@@ -21,7 +21,15 @@ IMPORT ./token as tok
 
 <> list >
 
-    symbol "(+" ( token | class )? ')'
+    symbol "+" 
+
+            :ast { t_List_Rules, symbol:$1, tok }
+
+    | symbol "*"
+
+            :ast { t_List_Rules, symbol:$1, tok, optional: true }
+
+    | symbol "(+" ( token | class )? ')'
 
             :ast { t_List_Rules, terminal_symbol:$3, symbol:$1, tok }
 
@@ -32,11 +40,15 @@ IMPORT ./token as tok
     | symbol
 
 
-<> symbol > nonterminal | terminal
+<> symbol > nonterminal | template_nonterminal | terminal
 
+<> template_nonterminal > 
+
+    nonterminal "::<" ( nonterminal  )(+",")^template_args ">"
+
+            :ast { t_Template_NonTerminal_Symbol, name:$1, template_args, tok}
 
 <> nonterminal > nonterminal_symbol | import_nonterminal_symbol
-
 
 <> nonterminal_symbol > 
 

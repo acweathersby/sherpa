@@ -123,7 +123,7 @@ impl SherpaGrammarBuilder {
 
     while let Some(id) = queue.pop_front() {
       if known_imports.insert(id.guid) {
-        match load_grammar(&mut j.transfer(), id) {
+        match load_grammar(&mut j.transfer(), id, soup.string_store.clone()) {
           Ok((new_soup, new_imports)) => {
             blend_soups(
               soup.clone(),
@@ -162,7 +162,7 @@ impl SherpaGrammarBuilder {
 
           while let Some(id) = queue.pop_front() {
             if known_imports.insert(id.guid) {
-              match load_grammar(&mut j.transfer(), id) {
+              match load_grammar(&mut j.transfer(), id, soup.string_store.clone()) {
                 Ok((new_soup, new_imports)) => {
                   blend_soups(
                     soup.clone(),

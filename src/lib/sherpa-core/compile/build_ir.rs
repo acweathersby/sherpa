@@ -1,15 +1,14 @@
 //! Functions for translating parse graphs into Sherpa IR code.
 use crate::{
-  compile::build_graph::graph::{State, StateId, StateType},
+  compile::build_graph::graph::{GraphBuilder, GraphIterator, GraphState, StateId, StateType},
   journal::Journal,
   types::*,
   utils::hash_group_btreemap,
   writer::code_writer::CodeWriter,
 };
 use sherpa_rust_runtime::types::bytecode::InputType;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use super::build_graph::graph::GraphHost;
+use super::build_graph::{graph::GraphHost, items::get_follow_internal};
 
 pub(crate) fn build_ir<'db>(
   j: &mut Journal,
@@ -18,34 +17,10 @@ pub(crate) fn build_ir<'db>(
 ) -> SherpaResult<Array<Box<ParseState>>> {
   debug_assert!(entry_name.as_u64() != 0);
 
-  let leaf_states = graph.get_leaf_states();
-  let mut queue = VecDeque::from_iter(leaf_states.iter().cloned());
-  let mut links: OrderedMap<StateId, OrderedSet<&State>> = OrderedMap::new();
   let mut output = OrderedMap::<StateId, Box<ParseState>>::new();
-  let mut seen = OrderedSet::new();
-  let empty_hash = OrderedSet::new();
+  let mut iter = GraphIterator::new(graph);
 
-  while let Some(state) = queue.pop_front() {
-    if !seen.insert(state.get_id()) {
-      continue;
-    }
-    let predecessors = state.get_predecessors().clone();
-    for predecessor in &predecessors {
-      links.entry(*predecessor).or_insert(OrderedSet::new()).insert(state);
-      queue.push_back(&graph[*predecessor]);
-    }
-  }
-
-  queue.extend(leaf_states.iter());
-  queue.extend(links.keys().rev().map(|id| &graph[*id]));
-
-  while let Some(state) = queue.pop_front() {
-    if output.contains_key(&state.get_id()) {
-      continue;
-    }
-
-    let successors = links.get(&state.get_id()).unwrap_or(&empty_hash);
-
+  while let Some((graph, state, successors)) = iter.next() {
     let goto_name = if let Some(goto) = state.get_goto_state() {
       let goto_pair = convert_nonterm_shift_state_to_ir(j, graph, &goto, successors)?;
       let out = Some(goto_pair.1.hash_name.clone());
@@ -60,7 +35,7 @@ pub(crate) fn build_ir<'db>(
     }
   }
   #[cfg(debug_assertions)]
-  debug_assert!(!output.is_empty(), "This graph did not yield any states! \n{}", graph.debug_string());
+  debug_assert!(!output.is_empty(), "This graph did not yield any states! \n{}", graph._debug_string_());
 
   j.report_mut().wrap_ok_or_return_errors(output.into_values().collect())
 }
@@ -74,8 +49,8 @@ enum SType {
 fn convert_nonterm_shift_state_to_ir<'db>(
   _j: &mut Journal,
   graph: &GraphHost<'db>,
-  state: &State,
-  successors: &OrderedSet<&State>,
+  state: &GraphState,
+  successors: &OrderedSet<&GraphState>,
 ) -> SherpaResult<(StateId, Box<ParseState>)> {
   let db = graph.get_db();
   let successors = successors.iter().filter(|s| {
@@ -129,8 +104,8 @@ fn convert_nonterm_shift_state_to_ir<'db>(
 fn convert_state_to_ir<'db>(
   _j: &mut Journal,
   graph: &GraphHost<'db>,
-  state: &State,
-  successors: &OrderedSet<&State>,
+  state: &GraphState,
+  successors: &OrderedSet<&GraphState>,
   entry_name: IString,
   goto_state_id: Option<IString>,
 ) -> SherpaResult<Vec<(StateId, Box<ParseState>)>> {
@@ -235,15 +210,16 @@ fn convert_state_to_ir<'db>(
           | StateType::AssignToken(..)
       ),
     "Graph state failed to generate ir states:\n{} \nGraph\n{}",
-    state.debug_string(db),
-    graph.debug_string()
+    state._debug_string_(db),
+    graph._debug_string_()
   );
 
   SherpaResult::Ok(out)
 }
 
-fn add_tok_expr(graph: &GraphHost, state: &State, successors: &OrderedSet<&State>, w: &mut CodeWriter<Vec<u8>>) {
+fn add_tok_expr(graph: &GraphHost, state: &GraphState, successors: &OrderedSet<&GraphState>, w: &mut CodeWriter<Vec<u8>>) {
   let db = graph.get_db();
+
   let mut set_token = successors.iter().filter_map(|s| match s.get_type() {
     StateType::AssignToken(tok) | StateType::AssignAndFollow(tok) => Some(tok),
     _ => None,
@@ -255,8 +231,8 @@ fn add_tok_expr(graph: &GraphHost, state: &State, successors: &OrderedSet<&State
       set_token.all(|tok| tok == tok_id),
       "[INTERNAL ERROR] Expected a single token assignment, got [ {} ]\n in scanner state: \n{}. \n Successor:{}",
       set_token.map(|tok| db.token(tok).name.to_string(db.string_store())).collect::<Vec<_>>().join(" | "),
-      state.debug_string(db),
-      successors.iter().map(|s| { s.debug_string(db) }).collect::<Vec<_>>().join("\n")
+      state._debug_string_(db),
+      successors.iter().map(|s| { s._debug_string_(db) }).collect::<Vec<_>>().join("\n")
     );
 
     (w + "set-tok " + db.tok_val(tok_id).to_string()).prime_join(" then ");
@@ -264,10 +240,10 @@ fn add_tok_expr(graph: &GraphHost, state: &State, successors: &OrderedSet<&State
 }
 
 fn classify_successors<'graph, 'db>(
-  successors: &'graph OrderedSet<&'graph State<'db>>,
+  successors: &'graph OrderedSet<&'graph GraphState<'db>>,
   _db: &'db ParserDatabase,
-) -> VecDeque<((u32, InputType), OrderedSet<&'graph State<'db>>)> {
-  VecDeque::from_iter(
+) -> Queue<((u32, InputType), OrderedSet<&'graph GraphState<'db>>)> {
+  Queue::from_iter(
     hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol().sym() {
       SymbolId::EndOfFile { .. } => (0, InputType::EndOfFile),
       SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (4, InputType::Token),
@@ -277,7 +253,7 @@ fn classify_successors<'graph, 'db>(
       sym if sym.is_class() => (3, InputType::Class),
       _sym => {
         #[cfg(debug_assertions)]
-        unreachable!("{_sym:?} {}", s.debug_string(_db));
+        unreachable!("{_sym:?} {}", s._debug_string_(_db));
         #[cfg(not(debug_assertions))]
         unreachable!()
       }
@@ -288,11 +264,11 @@ fn classify_successors<'graph, 'db>(
 
 fn add_match_expr<'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
-  state: &State,
+  state: &GraphState,
   graph: &GraphHost<'db>,
-  branches: &mut VecDeque<((u32, InputType), OrderedSet<&State>)>,
+  branches: &mut Queue<((u32, InputType), OrderedSet<&GraphState>)>,
   goto_state_id: Option<IString>,
-) -> Option<(IString, BTreeSet<PrecedentDBTerm>)> {
+) -> Option<(IString, OrderedSet<PrecedentDBTerm>)> {
   let db = graph.get_db();
 
   if let Some(((_, input_type), successors)) = branches.pop_front() {
@@ -308,19 +284,42 @@ fn add_match_expr<'db>(
       None
     } else {
       let (symbols, skipped) = if input_type == InputType::Token {
-        let syms = successors.iter().map(|s| s.get_symbol().sym().tok_db_key().unwrap()).collect::<OrderedSet<_>>();
+        let mut syms = successors.iter().map(|s| s.get_symbol().sym().tok_db_key().unwrap()).collect::<OrderedSet<_>>();
 
-        let skipped = state
-          .get_skipped()
-          .iter()
-          .filter_map(|s| {
-            let id = s.tok_db_key().unwrap();
-            (!syms.contains(&id)).then_some(id)
-          })
-          .collect::<OrderedSet<_>>();
+        // If the kernel includes any completed items, include tokens that follow
+        // those items.
+
+        for item in state.kernel_items_ref().iter().filter(|i| i.is_complete()) {
+          let mode = graph.graph_type;
+          let (follow, _) = get_follow_internal(graph, *item).expect("Should be able to build follow sets");
+
+          if graph._goal_nonterm_index_is_(0) && state.id.0 == 351 {
+            println!("{}", state._debug_string_(db));
+            follow.debug_print("FOLLOW");
+          }
+
+          let iter = follow
+            .iter()
+            .closure::<Items>(StateId::root())
+            .into_iter()
+            .filter_map(|i| i.is_term(mode).then_some(i.term_index_at_sym(mode)).flatten());
+          syms.extend(iter);
+        }
+
+        let skipped = if state.get_type() == StateType::Peek {
+          state.get_resolve_items().flatten().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
+        } else {
+          state.kernel_items_ref().iter().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
+        }
+        .into_iter()
+        .filter_map(|s| {
+          let id = s.tok_db_key().unwrap();
+          (!syms.contains(&id)).then_some(id)
+        })
+        .collect::<OrderedSet<_>>();
 
         // Build scanner collection
-        let mut symbols = BTreeSet::default();
+        let mut symbols = OrderedSet::default();
 
         for state in &successors {
           symbols.insert(PrecedentDBTerm::from(state.get_symbol(), db));
@@ -348,7 +347,7 @@ fn add_match_expr<'db>(
       // Sort successors
       let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEndComplete(_) | StateType::Peek));
 
-      for (state_val, s) in successors.iter().map(|s| (s.get_symbol().sym().to_state_val(db), s)).collect::<BTreeMap<_, _>>() {
+      for (state_val, s) in successors.iter().map(|s| (s.get_symbol().sym().to_state_val(db), s)).collect::<OrderedMap<_, _>>() {
         w = w + "\n\n( " + state_val.to_string() + " ){ ";
         w = w + build_body(state, s, graph, goto_state_id).join(" then ") + " }";
       }
@@ -379,14 +378,19 @@ fn add_match_expr<'db>(
   }
 }
 
-fn build_body<'db>(state: &State, successor: &State, graph: &GraphHost<'db>, goto_state_id: Option<IString>) -> Vec<String> {
+fn build_body<'db>(
+  state: &GraphState,
+  successor: &GraphState,
+  graph: &GraphHost<'db>,
+  goto_state_id: Option<IString>,
+) -> Vec<String> {
   let is_scanner = graph.is_scanner();
   let mut body_string: Vec<String> = Array::new();
   let s_type = successor.get_type();
   let db = graph.get_db();
 
   if match s_type {
-    StateType::Shift => {
+    StateType::Shift | StateType::KernelShift => {
       let scan_expr = successor.get_symbol().sym().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
       body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift").into());
       true
@@ -468,21 +472,21 @@ fn create_rule_reduction(rule_id: DBRuleKey, db: &ParserDatabase) -> String {
   w.to_string()
 }
 
-pub(super) fn create_ir_state_name(graph: &GraphHost, origin_state: Option<&State>, target_state: &State) -> String {
+pub(super) fn create_ir_state_name(graph: &GraphHost, origin_state: Option<&GraphState>, target_state: &GraphState) -> String {
   if origin_state.is_some_and(|s| s.get_id() == target_state.get_id()) {
     "%%%%".to_string()
   } else if false {
     graph.get_state_name(target_state.get_id())
   } else {
-    graph.is_scanner().then_some("s").unwrap_or("p").to_string() + "_" + &target_state.get_hash().to_string()
+    graph.is_scanner().then_some("s").unwrap_or("p").to_string() + "_" + &target_state.get_hash(graph.db).to_string()
   }
 }
 
 pub(super) fn create_ir_state<'db>(
   graph: &GraphHost<'db>,
   w: CodeWriter<Vec<u8>>,
-  state: &State,
-  scanner: Option<(IString, BTreeSet<PrecedentDBTerm>)>,
+  state: &GraphState,
+  scanner: Option<(IString, OrderedSet<PrecedentDBTerm>)>,
 ) -> SherpaResult<ParseState> {
   let ir_state = ParseState {
     code: w.to_string(),

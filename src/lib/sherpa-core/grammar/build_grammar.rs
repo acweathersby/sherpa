@@ -695,13 +695,13 @@ fn record_symbol(
 
     ASTNode::NonTerminal_Symbol(_) | ASTNode::NonTerminal_Import_Symbol(_) => {
       let id = get_nonterminal_id_from_ast_node(g_data, sym_node)?.as_sym();
-      // Bypass the registration of this symbol as a symbol.
+      // Bypass the registration of this nonterminal as a symbol.
       return SherpaResult::Ok(id);
     }
 
     ASTNode::NonTerminal_Terminal_Symbol(token_prod) => {
       let id = get_nonterminal_id_from_ast_node(g_data, &token_prod.nonterminal)?.as_tok_sym();
-      // Bypass the registration of this symbol as a symbol.
+      // Bypass the registration of this nonterminal as a symbol.
       return SherpaResult::Ok(id);
     }
 

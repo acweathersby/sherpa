@@ -120,9 +120,9 @@ impl<T: ByteReader + LLVMByteReader, M> Debug for ParseContext<T, M> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut dbgstr = f.debug_struct("ParseContext");
     dbgstr.field("anchor_ptr", &self.anchor_ptr);
-    dbgstr.field("scan_ptr", &self.scan_ptr);
+    dbgstr.field("scan_ptr", &self.tok_ptr);
     dbgstr.field("tok_len", &self.tok_len);
-    dbgstr.field("head_ptr", &self.head_ptr);
+    dbgstr.field("head_ptr", &self.sym_ptr);
     dbgstr.field("base_ptr", &self.base_ptr);
     dbgstr.field("end_ptr", &self.end_ptr);
     dbgstr.field("nterm", &self.nterm);

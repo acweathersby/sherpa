@@ -316,7 +316,11 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         sym if sym.is_term() => {
           let nterm = sym.to_scanner_nterm();
           let rules = Array::from_iter(vec![Rule {
-            symbols: vec![SymbolRef { id: *sym, ..Default::default() }],
+            symbols: vec![SymbolRef {
+              id: *sym,
+              token_precedence: sym.base_precedence(),
+              ..Default::default()
+            }],
             skipped: Default::default(),
             ast:     None,
             tok:     Token::default(),

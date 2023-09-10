@@ -27,8 +27,19 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
   let results = db
     .nonterms()
     .iter()
-    .cloned()
     .enumerate()
+    .map(|(index, sym)| (DBNonTermKey::from(index), sym.clone()))
+    .filter(|(nt_id, sym)| {
+      if !config.ALLOW_RECURSIVE_DESCENT {
+        // If we can't make calls to another nonterminal parse graph then it
+        // doesn't make sense to create parse graphs for non-terminals
+        // that are not exported by the grammar, as the root of those graphs
+        // will be unreachable.
+        sym.is_term() || db.entry_nterm_keys().contains(nt_id)
+      } else {
+        true
+      }
+    })
     .collect::<Vec<_>>()
     .chunks(10)
     .map(|chunks| (j.transfer(), chunks))
@@ -80,8 +91,10 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
   for (scanner, group) in scanners {
     let start_items = group
       .iter()
-      .flat_map(|s| Items::start_items(db.token(s.tok()).nonterm_id, db).to_origin(Origin::TerminalGoal(s.tok(), s.precedence())))
-      .collect::<Array<_>>();
+      .flat_map(|s| {
+        ItemSet::start_items(db.token(s.tok()).nonterm_id, db).to_origin(Origin::TerminalGoal(s.tok(), s.precedence()))
+      })
+      .collect::<ItemSet>();
 
     let graph = build(&mut j, scanner, GraphType::Scanner, start_items, db, config)?;
 
@@ -110,7 +123,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
 fn create_parse_states_from_prod<'db>(
   j: &mut Journal,
   db: &'db ParserDatabase,
-  nterm: usize,
+  nterm_key: DBNonTermKey,
   nterm_sym: SymbolId,
   states: &mut States,
   scanners: &mut Scanners,
@@ -118,8 +131,8 @@ fn create_parse_states_from_prod<'db>(
 ) -> SherpaResult<()> {
   j.set_active_report("Non-terminal Compile", ReportType::NonTerminalCompile(nterm_sym.to_nterm()));
 
-  if let Some(custom_state) = db.custom_state(nterm.into()) {
-    let name = db.nonterm_guid_name(nterm.into());
+  if let Some(custom_state) = db.custom_state(nterm_key) {
+    let name = db.nonterm_guid_name(nterm_key);
     let state = ParseState {
       hash_name:     name,
       name:          name,
@@ -133,13 +146,13 @@ fn create_parse_states_from_prod<'db>(
     };
     states.insert(name, Box::new(state));
   } else {
-    let start_items = Items::start_items((nterm as u32).into(), db).to_origin(Origin::NonTermGoal(nterm.into()));
+    let start_items = ItemSet::start_items(nterm_key, db).to_origin(Origin::NonTermGoal(nterm_key));
 
     match nterm_sym {
       SymbolId::NonTerminal { .. } => {
-        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphType::Parser, start_items, db, config)?;
+        let graph = build(j, db.nonterm_guid_name(nterm_key), GraphType::Parser, start_items, db, config)?;
 
-        let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm.into()))?;
+        let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm_key))?;
 
         for mut state in ir {
           if let Some(scanner_data) = state.get_scanner() {
@@ -149,17 +162,15 @@ fn create_parse_states_from_prod<'db>(
         }
       }
       SymbolId::NonTerminalToken { .. } => {
-        let graph = build(j, db.nonterm_guid_name(nterm.into()), GraphType::Scanner, start_items, db, config)?;
+        let graph = build(j, db.nonterm_guid_name(nterm_key), GraphType::Scanner, start_items, db, config)?;
 
-        let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm.into()))?;
+        let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm_key))?;
 
         for state in ir {
           states.insert(state.hash_name, state);
         }
       }
-      SymbolId::NonTerminalState { .. } => {
-        // todo!(load state into the states collection)
-      }
+      SymbolId::NonTerminalState { .. } => { /* Not Processed Here */ }
       _ => unreachable!(),
     }
   }

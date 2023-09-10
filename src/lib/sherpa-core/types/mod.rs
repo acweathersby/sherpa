@@ -1,6 +1,5 @@
 mod error;
 pub mod error_types;
-mod follow;
 mod grammar;
 mod istring;
 mod item;
@@ -12,7 +11,6 @@ mod result;
 mod symbol;
 
 pub use error::*;
-pub use follow::*;
 pub use grammar::*;
 pub use istring::*;
 pub use item::*;

@@ -8,8 +8,9 @@ pub const DEFAULT_SYM_ID: u32 = 0xFDEFA017;
 
 pub const CUSTOM_TOKEN_PRECEDENCE_BASELINE: u16 = 5;
 pub const EXCLUSIVE_TERMINAL_TOKEN_PRECEDENCE: u16 = 4;
-pub const TERMINAL_TOKEN_PRECEDENCE: u16 = 3;
-pub const NON_TERMINAL_TOKEN_PRECEDENCE: u16 = 2;
+pub const NON_TERMINAL_TOKEN_PRECEDENCE: u16 = 3;
+pub const TERMINAL_TOKEN_PRECEDENCE_IN_CONFLICT: u16 = 4;
+pub const TERMINAL_TOKEN_PRECEDENCE: u16 = 1;
 pub const CLASS_TOKEN_PRECEDENCE: u16 = 1;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -104,7 +105,16 @@ impl SymbolId {
     }
   }
 
-  pub fn base_token_precedence(&self) -> u16 {
+  pub fn conflict_precedence(&self) -> u16 {
+    match self {
+      Self::Token { .. } => TERMINAL_TOKEN_PRECEDENCE_IN_CONFLICT,
+      Self::NonTerminalToken { .. } => NON_TERMINAL_TOKEN_PRECEDENCE,
+      _ if self.is_class() => CLASS_TOKEN_PRECEDENCE,
+      _ => 0,
+    }
+  }
+
+  pub fn base_precedence(&self) -> u16 {
     match self {
       Self::Token { .. } => TERMINAL_TOKEN_PRECEDENCE,
       Self::NonTerminalToken { .. } => NON_TERMINAL_TOKEN_PRECEDENCE,

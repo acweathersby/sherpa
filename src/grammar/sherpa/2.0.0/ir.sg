@@ -40,17 +40,15 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> transitive_statement >
 
-    "peek"          :ast { t_Peek, tok }
+    "shift" ":skip"? ( ":tok" | ":sym" )     :ast { t_Shift, type:str($3), skip:bool($2), tok }
 
-    | "peek-skip"   :ast { t_PeekSkip, tok }
+    | "peek" ":skip"? ( ":tok" | ":sym" )    :ast { t_Peek, type:str($3), skip:bool($2), tok }
 
-    | "shift"       :ast { t_Shift, tok }
+    | "reset" ( ":tok" | ":sym" )            :ast { t_Reset, cursor:str($2), tok }
 
-    | "skip"        :ast { t_Skip, tok }
-
-    | "scan"        :ast { t_Scan, tok }
-
-    | "reset"       :ast { t_Reset, tok }
+    | "fork" "{" ( sym::nonterminal ":" tok::int^int :ast { t_ForkInit, state: $1, target_nonterm: u32($3) }  )(+) "}"                 
+                                            
+                                             :ast { t_Fork, paths:str($2), tok }
 
 
 <> terminal_statement >

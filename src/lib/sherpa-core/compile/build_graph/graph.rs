@@ -21,6 +21,7 @@ pub enum Origin {
   Peek(u64, StateId),
   /// The item
   BreadCrumb(DBRuleKey),
+  Fork(DBRuleKey),
   PEG(DBNonTermKey),
   // Out of scope item that was generated from the
   // completion of a token non-terminal.
@@ -33,9 +34,18 @@ pub enum Origin {
 
 impl Hash for Origin {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    if let Origin::Peek(resolve_id, _) = self {
-      resolve_id.hash(state)
+    match self {
+      Origin::Peek(resolve_id, _) => resolve_id.hash(state),
+      Origin::TerminalGoal(resolve_id, prec) => {
+        resolve_id.hash(state);
+        prec.hash(state);
+      }
+      Origin::Fork(resolve_id) | Origin::BreadCrumb(resolve_id) => {
+        resolve_id.hash(state);
+      }
+      _ => {}
     }
+
     std::mem::discriminant(self).hash(state)
   }
 }
@@ -58,7 +68,7 @@ impl Origin {
       }
       Origin::BreadCrumb(rule_id) => {
         let item = Item::from_rule(*rule_id, db);
-        format!("BreadCrumb[ {:?} ]", item.debug_string())
+        format!("BreadCrumb[ {:?} ]", item._debug_string_())
       }
       _ => format!("{:?}", self),
     }
@@ -78,6 +88,13 @@ impl Origin {
       _ => SymbolId::Undefined,
     }
   }
+
+  pub fn get_symbol_key(&self) -> DBTermKey {
+    match self {
+      Origin::TerminalGoal(sym_id, ..) => *sym_id,
+      _ => DBTermKey::default(),
+    }
+  }
 }
 
 // Transtion Type ----------------------------------------------------
@@ -88,6 +105,7 @@ pub enum StateType {
   Undefined,
   Start,
   Shift,
+  KernelShift,
   /// The completion of this branch will complete one or more kernel items.
   NonTerminalResolve,
   /// The completion of this branch will complete one or more intermediary goto
@@ -145,10 +163,10 @@ impl StateType {
         format!("InternalCall({})", db.nonterm_friendly_name_string(*nterm))
       }
       Self::AssignAndFollow(sym_id) => {
-        format!("AssignAndFollow({})", db.sym(*sym_id).debug_string(db))
+        format!("AssignAndFollow({}:{})", sym_id.to_val(db), db.token(*sym_id).name.to_str(db.string_store()).as_str())
       }
       Self::AssignToken(sym_id) => {
-        format!("AssignToken({})", db.sym(*sym_id).debug_string(db))
+        format!("AssignToken({}:{})", sym_id.to_val(db), db.token(*sym_id).name.to_str(db.string_store()).as_str())
       }
       Self::Reduce(nterm, _) => {
         format!("Reduce({nterm:?})",)
@@ -161,7 +179,7 @@ impl StateType {
 // State -------------------------------------------------------------
 
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct State<'db> {
+pub struct GraphState<'db> {
   pub id: StateId,
   pub parent: StateId,
   pub predecessors: OrderedSet<StateId>,
@@ -172,50 +190,31 @@ pub struct State<'db> {
   pub reduce_item: Option<Item<'db>>,
   pub nonterm_items: ItemSet<'db>,
   pub leaf_state: bool,
-  pub closure: Option<ItemSet<'db>>,
+  canonical_hash: u64,
+  pub lookahead_hash: u64,
+  pub symbol_set_id: u64,
 }
 
-impl<'db> Hash for State<'db> {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    self.t_type.hash(state);
-
-    self.term_symbol.hash(state);
-
-    for item in &self.kernel_items {
-      item.rule_id.hash(state);
-      item.sym_index.hash(state);
-      item.origin.hash(state);
-      item.goto_distance.hash(state);
-    }
-  }
-}
-
-impl<'db> State<'db> {
-  pub fn get_resolve_state(&self, peek_origin_key: u64) -> ItemSet<'db> {
+impl<'db> GraphState<'db> {
+  pub fn get_resolve_item_set(&self, peek_origin_key: u64) -> ItemSet<'db> {
     self.peek_resolve_items.get(&peek_origin_key).unwrap().clone()
   }
 
-  pub fn get_resolve_states(&self) -> impl Iterator<Item = &ItemSet<'db>> + Clone {
+  pub fn get_resolve_items(&self) -> impl Iterator<Item = &ItemSet<'db>> + Clone {
     self.peek_resolve_items.values()
   }
 
-  pub fn get_hash(&self) -> u64 {
-    use std::hash::Hasher;
-    let mut hasher = DefaultHasher::new();
-    self.hash(&mut hasher);
-    hasher.finish()
+  pub fn get_hash(&self, db: &'db ParserDatabase) -> u64 {
+    debug_assert!(self.lookahead_hash != 0, "Hash should not be 0 {}", self._debug_string_(db));
+    self.lookahead_hash
   }
 
   pub fn kernel_items_ref(&self) -> &ItemSet<'db> {
     &self.kernel_items
   }
 
-  pub fn get_closure_ref(&self) -> SherpaResult<&ItemSet<'db>> {
-    return o_to_r(self.closure.as_ref(), "Closure Not Created");
-  }
-
   pub fn set_reduce_item(&mut self, item: Item<'db>) {
-    debug_assert!(item.is_complete());
+    debug_assert!(item.is_complete(), "Expected item to be completed in order to reduce  it:\n  item: {}", item._debug_string_());
     self.reduce_item = Some(item);
   }
 
@@ -225,10 +224,6 @@ impl<'db> State<'db> {
 
   pub fn get_id(&self) -> StateId {
     self.id
-  }
-
-  pub fn get_skipped(&self) -> OrderedSet<SymbolId> {
-    self.kernel_items_ref().iter().filter_map(|i| i.get_skipped()).flatten().cloned().collect()
   }
 
   pub fn set_nonterm_items(&mut self, nonterm_items: &ItemSet<'db>) {
@@ -247,21 +242,6 @@ impl<'db> State<'db> {
     self.nonterm_items.len() > 0
   }
 
-  pub fn get_goto_state(&self) -> Option<Self> {
-    if self.nonterm_items.len() > 0 {
-      Some(Self {
-        term_symbol: self.term_symbol,
-        id: self.id.to_goto(),
-        t_type: StateType::NonTerminalResolve,
-        kernel_items: self.nonterm_items.clone(),
-        nonterm_items: self.kernel_items.clone(),
-        ..Default::default()
-      })
-    } else {
-      None
-    }
-  }
-
   pub(crate) fn get_symbol(&self) -> PrecedentSymbol {
     self.term_symbol
   }
@@ -270,10 +250,33 @@ impl<'db> State<'db> {
     self.parent
   }
 
+  pub fn get_goto_state(&self) -> Option<GraphState<'db>> {
+    if self.nonterm_items.len() > 0 {
+      let mut goto_state = GraphState {
+        term_symbol: self.term_symbol,
+        id: self.id.to_goto(),
+        t_type: StateType::NonTerminalResolve,
+        kernel_items: self.nonterm_items.clone(),
+        nonterm_items: self.kernel_items.clone(),
+        ..Default::default()
+      };
+
+      goto_state.canonical_hash = GraphBuilder::create_state_hash(&goto_state, 0, DefaultHasher::new());
+      goto_state.lookahead_hash = goto_state.canonical_hash;
+
+      Some(goto_state)
+    } else {
+      None
+    }
+  }
+
   #[cfg(debug_assertions)]
-  pub fn debug_string(&self, db: &'db ParserDatabase) -> String {
+  pub fn _debug_string_(&self, db: &'db ParserDatabase) -> String {
     let mut string = String::new();
-    string += &format!("\n\nSTATE -- [{:}][{:}] --", self.id.0, self.get_hash());
+    string += &format!(
+      "STATE -- [{: >8}][c:{: <24} h:{: <24}] [sym:{: <24}] --",
+      self.id.0, self.canonical_hash, self.lookahead_hash, self.symbol_set_id
+    );
 
     if self.predecessors.len() > 0 {
       string += &format!(r##" preds [{}]"##, self.predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" "));
@@ -294,23 +297,24 @@ impl<'db> State<'db> {
 
     if let Some(item) = &self.reduce_item {
       string += &format!("\n  Reduce:");
-      string += &format!("\n   - {}", item.debug_string());
+      string += &format!("\n   - {}", item._debug_string_());
     }
 
     string += "\n-- kernel-items:";
     for item in &self.kernel_items {
-      string += &format!("\n   - {}", item.debug_string());
+      string += &format!("\n   - {}", item._debug_string_());
     }
 
     if !self.nonterm_items.is_empty() {
-      if let Some(goto_hash) = self.get_goto_state().and_then(|s| Some(s.get_hash())) {
+      if let Some(goto_hash) = self.get_goto_state().and_then(|s| Some(s.canonical_hash)) {
         string += &format!("\n\nGOTO -- [{:}][{:}] --", self.id.0, goto_hash);
       }
       string += "\n-- non-terms:";
       for item in &self.nonterm_items {
-        string += &format!("\n   - {}", item.debug_string());
+        string += &format!("\n   - {}", item._debug_string_());
       }
     }
+
     string
   }
 }
@@ -319,7 +323,7 @@ impl<'db> State<'db> {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub enum GraphState {
+pub enum GraphBuildState {
   #[default]
   Normal,
   NormalGoto,
@@ -342,11 +346,10 @@ pub enum GraphType {
   Scanner,
 }
 
-use sherpa_rust_runtime::types::SharedSymbolBuffer;
-use GraphState::*;
+use GraphBuildState::*;
 
-use super::build::handle_kernel_items;
-impl GraphState {
+use super::{build::handle_kernel_items, items::get_follow_internal};
+impl GraphBuildState {
   pub fn peek_level(&self) -> usize {
     match self {
       Peek(level) => *level as usize,
@@ -364,10 +367,11 @@ impl GraphState {
 
 pub struct GraphHost<'db> {
   pub leaf_states: OrderedSet<StateId>,
-  pub states:      Array<State<'db>>,
+  pub states:      Array<GraphState<'db>>,
   pub db:          &'db ParserDatabase,
   pub name:        IString,
   pub graph_type:  GraphType,
+  pub symbol_sets: Map<u64, OrderedSet<DBTermKey>>,
 }
 
 impl<'follow, 'db: 'follow> GraphHost<'db> {
@@ -375,6 +379,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
     Self {
       states: Default::default(),
       leaf_states: Default::default(),
+      symbol_sets: Default::default(),
       db,
       name,
       graph_type,
@@ -390,7 +395,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
     self[state].leaf_state = true;
   }
 
-  pub fn get_leaf_states(&self) -> Vec<&State> {
+  pub fn get_leaf_states(&self) -> Vec<&GraphState> {
     self.leaf_states.iter().map(|s| &self[*s]).collect()
   }
 
@@ -426,17 +431,31 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
   }
 
   #[cfg(debug_assertions)]
-  pub fn debug_string(&self) -> String {
+  pub fn _debug_string_(&self) -> String {
     let mut string = String::new();
 
     for state in &self.states {
       let is_leaf_state = self.leaf_states.contains(&state.get_id());
       if is_leaf_state {
-        string += "\nLEAF STATE ----------------------------------";
-        string += &state.debug_string(self.db);
-        string += "\n---------------------------------------------";
+        string += "\n\nLEAF ======================================\n";
+        string += &state._debug_string_(self.db);
+        if let Some(la) = self.symbol_sets.get(&state.symbol_set_id) {
+          string += &format!(
+            "\n\n  Symbols: {}",
+            la.iter().map(|sym| self.db.sym(*sym).debug_string(self.db)).collect::<Vec<_>>().join(" | ")
+          );
+        }
+        string += "\n===============================================";
       } else {
-        string += &state.debug_string(self.db);
+        string += "\n\n---------------------------------------------";
+        string += &("\n".to_string() + &state._debug_string_(self.db));
+        if let Some(la) = self.symbol_sets.get(&state.symbol_set_id) {
+          string += &format!(
+            "\n\n  Symbols: {}",
+            la.iter().map(|sym| self.db.sym(*sym).debug_string(self.db)).collect::<Vec<_>>().join(" | ")
+          );
+        }
+        string += "\n\n---------------------------------------------";
       }
     }
 
@@ -448,7 +467,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
   pub fn _debug_print_(&self) {
     #[cfg(debug_assertions)]
     {
-      println!("{}", self.debug_string());
+      println!("{}", self._debug_string_());
     }
   }
 
@@ -458,7 +477,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
 }
 
 impl<'db> Index<usize> for GraphHost<'db> {
-  type Output = State<'db>;
+  type Output = GraphState<'db>;
 
   fn index(&self, index: usize) -> &Self::Output {
     &self.states[index]
@@ -466,7 +485,7 @@ impl<'db> Index<usize> for GraphHost<'db> {
 }
 
 impl<'db> Index<StateId> for GraphHost<'db> {
-  type Output = State<'db>;
+  type Output = GraphState<'db>;
 
   fn index(&self, index: StateId) -> &Self::Output {
     &self.states[index.0 as usize]
@@ -483,7 +502,7 @@ impl<'db> IndexMut<StateId> for GraphHost<'db> {
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct StateId(pub u32, pub GraphState);
+pub struct StateId(pub u32, pub GraphBuildState);
 
 impl Hash for StateId {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -498,7 +517,7 @@ impl Default for StateId {
 }
 
 impl StateId {
-  pub fn state(&self) -> GraphState {
+  pub fn state(&self) -> GraphBuildState {
     self.1
   }
 
@@ -515,7 +534,11 @@ impl StateId {
   }
 
   pub fn to_post_reduce(&self) -> Self {
-    Self(self.0 + (u32::MAX >> 2), self.1)
+    if self.0 < u32::MAX >> 2 {
+      Self(self.0 + (u32::MAX >> 2), self.1)
+    } else {
+      *self
+    }
   }
 
   pub fn is_post_reduce(&self) -> bool {
@@ -523,7 +546,11 @@ impl StateId {
   }
 
   pub fn to_goto(&self) -> Self {
-    Self(self.0 + (u32::MAX >> 1), self.1)
+    if self.0 < u32::MAX >> 1 {
+      Self(self.0 + (u32::MAX >> 1), self.1)
+    } else {
+      *self
+    }
   }
 
   pub fn is_goto(&self) -> bool {
@@ -539,7 +566,7 @@ impl StateId {
   }
 }
 
-impl<'db> PartialEq<u32> for State<'db> {
+impl<'db> PartialEq<u32> for GraphState<'db> {
   fn eq(&self, other: &u32) -> bool {
     self.id.0 == *other
   }
@@ -551,39 +578,10 @@ pub struct StateBuilder<'graph_iter, 'db: 'graph_iter> {
 }
 
 impl<'graph_iter, 'db> StateBuilder<'graph_iter, 'db> {
-  pub fn to_state(self) -> StateId {
-    self.state_id
-  }
-
-  pub fn enque(self) -> Option<StateId> {
-    let StateBuilder { state_id, builder } = self;
-    builder.enqueue_pending_state(state_id)
-  }
-
-  pub fn enque_leaf(self) -> Option<StateId> {
-    let StateBuilder { state_id, builder } = self;
-    if let Some(_) = builder.enqueue_pending_state(state_id) {
-      builder.graph.add_leaf_state(state_id);
-      Some(state_id)
-    } else {
-      None
-    }
-  }
-
   pub fn set_parent(&mut self, parent: StateId) {
     let StateBuilder { state_id, builder } = self;
     builder.get_state_mut(*state_id).parent = parent;
     builder.get_state_mut(*state_id).predecessors = BTreeSet::from_iter([parent]);
-  }
-
-  pub fn to_leaf(self) {
-    let StateBuilder { state_id, builder } = self;
-    builder.graph.add_leaf_state(state_id)
-  }
-
-  pub fn to_pending(self) {
-    let StateBuilder { state_id, builder } = self;
-    builder.add_pending(state_id)
   }
 
   pub fn set_peek_resolve_state<T: ItemContainer<'db> + Hash>(&mut self, items: &T) -> Origin {
@@ -602,6 +600,41 @@ impl<'graph_iter, 'db> StateBuilder<'graph_iter, 'db> {
     let StateBuilder { state_id, builder } = self;
     builder.get_state_mut(*state_id).set_reduce_item(item);
   }
+
+  pub fn to_leaf(self) {
+    let StateBuilder { state_id, builder } = self;
+    builder.prepare_state(state_id);
+    builder.graph.add_leaf_state(state_id)
+  }
+
+  pub fn to_pending(self) {
+    let StateBuilder { state_id, builder } = self;
+    builder.prepare_state(state_id);
+    builder.add_pending(state_id)
+  }
+
+  pub fn to_enqueued_leaf(self) -> Option<StateId> {
+    let StateBuilder { state_id, builder } = self;
+    builder.prepare_state(state_id);
+    if let Some(_) = builder.enqueue_state(state_id) {
+      builder.graph.add_leaf_state(state_id);
+      Some(state_id)
+    } else {
+      None
+    }
+  }
+
+  pub fn to_enqueued(self) -> Option<StateId> {
+    let StateBuilder { state_id, builder } = self;
+    builder.prepare_state(state_id);
+    builder.enqueue_state(state_id)
+  }
+
+  pub fn to_state(self) -> StateId {
+    let StateBuilder { state_id, builder } = self;
+    builder.prepare_state(state_id);
+    state_id
+  }
 }
 
 pub(crate) struct GraphBuilder<'db> {
@@ -611,8 +644,9 @@ pub(crate) struct GraphBuilder<'db> {
   state_queue: VecDeque<StateId>,
   errors:      Vec<SherpaError>,
   state_map:   OrderedMap<u64, StateId>,
-  pub db:      &'db ParserDatabase,
-  pub config:  ParserConfig,
+
+  pub db:     &'db ParserDatabase,
+  pub config: ParserConfig,
 }
 
 impl<'db> GraphBuilder<'db> {
@@ -621,33 +655,10 @@ impl<'db> GraphBuilder<'db> {
     name: IString,
     graph_type: GraphType,
     config: ParserConfig,
-    kernel_items: Items<'db>,
+    kernel_items: ItemSet<'db>,
   ) -> Self {
-    let mut graph = GraphHost::new(db, name, graph_type);
-
-    let mut state = State {
-      id: StateId::root(),
-      term_symbol: (SymbolId::Default, 0).into(),
-      t_type: StateType::Start,
-      ..Default::default()
-    };
-
-    // Automatically setup lanes a goal values.
-    let kernel_items = kernel_items
-      .into_iter()
-      .enumerate()
-      .map(|(i, mut item)| {
-        item.goal = i as u32;
-        item
-      })
-      .collect::<Items>();
-
-    set_kernel_items(&mut state, kernel_items.iter());
-
-    graph.states.push(state);
-
-    Self {
-      graph,
+    let mut builder = Self {
+      graph: GraphHost::new(db, name, graph_type),
       state_id: StateId::root(),
       pending: Vec::new(),
       errors: Vec::new(),
@@ -655,7 +666,11 @@ impl<'db> GraphBuilder<'db> {
       state_map: Default::default(),
       db,
       config,
-    }
+    };
+
+    builder.create_root_state(kernel_items);
+
+    builder
   }
 
   pub fn into_inner(self) -> (GraphHost<'db>, Vec<SherpaError>) {
@@ -675,12 +690,70 @@ impl<'db> GraphBuilder<'db> {
     }
   }
 
+  fn create_state_hash<'a, H: std::hash::Hasher>(state: &GraphState<'a>, lookahead: u64, mut hasher: H) -> u64 {
+    let hasher = &mut hasher;
+
+    state.t_type.hash(hasher);
+
+    state.term_symbol.hash(hasher);
+
+    for item in &state.kernel_items {
+      item.rule_id.hash(hasher);
+      item.sym_index.hash(hasher);
+      item.origin.hash(hasher);
+      item.goal.hash(hasher);
+      item.goto_distance.hash(hasher);
+    }
+
+    lookahead.hash(hasher);
+
+    hasher.finish()
+  }
+
+  fn get_state_symbols<'a>(state: &GraphState<'a>, graph: &GraphHost<'a>) -> Option<OrderedSet<DBTermKey>> {
+    if graph.is_scanner() {
+      return None;
+    };
+
+    let mode = graph.graph_type;
+
+    let mut symbols = OrderedSet::new();
+
+    for item in &state.kernel_items {
+      if let Some(term) = item.term_index_at_sym(mode) {
+        symbols.insert(term);
+      } else if item.is_nonterm(mode) {
+        for item in graph.db.get_closure(item) {
+          if let Some(term) = item.term_index_at_sym(graph.graph_type) {
+            symbols.insert(term);
+          }
+        }
+      } else {
+        if let Ok((follow, _)) = get_follow_internal(graph, *item) {
+          for item in follow {
+            if let Some(term) = item.term_index_at_sym(mode) {
+              symbols.insert(term);
+            } else if item.is_nonterm(mode) {
+              for item in graph.db.get_closure(&item) {
+                if let Some(term) = item.term_index_at_sym(graph.graph_type) {
+                  symbols.insert(term);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    Some(symbols)
+  }
+
   pub fn get_pending_items(&self) -> ItemSet<'db> {
     self
       .pending
       .iter()
       .flat_map(|s| {
-        if let GraphState::Peek(_) = s.state() {
+        if let GraphBuildState::Peek(_) = s.state() {
           self.get_state(*s).peek_resolve_items.values().flatten().cloned().to_set().into_iter()
         } else {
           self.get_state(*s).kernel_items_ref().clone().to_set().into_iter()
@@ -689,13 +762,75 @@ impl<'db> GraphBuilder<'db> {
       .collect()
   }
 
-  pub fn enqueue_pending_state(&mut self, state_id: StateId) -> Option<StateId> {
-    let state = &self.graph[state_id];
-    let hash_id = hash_id_value_u64(state);
+  fn create_root_state(&mut self, kernel_items: BTreeSet<Item<'db>>) {
+    self
+      .create_state(
+        Normal,
+        (SymbolId::Default, 0).into(),
+        StateType::Start,
+        kernel_items
+          .into_iter()
+          .enumerate()
+          .map(|(i, mut item)| {
+            item.goal = i as u32;
+            item
+          })
+          .collect::<Items>(),
+      )
+      .to_enqueued();
+  }
+
+  fn prepare_state(&mut self, state_id: StateId) {
+    let Self { config, graph, .. } = self;
+
+    let lookahead_id = match Self::get_state_symbols(&graph[state_id], &graph) {
+      Some(lookahead_set) if !lookahead_set.is_empty() => {
+        let lookahead_id = hash_id_value_u64(&lookahead_set);
+        graph.symbol_sets.insert(lookahead_id, lookahead_set);
+        lookahead_id
+      }
+      _ => 0,
+    };
+
+    let hash = if config.ALLOW_LOOKAHEAD_MERGE {
+      Self::create_state_hash(&graph[state_id], 0, DefaultHasher::new())
+    } else {
+      Self::create_state_hash(&graph[state_id], lookahead_id, DefaultHasher::new())
+    };
+
+    graph[state_id].symbol_set_id = lookahead_id;
+    graph[state_id].canonical_hash = hash;
+    graph[state_id].lookahead_hash = hash_id_value_u64((hash, lookahead_id));
+  }
+
+  pub fn enqueue_state(&mut self, state_id: StateId) -> Option<StateId> {
+    let Self { config, graph, .. } = self;
+    let state = &graph[state_id];
+    let hash_id = state.canonical_hash;
+
+    debug_assert!(hash_id != 0, "State has not been hashed!\n{}", state._debug_string_(self.db));
 
     if let Some(original_state) = self.state_map.get(&hash_id).cloned() {
-      let parent = state.parent;
-      self.graph[original_state].predecessors.insert(parent);
+      let parent: StateId = state.parent;
+      graph[original_state].predecessors.insert(parent);
+
+      if config.ALLOW_LOOKAHEAD_MERGE {
+        let original_la_id = graph[original_state].symbol_set_id;
+        let new_lookahead_id = graph[state_id].symbol_set_id;
+
+        // Create a new lookahead set for this state.
+        if let Some(existing_lookahead) = graph.symbol_sets.get(&original_la_id) {
+          if let Some(other_lookaheads) = graph.symbol_sets.get(&new_lookahead_id) {
+            let new_lookaheads = existing_lookahead.clone();
+            new_lookaheads.clone().extend(other_lookaheads);
+            let lookahead_id = hash_id_value_u64(&new_lookaheads);
+            graph[original_state].symbol_set_id = lookahead_id;
+            graph[original_state].lookahead_hash = hash_id_value_u64((hash_id, lookahead_id));
+            graph.symbol_sets.insert(lookahead_id, new_lookaheads);
+          }
+        }
+      }
+
       if state_id.0 == (self.graph.states.len() - 1) as u32 {
         drop(self.graph.states.pop());
       }
@@ -715,11 +850,11 @@ impl<'db> GraphBuilder<'db> {
     self.state_id
   }
 
-  pub fn current_state(&self) -> &State<'db> {
+  pub fn current_state(&self) -> &GraphState<'db> {
     &self.graph[self.state_id]
   }
 
-  pub fn current_state_mut(&mut self) -> &mut State<'db> {
+  pub fn current_state_mut(&mut self) -> &mut GraphState<'db> {
     &mut self.graph[self.state_id]
   }
 
@@ -735,24 +870,24 @@ impl<'db> GraphBuilder<'db> {
     &self.graph
   }
 
-  pub fn get_state(&self, state_id: StateId) -> &State<'db> {
+  pub fn get_state(&self, state_id: StateId) -> &GraphState<'db> {
     &self.graph[state_id]
   }
 
-  pub fn get_state_mut(&mut self, state_id: StateId) -> &mut State<'db> {
+  pub fn get_state_mut(&mut self, state_id: StateId) -> &mut GraphState<'db> {
     &mut self.graph[state_id]
   }
 
   pub fn create_state<'a>(
     &'a mut self,
-    state: GraphState,
+    state: GraphBuildState,
     symbol: PrecedentSymbol,
     t_type: StateType,
     kernel_items: Items<'db>,
   ) -> StateBuilder<'a, 'db> {
     let id = StateId(self.graph.states.len() as u32, state);
 
-    let mut state = State {
+    let mut state = GraphState {
       id,
       term_symbol: symbol,
       t_type,
@@ -768,23 +903,18 @@ impl<'db> GraphBuilder<'db> {
     StateBuilder { state_id: id, builder: self }
   }
 
-  /// Add kernel items to the current state.
-  pub fn add_kernel_items<T: ItemContainer<'db>>(&mut self, kernel_items: T) {
-    add_kernel_items(&mut self.current_state_mut(), kernel_items)
-  }
-
   pub fn process_pending(&mut self, should_increment_gotos: bool) {
     for state in self.pending.drain(..).collect::<Vec<_>>() {
       if should_increment_gotos {
         increment_gotos(self, state);
       }
-      self.enqueue_pending_state(state);
+      self.enqueue_state(state);
     }
   }
 
   #[cfg(debug_assertions)]
   pub fn _print_state_(&self) {
-    println!("{}", self.get_state(self.state_id).debug_string(self.db));
+    println!("{}", self.get_state(self.state_id)._debug_string_(self.db));
   }
 
   #[cfg(debug_assertions)]
@@ -794,7 +924,12 @@ impl<'db> GraphBuilder<'db> {
 
   #[cfg(debug_assertions)]
   pub fn _is_nonterminal_state_(&self, nterm_id: u32, state_id: u32) -> bool {
-    self.graph._goal_nonterm_index_is_(nterm_id) && self.state_id().0 == state_id
+    if self.is_scanner() {
+      self.graph.goal_items().iter().any(|i| i.origin.get_symbol_key() == DBTermKey::from(nterm_id))
+        && self.state_id().0 == state_id
+    } else {
+      self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.state_id().0 == state_id
+    }
   }
 }
 
@@ -815,26 +950,60 @@ fn increment_gotos(gb: &mut GraphBuilder, parent_id: StateId) {
   }
 }
 
-fn set_kernel_items<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db>>(state: &mut State<'db>, kernel_items: T) {
+fn set_kernel_items<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db>>(state: &mut GraphState<'db>, kernel_items: T) {
   let mut kernel_items =
     kernel_items.into_iter().map(|i| if i.origin_state.is_invalid() { i.to_origin_state(state.id) } else { *i }).collect();
-
   state.kernel_items.append(&mut kernel_items);
-
-  calculate_closure(state);
 }
 
 /// Add kernel items and set their origin to this state.
-fn add_kernel_items<'db, T: ItemContainer<'db>>(state: &mut State<'db>, kernel_items: T) {
+fn add_kernel_items<'db, T: ItemContainer<'db>>(state: &mut GraphState<'db>, kernel_items: T) {
   let mut kernel_items = kernel_items.into_iter().map(|i| i.to_origin_state(state.id)).collect();
-
   state.kernel_items.append(&mut kernel_items);
-
-  calculate_closure(state);
 }
 
-fn calculate_closure(state: &mut State) {
-  if !state.kernel_items.is_empty() {
-    state.closure = Some(state.kernel_items.iter().closure::<ItemSet>(state.id));
+/// Iterates over valid state nodes within the graph. Valid nodes are those that
+/// reachable from leaf states.
+pub struct GraphIterator<'a, 'db: 'a> {
+  graph:      &'a GraphHost<'db>,
+  queue:      Queue<StateId>,
+  links:      OrderedMap<StateId, OrderedSet<&'a GraphState<'db>>>,
+  empty_hash: OrderedSet<&'a GraphState<'db>>,
+}
+
+impl<'a, 'db: 'a> GraphIterator<'a, 'db> {
+  pub fn new(graph: &'a GraphHost<'db>) -> Self {
+    let leaf_states = graph.get_leaf_states();
+    let mut queue = Queue::from_iter(leaf_states.iter().map(|i| i.get_id()));
+    let mut links: OrderedMap<StateId, OrderedSet<&GraphState>> = OrderedMap::new();
+    let mut seen = OrderedSet::new();
+    let empty_hash = OrderedSet::new();
+
+    while let Some(state) = queue.pop_front() {
+      if !seen.insert(state) {
+        continue;
+      }
+      let predecessors = graph[state].get_predecessors().clone();
+      for predecessor in &predecessors {
+        links.entry(*predecessor).or_insert(OrderedSet::new()).insert(&graph[state]);
+        queue.push_back(*predecessor);
+      }
+    }
+
+    let mut set = OrderedSet::from_iter(leaf_states.iter().map(|i| i.get_id()));
+
+    set.extend(links.keys().rev().map(|id| *id));
+
+    queue.extend(set.into_iter());
+
+    Self { graph, queue, links, empty_hash }
+  }
+
+  pub fn next<'b>(&'b mut self) -> Option<(&'b GraphHost<'db>, &'b GraphState<'db>, &'b OrderedSet<&'a GraphState<'db>>)> {
+    while let Some(state) = self.queue.pop_front() {
+      return Some((self.graph, &self.graph[state], self.links.get(&state).unwrap_or(&self.empty_hash)));
+    }
+
+    None
   }
 }

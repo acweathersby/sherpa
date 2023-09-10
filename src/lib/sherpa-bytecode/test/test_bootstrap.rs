@@ -11,25 +11,42 @@ use super::utils::TestParser;
 
 #[test]
 fn test_full_grammar() -> SherpaResult<()> {
-  let file_names = ["grammar.sg", "ascript.sg", "ir.sg", "symbol.sg", "token.sg"];
   let grammar_folder =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/sherpa/2.0.0").canonicalize().unwrap();
+
+  // Build our parser;
+
   let sherpa_grammar = grammar_folder.join("grammar.sg");
   let mut grammar = SherpaGrammarBuilder::new();
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar)?;
   let parser = database.build_parser(ParserConfig::new().lr_only())?.optimize(false)?;
   let pkg = compile_bytecode(&parser, true)?;
 
+  // Gather list of files to validata. This includes the latest sherpa grammar
+  // itself and all files found in the "validate" folder adjacent to the latest
+  // grammar version folder.
+
+  let grammar_files =
+    grammar_folder.read_dir()?.filter_map(|f| f.ok()).filter(|f| f.file_type().is_ok_and(|t| t.is_file())).map(|f| f.path());
+
+  let validation_files = grammar_folder
+    .join("../validate")
+    .canonicalize()?
+    .read_dir()?
+    .filter_map(|f| f.ok())
+    .filter(|f| f.file_type().is_ok_and(|t| t.is_file()))
+    .map(|f| f.path());
+
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
   parser.write_states_to_temp_file()?;
 
-  for file_name in file_names {
-    println!("{file_name}");
+  for file_path in validation_files.chain(grammar_files.into_iter()) {
+    println!("{}", file_path.file_name().and_then(|f| f.to_str()).expect("Could not read file name"));
 
-    let input = std::fs::read_to_string(grammar_folder.join(file_name))?;
+    let input = std::fs::read_to_string(file_path)?;
 
     let db = parser.get_db();
-    let mut cd = if false {
+    let mut cd = if true {
       #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
       sherpa_core::file_debugger(
         db.to_owned(),

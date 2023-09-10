@@ -180,7 +180,7 @@ Reduce to {nterm_name} with rule:
 
 Stack:\n{}\n
 -------------------------------------------------------------------------------",
-        item.to_complete().debug_string(),
+        item.to_complete()._debug_string_(),
         stack
           .iter()
           .enumerate()
@@ -221,7 +221,7 @@ Stack:\n{}\n
       )
     }
     DebugEvent::ExecuteInstruction { instruction } if display_instruction => {
-      let active_ptr = if ctx.is_scanner() { ctx.scan_ptr } else { ctx.head_ptr };
+      let active_ptr = if ctx.is_scanner() { ctx.tok_ptr } else { ctx.sym_ptr };
       if ctx.is_scanner() || display_scanner_output {
         if !matches!(instruction.get_opcode(), Opcode::VectorBranch | Opcode::HashBranch) {
           Default::default()
@@ -243,8 +243,8 @@ Stack:\n{}\n
           ctx.tok_id,
           ctx.anchor_ptr,
           ctx.base_ptr,
-          ctx.head_ptr,
-          ctx.scan_ptr,
+          ctx.sym_ptr,
+          ctx.tok_ptr,
           ctx.end_ptr,
           &ctx.get_str()[(active_ptr)..(active_ptr + input_window_size).min(ctx.get_str().len())].replace("\n", "\\n"),
           disassemble_parse_block(Some(*instruction), true).0

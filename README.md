@@ -31,9 +31,16 @@ API documentation can be found here.
 
 ## Recursive Ascent and Descent Compilers
 
+## Earley Parser
+
+ - [Marpa](https://jeffreykegler.github.io/Marpa-web-site/)
+ - [Santiago](https://github.com/kamadorueda/santiago)
+
 ## LR Compilers
 - [LALRPOP](https://github.com/lalrpop/lalrpop) (rust) - LR(1) parser generator for Rust
-- [tree-sitter](https://github.com/tree-sitter/tree-sitter) (C / JavaScript) - An incremental parsing system for programming tools
+- [tree-sitter](https://github.com/tree-sitter/tree-sitter) (C / JavaScript) - An incremental 
+parsing system for programming tools
+- [Antlr](https://github.com/tree-sitter/tree-sitter) (C / JavaScript) - An incremental 
 
 ## Parsing Expression Grammar (PEG) Compilers
 

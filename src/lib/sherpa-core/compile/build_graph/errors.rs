@@ -1,11 +1,9 @@
-use super::{graph::*, items::get_goal_items};
+use super::graph::*;
 use crate::types::*;
 
 use ErrorClass::*;
 
-pub(super) fn create_reduce_reduce_error(iter: &GraphBuilder, end_items: ItemSet) -> SherpaError {
-  let _db = iter.graph().get_db();
-  let _goals = end_items.iter().flat_map(|i| get_goal_items(iter, i)).collect::<OrderedSet<_>>();
+pub(super) fn _create_reduce_reduce_error(iter: &GraphBuilder, end_items: ItemSet) -> SherpaError {
   /*   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "reduce-conflict",
     msg:      "Unresolvable parse conflict encountered".into(),
@@ -32,16 +30,16 @@ pub(super) fn create_reduce_reduce_error(iter: &GraphBuilder, end_items: ItemSet
 }
 
 /// Produces errors that result the banning of LR states.
-pub(super) fn lr_disabled_error<'db>(iter: &GraphBuilder) -> SherpaResult<()> {
-  let db = iter.graph().get_db();
+pub(super) fn lr_disabled_error<'db>(gb: &GraphBuilder, lr_items: Items) -> SherpaResult<()> {
+  let db = gb.graph().get_db();
 
   let s_store = db.string_store();
 
-  let nonterms = iter.graph()[iter.state_id()].get_nonterm_items();
+  let nonterms = lr_items;
 
   if nonterms.len() == 1 {
     let first = nonterms.first().unwrap();
-    if first.is_left_recursive() {
+    if first.is_left_recursive(gb.get_mode()) {
       return Err(SherpaError::SourceError {
         loc:        first.rule().tok.clone(),
         path:       first.rule().g_id.path.to_path(s_store),
@@ -66,14 +64,18 @@ pub(super) fn lr_disabled_error<'db>(iter: &GraphBuilder) -> SherpaResult<()> {
     id:       (ForbiddenLR, 1, "goto-states-forbidden").into(),
     msg:      "Since LR parsing is disabled could not construct goto state to handle the parsing of the nonterminal ["
       .to_string()
-      + &db.nonterm_friendly_name_string(iter.graph().get_goal_nonterm_index())
+      + &db.nonterm_friendly_name_string(gb.graph().get_goal_nonterm_index())
       + "]",
     ps_msg:   "Consider enabling lr parsing through the parser config object".into(),
     severity: SherpaErrorSeverity::Critical,
   });
 }
 
-pub fn conflicting_symbols_error<'db>(graph: &GraphHost<'db>, groups: OrderedMap<(u16, SymbolId), ItemSet<'db>>) -> SherpaError {
+pub(crate) fn conflicting_symbols_error<'db>(
+  gb: &GraphBuilder<'db>,
+  groups: OrderedMap<(u16, SymbolId), Follows<'db>>,
+) -> SherpaError {
+  let graph = gb.graph();
   let db = graph.get_db();
   SherpaError::SourcesError {
     id:       (GraphConstruction, 0, "conflicting-symbols").into(),
@@ -82,23 +84,27 @@ pub fn conflicting_symbols_error<'db>(graph: &GraphHost<'db>, groups: OrderedMap
     severity: SherpaErrorSeverity::Critical,
     sources:  groups
       .iter()
-      .map(|(_sym, items)| {
-        items.iter().map(|i| (i.rule().tok.clone(), i.rule().g_id.path.to_path(db.string_store()), Default::default()))
+      .map(|(_sym, follows)| {
+        follows
+          .iter()
+          .map(|p| (p.kernel.rule().tok.clone(), p.kernel.rule().g_id.path.to_path(db.string_store()), Default::default()))
       })
       .flatten()
       .collect(),
   }
 }
 
-pub fn peek_not_allowed_error<'db>(graph: &GraphHost<'db>, parent: StateId) -> SherpaError {
+pub(crate) fn peek_not_allowed_error(gb: &GraphBuilder, parent: StateId) -> SherpaError {
+  let graph = gb.graph();
   let state = &graph[parent];
   let parent = &graph[graph[parent].get_parent()];
 
   let db = graph.get_db();
-  let peek_groups = state.get_resolve_states();
+  let peek_groups = state.get_resolve_items();
 
   if let sym @ SymbolId::DBNonTerminal { key } = state.get_symbol().sym() {
-    let source_nonterms = parent.get_nonterm_items().iter().filter(|i| i.nonterm_index_at_sym().is_some_and(|k| k == key));
+    let source_nonterms =
+      parent.get_nonterm_items().iter().filter(|i| i.nonterm_index_at_sym(gb.get_mode()).is_some_and(|k| k == key));
     SherpaError::SourcesError {
       id:       (ForbiddenPeek, 0, "disabled-peeking").into(),
       msg:      "Cannot create lookahead states to resolve items in rules for [".to_string()
@@ -118,9 +124,9 @@ pub fn peek_not_allowed_error<'db>(graph: &GraphHost<'db>, parent: StateId) -> S
               "Reduce to [".to_string()
                 + &db.nonterm_friendly_name_string(i.nonterm_index())
                 + "]? | "
-                + &i.to_canonical().debug_string()
+                + &i.to_canonical()._debug_string_()
             } else {
-              "Continue shifting? | ".to_string() + &i.to_canonical().debug_string()
+              "Continue shifting? | ".to_string() + &i.to_canonical()._debug_string_()
             },
           )
         })

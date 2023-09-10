@@ -1,16 +1,16 @@
 #![allow(unused)]
 
-use super::super::{build::TransitionGroups, graph::*};
+use super::super::{build::GroupedFirsts, graph::*};
 use crate::types::*;
 use std::collections::BTreeSet;
 
-use GraphState::*;
+use GraphBuildState::*;
 
 pub(crate) fn handle_peg_complete_groups<'db>(
   gb: &mut GraphBuilder<'db>,
-  groups: &mut TransitionGroups<'db>,
+  groups: &mut GroupedFirsts<'db>,
   prec_sym: PrecedentSymbol,
-  follow_pairs: OrderedSet<FollowPair<'db>>,
+  follow_pairs: Follows<'db>,
   default_only_items: &ItemSet<'db>,
 ) -> SherpaResult<()> {
   Ok(())

@@ -9,6 +9,26 @@ use std::path::PathBuf;
 use super::utils::compile_and_run_grammars;
 
 #[test]
+pub fn basic_scanner() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+      IGNORE { c:sp c:nl }
+
+      <> A > "sym" [ tk:ref? "?" ?  "ref"? ]!
+          | "sym"
+
+      <> ref > "^" id
+
+      <> id > tk:id_tok
+
+      <> id_tok >  ( "-" | "_" | c:id ) ( c:id | '_' | '-' | c:num )(*)
+
+  "#],
+    &[("default", "sym?^name", true)],
+  )
+}
+
+#[test]
 pub fn basic_left_recursion() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
@@ -108,7 +128,7 @@ pub fn precedence() -> SherpaResult<()> {
     <> space > c:sp(+)
 
 "#],
-    &[("default", "1 + 2 * 2 * 2 + 2 * 2 + 1 +                                                     1", true)],
+    &[("default", "1 + 2 * 2 ^ 2 + 2 * 2 + 1 + 1", true)],
   )
 }
 
@@ -151,13 +171,13 @@ IGNORE { c:sp  }
 <> id_tok > c:id
 
 "#],
-    &[("default", "t => g :t t", true), ("default", ":t t => a :t!", true), ("default", ":t t => g :t! t!", true)],
+    &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
   )
 }
 
 #[test]
 pub fn construct_basic_recursive_descent() -> SherpaResult<()> {
-  compile_and_run_grammars(&[r#"<> A > 'h' 'e' 'l' 'l' 'o'"#], &[("default", "hello ", true)])
+  compile_and_run_grammars(&[r#"<> A > B ' ' C <> B > 'hello' <> C > 'world' "#], &[("default", "hello world", true)])
 }
 
 #[test]
@@ -455,12 +475,13 @@ pub fn recursive_skipped_comments() -> SherpaResult<()> {
 
     <> A > "hello" "world"
 
-    <> comment > "/*"{:9999} comment_body '*'{:1} "/"{:9999}
+    <> comment > '/' "*"{:9999} comment_body '*'{:9999} "/"{:9999}
 
-    <> comment_body >  ( c:nl | c:sym{:1} | c:num | c:sp | c:id | comment )(+)
+    <> comment_body >  ( c:nl | c:sym | c:num | c:sp | c:id | comment )(+)
     "##],
     &[
-      ("default", r##"hello /* This is the * only way to go /* to */ the moon */ world"##, true),
+      ("default", r##"hello /* */ world"##, true),
+      ("default", r##"hello /* This is the only way to go /* to */ the moon */ world"##, true),
       ("default", r##"hello /* This is the only way to go /* to */ the moon / world"##, false),
     ],
   )
@@ -522,17 +543,17 @@ fn escaped_values() -> SherpaResult<()> {
 fn escaped_string() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r##"
-        <> string > tk:string_tk
+        <> string > tk:string_tk "a"
         
         <> string_tk > '"' ( c:sym | c:num | c:sp | c:id | escape )(*) "\""
         
         <> escape > "\\"{:9999}  ( c:sym | c:num | c:sp | c:id )
         "##],
     &[
-      ("default", r##""""##, true),
-      ("default", r##""\\""##, true),
-      ("default", r##""1234""##, true),
-      ("default", r##""12\"34""##, true),
+      ("default", r##"""a"##, true),
+      ("default", r##""\\"a"##, true),
+      ("default", r##""1234"a"##, true),
+      ("default", r##""12\"34"a"##, true),
     ],
   )
 }

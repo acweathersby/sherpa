@@ -114,16 +114,16 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   const __HINT__: Opcode = Opcode::ShiftToken;
 
   debug_assert!(
-    ctx.start_line_off as usize <= ctx.head_ptr,
+    ctx.start_line_off as usize <= ctx.sym_ptr,
     "
   The `start_line_offset` should not be advanced further than the `head_ptr` at this point
   head_ptr: {}  start_line_off:{}",
-    ctx.head_ptr,
+    ctx.sym_ptr,
     ctx.start_line_off
   );
 
   let action = ParseAction::Shift {
-    token_byte_offset: ctx.head_ptr as u32,
+    token_byte_offset: ctx.sym_ptr as u32,
     token_byte_length: ctx.tok_len as u32,
     token_line_count:  ctx.start_line_num,
     token_line_offset: ctx.start_line_off,
@@ -135,11 +135,11 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   ctx.end_line_num = ctx.start_line_num;
   ctx.end_line_off = ctx.end_line_off;
 
-  let new_offset = ctx.head_ptr + ctx.tok_len;
+  let new_offset = ctx.sym_ptr + ctx.tok_len;
 
   ctx.base_ptr = new_offset;
-  ctx.head_ptr = new_offset;
-  ctx.scan_ptr = new_offset;
+  ctx.sym_ptr = new_offset;
+  ctx.tok_ptr = new_offset;
   ctx.tok_id = 0;
   ctx.tok_len = 0;
 
@@ -166,9 +166,9 @@ fn scan_shift<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
 ) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::ScanShift;
 
-  ctx.scan_ptr = ctx.scan_ptr + ctx.sym_len as usize;
+  ctx.tok_ptr = ctx.tok_ptr + ctx.sym_len as usize;
   ctx.sym_len = 0;
-  let offset = ctx.scan_ptr;
+  let offset = ctx.tok_ptr;
   ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
 
   (ParseAction::None, i.next(), false, true)
@@ -181,9 +181,9 @@ fn peek_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
 ) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PeekToken;
 
-  let offset = ctx.head_ptr + ctx.tok_len;
-  ctx.head_ptr = offset;
-  ctx.scan_ptr = offset;
+  let offset = ctx.sym_ptr + ctx.tok_len;
+  ctx.sym_ptr = offset;
+  ctx.tok_ptr = offset;
   ctx.tok_id = 0;
   ctx.tok_len = 0;
   ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
@@ -205,12 +205,12 @@ fn __skip_token_core__<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Read
   base_instruction: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> OpReturnVal<'a> {
-  let original_offset = ctx.head_ptr;
-  let offset = ctx.head_ptr + ctx.tok_len as usize;
+  let original_offset = ctx.sym_ptr;
+  let offset = ctx.sym_ptr + ctx.tok_len as usize;
   let tok_len = ctx.tok_len;
   let token_id = ctx.tok_id;
-  ctx.scan_ptr = offset;
-  ctx.head_ptr = offset;
+  ctx.tok_ptr = offset;
+  ctx.sym_ptr = offset;
   ctx.tok_id = 0;
   ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
 
@@ -343,7 +343,7 @@ fn assign_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   const __HINT__: Opcode = Opcode::AssignToken;
   let mut iter = i.iter();
   ctx.tok_id = iter.next_u32_le().unwrap();
-  ctx.tok_len = ctx.scan_ptr - ctx.head_ptr;
+  ctx.tok_len = ctx.tok_ptr - ctx.sym_ptr;
   ctx.chkp_line_num = ctx.end_line_num;
   ctx.chkp_line_off = ctx.end_line_off;
   (ParseAction::None, i.next(), false, true)
@@ -356,8 +356,8 @@ fn peek_reset<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
 ) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PeekReset;
   let offset = ctx.base_ptr;
-  ctx.head_ptr = offset;
-  ctx.scan_ptr = offset;
+  ctx.sym_ptr = offset;
+  ctx.tok_ptr = offset;
   ctx.tok_id = 0;
   ctx.tok_len = 0;
   ctx.sym_len = 0;
@@ -450,7 +450,7 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 ) -> u32 {
   match input_type {
     InputType::NonTerminal => ctx.get_nonterminal() as u32,
-    InputType::EndOfFile => (ctx.scan_ptr >= ctx.end_ptr) as u32,
+    InputType::EndOfFile => (ctx.tok_ptr >= ctx.end_ptr) as u32,
     InputType::Class => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.sym_len = scan_len;
@@ -477,7 +477,7 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
       if byte == 10 {
         ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.scan_ptr as u32;
+        ctx.end_line_off = ctx.tok_ptr as u32;
       }
 
       if byte > 0 {
@@ -492,7 +492,7 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 
       if byte == 10 {
         ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.scan_ptr as u32;
+        ctx.end_line_off = ctx.tok_ptr as u32;
       }
 
       if byte > 0 {
@@ -520,8 +520,8 @@ fn token_scan<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
   debug: &mut Option<&'debug mut DebugFn<R, M>>,
 ) {
   ctx.tok_id = 0;
-  ctx.scan_ptr = ctx.head_ptr;
-  let offset = ctx.scan_ptr;
+  ctx.tok_ptr = ctx.sym_ptr;
+  let offset = ctx.tok_ptr;
   ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
 
   // Initialize Scanner
@@ -576,9 +576,9 @@ fn token_scan<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
     }
   } {
     Some(()) => {
-      ctx.scan_ptr = ctx.head_ptr;
+      ctx.tok_ptr = ctx.sym_ptr;
       ctx.set_is_scanner(false);
-      let offset = ctx.scan_ptr;
+      let offset = ctx.tok_ptr;
       ctx.get_reader_mut().set_cursor_to(offset, 0, 0);
     }
     _ => panic!("Unusable State"),
@@ -605,7 +605,7 @@ pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M
         last_nonterminal: ctx.nterm,
         last_input:       TokenRange {
           len:      ctx.tok_len as u32,
-          off:      ctx.head_ptr as u32,
+          off:      ctx.sym_ptr as u32,
           line_num: 0,
           line_off: 0,
         },
@@ -668,7 +668,7 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M, ByteCode: AsRef<[u8]>> S
   }
 
   fn head_at_end(&self) -> bool {
-    self.ctx.head_ptr == self.get_reader().len()
+    self.ctx.sym_ptr == self.get_reader().len()
   }
 
   fn get_token_length(&self) -> u32 {
@@ -712,8 +712,8 @@ impl<'a, R: ByteReader + MutByteReader + UTF8Reader, M, ByteCode: AsRef<[u8]>> S
     self.ctx.end_ptr = self.get_reader().len();
     self.ctx.anchor_ptr = 0;
     self.ctx.base_ptr = 0;
-    self.ctx.head_ptr = 0;
-    self.ctx.scan_ptr = 0;
+    self.ctx.sym_ptr = 0;
+    self.ctx.tok_ptr = 0;
     self.get_reader_mut().set_cursor(0);
     self.get_reader_mut().next(0);
   }

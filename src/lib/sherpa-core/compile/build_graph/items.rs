@@ -1,42 +1,65 @@
 use super::{
-  build::{TransitionGroup, TransitionGroups},
-  flow::get_kernel_items_from_peek_item,
+  build::{GroupedFirsts, TransitionGroup},
   graph::*,
-  symbols::symbols_occlude,
 };
-/// Returns all incomplete items that follow the given completed item,
-use crate::{types::*, utils::hash_group_btreemap};
+use crate::types::*;
+use sherpa_rust_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
 use std::collections::VecDeque;
 
-/// and all completed items that were encountered, including the initial item.
-pub(super) fn get_follow<'db>(gb: &GraphBuilder<'db>, item: Item<'db>) -> SherpaResult<(Items<'db>, Items<'db>)> {
+/// Returns a tuple comprised of a vector of all items that follow the given
+/// item, provided the given item is in a complete state, and a list of a all
+/// items that are completed from directly or indirectly transitioning on the
+/// nonterminal of the given item.
+pub(crate) fn get_follow<'db>(gb: &GraphBuilder<'db>, item: Item<'db>) -> SherpaResult<(Items<'db>, Items<'db>)> {
+  get_follow_internal(gb.graph(), item)
+}
+
+/// Returns a tuple comprised of a vector of all items that follow the given
+/// item, provided the given item is in a complete state, and a list of a all
+/// items that are completed from directly or indirectly transitioning on the
+/// nonterminal of the given item.
+pub(crate) fn get_follow_internal<'db>(graph: &GraphHost<'db>, item: Item<'db>) -> SherpaResult<(Items<'db>, Items<'db>)> {
   if !item.is_complete() {
     return SherpaResult::Ok((vec![item], vec![]));
   }
-
+  let ____is_scan____ = graph.graph_type == GraphType::Scanner;
   let mut completed = OrderedSet::new();
   let mut follow = OrderedSet::new();
   let mut queue = VecDeque::from_iter(vec![item]);
+  let db = graph.get_db();
+  let mode = graph.graph_type;
 
   while let Some(item) = queue.pop_front() {
     if completed.insert(item) {
       let nterm = item.nonterm_index();
-      let closure = if item.is_out_of_scope() {
-        gb.graph()
-          .get_db()
-          .nonterm_follow_items(nterm)
+      let closure = if item.goal_is_oos() {
+        db.nonterm_follow_items(nterm)
           //graph[item.origin_state]
           //  .get_root_closure_ref()?
           //.iter()
-          .filter(|i| /* i.is_out_of_scope() && */ i.nontermlike_index_at_sym().unwrap_or_default() == nterm)
+          .filter(|i| /* i.is_out_of_scope() && */ i.nonterm_index_at_sym(mode).unwrap_or_default() == nterm)
           .map(|i| i.to_origin(item.origin).to_oos_index().to_origin_state(StateId::root()))
           .collect::<Array<_>>()
       } else {
-        gb.graph()[item.origin_state]
-          .get_closure_ref()?
-          .into_iter()
-          .filter(|i| i.nontermlike_index_at_sym().unwrap_or_default() == nterm && i.goal == item.goal)
-          .cloned()
+        let state = item.origin_state;
+        let origin = item.origin;
+        let goal = item.goal;
+        graph[item.origin_state]
+          .kernel_items_ref()
+          .iter()
+          .filter(|kernel| kernel.goal == goal)
+          .flat_map(|kernel| {
+            db.get_closure(kernel)
+              .map(|i| {
+                if i.is_canonical() == kernel.is_canonical() {
+                  *kernel
+                } else {
+                  i.to_origin_state(state).to_goal(goal).to_origin(origin)
+                }
+              })
+              .chain([kernel.clone()])
+          })
+          .filter(|i| i.nonterm_index_at_sym(mode) == Some(nterm))
           .collect::<Array<_>>()
       };
 
@@ -50,9 +73,9 @@ pub(super) fn get_follow<'db>(gb: &GraphBuilder<'db>, item: Item<'db>) -> Sherpa
           }
         }
       } else if !item.origin_state.is_root() {
-        let parent_state = gb.graph()[item.origin_state].get_parent();
+        let parent_state = graph[item.origin_state].get_parent();
         queue.push_back(item.to_origin_state(parent_state));
-      } else if !gb.is_scanner() && !item.is_out_of_scope() {
+      } else if !____is_scan____ && !item.is_out_of_scope() {
         let item: Item<'_> = item.to_oos_index();
         queue.push_back(item);
       }
@@ -65,12 +88,12 @@ pub(super) fn get_follow<'db>(gb: &GraphBuilder<'db>, item: Item<'db>) -> Sherpa
 // Inserts out of scope sentinel items into the existing
 // items groups if we are in scanner mode and the item that
 // was completed belongs to the parse state goal set.
-pub(super) fn get_oos_follow_from_completed<'db, 'follow>(
+pub(super) fn get_oos_follow_from_completed<'db>(
   gb: &GraphBuilder<'db>,
   completed_items: &Items<'db>,
-  handler: &mut dyn FnMut(Items<'db>),
+  handler: &mut dyn FnMut(Follows<'db>),
 ) -> SherpaResult<()> {
-  let mut out = ItemSet::new();
+  let mut out = OrderedSet::new();
   for completed_item in completed_items {
     if !completed_item.is_out_of_scope() {
       let (_, completed) = get_follow(gb, *completed_item)?;
@@ -85,12 +108,12 @@ pub(super) fn get_oos_follow_from_completed<'db, 'follow>(
             .to_origin(if gb.is_scanner() { Origin::ScanCompleteOOS } else { Origin::GoalCompleteOOS })
             .to_oos_index(),
         )?;
-        out.append(&mut follow.to_set());
+        out.extend(&mut follow.into_iter().map(|f| -> Follow { (*completed_item, f, gb.get_mode()).into() }));
       }
     }
   }
   if !out.is_empty() {
-    handler(out.to_vec());
+    handler(out.into_iter().collect());
   }
   SherpaResult::Ok(())
 }
@@ -99,104 +122,81 @@ pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items<'db>, gr
   items.iter().filter(|i| graph.item_is_goal(*i)).cloned().collect()
 }
 
-pub(super) fn merge_items_into_groups<'db>(follow: &Vec<Item<'db>>, par: StateId, groups: &mut TransitionGroups<'db>) {
+pub(super) fn merge_follow_items_into_group<'db>(
+  follows: &Vec<Follow<'db>>,
+  par: StateId,
+  firsts_groups: &mut GroupedFirsts<'db>,
+) {
   // Dumb symbols that could cause termination of parse into the intermediate
   // item groups
-  for (sym, group) in hash_group_btreemap(
-    follow.iter().closure::<ItemSet>(par).into_iter().filter(|i| i.is_term()).collect::<OrderedSet<_>>(),
-    |_, i| i.sym(),
-  ) {
-    if !groups.contains_key(&sym) {
-      groups.insert(sym, (group.iter().get_max_symbol_precedence(), group));
+
+  for follow in follows {
+    if !firsts_groups.contains_key(&follow.sym) {
+      firsts_groups.insert(follow.sym, (follow.prec, vec![*follow]));
     }
   }
 }
 
-pub(super) fn all_items_come_from_same_nonterminal_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(group: T) -> bool {
-  group.clone().all(|i| i.is_at_initial()) && group.map(|i| i.nonterm_index()).collect::<Set<_>>().len() == 1
-}
-
-pub(super) fn all_items_transition_on_same_nonterminal<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
-  mut group: T,
-) -> bool {
-  let Some(first) = group.next() else { return false };
-
-  let Some(nonterm) = first.nontermlike_index_at_sym() else { return false };
-
-  group.all(|f| f.nontermlike_index_at_sym() == Some(nonterm))
-}
-
-pub(super) fn peek_items_are_from_goto_state(cmpl: &Items, graph: &GraphHost) -> bool {
-  debug_assert_eq!(
-    cmpl
-      .iter()
-      .map(|i| {
-        match i.origin {
-          Origin::Peek(_, origin) => origin,
-          _ => unreachable!(),
-        }
-      })
-      .collect::<OrderedSet<_>>()
-      .len(),
-    1
-  );
-  match cmpl[0].origin {
-    Origin::Peek(_, origin) => graph[origin].get_type().is_goto(),
-    _ => false,
-  }
-}
-
-pub(super) fn get_goal_items<'db, 'follow>(iter: &GraphBuilder<'db>, item: &Item<'db>) -> Items<'db> {
-  match item.origin {
-    Origin::TerminalGoal(..) | Origin::NonTermGoal(_) => {
-      vec![iter.graph()[0].kernel_items_ref().clone().to_vec()[item.goal as usize]]
-    }
-    Origin::Peek(..) => get_kernel_items_from_peek_item(iter, item).iter().cloned().collect(),
-    _ => vec![],
-  }
-}
-
-pub(super) fn merge_occluding_token_items<'db, 'follow>(
-  from_groups: TransitionGroups<'db>,
-  into_groups: &mut TransitionGroups<'db>,
-) {
+pub(super) fn merge_occluding_token_items<'db>(from_groups: GroupedFirsts<'db>, into_groups: &mut GroupedFirsts<'db>) {
   for (sym, group) in into_groups.iter_mut() {
-    let mut occluding_items = get_set_of_occluding_token_items(sym, group, &from_groups, group.1.first().unwrap().get_db());
-    group.1.append(&mut occluding_items);
+    let mut occluding_items = get_set_of_occluding_token_items(sym, group, &from_groups);
+    group.1.extend(occluding_items);
   }
 }
 
-pub(super) fn get_set_of_occluding_token_items<'db, 'follow>(
+pub(super) fn get_set_of_occluding_token_items<'db>(
   into_sym: &SymbolId,
   into_group: &TransitionGroup<'db>,
-  groups: &TransitionGroups<'db>,
-  db: &ParserDatabase,
-) -> ItemSet<'db> {
-  let mut occluding = ItemSet::new();
-  let into_group_precedence = into_group.0;
+  groups: &GroupedFirsts<'db>,
+) -> Firsts<'db> {
+  let mut occluding = Firsts::new();
+  let into_prec = into_group.0;
 
-  if into_group_precedence >= 9999 {
+  if into_prec >= 9999 {
     return occluding;
   }
 
-  for (from_sym, from_group) in groups.iter().filter(|(other_sym, _)| into_sym != *other_sym) {
-    if symbols_occlude(into_sym, from_sym, db) {
-      /*     #[cfg(debug_assertions)]
-      {
-        _j.report_mut().add_note(
-          "Symbol Group Merge",
-          format!(
-            "\nDue to the ambiguous symbols [{} ≈ {}] the group [\n\n{}\n\n] will be merged into [\n\n{}\n\n]\n",
-            into_sym.debug_string(db),
-            from_sym.debug_string(db),
-            from_group.to_debug_string("\n"),
-            into_group.to_debug_string("\n")
-          ),
-        );
-      } */
-      occluding.append(&mut from_group.1.clone());
+  for (from_sym, from_group) in groups.iter().filter(|(other_sym, (prec, _))| into_sym != *other_sym && into_prec <= *prec) {
+    if symbols_occlude(into_sym, from_sym) {
+      occluding.extend(from_group.1.iter().cloned());
     }
   }
 
   occluding
+}
+
+/// Compares whether symbolB occludes symbolA
+/// ( produces an ambiguous parse path )
+///
+/// Symbols that can occlude are as follows
+///
+/// - `g:id` and any single identifier character.
+/// - `g:num` and any single numeric character.
+/// - `g:sym` and any single character thats not a numeric, identifier, space,
+///   newline, or tab.
+fn symbols_occlude(symA: &SymbolId, symB: &SymbolId) -> bool {
+  match symA {
+    SymbolId::Char { char, .. } => match symB {
+      SymbolId::ClassNumber { .. } => {
+        (*char < 128) && get_token_class_from_codepoint(*char as u32) == CodePointClass::Number as u32
+      }
+      SymbolId::ClassIdentifier { .. } => {
+        (*char < 128) && get_token_class_from_codepoint(*char as u32) == CodePointClass::Identifier as u32
+      }
+      SymbolId::ClassSymbol { .. } => {
+        (*char < 128) && get_token_class_from_codepoint(*char as u32) == CodePointClass::Symbol as u32
+      }
+      SymbolId::Default => false,
+      symB => *symA == *symB,
+    },
+    SymbolId::Codepoint { val, .. } => match symB {
+      SymbolId::ClassNumber { .. } => get_token_class_from_codepoint(*val) == CodePointClass::Number as u32,
+      SymbolId::ClassIdentifier { .. } => get_token_class_from_codepoint(*val) == CodePointClass::Identifier as u32,
+      SymbolId::ClassSymbol { .. } => get_token_class_from_codepoint(*val) == CodePointClass::Symbol as u32,
+      SymbolId::Default => false,
+      symB => *symA == *symB,
+    },
+    SymbolId::Default => false,
+    symA => *symA == *symB,
+  }
 }

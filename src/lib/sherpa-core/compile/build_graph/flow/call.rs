@@ -1,95 +1,119 @@
-use super::super::{
-  graph::*,
-  items::{all_items_come_from_same_nonterminal_call, all_items_transition_on_same_nonterminal},
-};
+use super::super::graph::*;
 use crate::types::*;
 
-use GraphState::*;
+use GraphBuildState::*;
+use StateType::*;
 
-pub(crate) fn create_call<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db> + Clone>(
-  iter: &mut GraphBuilder<'db>,
+pub struct CreateCallResult<'db> {
+  /// `true` if the state is a KernelCall
+  pub is_kernel:         bool,
+  /// The new state that will perform the call
+  pub state_id:          StateId,
+  /// A list of items from the parent closure that transition on the called
+  /// non-terminal.
+  pub _transition_items: Items<'db>,
+}
+
+/// Attempts to make a "call" states, which jumps to the root of another
+/// non-terminal parse graph. Returns an optional tuple:
+/// (
+///   is_ker
+/// )
+pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
+  gb: &mut GraphBuilder<'db>,
   group: T,
   sym: PrecedentSymbol,
-) -> Option<(StateId, Vec<Item<'db>>)> {
-  let Some(first) = group.clone().next() else { return None };
-  let db = iter.graph().get_db();
+) -> Option<CreateCallResult<'db>> {
+  let ____is_scan____ = gb.is_scanner();
+  let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
+  let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
 
-  let call_data = if all_items_come_from_same_nonterminal_call(group.clone()) {
-    let nterm = first.nonterm_index();
+  if
+  /* TODO(anthony) remove this after scan peek is implemented >>> */
+  ____is_scan____ /* <<< */ || !____allow_rd____ || group.clone().any(|i| i.is_kernel_terminal()) {
+    return None;
+  };
 
-    if !matches!(db.nonterm_recursion_type(nterm), RecursionType::LeftRecursive | RecursionType::LeftRightRecursive) {
-      let Ok(items) = iter.current_state().get_closure_ref().map(|i| {
-        i.iter()
-          .filter(|i| match i.nontermlike_index_at_sym() {
+  // if all kernels are on same nonterminal symbol then we can do a call, provided
+  // the nonterminal is not left recursive.
+
+  let kernel_symbol = group.clone().kernel_nonterm_sym(gb.get_mode());
+
+  if kernel_symbol.len() == 1 {
+    if let Some(Some(nonterm)) = kernel_symbol.first() {
+      match gb.db.nonterm_recursion_type(*nonterm) {
+        RecursionType::LeftRecursive | RecursionType::LeftRightRecursive => {
+          // Can't make a call on a left recursive non-terminal.
+        }
+        _ => {
+          // Create call on the kernel items.
+          let items = group.to_kernel().to_vec();
+          return Some(CreateCallResult {
+            is_kernel:         true,
+            state_id:          gb.create_state(Normal, sym, KernelCall(*nonterm), items.iter().try_increment()).to_state(),
+            _transition_items: items,
+          });
+        }
+      }
+    }
+  }
+
+  // We'll need to climb the closure graph to find the highest mutual non-terminal
+  // that is not left recursive. This is only allowed if the system allows LR
+  if !____allow_ra____ {
+    return None;
+  };
+
+  if let Some((nonterm, items)) = climb_nonterms(gb, group) {
+    return Some(CreateCallResult {
+      is_kernel:         true,
+      state_id:          gb.create_state(Normal, sym, InternalCall(nonterm), items.iter().try_increment()).to_state(),
+      _transition_items: items,
+    });
+  } else {
+    None
+  }
+}
+
+fn climb_nonterms<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
+  gb: &mut GraphBuilder<'db>,
+  group: T,
+) -> Option<(DBNonTermKey, Vec<Item<'db>>)> {
+  let db = gb.graph().get_db();
+
+  if all_items_come_from_same_nonterminal_call(group.clone()) {
+    let nterm = unsafe { group.clone().next().unwrap_unchecked() }.next.nonterm_index();
+
+    if matches!(db.nonterm_recursion_type(nterm), RecursionType::LeftRecursive | RecursionType::LeftRightRecursive) {
+      return None;
+    };
+
+    let climbed_firsts = group
+      .clone()
+      .flat_map(|p| {
+        p.kernel
+          .closure_iter()
+          .filter(|i| match i.nonterm_index_at_sym(gb.get_mode()) {
             Some(id) => id == nterm && i.nonterm_index() != nterm,
             _ => false,
           })
-          .cloned()
-          .collect::<Vec<_>>()
-      }) else {
-        return None;
-      };
+          .map(|i| -> TransitionPair { (p.kernel, i, gb.get_mode()).into() })
+      })
+      .collect::<Vec<_>>();
 
-      // There may be a superior candidate. evaluate that.
-      if let Some(pending_state) = create_call(iter, items.iter(), sym) {
-        return Some(pending_state);
-      }
-
-      Some((items, nterm))
-    } else {
-      None
+    // There may be a superior candidate. evaluate that.
+    if let Some(candidate) = climb_nonterms(gb, climbed_firsts.iter()) {
+      return Some(candidate);
     }
-  } else {
-    None
-  };
 
-  create_call_internal(iter, call_data, sym)
-}
-
-pub(crate) fn create_call_internal<'db>(
-  gb: &mut GraphBuilder<'db>,
-  call_pack: Option<(Vec<Item<'db>>, DBNonTermKey)>,
-  sym: PrecedentSymbol,
-) -> Option<(StateId, Vec<Item<'db>>)> {
-  match call_pack {
-    Some((items, nterm_to_call)) if items.len() > 0 => {
-      use StateType::*;
-
-      let state_type = if gb.is_scanner() {
-        let kernel_items = gb.current_state().kernel_items_ref();
-        items.iter().all(|i| kernel_items.contains(i)).then_some(KernelCall(nterm_to_call)).unwrap_or(InternalCall(nterm_to_call))
-      } else {
-        InternalCall(nterm_to_call)
-      };
-      Some((gb.create_state(Normal, sym, state_type, items.iter().try_increment()).to_state(), items))
-    }
-    _ => None,
-  }
-}
-
-pub(crate) fn create_kernel_call<'a, 'db: 'a>(gb: &mut GraphBuilder<'db>, sym: PrecedentSymbol) -> Option<()> {
-  let group = gb.current_state().kernel_items_ref().clone();
-  let group = group.iter();
-  let Some(first) = group.clone().next() else { return None };
-  let db = gb.graph().get_db();
-
-  if let Some((state, _)) = create_call_internal(
-    gb,
-    if all_items_transition_on_same_nonterminal(group.clone()) {
-      let nterm = first.nonterm_index_at_sym()?;
-      if !matches!(db.nonterm_recursion_type(nterm), RecursionType::LeftRecursive | RecursionType::LeftRightRecursive) {
-        Some((group.to_vec(), nterm))
-      } else {
-        None
-      }
-    } else {
-      None
-    },
-    sym,
-  ) {
-    gb.enqueue_pending_state(state);
-    Some(())
+    Some((nterm, climbed_firsts.iter().to_inherited(gb.state_id()).iter().to_next().cloned().collect()))
   } else {
     None
   }
+}
+
+pub(super) fn all_items_come_from_same_nonterminal_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
+  group: T,
+) -> bool {
+  group.clone().all(|i| i.next.is_at_initial()) && group.map(|i| i.next.nonterm_index()).collect::<Set<_>>().len() == 1
 }

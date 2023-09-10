@@ -19,7 +19,10 @@ use crate::{
   types::*,
 };
 use sherpa_rust_runtime::types::bytecode::InputType;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+
+type Map<A, B> = BTreeMap<A, B>;
+type Set<A> = BTreeSet<A>;
 
 /// Performance various transformation on the parse state graph
 /// to reduce number of steps between transient actions, and to
@@ -137,7 +140,7 @@ fn _inline_matches<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -
 fn remove_redundant_defaults<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
-  let mut state_branch_lookup: HashMap<IString, HashSet<(u64, String, u64)>> = HashMap::new();
+  let mut state_branch_lookup: Map<IString, Set<(u64, String, u64)>> = Map::new();
 
   for (name, state) in &parse_states {
     if let Some(box parser::State { statement, .. }) = state.ast.as_ref() {
@@ -174,7 +177,7 @@ fn remove_redundant_defaults<'db>(db: &'db ParserDatabase, mut parse_states: Par
     db: &'db ParserDatabase,
     state: IString,
     root_statement: &mut parser::Statement,
-    state_branch_lookup: &HashMap<IString, HashSet<(u64, String, u64)>>,
+    state_branch_lookup: &Map<IString, Set<(u64, String, u64)>>,
     info: &String,
   ) -> bool {
     if let Some(parser::Matches { matches, .. }) = root_statement.branch.as_mut().and_then(|m| m.as_Matches_mut()) {
@@ -404,7 +407,7 @@ fn inline_scanners<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMa
 fn _inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
-  let mut naked_state_lookup = HashMap::new();
+  let mut naked_state_lookup = Map::new();
 
   for (name, state) in &parse_states {
     // Only statements with branches that are not Matches can be considered as
@@ -419,7 +422,7 @@ fn _inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap
   fn inline_statement(
     db: &ParserDatabase,
     statement: &mut parser::Statement,
-    stmt_lu: &HashMap<IString, Statement>,
+    stmt_lu: &Map<IString, Statement>,
   ) -> SherpaResult<()> {
     let parser::Statement { branch, .. } = statement;
 
@@ -508,7 +511,7 @@ fn _inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap
 fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
-  let mut state_branch_lookup: HashMap<(IString, IString, u64), Statement> = HashMap::new();
+  let mut state_branch_lookup: Map<(IString, IString, u64), Statement> = Map::new();
 
   for (name, state) in &parse_states {
     if let Some(box parser::State { statement, .. }) = state.ast.as_ref() {
@@ -539,7 +542,7 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
   fn merge_branches<'db>(
     db: &'db ParserDatabase,
     statement: &mut parser::Statement,
-    state_branch_lookup: &HashMap<(IString, IString, u64), Statement>,
+    state_branch_lookup: &Map<(IString, IString, u64), Statement>,
   ) {
     let parser::Statement { branch, .. } = statement;
 
@@ -690,15 +693,14 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   mut parse_states: ParseStatesMap,
   gc_label: Option<&str>,
 ) -> SherpaResult<R> {
-  let mut state_name_to_canonical_state_name = HashMap::new();
-  let mut hash_to_name_set = HashMap::new();
+  let mut state_name_to_canonical_state_name = Map::new();
+  let mut hash_to_name_set = Map::new();
 
   // Prefer root names.
   for (name, state) in &parse_states {
     if state.root {
       let hash = state.get_canonical_hash(db)?;
       let canonical_name = hash_to_name_set.entry(hash).or_insert(*name).clone();
-      println!("{}", canonical_name.to_string(db.string_store()));
       state_name_to_canonical_state_name.insert(*name, canonical_name);
     }
   }
@@ -711,7 +713,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     }
   }
 
-  fn canonicalize_goto_name(db: &ParserDatabase, name: String, name_lu: &HashMap<IString, IString>) -> SherpaResult<String> {
+  fn canonicalize_goto_name(db: &ParserDatabase, name: String, name_lu: &Map<IString, IString>) -> SherpaResult<String> {
     let iname = name.to_token();
     let canonical_name = *name_lu.get(&iname).expect("State name should exist");
 
@@ -722,7 +724,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   fn canonicalize_statement(
     db: &ParserDatabase,
     statement: &mut parser::Statement,
-    name_lu: &HashMap<IString, IString>,
+    name_lu: &Map<IString, IString>,
   ) -> SherpaResult<()> {
     let parser::Statement { branch, .. } = statement;
     if let Some(branch) = branch.as_mut() {

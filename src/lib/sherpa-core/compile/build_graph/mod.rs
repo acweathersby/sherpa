@@ -2,8 +2,7 @@ mod build;
 mod errors;
 mod flow;
 pub mod graph;
-mod items;
-mod symbols;
+pub(crate) mod items;
 
 use crate::{journal::Journal, types::*};
 
@@ -13,7 +12,7 @@ pub(crate) fn build<'follow, 'db: 'follow>(
   j: &mut Journal,
   name: IString,
   graph_type: GraphType,
-  kernel_items: Items<'db>,
+  kernel_items: ItemSet<'db>,
   db: &'db ParserDatabase,
   config: ParserConfig,
 ) -> SherpaResult<GraphHost<'db>> {
@@ -23,9 +22,9 @@ pub(crate) fn build<'follow, 'db: 'follow>(
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
   if !gb.is_scanner() {
-    crate::test::utils::write_debug_file(db, "parse_graph.tmp", gb.graph().debug_string(), true)?;
+    crate::test::utils::write_debug_file(db, "parse_graph.tmp", gb.graph()._debug_string_(), true)?;
   } else {
-    crate::test::utils::write_debug_file(db, "scanner_graph.tmp", gb.graph().debug_string(), true)?;
+    crate::test::utils::write_debug_file(db, "scanner_graph.tmp", gb.graph()._debug_string_(), true)?;
   }
 
   let (graph, errors) = gb.into_inner();

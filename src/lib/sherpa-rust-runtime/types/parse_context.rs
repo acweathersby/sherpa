@@ -26,7 +26,26 @@ impl Default for Goto {
   }
 }
 
-/// This function should set up a new input block,
+enum Symbol {
+  Skip(Token),
+  Terminal(Token),
+  Nonterminal(u32, Box<Symbol>, Box<Vec<Symbol>>),
+  Fork(Box<ParseStack>),
+}
+
+pub struct ParseStack {
+  states:           Vec<u32>,
+  symbols:          Vec<Symbol>,
+  nonterminal_goal: u32,
+  error_weight:     u32,
+  prefix_sibling:   Option<Box<ParseStack>>,
+}
+
+pub struct ParseStacks {
+  stacks: Box<ParseStack>,
+}
+
+/// This function should set up a new input window,
 /// Respecting the the relative offsets of the parsing pointers.
 /// All pointer offsets should be relative to the anchor pointer
 /// which should at least point into some valid input data.
@@ -50,19 +69,22 @@ type GetBlockFunction<T> = extern "C" fn(
 #[repr(C)]
 pub struct ParseContext<T: ByteReader, M = u32> {
   // Input data ----------
-  /// The head of the input block
+  /// The head of the input window
   pub begin_ptr:      usize,
-  /// The the end of the last shifted token
   pub anchor_ptr:     usize,
-  /// The the start of the evaluated token, which may be
-  /// the same as base_ptr unless we are using peek shifts.
+  /// The the end of the last shifted token
   pub base_ptr:       usize,
-  /// The the start of the evaluated token, which may be
-  /// the same as base_ptr unless we are using peek shifts.
-  pub head_ptr:       usize,
+  /// The the start of the token currently being evaluated.
+  pub sym_ptr:        usize,
+  /// The the start of the token currently being evaluated.
+  pub sym_pk_ptr:     usize,
   /// The start of all unevaluated characters
-  pub scan_ptr:       usize,
-  /// The end of the input block
+  pub tok_ptr:        usize,
+  /// The start of all unevaluated characters
+  pub tok_pk_ptr:     usize,
+  /// The end of the input window. This is a fixed reference that should
+  /// not change during parsing unless the end of the input window has been
+  /// reached and a larger window is requested.
   pub end_ptr:        usize,
   /// The number of characters that comprize the current
   /// token. This should be 0 if the tok_id is also 0
@@ -106,7 +128,7 @@ pub struct ParseContext<T: ByteReader, M = u32> {
   pub is_active:      bool,
   // Miscellaneous ---------
   pub in_peek_mode:   bool,
-  /// True if the last block requested input block represent data up to
+  /// True if the last block requested input window represent data up to
   /// and including the end of input.
   pub block_is_eoi:   bool,
 }
@@ -114,9 +136,9 @@ pub struct ParseContext<T: ByteReader, M = u32> {
 impl<T: ByteReader, M> ParseContext<T, M> {
   pub fn reset(&mut self) {
     self.anchor_ptr = 0;
-    self.scan_ptr = 0;
+    self.tok_ptr = 0;
     self.tok_len = 0;
-    self.head_ptr = 0;
+    self.sym_ptr = 0;
     self.base_ptr = 0;
     self.end_ptr = 0;
     self.begin_ptr = 0;
@@ -203,7 +225,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   }
 
   pub fn get_token_offset(&self) -> u32 {
-    (self.head_ptr - self.begin_ptr) as u32
+    (self.sym_ptr - self.begin_ptr) as u32
   }
 
   pub fn get_token_line_number(&self) -> u32 {
@@ -247,11 +269,13 @@ impl<T: ByteReader, M> Default for ParseContext<T, M> {
   fn default() -> Self {
     Self {
       anchor_ptr:     0,
-      scan_ptr:       0,
+      tok_ptr:        0,
       tok_len:        0,
-      head_ptr:       0,
+      sym_ptr:        0,
       base_ptr:       0,
       end_ptr:        0,
+      sym_pk_ptr:     0,
+      tok_pk_ptr:     0,
       nterm:          0,
       begin_ptr:      0,
       end_line_num:   0,

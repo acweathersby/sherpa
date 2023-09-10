@@ -34,8 +34,12 @@ pub fn compile_grammar_from_str(
 
 /// Imports a single grammar from a source location and merges it into the soup.
 /// Returns a list of grammars that are imported by the source grammar
-pub fn load_grammar(j: &mut Journal, import_id: GrammarIdentities) -> SherpaResult<(Arc<GrammarSoup>, Vec<GrammarIdentities>)> {
-  let mut g_c: Arc<GrammarSoup> = GrammarSoup::new();
+pub fn load_grammar(
+  j: &mut Journal,
+  import_id: GrammarIdentities,
+  s_store: IStringStore,
+) -> SherpaResult<(Arc<GrammarSoup>, Vec<GrammarIdentities>)> {
+  let mut g_c: Arc<GrammarSoup> = GrammarSoup::from_string_store(s_store);
   let GrammarIdentities { guid, guid_name, path, .. } = import_id;
 
   j.set_active_report("Load Grammar From Path", ReportType::GrammarCompile(guid));

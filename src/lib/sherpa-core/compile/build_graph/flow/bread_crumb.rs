@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use super::super::{build::TransitionGroups, graph::*, items::peek_items_are_from_goto_state};
+use super::super::{build::GroupedFirsts, graph::*};
 use crate::{
   compile::build_graph::errors::peek_not_allowed_error,
   types::*,
@@ -8,13 +8,13 @@ use crate::{
 };
 use std::collections::BTreeSet;
 
-use GraphState::*;
+use GraphBuildState::*;
 
 pub(crate) fn handle_bread_crumb_complete_groups<'db>(
   gb: &mut GraphBuilder<'db>,
-  groups: &mut TransitionGroups<'db>,
+  groups: &mut GroupedFirsts<'db>,
   prec_sym: PrecedentSymbol,
-  follow_pairs: OrderedSet<FollowPair<'db>>,
+  follow_pairs: Follows<'db>,
   default_only_items: &ItemSet<'db>,
 ) -> SherpaResult<()> {
   Ok(())

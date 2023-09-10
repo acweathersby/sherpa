@@ -1,5 +1,5 @@
 use super::*;
-use crate::{parser, CachedString, SherpaResult};
+use crate::{compile::build_graph::graph::GraphType, parser, CachedString, SherpaResult};
 use std::collections::{HashMap, VecDeque};
 
 /// Data used for the compilation of parse states. contains
@@ -106,6 +106,7 @@ impl ParserDatabase {
       out
     }) {
       let is_scanner = matches!(self.nonterm_sym(item.nonterm_index()), SymbolId::DBNonTerminalToken { .. });
+      let mode = if is_scanner { GraphType::Scanner } else { GraphType::Parser };
 
       match item.get_type() {
         ItemType::TokenNonTerminal(nonterm, _) if is_scanner => {
@@ -118,12 +119,12 @@ impl ParserDatabase {
       //-------------------------------------------------------------------------------------------
       // Use completed items to file out the reduce types table.
       if item.is_complete() {
-        reduce_types[item.rule_id.0 as usize] = if item.is_left_recursive() {
+        reduce_types[item.rule_id.0 as usize] = if item.is_left_recursive(mode) {
           ReductionType::LeftRecursive
         } else if item.rule().ast.as_ref().is_some_and(|a| matches!(a, ASTToken::Defined(..))) {
           ReductionType::SemanticAction
         } else if item.len == 1 {
-          match item.to_start().is_term() {
+          match item.to_start().is_term(mode) {
             true => ReductionType::SingleTerminal,
             false => ReductionType::SingleNonTerminal,
           }
@@ -135,6 +136,18 @@ impl ParserDatabase {
       //-------------------------------------------------------------------------------------------
       // Calculate closures for uncompleted items.
 
+      fn create_closure<'db>(value: Item, db: &'db ParserDatabase, mode: GraphType) -> Items<'db> {
+        if let Some(nterm) = value.nonterm_index_at_sym(mode) {
+          if let Ok(rules) = db.nonterm_rules(nterm) {
+            rules.iter().map(|r| Item::from_rule(*r, db)).collect()
+          } else {
+            Default::default()
+          }
+        } else {
+          Default::default()
+        }
+      }
+
       let root_nonterm = item.nonterm_index();
       let mut recursion_encountered = false;
       let mut closure = ItemSet::from_iter([]);
@@ -145,22 +158,25 @@ impl ParserDatabase {
           match kernel_item.get_type() {
             ItemType::TokenNonTerminal(nonterm, _) => {
               if is_scanner {
-                for item in Items::from(kernel_item) {
+                for item in create_closure(kernel_item, &self, mode) {
                   recursion_encountered |= nonterm == root_nonterm;
-                  queue.push_back(item.align(kernel_item))
+                  queue.push_back(item.align(&kernel_item))
                 }
               }
             }
             ItemType::NonTerminal(nonterm) => {
-              for item in Items::from(kernel_item) {
+              for item in create_closure(kernel_item, &self, mode) {
                 recursion_encountered |= nonterm == root_nonterm;
-                queue.push_back(item.align(kernel_item))
+                queue.push_back(item.align(&kernel_item))
               }
             }
             _ => {}
           }
         }
       }
+
+      // Don't include the root item.
+      closure.remove(&item);
 
       closure_map
         .get_mut(item.rule_id.0 as usize)
@@ -382,8 +398,11 @@ impl ParserDatabase {
     }
   }
 
-  pub fn get_closure<'db>(&'db self, rule: DBRuleKey, sym_index: usize) -> impl Iterator<Item = Item<'db>> {
-    self.item_closures[rule.0 as usize][sym_index as usize].iter().map(|s| Item::from_static(*s, self))
+  /// Returns the closure of the item.
+  /// > note: The closure does not include the item used as the seed for the
+  /// > closure.
+  pub fn get_closure<'db>(&'db self, item: &Item<'db>) -> impl ItemContainerIter {
+    self.item_closures[item.rule_id.0 as usize][item.sym_index as usize].iter().map(|s| Item::from_static(*s, self))
   }
 
   /// Returns all regular (non token) nonterminals.

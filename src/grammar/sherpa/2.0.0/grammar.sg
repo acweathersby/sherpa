@@ -19,7 +19,7 @@ EXPORT dt::escaped_string as escaped
 
 <> grammar >
 
-    [preamble(*) ( cf_rules | peg_rules | append_rules | ir::state )(*)]
+    [preamble(*) ( cf_rules | peg_rules | append_rules | ir::state | template_rule )(+)]
 
         :ast { t_Grammar, preamble:$1, rules:$2, tok }
 
@@ -61,6 +61,12 @@ EXPORT dt::escaped_string as escaped
 
         :ast { t_Name, name: str($2) }
 
+
+<> template_rule > 
+
+    "<" ( tok::id :ast str($1) )(+",")^p ">" sym::nonterminal_symbol^n ">" rules^r
+
+        :ast { t_TemplateRules, name_sym:$n, template_params:$p, rules: $r, tok }
 
 <> cf_rules > 
 

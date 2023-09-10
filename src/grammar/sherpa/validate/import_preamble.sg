@@ -1,0 +1,3 @@
+IMPORT a/b/c/grammar.sg as g
+
+<> A > b
