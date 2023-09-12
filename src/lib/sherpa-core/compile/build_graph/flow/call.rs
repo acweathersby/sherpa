@@ -50,7 +50,9 @@ pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone
           let items = group.to_kernel().to_vec();
           return Some(CreateCallResult {
             is_kernel:         true,
-            state_id:          gb.create_state(Normal, sym, KernelCall(*nonterm), items.iter().try_increment()).to_state(),
+            state_id:          gb
+              .create_state(Normal, sym, KernelCall(*nonterm), Some(items.try_increment().iter().cloned()))
+              .to_state(),
             _transition_items: items,
           });
         }
@@ -66,8 +68,10 @@ pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone
 
   if let Some((nonterm, items)) = climb_nonterms(gb, group) {
     return Some(CreateCallResult {
-      is_kernel:         true,
-      state_id:          gb.create_state(Normal, sym, InternalCall(nonterm), items.iter().try_increment()).to_state(),
+      is_kernel:         false,
+      state_id:          gb
+        .create_state(Normal, sym, InternalCall(nonterm), Some(items.try_increment().iter().cloned()))
+        .to_state(),
       _transition_items: items,
     });
   } else {
@@ -106,7 +110,7 @@ fn climb_nonterms<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
       return Some(candidate);
     }
 
-    Some((nterm, climbed_firsts.iter().to_inherited(gb.state_id()).iter().to_next().cloned().collect()))
+    Some((nterm, climbed_firsts.iter().to_inherited(gb.current_state_id()).iter().to_next().cloned().collect()))
   } else {
     None
   }

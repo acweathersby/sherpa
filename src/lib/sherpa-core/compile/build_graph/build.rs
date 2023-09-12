@@ -55,7 +55,7 @@ fn get_firsts<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<GroupedFirsts<'db
 
 fn handle_goto_states<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<()> {
   let should_process_gotos =
-    if !gb.is_scanner() && !gb.state_id().state().currently_peeking() { handle_nonterminal_shift(gb)? } else { false };
+    if !gb.is_scanner() && !gb.current_state_id().state().currently_peeking() { handle_nonterminal_shift(gb)? } else { false };
 
   if should_process_gotos && !gb.config.ALLOW_LR {
     lr_disabled_error(gb, gb.current_state().nonterm_items.clone().to_vec())?;
@@ -106,7 +106,7 @@ fn handle_nonterminal_shift<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<boo
   nterm_items.extend(kernel_base.iter().filter(|i| !i.is_complete()).flat_map(|i| {
     let a = i.to_owned().to_canonical();
     let b = i.to_owned();
-    let state_id = gb.state_id();
+    let state_id = gb.current_state_id();
     db.get_closure(i)
       .filter(move |i| i.is_nonterm(mode) && i.to_canonical() != a)
       .map(move |a| a.align(&b).to_origin_state(state_id))
@@ -114,7 +114,7 @@ fn handle_nonterminal_shift<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<boo
 
   let out_items = gb.get_pending_items();
 
-  let parent_id = gb.state_id();
+  let parent_id = gb.current_state_id();
   let is_at_root = parent_id.is_root();
 
   let out_items: ItemSet<'db> = if false && parent_id.is_root() {
@@ -147,7 +147,9 @@ fn handle_nonterminal_shift<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<boo
     let are_shifting_a_goal_nonterm = is_at_root && gb.graph().goal_items().iter().rule_nonterm_ids().contains(&nterm);
     let contains_completed_kernel_items = items.iter().any(|i| kernel_base.contains(i) && i.is_penultimate());
 
-    let mut incremented_items = items.iter().map(|i| i.calculate_goto_distance(gb, parent_id)).try_increment();
+    let mut incremented_items = items
+      .iter() /* .map(|i| i.calculate_goto_distance(gb, parent_id)) */
+      .try_increment();
     let nterm_shift_type = StateType::NonTerminalShiftLoop;
 
     // TODO(anthony): Only need to do this type of look ahead if one of the
@@ -225,15 +227,16 @@ fn handle_nonterminal_shift<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<boo
     // A State following a goto point must either end with a return to that GOTO or
     // a completion of the gotos kernel items.
 
-    if let Some(state) =
-      gb.create_state(NormalGoto, (nterm.to_sym(), 0).into(), nterm_shift_type, incremented_items).to_enqueued()
+    if let Some(state) = gb
+      .create_state(NormalGoto, (nterm.to_sym(), 0).into(), nterm_shift_type, Some(incremented_items.into_iter().map(|i| i)))
+      .to_pending()
     {
       if are_shifting_a_goal_nonterm && !contains_completed_kernel_items {
-        let mut new_state = gb.create_state(
+        let mut new_state = gb.create_state::<DefaultIter>(
           GraphBuildState::Leaf,
           (SymbolId::Default, 0).into(),
           StateType::NonTermCompleteOOS,
-          Default::default(),
+          None,
         );
         new_state.set_parent(state);
         new_state.to_leaf();
@@ -243,7 +246,8 @@ fn handle_nonterminal_shift<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<boo
 
   // The remaining non-terminals are comprised of accept items for this state.
   for nonterm_id in kernel_nterm_ids {
-    gb.create_state(GraphBuildState::Leaf, (nonterm_id.to_sym(), 0).into(), StateType::NonTerminalComplete, vec![]).to_leaf();
+    gb.create_state::<DefaultIter>(GraphBuildState::Leaf, (nonterm_id.to_sym(), 0).into(), StateType::NonTerminalComplete, None)
+      .to_leaf();
   }
 
   SherpaResult::Ok(true)
@@ -279,7 +283,7 @@ fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(gb: &mut GraphBuilder<'db>, gr
     let ____is_scan____ = gb.is_scanner();
     let prec_sym: PrecedentSymbol = (sym, group.0).into();
 
-    match gb.state_id().state() {
+    match gb.current_state_id().state() {
       BreadCrumb(_level) => {
         todo!("Complete breadcrumb parsing");
       }
@@ -374,7 +378,7 @@ pub(crate) fn handle_completed_groups<'db>(
   let ____is_scan____ = gb.is_scanner();
   let prec_sym: PrecedentSymbol = (sym, follow_pairs.iter().max_precedence()).into();
 
-  match gb.state_id().state() {
+  match gb.current_state_id().state() {
     GraphBuildState::PEG => handle_bread_crumb_complete_groups(gb, groups, prec_sym, follow_pairs, default_only_items),
     GraphBuildState::BreadCrumb(_) => handle_peg_complete_groups(gb, groups, prec_sym, follow_pairs, default_only_items),
     GraphBuildState::Peek(_) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs, default_only_items),

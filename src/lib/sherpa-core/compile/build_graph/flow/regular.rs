@@ -120,7 +120,7 @@ fn create_out_of_scope_complete_state<'a, 'db: 'a, T: TransitionPairRefIter<'a, 
       (_, true) => StateType::ScannerCompleteOOS,
       _ => StateType::NonTermCompleteOOS,
     };
-    gb.create_state(Normal, sym, transition_type, out_of_scope.to_kernel().cloned().collect()).to_leaf();
+    gb.create_state(Normal, sym, transition_type, Some(out_of_scope.to_kernel().cloned())).to_leaf();
   }
 }
 
@@ -153,17 +153,22 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
       if let Some(CreateCallResult { is_kernel, state_id, _transition_items }) =
         ____allow_rd____.then(|| create_call(gb, in_scope.clone(), prec_sym)).flatten()
       {
-        if !____allow_ra____ {
-          lr_disabled_error(gb, _transition_items)?;
+        if is_kernel {
+          gb.enqueue_state(state_id);
+        } else {
+          if !____allow_ra____ {
+            lr_disabled_error(gb, _transition_items)?;
+          }
+          gb.add_pending(state_id);
         }
-        gb.add_pending(state_id);
       } else {
         // If can't create call, do LR shift, or peek, or warn about k=1 conflicts.
         if group.iter().all(|p| p.is_kernel_terminal()) {
-          gb.create_state(Normal, prec_sym, StateType::KernelShift, group.iter().to_kernel().try_increment()).to_pending();
+          gb.create_state(Normal, prec_sym, StateType::KernelShift, Some(group.iter().to_kernel().try_increment().into_iter()))
+            .to_enqueued();
         } else if ____allow_ra____ {
-          let items = in_scope.to_inherited(gb.state_id()).iter().to_next().try_increment();
-          gb.create_state(Normal, prec_sym, StateType::Shift, items).to_pending();
+          let items = in_scope.to_inherited(gb.current_state_id()).iter().to_next().try_increment();
+          gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_pending();
         } else {
           if len > 1 {
             if !____allow_ra____ {
@@ -257,7 +262,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
       #[cfg(debug_assertions)]
       unimplemented!(
         "\nNot Implemented: {:?} len:{_len} collide:{_collide:?} sym:{} \n[ {} ]\n\n{}",
-        gb.state_id().state(),
+        gb.current_state_id().state(),
         sym.debug_string(gb.db),
         cmpl.to_debug_string("\n"),
         gb.graph()._debug_string_()

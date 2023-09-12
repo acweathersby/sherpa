@@ -309,19 +309,8 @@ impl<'db> Item<'db> {
 
   /// Calculates the number of GOTO states that would be pushed to the stack
   /// following the state this item originated from.
-  pub(crate) fn calculate_goto_distance(&self, iter: &GraphBuilder, parent_id: StateId) -> Self {
-    let mut state = parent_id;
-    let mut goto_distance = 0;
-
-    while state != self.origin_state {
-      debug_assert!(!state.is_root());
-      if iter.graph()[state].has_goto_state() {
-        goto_distance += 1;
-      }
-      state = iter.graph()[state].get_parent();
-    }
-
-    Self { goto_distance, ..self.clone() }
+  pub(crate) fn increment_goto(&self) -> Self {
+    return Self { goto_distance: self.goto_distance + 1, ..self.clone() };
   }
 
   pub fn increment(&self) -> Option<Self> {
@@ -822,7 +811,7 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
   }
 
   #[cfg(debug_assertions)]
-  fn debug_print(&self, _comment: &str) {
+  fn _debug_print_(&self, _comment: &str) {
     debug_items(_comment, self.clone());
   }
 

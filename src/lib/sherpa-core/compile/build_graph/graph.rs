@@ -591,7 +591,7 @@ impl<'graph_iter, 'db> StateBuilder<'graph_iter, 'db> {
     Origin::Peek(index, self.state_id)
   }
 
-  pub fn add_kernel_items<T: ItemContainer<'db> + Hash>(&mut self, items: T) {
+  pub fn add_kernel_items<T: ItemContainerIter<'db>>(&mut self, items: T) {
     let StateBuilder { state_id, builder } = self;
     add_kernel_items(builder.get_state_mut(*state_id), items);
   }
@@ -607,10 +607,10 @@ impl<'graph_iter, 'db> StateBuilder<'graph_iter, 'db> {
     builder.graph.add_leaf_state(state_id)
   }
 
-  pub fn to_pending(self) {
+  pub fn to_pending(self) -> Option<StateId> {
     let StateBuilder { state_id, builder } = self;
-    builder.prepare_state(state_id);
-    builder.add_pending(state_id)
+    builder.add_pending(state_id);
+    Some(state_id)
   }
 
   pub fn to_enqueued_leaf(self) -> Option<StateId> {
@@ -637,6 +637,7 @@ impl<'graph_iter, 'db> StateBuilder<'graph_iter, 'db> {
   }
 }
 
+pub type DefaultIter<'db> = std::vec::IntoIter<Item<'db>>;
 pub(crate) struct GraphBuilder<'db> {
   graph:       GraphHost<'db>,
   state_id:    StateId,
@@ -659,7 +660,7 @@ impl<'db> GraphBuilder<'db> {
   ) -> Self {
     let mut builder = Self {
       graph: GraphHost::new(db, name, graph_type),
-      state_id: StateId::root(),
+      state_id: StateId::default(),
       pending: Vec::new(),
       errors: Vec::new(),
       state_queue: VecDeque::from_iter([StateId::root()]),
@@ -768,14 +769,7 @@ impl<'db> GraphBuilder<'db> {
         Normal,
         (SymbolId::Default, 0).into(),
         StateType::Start,
-        kernel_items
-          .into_iter()
-          .enumerate()
-          .map(|(i, mut item)| {
-            item.goal = i as u32;
-            item
-          })
-          .collect::<Items>(),
+        Some(kernel_items.iter().enumerate().map(|(i, mut item)| item.to_goal(i as u32))),
       )
       .to_enqueued();
   }
@@ -810,35 +804,38 @@ impl<'db> GraphBuilder<'db> {
 
     debug_assert!(hash_id != 0, "State has not been hashed!\n{}", state._debug_string_(self.db));
 
-    if let Some(original_state) = self.state_map.get(&hash_id).cloned() {
-      let parent: StateId = state.parent;
-      graph[original_state].predecessors.insert(parent);
+    match (state_id.is_root(), self.state_map.get(&hash_id).cloned()) {
+      (false, Some(original_state)) => {
+        let parent: StateId = state.parent;
+        graph[original_state].predecessors.insert(parent);
 
-      if config.ALLOW_LOOKAHEAD_MERGE {
-        let original_la_id = graph[original_state].symbol_set_id;
-        let new_lookahead_id = graph[state_id].symbol_set_id;
+        if config.ALLOW_LOOKAHEAD_MERGE {
+          let original_la_id = graph[original_state].symbol_set_id;
+          let new_lookahead_id = graph[state_id].symbol_set_id;
 
-        // Create a new lookahead set for this state.
-        if let Some(existing_lookahead) = graph.symbol_sets.get(&original_la_id) {
-          if let Some(other_lookaheads) = graph.symbol_sets.get(&new_lookahead_id) {
-            let new_lookaheads = existing_lookahead.clone();
-            new_lookaheads.clone().extend(other_lookaheads);
-            let lookahead_id = hash_id_value_u64(&new_lookaheads);
-            graph[original_state].symbol_set_id = lookahead_id;
-            graph[original_state].lookahead_hash = hash_id_value_u64((hash_id, lookahead_id));
-            graph.symbol_sets.insert(lookahead_id, new_lookaheads);
+          // Create a new lookahead set for this state.
+          if let Some(existing_lookahead) = graph.symbol_sets.get(&original_la_id) {
+            if let Some(other_lookaheads) = graph.symbol_sets.get(&new_lookahead_id) {
+              let new_lookaheads = existing_lookahead.clone();
+              new_lookaheads.clone().extend(other_lookaheads);
+              let lookahead_id = hash_id_value_u64(&new_lookaheads);
+              graph[original_state].symbol_set_id = lookahead_id;
+              graph[original_state].lookahead_hash = hash_id_value_u64((hash_id, lookahead_id));
+              graph.symbol_sets.insert(lookahead_id, new_lookaheads);
+            }
           }
         }
-      }
 
-      if state_id.0 == (self.graph.states.len() - 1) as u32 {
-        drop(self.graph.states.pop());
+        if state_id.0 == (self.graph.states.len() - 1) as u32 {
+          drop(self.graph.states.pop());
+        }
+        None
       }
-      None
-    } else {
-      self.state_map.insert(hash_id, state_id);
-      self.state_queue.push_back(state_id);
-      Some(state_id)
+      _ => {
+        self.state_map.insert(hash_id, state_id);
+        self.state_queue.push_back(state_id);
+        Some(state_id)
+      }
     }
   }
 
@@ -846,7 +843,7 @@ impl<'db> GraphBuilder<'db> {
     self.pending.push(state);
   }
 
-  pub fn state_id(&self) -> StateId {
+  pub fn current_state_id(&self) -> StateId {
     self.state_id
   }
 
@@ -878,12 +875,12 @@ impl<'db> GraphBuilder<'db> {
     &mut self.graph[state_id]
   }
 
-  pub fn create_state<'a>(
+  pub fn create_state<'a, T: ItemContainerIter<'db>>(
     &'a mut self,
     state: GraphBuildState,
     symbol: PrecedentSymbol,
     t_type: StateType,
-    kernel_items: Items<'db>,
+    kernel_items: Option<T>,
   ) -> StateBuilder<'a, 'db> {
     let id = StateId(self.graph.states.len() as u32, state);
 
@@ -892,11 +889,13 @@ impl<'db> GraphBuilder<'db> {
       term_symbol: symbol,
       t_type,
       parent: self.state_id,
-      predecessors: BTreeSet::from_iter(vec![self.state_id]),
+      predecessors: if self.state_id.is_invalid() { BTreeSet::new() } else { BTreeSet::from_iter(vec![self.state_id]) },
       ..Default::default()
     };
 
-    set_kernel_items(&mut state, kernel_items.iter());
+    if let Some(kernel_items) = kernel_items {
+      set_kernel_items(&mut state, kernel_items);
+    }
 
     self.graph.states.push(state);
 
@@ -904,11 +903,12 @@ impl<'db> GraphBuilder<'db> {
   }
 
   pub fn process_pending(&mut self, should_increment_gotos: bool) {
-    for state in self.pending.drain(..).collect::<Vec<_>>() {
+    for state_id in self.pending.drain(..).collect::<Vec<_>>() {
       if should_increment_gotos {
-        increment_gotos(self, state);
+        increment_gotos(self, state_id, self.current_state_id());
       }
-      self.enqueue_state(state);
+      self.prepare_state(state_id);
+      self.enqueue_state(state_id);
     }
   }
 
@@ -926,49 +926,54 @@ impl<'db> GraphBuilder<'db> {
   pub fn _is_nonterminal_state_(&self, nterm_id: u32, state_id: u32) -> bool {
     if self.is_scanner() {
       self.graph.goal_items().iter().any(|i| i.origin.get_symbol_key() == DBTermKey::from(nterm_id))
-        && self.state_id().0 == state_id
+        && self.current_state_id().0 == state_id
     } else {
-      self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.state_id().0 == state_id
+      self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.current_state_id().0 == state_id
     }
   }
 }
 
-fn increment_gotos(gb: &mut GraphBuilder, parent_id: StateId) {
-  if gb.get_state(parent_id).peek_resolve_items.len() > 0 {
+fn increment_gotos(gb: &mut GraphBuilder, next_state_id: StateId, current_id: StateId) {
+  if gb.get_state(next_state_id).peek_resolve_items.len() > 0 {
     let resolve_states = gb
-      .get_state(parent_id)
+      .get_state(next_state_id)
       .peek_resolve_items
       .iter()
-      .map(|(id, i)| (*id, i.iter().map(|i| i.calculate_goto_distance(gb, parent_id)).collect::<ItemSet>()))
+      .map(|(id, i)| {
+        (*id, i.iter().map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { *i }).collect::<ItemSet>())
+      })
       .collect::<OrderedMap<_, _>>();
-    gb.get_state_mut(parent_id).peek_resolve_items = resolve_states;
+    gb.get_state_mut(next_state_id).peek_resolve_items = resolve_states;
   } else {
-    let incremented: Items =
-      gb.get_state(parent_id).kernel_items_ref().iter().map(|i| i.calculate_goto_distance(gb, parent_id)).collect();
+    let items = gb
+      .get_state_mut(next_state_id)
+      .kernel_items
+      .iter()
+      .map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { *i })
+      .collect::<Items>();
 
-    set_kernel_items(gb.get_state_mut(parent_id), incremented.iter())
+    set_kernel_items(gb.get_state_mut(next_state_id), items.into_iter())
   }
 }
 
-fn set_kernel_items<'a, 'db: 'a, T: ItemRefContainerIter<'a, 'db>>(state: &mut GraphState<'db>, kernel_items: T) {
-  let mut kernel_items =
-    kernel_items.into_iter().map(|i| if i.origin_state.is_invalid() { i.to_origin_state(state.id) } else { *i }).collect();
-  state.kernel_items.append(&mut kernel_items);
+fn set_kernel_items<'db, T: ItemContainerIter<'db>>(state: &mut GraphState<'db>, kernel_items: T) {
+  state.kernel_items.clear();
+  state.kernel_items.extend(kernel_items.map(|i| if i.origin_state.is_invalid() { i.to_origin_state(state.id) } else { i }));
 }
 
 /// Add kernel items and set their origin to this state.
-fn add_kernel_items<'db, T: ItemContainer<'db>>(state: &mut GraphState<'db>, kernel_items: T) {
-  let mut kernel_items = kernel_items.into_iter().map(|i| i.to_origin_state(state.id)).collect();
-  state.kernel_items.append(&mut kernel_items);
+fn add_kernel_items<'db, T: ItemContainerIter<'db>>(state: &mut GraphState<'db>, kernel_items: T) {
+  state.kernel_items.extend(kernel_items.map(|i| i.to_origin_state(state.id)));
 }
 
 /// Iterates over valid state nodes within the graph. Valid nodes are those that
 /// reachable from leaf states.
 pub struct GraphIterator<'a, 'db: 'a> {
-  graph:      &'a GraphHost<'db>,
-  queue:      Queue<StateId>,
-  links:      OrderedMap<StateId, OrderedSet<&'a GraphState<'db>>>,
-  empty_hash: OrderedSet<&'a GraphState<'db>>,
+  graph:       &'a GraphHost<'db>,
+  queue:       Queue<StateId>,
+  used_states: OrderedSet<StateId>,
+  links:       OrderedMap<StateId, OrderedSet<&'a GraphState<'db>>>,
+  empty_hash:  OrderedSet<&'a GraphState<'db>>,
 }
 
 impl<'a, 'db: 'a> GraphIterator<'a, 'db> {
@@ -994,9 +999,9 @@ impl<'a, 'db: 'a> GraphIterator<'a, 'db> {
 
     set.extend(links.keys().rev().map(|id| *id));
 
-    queue.extend(set.into_iter());
+    queue.extend(set.iter());
 
-    Self { graph, queue, links, empty_hash }
+    Self { graph, queue, links, empty_hash, used_states: set }
   }
 
   pub fn next<'b>(&'b mut self) -> Option<(&'b GraphHost<'db>, &'b GraphState<'db>, &'b OrderedSet<&'a GraphState<'db>>)> {

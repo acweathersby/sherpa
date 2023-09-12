@@ -25,13 +25,13 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
   transition_type: StateType,
 ) -> SherpaResult<StateId> {
   debug_assert!(!gb.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
-  let state_id = gb.state_id();
+  let state_id = gb.current_state_id();
   let mut kernel_items = Array::default();
   let ALLOW_PEEKING = gb.config.ALLOW_PEEKING;
 
   let existing_items: ItemSet = incomplete_items.clone().to_next().to_absolute();
 
-  let mut state = gb.create_state(GraphBuildState::Peek(0), sym, transition_type, Array::default());
+  let mut state = gb.create_state::<DefaultIter>(GraphBuildState::Peek(0), sym, transition_type, None);
 
   if let Some(completed_pairs) = completed_pairs {
     let pairs = completed_pairs.to_inherited(state_id).into_iter().collect::<BTreeSet<_>>();
@@ -73,7 +73,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
     "Peek states should not be in the resolution"
   );
 
-  state.add_kernel_items(if need_increment { kernel_items.try_increment() } else { kernel_items });
+  state.add_kernel_items((if need_increment { kernel_items.try_increment() } else { kernel_items }).iter().cloned());
 
   if ALLOW_PEEKING {
     Ok(state.to_state())
@@ -90,7 +90,7 @@ fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>>>(
 ) -> SherpaResult<()> {
   let (index, items) = get_kernel_items_from_peek_origin(gb, resolved.next().unwrap().kernel.origin);
 
-  gb.create_state(NormalGoto, sym, StateType::PeekEndComplete(index), items.clone().to_vec()).to_enqueued();
+  gb.create_state(NormalGoto, sym, StateType::PeekEndComplete(index), Some(items.iter().cloned())).to_enqueued();
 
   Ok(())
 }
@@ -170,12 +170,14 @@ pub(crate) fn handle_peek_complete_groups<'db>(
       if incpl_targets_len == 1 {
         // Single shift resolution, this is the ideal situation.
         let (origin_index, items) = incpl_targets.unwrap().into_iter().next().unwrap();
-        gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), items.to_vec()).to_enqueued();
+        gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(items.iter().cloned()))
+          .to_enqueued();
       } else if incpl_targets_len > 1 {
         panic!("MULTIPLE INCOMPLETED -- Cannot resolve using peek within the limits of the grammar rules. This requires a fork");
       } else if cmpl_targets_len == 1 {
         let (origin_index, items) = cmpl_targets.unwrap().into_iter().next().unwrap();
-        gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), items.to_vec()).to_enqueued();
+        gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(items.iter().cloned()))
+          .to_enqueued();
       } else if cmpl_targets_len > 1 {
         panic!("MULTIPLE COMPLETED -- Cannot resolve using peek within the limits of the grammar rules. This requires a fork");
       } else {
@@ -221,7 +223,8 @@ pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
   if group.iter().all(|i| matches!(i.kernel.origin, Origin::Peek(..))) {
     resolve_peek(gb, group.iter(), prec_sym)?;
   } else {
-    gb.create_state(Peek(level + 1), prec_sym, StateType::Peek, group.iter().to_next().try_increment()).to_enqueued();
+    gb.create_state(Peek(level + 1), prec_sym, StateType::Peek, Some(group.iter().to_next().try_increment().iter().cloned()))
+      .to_enqueued();
   }
   SherpaResult::Ok(())
 }

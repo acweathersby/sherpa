@@ -295,7 +295,7 @@ fn add_match_expr<'db>(
 
           if graph._goal_nonterm_index_is_(0) && state.id.0 == 351 {
             println!("{}", state._debug_string_(db));
-            follow.debug_print("FOLLOW");
+            follow._debug_print_("FOLLOW");
           }
 
           let iter = follow
@@ -437,7 +437,7 @@ fn build_body<'db>(
 
     match (&goto_state_id, s_type) {
       // Kernel calls can bypass gotos.
-      //  (_, StateType::KernelCall(..)) => {}
+      (_, StateType::KernelCall(..)) | (_, StateType::KernelShift) => {}
       (Some(gt), _) => body_string.push("push ".to_string() + &gt.to_string(db.string_store())),
       _ => {}
     }
@@ -477,6 +477,8 @@ pub(super) fn create_ir_state_name(graph: &GraphHost, origin_state: Option<&Grap
     "%%%%".to_string()
   } else if false {
     graph.get_state_name(target_state.get_id())
+  } else if target_state.id.is_goto() {
+    "g_".to_string() + &target_state.get_hash(graph.db).to_string()
   } else {
     graph.is_scanner().then_some("s").unwrap_or("p").to_string() + "_" + &target_state.get_hash(graph.db).to_string()
   }

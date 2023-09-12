@@ -39,6 +39,26 @@ pub struct ParseStack {
   nonterminal_goal: u32,
   error_weight:     u32,
   prefix_sibling:   Option<Box<ParseStack>>,
+  /// The head of the input window
+  pub begin_ptr:    usize,
+  pub anchor_ptr:   usize,
+  /// The the end of the last shifted token
+  pub base_ptr:     usize,
+  /// The the start of the token currently being evaluated.
+  pub sym_ptr:      usize,
+  /// The the start of the token currently being evaluated.
+  pub sym_pk_ptr:   usize,
+  /// The start of all unevaluated characters
+  pub tok_ptr:      usize,
+  /// The start of all unevaluated characters
+  pub tok_pk_ptr:   usize,
+  /// The end of the input window. This is a fixed reference that should
+  /// not change during parsing unless the end of the input window has been
+  /// reached and a larger window is requested.
+  pub end_ptr:      usize,
+  /// The number of characters that comprize the current
+  /// token. This should be 0 if the tok_id is also 0
+  pub tok_len:      usize,
 }
 
 pub struct ParseStacks {
