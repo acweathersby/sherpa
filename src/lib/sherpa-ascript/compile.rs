@@ -173,22 +173,16 @@ fn resolve_nonterm_reduce_types(
   let mut pending_nterms = VecDeque::from_iter(db.parser_nonterms().into_iter().rev());
 
   while let Some(nterm) = pending_nterms.pop_front() {
-    /* debug_assert!(
-      nterm_types.contains_key(&nterm),
-      "All non-terminal should be accounted for.\nNon-terminal [{}] does not have an associated return type",
-      db.nonterm_friendly_name_string(nterm)
-    ); */
-
     let mut resubmit = false;
     let mut new_map = OrderedMap::new();
 
-    let Some(vector_types) = nterm_types.remove(&nterm) else {
+    let Some(base_types) = nterm_types.remove(&nterm) else {
       j.report_mut().add_error(SherpaError::Text("Could not get type of nterm".into()));
-      continue;
+      return Err(SherpaError::Text("Failure".to_string()));
     };
 
-    let vector_types = vector_types.into_iter().collect::<Vec<_>>();
-    let (vector_types, scalar_types) = vector_types.into_iter().partition::<Vec<_>, _>(|(a, _)| a.type_.is_vec());
+    let base_types = base_types.into_iter().collect::<Vec<_>>();
+    let (vector_types, scalar_types) = base_types.into_iter().partition::<Vec<_>, _>(|(a, _)| a.type_.is_vec());
 
     if !scalar_types.is_empty() {
       use AScriptTypeVal::*;

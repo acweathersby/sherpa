@@ -15,6 +15,9 @@ pub struct ParserConfig {
   /// When disabled, grammars with rules that require a lookahead that is
   ///  `k>1` will be rejected, and relevant errors will be reported.
   pub ALLOW_PEEKING: bool,
+  /// The maximum number of lookead symbols allowed before parser construction
+  /// is aborted or a different disambiguating strategy is employed.
+  pub max_k: usize,
   /// Allow merging of states that only differ in their look ahead sets. This
   /// will lead to a decrease in accuracy of error messages.
   pub ALLOW_LOOKAHEAD_MERGE: bool,
@@ -22,8 +25,9 @@ pub struct ParserConfig {
   /// lead to a CSF (Concrete Syntax Forest) or a CSDAG (Concrete Syntax DAG)
   /// being returned by the parser instead of a CST
   pub ALLOW_FORKING: bool,
-
-  pub max_k: usize,
+  /// Creates a single scanner instead of multiple contextual scanners. More
+  /// likely to report terminal conflicts.
+  pub CONTEXT_FREE: bool,
 }
 
 impl Default for ParserConfig {
@@ -31,9 +35,10 @@ impl Default for ParserConfig {
     Self {
       ALLOW_RECURSIVE_DESCENT: true,
       ALLOW_LR: true,
-      ALLOW_LOOKAHEAD_MERGE: true,
+      ALLOW_LOOKAHEAD_MERGE: false,
       ALLOW_PEEKING: true,
       ALLOW_FORKING: false,
+      CONTEXT_FREE: false,
       max_k: usize::MAX,
     }
   }
@@ -41,40 +46,84 @@ impl Default for ParserConfig {
 
 impl ParserConfig {
   pub fn new() -> Self {
-    Self::default()
+    Self::default().set_k(8).enable_fork(false)
   }
 
   pub fn hybrid(self) -> Self {
     Self::new()
   }
 
-  pub fn lr_only(mut self) -> Self {
-    self.ALLOW_RECURSIVE_DESCENT = false;
-    self.ALLOW_LR = true;
-    self
+  pub fn g_hybrid(self) -> Self {
+    self.hybrid().set_k(8).enable_fork(true)
   }
 
-  pub fn recursive_descent(mut self) -> Self {
+  pub fn g_recursive_descent_k(self) -> Self {
+    self.recursive_descent_k(8).enable_fork(true)
+  }
+
+  pub fn recursive_descent_k(mut self, k: usize) -> Self {
     self.ALLOW_RECURSIVE_DESCENT = true;
     self.ALLOW_LR = false;
     self.ALLOW_LOOKAHEAD_MERGE = false;
+    self.set_k(k)
+  }
+
+  pub fn glr(mut self) -> Self {
+    self = self.lrk(8);
+    self.ALLOW_FORKING = true;
+    self
+  }
+
+  pub fn gll(mut self) -> Self {
+    self = self.llk(8);
+    self.ALLOW_FORKING = true;
+    self
+  }
+
+  pub fn lrk(mut self, k: usize) -> Self {
+    self.ALLOW_LOOKAHEAD_MERGE = false;
+    self.ALLOW_LR = true;
+    self.ALLOW_RECURSIVE_DESCENT = false;
+    self.ALLOW_FORKING = false;
+    self.set_k(k)
+  }
+
+  pub fn llk(mut self, k: usize) -> Self {
+    self.ALLOW_RECURSIVE_DESCENT = false;
+    self.ALLOW_LR = false;
+    self.ALLOW_FORKING = false;
+    self.set_k(k)
+  }
+
+  pub fn ll1(mut self) -> Self {
+    self.ALLOW_RECURSIVE_DESCENT = false;
+    self.ALLOW_LR = false;
     self.ALLOW_PEEKING = false;
     self
   }
 
-  pub fn ll_only(mut self) -> Self {
-    self.ALLOW_RECURSIVE_DESCENT = false;
-    self.ALLOW_LR = false;
+  pub fn lalr(self) -> Self {
+    self.llk(1).enable_lookahead_merge(true)
+  }
+
+  pub fn set_k(mut self, k: usize) -> Self {
+    self.ALLOW_PEEKING = k > 1;
+    self.max_k = k;
     self
   }
 
-  pub fn enable_peeking(mut self, enable: bool) -> Self {
-    self.ALLOW_PEEKING = enable;
-    self
-  }
-
-  pub fn enable_la(mut self, enable: bool) -> Self {
+  pub fn enable_lookahead_merge(mut self, enable: bool) -> Self {
     self.ALLOW_LOOKAHEAD_MERGE = enable;
+    self
+  }
+
+  pub fn enable_fork(mut self, enable: bool) -> Self {
+    self.ALLOW_FORKING = enable;
+    self
+  }
+
+  pub fn enable_context_free(mut self, enable: bool) -> Self {
+    self.CONTEXT_FREE = enable;
     self
   }
 }

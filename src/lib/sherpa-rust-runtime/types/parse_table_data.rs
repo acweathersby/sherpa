@@ -1,5 +1,5 @@
 use super::{
-  bytecode::{ByteCodeIterator, InputType, Instruction},
+  bytecode::{ByteCodeIterator, Instruction, MatchInputType},
   *,
 };
 
@@ -7,7 +7,7 @@ use super::{
 #[derive(Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct TableHeaderData<'a> {
-  pub input_type: InputType,
+  pub input_type: MatchInputType,
   pub table_length: u32,
   pub table_meta: u32,
   /// The instruction of the scanner state, if this table has
@@ -31,10 +31,7 @@ pub struct TableHeaderData<'a> {
 impl<'a> From<Instruction<'a>> for TableHeaderData<'a> {
   #[track_caller]
   fn from(i: Instruction<'a>) -> Self {
-    debug_assert!(matches!(
-      i.get_opcode(),
-      bytecode::Opcode::HashBranch | bytecode::Opcode::VectorBranch
-    ));
+    debug_assert!(matches!(i.get_opcode(), bytecode::Opcode::HashBranch | bytecode::Opcode::VectorBranch));
 
     let mut iter = i.iter();
     let input_type = iter.next_u8().unwrap() as u32;
@@ -57,8 +54,7 @@ impl<'a> From<Instruction<'a>> for TableHeaderData<'a> {
       } else {
         (i.bytecode(), 0).into()
       },
-      default_block: (i.bytecode(), i.address() + default_delta as usize)
-        .into(),
+      default_block: (i.bytecode(), i.address() + default_delta as usize).into(),
     }
   }
 }

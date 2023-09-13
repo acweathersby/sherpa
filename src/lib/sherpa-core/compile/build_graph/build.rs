@@ -131,18 +131,18 @@ fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedF
       /* get_oos_follow_from_completed(gb, &completed.1.iter().to_kernel().to_vec(), &mut |follow| {
         merge_follow_items_into_group(&follow, gb.state_id(), groups)
       })?; */
-    } else {
-      follow_pairs = follow_pairs
-        .into_iter()
-        .map(|pair| {
-          if true {
-            (pair.kernel, pair.next.to_oos_index().to_origin(Origin::GoalCompleteOOS), gb.get_mode()).into()
-          } else {
-            pair
-          }
-        })
-        .collect();
-    }
+    } /* else {
+        follow_pairs = follow_pairs
+          .into_iter()
+          .map(|pair| {
+            if false {
+              (pair.kernel, pair.next.to_oos_index().to_origin(Origin::GoalCompleteOOS), gb.get_mode()).into()
+            } else {
+              pair
+            }
+          })
+          .collect();
+      } */
 
     let contains_in_scope_items = completed.1.iter().any(|i| !i.next.goal_is_oos());
 
@@ -156,14 +156,15 @@ fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedF
 
     if !follow_pairs.is_empty() {
       // Create reduce states for follow items that have not already been covered.
-      let mut completed_groups = hash_group_btree_iter(follow_pairs.into_iter(), |_, fp| match fp.next.get_type() {
-        ItemType::Completed(_) => {
-          unreachable!("Should be handled outside this path")
-        }
-        ItemType::TokenNonTerminal(_, sym) if !gb.is_scanner() => sym,
-        ItemType::Terminal(sym) => sym,
-        _ => SymbolId::Undefined,
-      });
+      let mut completed_groups: OrderedMap<SymbolId, Vec<TransitionPair>> =
+        hash_group_btree_iter(follow_pairs.into_iter(), |_, fp| match fp.next.get_type() {
+          ItemType::Completed(_) => {
+            unreachable!("Should be handled outside this path")
+          }
+          ItemType::TokenNonTerminal(_, sym) if !gb.is_scanner() => sym,
+          ItemType::Terminal(sym) => sym,
+          _ => SymbolId::Undefined,
+        });
 
       completed_groups.remove(&SymbolId::Undefined);
 

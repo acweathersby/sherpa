@@ -11,6 +11,32 @@ pub enum ItemType {
 
 pub type StaticItem = (DBRuleKey, u16);
 
+pub(crate) struct ItemIndex(u32);
+
+impl ItemIndex {
+  pub fn get_parts(&self) -> (usize, usize) {
+    ((self.0 >> 8) as usize, (self.0 & 0xFF) as usize)
+  }
+}
+
+impl<'db> From<Item<'db>> for ItemIndex {
+  fn from(i: Item<'db>) -> Self {
+    let rule_index: u32 = i.rule_id.into();
+    Self((rule_index << 8) | ((i.sym_index & 0xFF) as u32))
+  }
+}
+
+impl From<u32> for ItemIndex {
+  fn from(value: u32) -> Self {
+    Self(value)
+  }
+}
+
+impl Into<u32> for ItemIndex {
+  fn into(self) -> u32 {
+    self.0
+  }
+}
 /// Represents either a FIRST or a FOLLOW depending on whether the root item
 /// is incomplete or not.
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -134,18 +160,19 @@ pub trait TransitionPairRefIter<'a, 'db: 'a>: Iterator<Item = &'a TransitionPair
 
 impl<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>> + Sized + Clone> TransitionPairRefIter<'a, 'db> for T {}
 
+const OUT_SCOPE_LANE: u32 = 0x80_00_00_00;
 #[derive(Clone, Copy)]
 pub struct Item<'db> {
-  db: &'db ParserDatabase,
   /// The non-terminal or token that the item directly or
   /// indirectly resolves to
   pub origin: Origin,
-  /// The Graph goal
-  pub goal: u32,
+  db: &'db ParserDatabase,
   /// The graph state the item originated from
   pub origin_state: StateId,
   /// The index location of the item's Rule
   pub rule_id: DBRuleKey,
+  /// The graph goal lane
+  pub goal: u32,
   /// The number of symbols that comprise the items's Rule
   pub len: u16,
   /// The index of the active symbol. If `len == sym_index` then
@@ -210,7 +237,7 @@ impl<'a> Ord for Item<'a> {
 
 impl<'db> Item<'db> {
   /// Creates a new [ItemRef] with the same rule info as the original, but
-  /// with the meta info of `other`.
+  /// with the meta info of `other`. Resets goto metadata
   pub fn align<'a>(&self, other: &'a Item<'db>) -> Self {
     Self {
       rule_id: self.rule_id,
@@ -505,9 +532,17 @@ impl<'db> Item<'db> {
   }
 
   /// Returns an iterator over this item's closure.
-  /// > note: The closure will be over canonical items.
+  /// > note: The closure will be over canonical items, except fo the kernel
+  /// > item `self`
   pub fn closure_iter<'a>(&self) -> impl ItemContainerIter<'db> {
     [*self].into_iter().chain(self.db.get_closure(self))
+  }
+
+  /// Same as `Item::closure_iter`, except takes an extran `Item` as an
+  /// argument, from which the meta attributes will be assigned to the closure
+  /// items (note: the kernel item `self` is left untouched.)
+  pub fn closure_iter_align<'a>(&self, other: Self) -> impl ItemContainerIter<'db> {
+    [*self].into_iter().chain(self.db.get_closure(self).map(move |i| i.align(&other)))
   }
 
   pub fn _debug_string_(&self) -> String {
@@ -706,7 +741,7 @@ macro_rules! common_iter_functions {
       self.filter_map(|i| (!i.is_nonterm(mode)).then_some(i.sym())).collect()
     }
 
-    fn closure<T: ItemContainer<'db>>(self, state_id: StateId) -> T {
+    fn _closure<T: ItemContainer<'db>>(self, state_id: StateId) -> T {
       let mut closure = ItemSet::from_iter(self.clone().map(|i| i.clone()));
       closure.extend(self.filter(|i| !i.is_complete()).flat_map(|i| {
         let a = i.to_owned().to_canonical();

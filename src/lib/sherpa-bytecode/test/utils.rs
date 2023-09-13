@@ -23,12 +23,16 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) 
     let TestPackage { db, .. } = tp;
 
     for (entry_name, input, should_pass) in inputs {
-      TestParser::new(&mut ((*input).into()), &pkg).collect_shifts_and_skips(
-        db.get_entry_offset(entry_name, &pkg.state_name_to_address).expect(&format!(
-          "\nCan't find entry offset for entry point [default].\nValid entry names are\n    {}\n",
-          db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
-        )) as u32,
-        4,
+      let (bc_offset, e): (usize, &EntryPoint) = db.get_entry_data(entry_name, &pkg.state_name_to_address).expect(&format!(
+        "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+        db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
+      ));
+
+      assert!(bc_offset != 0);
+
+      let result = TestParser::new(&mut ((*input).into()), &pkg).completes(
+        bc_offset as u32,
+        e.nonterm_key.to_val(),
         &mut sherpa_core::file_debugger(
           db.to_owned(),
           PrintConfig {
@@ -43,17 +47,10 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)]) 
         .as_deref_mut(),
       );
 
-      let ok = TestParser::new(&mut ((*input).into()), &pkg)
-        .completes(
-          db.get_entry_offset(entry_name, &pkg.state_name_to_address).expect(&format!(
-            "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
-            db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
-          )) as u32,
-          &mut None,
-        )
-        .is_ok();
-
-      if ok != *should_pass {
+      if result.is_ok() != *should_pass {
+        if result.is_err() {
+          result?;
+        }
         panic!(
           "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
           if *should_pass { "pass" } else { "fail" }

@@ -223,6 +223,88 @@ Now our grammar looks like this:
 
 ```
 
+
+```sherpa { lab=true }
+IGNORE { c:sp c:nl }
+
+<> element_block > '<' component_identifier
+    ( element_attribute(+) )?
+    ( element_attributes | general_data | element_block | general_binding )(*)
+    ">"
+
+<> component_identifier >
+    identifier ( ':' identifier )?
+
+<> element_attributes >c:nl element_attribute(+)
+
+<> element_attribute > '-' identifier attribute_chars c:sp
+
+
+    | '-' identifier ':' identifier
+
+    | '-' "store" '{' local_values? '}'
+    | '-' "local" '{' local_values? '}'
+    | '-' "param" '{' local_values? '}'
+    | '-' "model" '{' local_values? '}'
+
+<> general_binding > ':' identifier
+
+<> local_values > local_value(+)
+
+<> local_value > identifier ( '`' identifier )? ( '='  c:num )? ( ',' )(*)
+
+
+<> attribute_chars > ( c:id | c:num | c:sym  )(+)
+<> general_data > ( c:id | c:num  | c:nl  )(+)
+
+<> identifier > tk:tok_identifier
+
+<> tok_identifier > ( c:id | c:num )(+)
+============
+
+"<i -test : soLongMySwanSong - store { test } <i> <i>>
+
+```
+
+Sherpa makes it easy to solve the precedence problem for mathematical expressions. 
+
+```sherpa { lab=true }
+IGNORE { tk:space }
+
+<> expr > expr "+"{1} expr{1}
+| expr "^"{4} expr{4}
+| expr "*"{3} expr{3}
+| expr "/"{2} expr{2}
+| expr "-"{1} expr{1}
+| c:num
+
+<> space > c:sp(+)
+============
+
+1 + 2 * 2 ^ 2 + 2 * 2 + 1 + 1
+
+```
+
+```sherpa { lab=true }
+IGNORE { c:sp  } 
+
+<> A > ( B | ":" C )(+)
+
+<> B > id "=>" c:id
+
+<> C > a_id(+)
+
+<> a_id > id "!"? 
+
+<> id > tk:id_tok
+
+<> id_tok > c:id
+============
+
+:t t => g :t! t!
+
+```
+
 A parse produced by this grammar will now be able to take an input such as `"1+2+3"` and return a numeric literal `6`. 
 
 ## What Next

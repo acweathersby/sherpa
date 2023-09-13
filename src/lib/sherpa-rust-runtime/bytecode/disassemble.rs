@@ -177,7 +177,7 @@ pub(crate) fn generate_table_string<'a>(i: Instruction<'a>, recursive: bool) -> 
   strings.push(create_default_entry(default_block.address()));
 
   let mut string =
-    format!("\n{}{} JUMP \n{: >7} TYPE {} ", header(i.address()), table_name, "", InputType::from(input_type).to_string(),);
+    format!("\n{}{} JUMP \n{: >7} TYPE {} ", header(i.address()), table_name, "", MatchInputType::from(input_type).to_string(),);
 
   string += &(if scan_index.address() > 0 {
     format!("\n{: >7} SCANNER ADDRESS {}", "", address_string(scan_index.address()))
@@ -211,13 +211,13 @@ fn create_default_entry(goto_offset: usize) -> String {
   format!("\nDEFAULT ---- JUMP TO {} ON FAIL", address_string(goto_offset))
 }
 
-fn create_normal_entry(token_id: u32, input_type: InputType, idx: usize, bc_address: usize, meta: i64) -> String {
+fn create_normal_entry(token_id: u32, input_type: MatchInputType, idx: usize, bc_address: usize, meta: i64) -> String {
   let token_string = token_id.to_string();
   format!(
     "\n{: >6}---- JUMP TO {} ON {} ( {} ) [{}]",
     header(idx),
     address_string(bc_address),
-    InputType::from(input_type).to_string(),
+    MatchInputType::from(input_type).to_string(),
     token_string,
     meta
   )

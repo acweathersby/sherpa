@@ -1,4 +1,4 @@
-use sherpa_rust_runtime::types::bytecode::InputType;
+use sherpa_rust_runtime::types::bytecode::MatchInputType;
 
 use super::*;
 use crate::{
@@ -108,7 +108,7 @@ impl<'db> ParseState {
 
     let mut cw = CodeWriter::new(vec![]);
 
-    render_IR(db, &mut cw, &ASTNode::State(ast.clone()), print_header, InputType::Default)?;
+    render_IR(db, &mut cw, &ASTNode::State(ast.clone()), print_header, MatchInputType::Default)?;
 
     unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
   }
@@ -149,7 +149,7 @@ fn render_IR<T: Write>(
   mut w: &mut CodeWriter<T>,
   node: &ASTNode,
   add_header: bool,
-  match_type: InputType,
+  match_type: MatchInputType,
 ) -> SherpaResult<()> {
   match node {
     ASTNode::State(box parser::State { id, statement, .. }) => {
@@ -193,7 +193,7 @@ fn render_IR<T: Write>(
 
       for m in matches {
         w = w.newline()?;
-        render_IR(db, w, m, false, InputType::from(mode.as_str()))?;
+        render_IR(db, w, m, false, MatchInputType::from(mode.as_str()))?;
       }
 
       _ = (w.dedent().newline()? + "}").dedent().newline()?;
@@ -202,14 +202,14 @@ fn render_IR<T: Write>(
     ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
       w = w + "default {";
 
-      render_IR(db, w, &ASTNode::Statement(statement.clone()), false, InputType::Default)?;
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false, MatchInputType::Default)?;
 
       _ = w + " }";
     }
 
     ASTNode::IntMatch(box parser::IntMatch { vals, statement, .. }) => {
       match match_type {
-        InputType::Token => {
+        MatchInputType::Token => {
           w = w
             + "( "
             + vals
@@ -224,7 +224,7 @@ fn render_IR<T: Write>(
               .join(" | ")
             + " )";
         }
-        InputType::Byte | InputType::ByteScanless => {
+        MatchInputType::Byte | MatchInputType::ByteScanless => {
           w = w
             + "( "
             + vals
@@ -239,7 +239,7 @@ fn render_IR<T: Write>(
               .join(" | ")
             + " )";
         }
-        InputType::NonTerminal => {
+        MatchInputType::NonTerminal => {
           w = w
             + "( "
             + vals
@@ -256,7 +256,7 @@ fn render_IR<T: Write>(
 
       w = w + " {";
 
-      render_IR(db, w, &ASTNode::Statement(statement.clone()), false, InputType::Default)?;
+      render_IR(db, w, &ASTNode::Statement(statement.clone()), false, MatchInputType::Default)?;
 
       _ = w + " }";
     }
@@ -304,7 +304,7 @@ fn render_IR<T: Write>(
 pub fn print_IR(node: &ASTNode, db: &ParserDatabase) -> SherpaResult<String> {
   let mut cw = CodeWriter::new(vec![]);
 
-  render_IR(db, &mut cw, node, false, InputType::Default)?;
+  render_IR(db, &mut cw, node, false, MatchInputType::Default)?;
 
   unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
 }

@@ -513,19 +513,50 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
   fn completes<'debug>(
     &mut self,
     entry_point: u32,
+    target_nonterminal_id: u32,
     debug: &mut Option<&'debug mut DebugFn<R, M>>,
   ) -> Result<(), SherpaParseError> {
     self.init_parser(entry_point);
     loop {
       match self.get_next_action(debug) {
-        ParseAction::Accept { .. } => {
-          break Result::Ok(());
+        ParseAction::Accept { nonterminal_id } => {
+          break if !self.head_at_end() {
+            Err(SherpaParseError {
+              inline_message: format!("Failed to read entire input {} {}", self.get_ctx().end_ptr, self.get_ctx().sym_ptr),
+              last_nonterminal: nonterminal_id,
+              loc: Default::default(),
+              message: "Failed to read entire input".to_string(),
+            })
+          } else if nonterminal_id != target_nonterminal_id {
+            Err(SherpaParseError {
+              inline_message: "Top symbol did not match the target nonterminal".to_string(),
+              last_nonterminal: nonterminal_id,
+              loc: Default::default(),
+              message: "CST is incorrect".to_string(),
+            })
+          } else {
+            Ok(())
+          };
         }
-
+        ParseAction::Shift { token_byte_length, token_byte_offset, token_id, .. } => {
+          let offset_start = token_byte_offset as usize;
+          let offset_end = (token_byte_offset + token_byte_length) as usize;
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::ActionShift { offset_start, offset_end, token_id }, self.get_ctx());
+          }
+        }
+        ParseAction::Reduce { rule_id: _rule_id, .. } =>
+        {
+          #[cfg(debug_assertions)]
+          if let Some(debug) = debug {
+            debug(&DebugEvent::ActionReduce { rule_id: _rule_id }, self.get_ctx());
+          }
+        }
         ParseAction::Error { last_input, .. } => {
           let mut token: Token = last_input.to_token(self.get_reader_mut());
           token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
-          break Result::Err(SherpaParseError {
+          break Err(SherpaParseError {
             message: "Could not recognize the following input:".to_string(),
             inline_message: "".to_string(),
             loc: token,

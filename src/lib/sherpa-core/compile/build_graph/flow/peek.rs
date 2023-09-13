@@ -34,7 +34,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
   let mut state = gb.create_state::<DefaultIter>(GraphBuildState::Peek(0), sym, transition_type, None);
 
   if let Some(completed_pairs) = completed_pairs {
-    let pairs = completed_pairs.into_iter().cloned().collect::<BTreeSet<_>>();
+    let pairs: BTreeSet<TransitionPair<'_>> = completed_pairs.into_iter().cloned().collect::<BTreeSet<_>>();
 
     // All items here complete the same nonterminal, so we group them all into one
     // goal index.
@@ -75,12 +75,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
 
   state.add_kernel_items((if need_increment { kernel_items.try_increment() } else { kernel_items }).iter().cloned());
 
-  if ALLOW_PEEKING {
-    Ok(state.to_state())
-  } else {
-    let state = state.to_state();
-    Err(peek_not_allowed_error(gb, state))
-  }
+  Ok(state.to_state())
 }
 
 fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>>>(

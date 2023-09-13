@@ -6,19 +6,18 @@ use crate::{
   utils::hash_group_btreemap,
   writer::code_writer::CodeWriter,
 };
-use sherpa_rust_runtime::types::bytecode::InputType;
+use sherpa_rust_runtime::types::bytecode::MatchInputType;
 
 use super::build_graph::{graph::GraphHost, items::get_follow_internal};
 
-pub(crate) fn build_ir<'db>(
+pub(crate) fn build_ir<'a, 'db: 'a>(
   j: &mut Journal,
-  graph: &GraphHost<'db>,
+  mut iter: GraphIterator<'a, 'db>,
   entry_name: IString,
 ) -> SherpaResult<Array<Box<ParseState>>> {
   debug_assert!(entry_name.as_u64() != 0);
 
   let mut output = OrderedMap::<StateId, Box<ParseState>>::new();
-  let mut iter = GraphIterator::new(graph);
 
   while let Some((graph, state, successors)) = iter.next() {
     let goto_name = if let Some(goto) = state.get_goto_state() {
@@ -35,7 +34,7 @@ pub(crate) fn build_ir<'db>(
     }
   }
   #[cfg(debug_assertions)]
-  debug_assert!(!output.is_empty(), "This graph did not yield any states! \n{}", graph._debug_string_());
+  debug_assert!(!output.is_empty(), "This graph did not yield any states! \n{}", iter.graph._debug_string_());
 
   j.report_mut().wrap_ok_or_return_errors(output.into_values().collect())
 }
@@ -59,7 +58,7 @@ fn convert_nonterm_shift_state_to_ir<'db>(
 
   let mut w = CodeWriter::new(vec![]);
 
-  (&mut w + "match: " + InputType::NONTERMINAL_STR + " {").increase_indent();
+  (&mut w + "match: " + MatchInputType::NONTERMINAL_STR + " {").increase_indent();
 
   for (bc_id, (_nterm_name, s_name, transition_type)) in successors
     .into_iter()
@@ -237,15 +236,15 @@ fn add_tok_expr(graph: &GraphHost, state: &GraphState, successors: &OrderedSet<&
 fn classify_successors<'graph, 'db>(
   successors: &'graph OrderedSet<&'graph GraphState<'db>>,
   _db: &'db ParserDatabase,
-) -> Queue<((u32, InputType), OrderedSet<&'graph GraphState<'db>>)> {
+) -> Queue<((u32, MatchInputType), OrderedSet<&'graph GraphState<'db>>)> {
   Queue::from_iter(
     hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol().sym() {
-      SymbolId::EndOfFile { .. } => (0, InputType::EndOfFile),
-      SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (4, InputType::Token),
-      SymbolId::Char { .. } => (1, InputType::Byte),
-      SymbolId::Codepoint { .. } => (2, InputType::Codepoint),
-      SymbolId::Default => (5, InputType::Default),
-      sym if sym.is_class() => (3, InputType::Class),
+      SymbolId::EndOfFile { .. } => (0, MatchInputType::EndOfFile),
+      SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (4, MatchInputType::Token),
+      SymbolId::Char { .. } => (1, MatchInputType::Byte),
+      SymbolId::Codepoint { .. } => (2, MatchInputType::Codepoint),
+      SymbolId::Default => (5, MatchInputType::Default),
+      sym if sym.is_class() => (3, MatchInputType::Class),
       _sym => {
         #[cfg(debug_assertions)]
         unreachable!("{_sym:?} {}", s._debug_string_(_db));
@@ -261,13 +260,13 @@ fn add_match_expr<'db>(
   mut w: &mut CodeWriter<Vec<u8>>,
   state: &GraphState,
   graph: &GraphHost<'db>,
-  branches: &mut Queue<((u32, InputType), OrderedSet<&GraphState>)>,
+  branches: &mut Queue<((u32, MatchInputType), OrderedSet<&GraphState>)>,
   goto_state_id: Option<IString>,
 ) -> Option<(IString, OrderedSet<PrecedentDBTerm>)> {
   let db = graph.get_db();
 
   if let Some(((_, input_type), successors)) = branches.pop_front() {
-    if matches!(input_type, InputType::Default) {
+    if matches!(input_type, MatchInputType::Default) {
       let successor = successors.into_iter().next().unwrap();
 
       let string = build_body(state, successor, graph, goto_state_id).join(" then ");
@@ -278,7 +277,7 @@ fn add_match_expr<'db>(
 
       None
     } else {
-      let (symbols, skipped) = if input_type == InputType::Token {
+      let (symbols, skipped) = if input_type == MatchInputType::Token {
         let mut syms = successors.iter().map(|s| s.get_symbol().sym().tok_db_key().unwrap()).collect::<OrderedSet<_>>();
 
         // If the kernel includes any completed items, include tokens that follow
@@ -287,18 +286,15 @@ fn add_match_expr<'db>(
         for item in state.kernel_items_ref().iter().filter(|i| i.is_complete()) {
           let mode = graph.graph_type;
 
-          let (follow, _) = get_follow_internal(graph, *item, false).expect("Should be able to build follow sets");
+          let (follow, _) = get_follow_internal(graph, *item, false);
 
           if graph._goal_nonterm_index_is_(0) && state.id.0 == 351 {
             println!("{}", state._debug_string_(db));
             follow._debug_print_("FOLLOW");
           }
 
-          let iter = follow
-            .iter()
-            .closure::<Items>(StateId::root())
-            .into_iter()
-            .filter_map(|i| i.is_term(mode).then_some(i.term_index_at_sym(mode)).flatten());
+          let iter = follow.iter().flat_map(|i| i.closure_iter()).filter_map(|i| i.term_index_at_sym(mode));
+
           syms.extend(iter);
         }
 

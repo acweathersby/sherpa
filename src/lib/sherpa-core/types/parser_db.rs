@@ -274,6 +274,15 @@ impl ParserDatabase {
       .and_then(|e| hash_map.get(&e.nonterm_entry_name).map(|v| (*v) as usize))
   }
 
+  pub fn get_entry_data(&self, entry_name: &str, hash_map: &HashMap<IString, u32>) -> Option<(usize, &EntryPoint)> {
+    let string = entry_name.to_token();
+    self
+      .entry_points
+      .iter()
+      .find(|e| e.entry_name == string)
+      .and_then(|e| Some((hash_map.get(&e.nonterm_entry_name).map(|v| (*v) as usize).unwrap_or_default(), e)))
+  }
+
   /// Returns the name of the database as a string.
   pub fn name_string(&self) -> String {
     self.name.to_string(&self.string_store)
@@ -405,6 +414,11 @@ impl ParserDatabase {
     self.item_closures[item.rule_id.0 as usize][item.sym_index as usize].iter().map(|s| Item::from_static(*s, self))
   }
 
+  pub(crate) fn get_closure_from_index<'db>(&'db self, index: ItemIndex) -> impl ItemContainerIter {
+    let (rule_id, sym_index) = index.get_parts();
+    self.item_closures[rule_id][sym_index].iter().map(|s| Item::from_static(*s, self))
+  }
+
   /// Returns all regular (non token) nonterminals.
   pub fn parser_nonterms<'db>(&'db self) -> Array<DBNonTermKey> {
     self
@@ -449,6 +463,12 @@ macro_rules! indexed_id_implementations {
     impl Into<usize> for $id_type {
       fn into(self) -> usize {
         self.0 as usize
+      }
+    }
+
+    impl Into<u32> for $id_type {
+      fn into(self) -> u32 {
+        self.0 as u32
       }
     }
 

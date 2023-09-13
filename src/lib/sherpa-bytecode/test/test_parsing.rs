@@ -123,12 +123,12 @@ pub fn precedence() -> SherpaResult<()> {
     | expr "*"{3} expr{3}
     | expr "/"{2} expr{2}
     | expr "-"{1} expr{1}
-    | c:num
+    | (c:num(+))
 
     <> space > c:sp(+)
 
 "#],
-    &[("default", "1 + 2 * 2 ^ 2 + 2 * 2 + 1 + 1", true)],
+    &[("default", "11 + 2 * 2 ^ 2 + 2 * 2 + 1 + 1", true)],
   )
 }
 
@@ -220,7 +220,7 @@ pub fn local_rule_append() -> SherpaResult<()> {
     
     +> A > "two"
 "#],
-    &[("default", "one ", true), ("default", "two", true)],
+    &[("default", "one", true), ("default", "two", true)],
   )
 }
 
@@ -240,7 +240,7 @@ IMPORT A as A
 +> A::A > "two"
 "#,
     ],
-    &[("default", "one ", true), ("default", "two", true)],
+    &[("default", "one", true), ("default", "two", true)],
   )
 }
 
@@ -276,7 +276,7 @@ pub fn skipped_symbol() -> SherpaResult<()> {
       
     <> A > "B" "T"
 "#],
-    &[("default", "BAT ", true), ("default", "BT", true), ("default", "BA AT", false)],
+    &[("default", "BAT", true), ("default", "BT", true), ("default", "BA AT", false)],
   )
 }
 
@@ -286,12 +286,12 @@ pub fn skipped_nonterm_token_symbol() -> SherpaResult<()> {
     &[r#"
     IGNORE { tk:vowels } 
       
-    <> A > "B" "T"
+    <> A > "B" "T" $
 
     <> vowels > "A" | "E" | "I" | "O" | "U" | "Y"
 "#],
     &[
-      ("default", "BAT ", true),
+      ("default", "BAT", true),
       ("default", "BIT", true),
       ("default", "BUT", true),
       ("default", "BOT", true),
@@ -308,17 +308,21 @@ fn parser_of_grammar_with_append_nonterminals() -> SherpaResult<()> {
   +> A >  "C"
   +> A >  "D"
 "#],
-    &[("default", "B ", true), ("default", "C", true), ("default", "D", true), ("default", "d", false)],
+    &[("default", "B", true), ("default", "C", true), ("default", "D", true), ("default", "d", false)],
   )
 }
 
 #[test]
 fn parsing_using_trivial_custom_state() -> SherpaResult<()> {
-  compile_and_run_grammars(&[r##"A => match : BYTE  (65 /* A */ | 66 /* B */) { shift then pass }"##], &[
-    ("default", "A ", true),
-    ("default", "B", true),
-    ("default", "C", false),
-  ])
+  compile_and_run_grammars(
+    &[r##"
+  A => match : BYTE (65 /* A */ | 66 /* B */) { goto B }
+
+  B => shift then pass
+  
+  "##],
+    &[("default", "A", true), ("default", "B", true), ("default", "C", false)],
+  )
 }
 
 #[test]
@@ -341,7 +345,7 @@ EXPORT B as B
 
 <> B > "c" "b" "a"    
     "##],
-    &[("A", "abc ", false), ("A", "abc", true), ("B", "cba", true), ("B", "cba ", true)],
+    &[("A", "abc ", false), ("A", "abc", true), ("B", "cba", true), ("B", "cba", true)],
   )
 }
 

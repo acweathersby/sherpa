@@ -7,7 +7,7 @@ use inkwell::{
 };
 use sherpa_core::{proxy::Array, *};
 use sherpa_rust_runtime::types::{
-  bytecode::{InputType, Opcode},
+  bytecode::{MatchInputType, Opcode},
   ParseActionType,
 };
 use std::collections::BTreeMap;
@@ -288,12 +288,12 @@ fn compile_match<'a, 'llvm: 'a>(
 
   if matches!(
     mode.as_str(),
-    InputType::BYTE_STR
-      | InputType::CLASS_STR
-      | InputType::CODEPOINT_STR
-      | InputType::BYTE_SCANLESS_STR
-      | InputType::CLASS_SCANLESS_STR
-      | InputType::CODEPOINT_SCANLESS_STR
+    MatchInputType::BYTE_STR
+      | MatchInputType::CLASS_STR
+      | MatchInputType::CODEPOINT_STR
+      | MatchInputType::BYTE_SCANLESS_STR
+      | MatchInputType::CLASS_SCANLESS_STR
+      | MatchInputType::CODEPOINT_SCANLESS_STR
   ) {
     check_for_input_acceptability(args, state_fun, p_ctx, i64.const_int(1, false), symbol_branches_start, default_block)?;
   } else {
@@ -303,24 +303,24 @@ fn compile_match<'a, 'llvm: 'a>(
   b.position_at_end(symbol_branches_start);
 
   let (cp_val, int_type) = match mode.as_str() {
-    InputType::NONTERMINAL_STR => {
+    MatchInputType::NONTERMINAL_STR => {
       let val = CtxAggregateIndices::nonterm_id.load(b, p_ctx)?.into_int_value();
       (val, i32)
     }
 
-    InputType::TOKEN_STR => {
+    MatchInputType::TOKEN_STR => {
       construct_scan(&args, p_ctx, state_fun, *args.state_lu.get(scanner).unwrap())?;
       let val = CtxAggregateIndices::tok_id.load(b, p_ctx)?.into_int_value();
       (val, i32)
     }
 
-    InputType::BYTE_STR | InputType::BYTE_SCANLESS_STR => {
+    MatchInputType::BYTE_STR | MatchInputType::BYTE_SCANLESS_STR => {
       CtxAggregateIndices::sym_len.store(b, p_ctx, u32_1)?;
       let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       (b.build_load(scan_ptr_cache, "").into_int_value(), i8)
     }
 
-    InputType::CODEPOINT_STR | InputType::CODEPOINT_SCANLESS_STR => {
+    MatchInputType::CODEPOINT_STR | MatchInputType::CODEPOINT_SCANLESS_STR => {
       let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
       CtxAggregateIndices::sym_len.store(b, p_ctx, tok_len)?;
@@ -328,7 +328,7 @@ fn compile_match<'a, 'llvm: 'a>(
       (cp_val, i32)
     }
 
-    InputType::CLASS_STR | InputType::CLASS_SCANLESS_STR => {
+    MatchInputType::CLASS_STR | MatchInputType::CLASS_SCANLESS_STR => {
       let scan_ptr_cache = CtxAggregateIndices::scan_ptr.load(b, p_ctx)?.into_pointer_value();
       let (cp_val, tok_len) = construct_cp_lu_with_token_len_store(args, scan_ptr_cache)?;
       CtxAggregateIndices::sym_len.store(b, p_ctx, tok_len)?;
@@ -339,15 +339,17 @@ fn compile_match<'a, 'llvm: 'a>(
 
       (cp_val, i32)
     }
-    InputType::END_OF_FILE_STR => {
+    MatchInputType::END_OF_FILE_STR => {
       let val = CtxAggregateIndices::tok_id.load(b, p_ctx)?.into_int_value();
       (val, i32)
     }
     _ => unreachable!(),
   };
 
-  let is_scanless =
-    matches!(mode.as_str(), InputType::BYTE_SCANLESS_STR | InputType::CODEPOINT_SCANLESS_STR | InputType::CLASS_SCANLESS_STR);
+  let is_scanless = matches!(
+    mode.as_str(),
+    MatchInputType::BYTE_SCANLESS_STR | MatchInputType::CODEPOINT_SCANLESS_STR | MatchInputType::CLASS_SCANLESS_STR
+  );
 
   let mut default_defined = false;
   let mut branches = Array::new();

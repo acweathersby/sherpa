@@ -33,11 +33,11 @@ fn complete_regular<'db>(first: TransitionPair<'db>, gb: &mut GraphBuilder<'db>,
   let ____is_scan____ = gb.is_scanner();
   let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
   let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
-  let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false;
+  let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false; // Forking is disabled
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
 
   if !gb.graph().item_is_goal(&completed_item) && !completed_item.from_goto_origin {
-    let (follow, completed_items) = get_follow(gb, completed_item, true).expect("could not get follow");
+    let (follow, completed_items) = get_follow(gb, completed_item, true);
 
     if follow.len() < 1 && completed_items.len() < 1 {
       panic!("TODO")
@@ -49,7 +49,8 @@ fn complete_regular<'db>(first: TransitionPair<'db>, gb: &mut GraphBuilder<'db>,
         Some(
           follow
             .into_iter()
-            .chain(completed_items.into_iter().filter(|i| !i.is_out_of_scope() && !i.is_canonically_equal(&completed_item))),
+            .chain(completed_items.into_iter().filter(|i| !i.is_out_of_scope() && !i.is_canonically_equal(&completed_item)))
+            .into_iter(),
         ),
       );
       state.set_reduce_item(completed_item);
@@ -74,7 +75,7 @@ fn complete_scan<'db>(
   first: TransitionPair<'db>,
 ) {
   let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-    completed.iter().into_iter().map(|i| get_follow(gb, i.kernel, false).expect("could not get follow")).unzip();
+    completed.iter().into_iter().map(|i| get_follow(gb, i.kernel, false)).unzip();
 
   let follow = follow.into_iter().flatten().collect::<Items>();
   let completed_items = completed_items.into_iter().flatten().collect::<Items>();

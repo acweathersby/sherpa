@@ -1,5 +1,5 @@
 use crate::types::{
-  bytecode::{ByteCodeIterator, InputType, Instruction, Opcode, NORMAL_STATE_FLAG, STATE_HEADER},
+  bytecode::{ByteCodeIterator, Instruction, MatchInputType, Opcode, NORMAL_STATE_FLAG, STATE_HEADER},
   *,
 };
 
@@ -443,36 +443,36 @@ pub fn vector_branch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
 }
 
 fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
-  input_type: InputType,
+  input_type: MatchInputType,
   scan_index: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
   debug: &mut Option<&'debug mut DebugFn<R, M>>,
 ) -> u32 {
   match input_type {
-    InputType::NonTerminal => ctx.get_nonterminal() as u32,
-    InputType::EndOfFile => (ctx.tok_ptr >= ctx.end_ptr) as u32,
-    InputType::Class => {
+    MatchInputType::NonTerminal => ctx.get_nonterminal() as u32,
+    MatchInputType::EndOfFile => (ctx.tok_ptr >= ctx.end_ptr) as u32,
+    MatchInputType::Class => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.sym_len = scan_len;
       ctx.get_reader().class() as u32
     }
-    InputType::ClassScanless => {
+    MatchInputType::ClassScanless => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.tok_len = scan_len as usize;
       ctx.get_reader().class() as u32
     }
-    InputType::Codepoint => {
+    MatchInputType::Codepoint => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.sym_len = scan_len;
       //ctx.tok_len = scan_len as usize;
       ctx.get_reader().codepoint() as u32
     }
-    InputType::CodepointScanless => {
+    MatchInputType::CodepointScanless => {
       let scan_len = ctx.get_reader().codepoint_byte_length();
       ctx.tok_len = scan_len as usize;
       ctx.get_reader().codepoint() as u32
     }
-    InputType::ByteScanless => {
+    MatchInputType::ByteScanless => {
       let byte = ctx.get_reader().byte();
 
       if byte == 10 {
@@ -487,7 +487,7 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       }
       byte as u32
     }
-    InputType::Byte => {
+    MatchInputType::Byte => {
       let byte = ctx.get_reader().byte();
 
       if byte == 10 {
@@ -503,7 +503,7 @@ fn get_input_value<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       }
       byte as u32
     }
-    InputType::Token => {
+    MatchInputType::Token => {
       debug_assert!(!ctx.is_scanner());
 
       token_scan(scan_index, ctx, debug);

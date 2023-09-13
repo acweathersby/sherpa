@@ -1,7 +1,7 @@
 use super::{
   build_graph::{
     build,
-    graph::{GraphType, Origin},
+    graph::{GraphIterator, GraphType, Origin},
   },
   build_ir::build_ir,
 };
@@ -98,7 +98,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
 
     let graph = build(&mut j, scanner, GraphType::Scanner, start_items, db, config)?;
 
-    let ir = build_ir(&mut j, &graph, scanner)?;
+    let ir = build_ir(&mut j, GraphIterator::new(&graph), scanner)?;
     // println!("{}", graph.debug_string());
     for state in ir {
       //  println!("{} {}", state.name.to_str(db.string_store()).as_str(),
@@ -133,6 +133,9 @@ fn create_parse_states_from_prod<'db>(
 
   if let Some(custom_state) = db.custom_state(nterm_key) {
     let name = db.nonterm_guid_name(nterm_key);
+
+    println!("Custom State: {}", name.to_string(db.string_store()));
+
     let state = ParseState {
       hash_name:     name,
       name:          name,
@@ -152,7 +155,7 @@ fn create_parse_states_from_prod<'db>(
       SymbolId::NonTerminal { .. } => {
         let graph = build(j, db.nonterm_guid_name(nterm_key), GraphType::Parser, start_items, db, config)?;
 
-        let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm_key))?;
+        let ir = build_ir(j, GraphIterator::new(&graph), db.nonterm_guid_name(nterm_key))?;
 
         for mut state in ir {
           if let Some(scanner_data) = state.get_scanner() {
@@ -164,7 +167,7 @@ fn create_parse_states_from_prod<'db>(
       SymbolId::NonTerminalToken { .. } => {
         let graph = build(j, db.nonterm_guid_name(nterm_key), GraphType::Scanner, start_items, db, config)?;
 
-        let ir = build_ir(j, &graph, db.nonterm_guid_name(nterm_key))?;
+        let ir = build_ir(j, GraphIterator::new(&graph), db.nonterm_guid_name(nterm_key))?;
 
         for state in ir {
           states.insert(state.hash_name, state);

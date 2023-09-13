@@ -14,7 +14,7 @@ use crate::{
 };
 #[cfg(debug_assertions)]
 use parser::GetASTNodeType;
-use sherpa_rust_runtime::types::Token;
+use sherpa_rust_runtime::types::{bytecode::MatchInputType, Token};
 use std::{hash::Hash, path::PathBuf, sync::Arc};
 
 /// Temporary structure to host rule data during
@@ -183,6 +183,7 @@ pub fn extract_nonterminals<'a>(
           tok: parse_state.tok.clone(),
           state: parse_state.clone(),
           symbols: Default::default(),
+          nterm_refs: Default::default(),
         }))
       }
       ASTNode::PrattRules(box parser::PrattRules { name_sym, rules: _, tok })
@@ -267,56 +268,113 @@ pub fn process_parse_state<'a>(
 ) -> SherpaResult<Box<CustomState>> {
   // Extract symbol information from the state.
 
-  let CustomState { id, state, symbols, guid_name, .. } = parse_state.as_mut();
-  {
-    let parser::Statement { branch, .. } = state.statement.as_ref();
-
-    if let Some(branch) = &branch {
-      match branch {
-        ASTNode::TerminalMatches(term_matches) => {
-          for match_ in &term_matches.matches {
-            match match_ {
-              ASTNode::TermMatch(term_match) => {
-                record_symbol(
-                  &term_match.sym,
-                  &mut NonTermData {
-                    root_nterm: *id,
-                    root_g_name: *guid_name,
-                    root_f_name: *guid_name,
-                    symbols,
-                    sub_nonterminals: &mut Default::default(),
-                    rules: &mut Default::default(),
-                  },
-                  g_data,
-                  s_store,
-                )?;
-              }
-              _ => {
-                // Default
-                // Hint
-              }
-            }
-          }
-        }
-        ASTNode::ProductionMatches(..) => {}
-        ASTNode::Matches(ast_match) => match ast_match.mode.as_str() {
-          "TERMINAL" => {}
+  fn process_state_nonterm(
+    nonterminal: &ASTNode,
+    g: &GrammarData,
+    s: &IStringStore,
+    sr: &mut std::collections::BTreeSet<(Token, IString, NonTermId)>,
+  ) -> Result<IString, SherpaError> {
+    let nonterm = &nonterminal;
+    let (tok, g_id) = match get_nonterminal_symbol(g, nonterm) {
+      (Some(nterm), None) => (&nterm.tok, &g.id),
+      (None, Some(nterm)) => {
+        let ref_name = nterm.module.to_token();
+        match g.imports.get(&ref_name) {
+          Some(id) => (&nterm.tok, id),
           _ => {
-            /*
-             * PRODUCTION
-             * TERMINAL
-             */
+            SherpaResult_Err("Could not retrieve ProductionID from node")?;
+            unreachable!()
           }
-        },
-        _ => {
-          // ASTNode::Gotos
-          // ASTNode::Pass
-          // ASTNode::Fail
-          // ASTNode::Accept
         }
       }
-    }
+      _ => unreachable!(),
+    };
+    let name_str = tok.to_string();
+    let (guid_name, _) = nterm_names(&name_str, g_id, s);
+    sr.insert((tok.clone(), g_id.path, NonTermId::from((g_id.guid, name_str.as_str()))));
+    Ok(guid_name)
   }
+
+  fn process_statement(
+    stmt: &mut Box<parser::Statement>,
+    g: &GrammarData,
+    s: &IStringStore,
+    sr: &mut OrderedSet<(Token, IString, NonTermId)>,
+  ) -> SherpaResult<()> {
+    for n in &mut stmt.transitive {
+      update_parser_state_node(g, s, n, sr)?;
+    }
+    for n in &mut stmt.branch {
+      update_parser_state_node(g, s, n, sr)?;
+    }
+    Ok(if let Some(n) = stmt.transitive.as_mut() {
+      update_parser_state_node(g, s, n, sr)?;
+    })
+  }
+
+  fn update_parser_state_node(
+    g: &GrammarData,
+    s: &IStringStore,
+    n: &mut ASTNode,
+    sr: &mut OrderedSet<(Token, IString, NonTermId)>,
+  ) -> SherpaResult<()> {
+    match n {
+      ASTNode::Gotos(gotos) => {
+        for push in &mut gotos.pushes {
+          let name = process_state_nonterm(&mut push.nonterminal, g, s, sr)?.to_string(s);
+          push.name = name;
+        }
+
+        let name = process_state_nonterm(&gotos.goto.nonterminal, g, s, sr)?.to_string(s);
+        gotos.goto.name = name;
+
+        println!("{}", gotos.goto.name);
+      }
+      ASTNode::IntMatch(int_match) => {
+        process_statement(&mut int_match.statement, g, s, sr)?;
+      }
+      ASTNode::NonTermMatch(nterm_match) => {
+        process_statement(&mut nterm_match.statement, g, s, sr)?;
+      }
+      ASTNode::ProductionMatches(ast_match) => {
+        for n in &mut ast_match.matches {
+          update_parser_state_node(g, s, n, sr)?;
+        }
+      }
+      ASTNode::TerminalMatches(ast_match) => {
+        for n in &mut ast_match.matches {
+          update_parser_state_node(g, s, n, sr)?;
+        }
+      }
+      ASTNode::Matches(ast_match) => {
+        // Convert name to one of our recognized types or warn about an invalid input
+        // name.
+
+        let internal_mode = match ast_match.mode.as_str() {
+          "BYTE" => MatchInputType::BYTE_SCANLESS_STR,
+          mode => return Err(SherpaError::Text("todo(anthony) : Invalide match mode error: ".to_string() + mode)),
+        };
+
+        ast_match.mode = internal_mode.into();
+
+        for n in &mut ast_match.matches {
+          update_parser_state_node(g, s, n, sr)?;
+        }
+      }
+      ASTNode::Statement(stmt) => {
+        process_statement(stmt, g, s, sr)?;
+      }
+      _ => {}
+    }
+
+    Ok(())
+  }
+
+  let mut nterm_refs = OrderedSet::new();
+
+  process_statement(&mut parse_state.state.statement, g_data, s_store, &mut nterm_refs)?;
+
+  parse_state.nterm_refs = nterm_refs;
 
   SherpaResult::Ok(parse_state)
 }
@@ -659,12 +717,12 @@ fn some_rules_have_ast_definitions(rules: &[Box<parser::Rule>]) -> bool {
 /// records the symbol in the grammar store.
 fn record_symbol(
   sym_node: &ASTNode,
-  p_data: &mut NonTermData,
+  n_data: &mut NonTermData,
   g_data: &GrammarData,
   s_store: &IStringStore,
 ) -> SherpaResult<SymbolId> {
   let id = match sym_node {
-    ASTNode::AnnotatedSymbol(annotated) => record_symbol(&annotated.symbol, p_data, g_data, s_store)?,
+    ASTNode::AnnotatedSymbol(annotated) => record_symbol(&annotated.symbol, n_data, g_data, s_store)?,
 
     ASTNode::TerminalToken(terminal) => {
       let string = escaped_from((&terminal.val).into())?.join("");
@@ -715,7 +773,7 @@ fn record_symbol(
     }
   };
 
-  p_data.symbols.insert(id);
+  n_data.symbols.insert(id);
 
   SherpaResult::Ok(id)
 }
@@ -914,7 +972,7 @@ mod test {
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (nonterminals, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
+    let (mut nonterminals, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
 
     assert_eq!(nonterminals.len(), 0);
     assert_eq!(parse_states.len(), 1);

@@ -8,107 +8,25 @@ use super::{
   create_call,
   create_peek,
   handle_completed_item,
+  resolve_conflicting_tokens,
+  resolve_reduce_reduce_conflict,
+  resolve_shift_reduce_conflict,
   CreateCallResult,
+  ReduceReduceConflictResolution,
+  ShiftReduceConflictResolution,
 };
 use crate::{
   compile::build_graph::{
     build::handle_completed_groups,
-    errors::{conflicting_symbols_error, lr_disabled_error},
+    errors::{conflicting_symbols_error, lr_disabled_error, peek_not_allowed_error},
+    items::{get_follow, get_follow_symbols},
   },
+  parser::Shift,
   types::*,
   utils::{hash_group_btree_iter, hash_group_btreemap},
 };
 
 use GraphBuildState::*;
-
-enum ShiftReduceConflictResolution {
-  Shift,
-  Reduce,
-  Peek,
-}
-
-enum ReduceReduceConflictResolution<'db> {
-  Reduce(Item<'db>),
-  BreadCrumb(Follows<'db>),
-  Peek(Follows<'db>),
-  Nothing,
-}
-
-fn resolve_reduce_reduce_conflict<'db>(
-  gb: &mut GraphBuilder<'db>,
-  prec_sym: PrecedentSymbol,
-  follow_pairs: Follows<'db>,
-) -> ReduceReduceConflictResolution<'db> {
-  if prec_sym.sym().is_default() {
-    ReduceReduceConflictResolution::Nothing
-  } else {
-    ReduceReduceConflictResolution::Peek(follow_pairs)
-  }
-}
-
-fn resolve_shift_reduce_conflict<
-  'a,
-  'db: 'a,
-  A: TransitionPairRefIter<'a, 'db> + Clone,
-  B: TransitionPairRefIter<'a, 'db> + Clone,
->(
-  gb: &GraphBuilder<'db>,
-  shifts: A,
-  reduces: B,
-) -> ShiftReduceConflictResolution {
-  let incom_nterm_set = shifts.clone().to_kernel().rule_nonterm_ids();
-  let compl_nterm_set = reduces.clone().map(|i| i.kernel.decrement().unwrap()).nonterm_ids_at_index(gb.get_mode());
-  let nterm_sets_are_equal = incom_nterm_set.len() == 1 && incom_nterm_set.is_superset(&compl_nterm_set);
-
-  if nterm_sets_are_equal && {
-    // If all the shift items reduce to the same nterm and all completed items where
-    // completed after shifting the same nterm, then the precedence of the shift
-    // items determines whether we should shift first or reduce.
-    let compl_prec = reduces.clone().map(|i| i.kernel.decrement().unwrap().precedence(gb.get_mode())).max().unwrap_or_default();
-    let incom_prec = shifts.max_precedence();
-
-    incom_prec >= compl_prec
-  } {
-    ShiftReduceConflictResolution::Shift
-  } else if nterm_sets_are_equal {
-    ShiftReduceConflictResolution::Reduce
-  } else {
-    ShiftReduceConflictResolution::Peek
-  }
-}
-
-fn resolve_conflicting_tokens<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &mut GraphBuilder<'db>,
-  sym: SymbolId,
-  completed: T,
-) -> SherpaResult<()> {
-  // Map items according to their symbols
-  let token_precedence_groups = hash_group_btree_iter::<Vec<_>, _, _, _, _>(completed.clone(), |_, i| {
-    (i.kernel.origin_precedence(), i.kernel.origin.get_symbol(gb.db))
-  });
-
-  let base_precedence_groups = hash_group_btreemap(token_precedence_groups, |_, ((_, sym), _)| sym.conflict_precedence());
-
-  if let Some((_, groups)) = base_precedence_groups.into_iter().rev().next() {
-    let mut _completed: Option<&Follows> = None;
-
-    if groups.len() == 1 {
-      _completed = Some(groups.values().next().unwrap());
-    } else if let Some((_, sub_group)) = groups.iter().rev().next() {
-      if sub_group.len() == 1 {
-        _completed = Some(&sub_group);
-      }
-    }
-
-    if let Some(completed_items) = _completed {
-      handle_completed_item(gb, completed_items.clone(), (sym, 0).into())
-    } else {
-      Err(conflicting_symbols_error(gb, groups))
-    }
-  } else {
-    Ok(())
-  }
-}
 
 fn create_out_of_scope_complete_state<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
   gb: &mut GraphBuilder<'db>,
@@ -136,7 +54,7 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
 
   let out_of_scope = group.iter().out_scope();
-  let mut in_scope = group.iter().in_scope();
+  let in_scope = group.iter().in_scope();
 
   match (in_scope.clone().count(), out_of_scope.clone().count()) {
     (0, 1..) => {
@@ -146,8 +64,12 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
       create_out_of_scope_complete_state(gb, out_of_scope, prec_sym);
     }
     (1.., 1..) => {
-      let pending_state = create_peek(gb, prec_sym, group.iter(), None, true, StateType::Peek)?;
-      gb.add_pending(pending_state);
+      if !____allow_peek____ {
+        peek_not_allowed_error(gb, &[out_of_scope.cloned().collect(), in_scope.cloned().collect()], "")?;
+      } else {
+        let pending_state = create_peek(gb, prec_sym, group.iter(), None, true, StateType::Peek)?;
+        gb.add_pending(pending_state);
+      }
     }
     (len, _) => {
       if let Some(CreateCallResult { is_kernel, state_id, _transition_items }) =
@@ -197,6 +119,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
   default_only_items: &ItemSet<'db>,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
+  let ____allow_peek____ = gb.config.ALLOW_PEEKING;
   let mut cmpl = follow_pairs.iter().to_next().to_vec();
   let sym = prec_sym.sym();
   // Non-Peeking States
@@ -244,7 +167,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
       } else {
         // WE can use precedence to resolve shift reduce conflicts.  For now favor
         // shift.
-        match resolve_shift_reduce_conflict(gb, group.iter(), follow_pairs.iter()) {
+        match resolve_shift_reduce_conflict(gb, group.iter(), follow_pairs.iter())? {
           ShiftReduceConflictResolution::Shift => {
             groups.insert(sym, (prec, group));
           }
@@ -254,6 +177,9 @@ pub(crate) fn handle_regular_complete_groups<'db>(
           ShiftReduceConflictResolution::Peek => {
             let state = create_peek(gb, prec_sym, group.iter(), Some(follow_pairs.iter()), true, StateType::Peek)?;
             gb.add_pending(state);
+          }
+          ShiftReduceConflictResolution::Fork => {
+            return Err(SherpaError::Text("todo(anthony): Not ready for forking yet".into()))
           }
         }
       }

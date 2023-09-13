@@ -94,52 +94,43 @@ pub(crate) fn conflicting_symbols_error<'db>(
   }
 }
 
-pub(crate) fn peek_not_allowed_error(gb: &GraphBuilder, parent: StateId) -> SherpaError {
-  let graph = gb.graph();
-  let state = &graph[parent];
-  let parent = &graph[graph[parent].get_parent()];
+pub(crate) fn peek_not_allowed_error<'db, T>(
+  gb: &GraphBuilder<'db>,
+  conflicting_groups: &[Vec<TransitionPair<'db>>],
+  submessage: &str,
+) -> SherpaResult<T> {
+  Err(peek_not_allowed_error_internal(gb, conflicting_groups, submessage))
+}
 
-  let db = graph.get_db();
-  let peek_groups = state.get_resolve_items();
-
-  if let sym @ SymbolId::DBNonTerminal { key } = state.get_symbol().sym() {
-    let source_nonterms =
-      parent.get_nonterm_items().iter().filter(|i| i.nonterm_index_at_sym(gb.get_mode()).is_some_and(|k| k == key));
-    SherpaError::SourcesError {
-      id:       (ForbiddenPeek, 0, "disabled-peeking").into(),
-      msg:      "Cannot create lookahead states to resolve items in rules for [".to_string()
-        + &db.nonterm_friendly_name_string(key)
-        + "] when peeking is disabled",
-      ps_msg:   "Enable peeking to disambiguate these states.".into(),
-      severity: SherpaErrorSeverity::Critical,
-      sources:  peek_groups
-        .clone()
-        .flatten()
-        .filter(|i| !i.is_out_of_scope())
-        .map(|i| {
-          (
-            if !i.is_complete() { i.rule().symbols[i.sym_index as usize].loc.clone() } else { i.rule().tok.clone() },
-            i.rule().g_id.path.to_path(db.string_store()),
-            if i.is_complete() {
-              "Reduce to [".to_string()
-                + &db.nonterm_friendly_name_string(i.nonterm_index())
-                + "]? | "
-                + &i.to_canonical()._debug_string_()
-            } else {
-              "Continue shifting? | ".to_string() + &i.to_canonical()._debug_string_()
-            },
-          )
-        })
-        .chain(source_nonterms.filter(|i: &&Item<'_>| !i.is_out_of_scope()).map(|i| {
-          (
-            i.rule().tok.clone(),
-            i.rule().g_id.path.to_path(db.string_store()),
-            "Yield the non-terminal [".to_string() + &sym.debug_string(db) + "]?",
-          )
-        }))
-        .dedup(),
-    }
-  } else {
-    todo!("PEEKING_ERROR: Handle normal LL case")
+fn peek_not_allowed_error_internal<'db>(
+  gb: &GraphBuilder<'db>,
+  conflicting_groups: &[Vec<TransitionPair<'db>>],
+  submessage: &str,
+) -> SherpaError {
+  let db = gb.db;
+  SherpaError::SourcesError {
+    id:       (ForbiddenPeek, 0, "disabled-peeking").into(),
+    msg:      "The following items cannot be resolved within k=1 lookahead when peeking is disabled".into(),
+    ps_msg:   if submessage.is_empty() { "Enable peeking to disambiguate these states.".into() } else { submessage.into() },
+    severity: SherpaErrorSeverity::Critical,
+    sources:  conflicting_groups
+      .iter()
+      .flat_map(|i| i.into_iter())
+      .map(|p| {
+        let i = p.kernel;
+        (
+          if !i.is_complete() { i.rule().symbols[i.sym_index as usize].loc.clone() } else { i.rule().tok.clone() },
+          i.rule().g_id.path.to_path(db.string_store()),
+          if i.is_complete() {
+            "Reduce to [".to_string()
+              + &db.nonterm_friendly_name_string(i.nonterm_index())
+              + "]? | "
+              + &i.to_canonical()._debug_string_()
+          } else {
+            "Continue shifting? | ".to_string() + &i.to_canonical()._debug_string_()
+          },
+        )
+      })
+      .dedup(),
   }
 }

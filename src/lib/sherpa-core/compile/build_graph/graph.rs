@@ -5,8 +5,6 @@ use std::{
   ops::{Index, IndexMut},
 };
 
-pub const OUT_SCOPE_INDEX: u32 = 0xFEEDDEED;
-
 /// Indicates the State type that generated
 /// the item
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -731,15 +729,14 @@ impl<'db> GraphBuilder<'db> {
           }
         }
       } else {
-        if let Ok((follow, _)) = get_follow_internal(graph, *item, false) {
-          for item in follow {
-            if let Some(term) = item.term_index_at_sym(mode) {
-              symbols.insert(term);
-            } else if item.is_nonterm(mode) {
-              for item in graph.db.get_closure(&item) {
-                if let Some(term) = item.term_index_at_sym(graph.graph_type) {
-                  symbols.insert(term);
-                }
+        let (follow, _) = get_follow_internal(graph, *item, false);
+        for item in follow {
+          if let Some(term) = item.term_index_at_sym(mode) {
+            symbols.insert(term);
+          } else if item.is_nonterm(mode) {
+            for item in graph.db.get_closure(&item) {
+              if let Some(term) = item.term_index_at_sym(graph.graph_type) {
+                symbols.insert(term);
               }
             }
           }
@@ -935,13 +932,13 @@ pub(crate) fn set_kernel_items<'db, T: ItemContainerIter<'db>>(state: &mut Graph
 
 /// Add kernel items and set their origin to this state.
 fn add_kernel_items<'db, T: ItemContainerIter<'db>>(state: &mut GraphState<'db>, kernel_items: T) {
-  state.kernel_items.extend(kernel_items.map(|i| i.to_origin_state(state.id)));
+  state.kernel_items.extend(kernel_items.map(|i| if i.origin_state.is_invalid() { i.to_origin_state(state.id) } else { i }));
 }
 
 /// Iterates over valid state nodes within the graph. Valid nodes are those that
 /// reachable from leaf states.
 pub struct GraphIterator<'a, 'db: 'a> {
-  graph:       &'a GraphHost<'db>,
+  pub graph:   &'a GraphHost<'db>,
   queue:       Queue<StateId>,
   #[allow(unused)]
   used_states: OrderedSet<StateId>,
@@ -951,30 +948,41 @@ pub struct GraphIterator<'a, 'db: 'a> {
 
 impl<'a, 'db: 'a> GraphIterator<'a, 'db> {
   pub fn new(graph: &'a GraphHost<'db>) -> Self {
-    let leaf_states = graph.get_leaf_states();
-    let mut queue = Queue::from_iter(leaf_states.iter().map(|i| i.get_id()));
-    let mut links: OrderedMap<StateId, OrderedSet<&GraphState>> = OrderedMap::new();
-    let mut seen = OrderedSet::new();
-    let empty_hash = OrderedSet::new();
+    let (used_states, links) = graph
+      .get_leaf_states()
+      .iter()
+      .filter_map(|leaf| {
+        let mut seen = OrderedSet::new();
+        let mut queue = Queue::from_iter([leaf.get_id()]);
+        let mut have_root = false;
+        let mut links = OrderedMap::new();
+        while let Some(state) = queue.pop_front() {
+          have_root |= state.is_root();
+          if !seen.insert(state) {
+            continue;
+          }
+          let predecessors = graph[state].get_predecessors().clone();
+          for predecessor in &predecessors {
+            links.entry(*predecessor).or_insert(OrderedSet::new()).insert(&graph[state]);
+            queue.push_back(*predecessor);
+          }
+        }
 
-    while let Some(state) = queue.pop_front() {
-      if !seen.insert(state) {
-        continue;
-      }
-      let predecessors = graph[state].get_predecessors().clone();
-      for predecessor in &predecessors {
-        links.entry(*predecessor).or_insert(OrderedSet::new()).insert(&graph[state]);
-        queue.push_back(*predecessor);
-      }
+        have_root.then_some((seen, links))
+      })
+      .fold((OrderedSet::default(), OrderedMap::default()), |(mut a1, mut a2), (mut b1, b2)| {
+        a1.append(&mut b1);
+        b2.into_iter().for_each(|(key, mut val)| a2.entry(key).or_insert(OrderedSet::new()).append(&mut val));
+        (a1, a2)
+      });
+
+    Self {
+      queue: Queue::from_iter(used_states.iter().cloned()),
+      empty_hash: OrderedSet::new(),
+      used_states,
+      links,
+      graph,
     }
-
-    let mut set = OrderedSet::from_iter(leaf_states.iter().map(|i| i.get_id()));
-
-    set.extend(links.keys().rev().map(|id| *id));
-
-    queue.extend(set.iter());
-
-    Self { graph, queue, links, empty_hash, used_states: set }
   }
 
   pub fn next<'b>(&'b mut self) -> Option<(&'b GraphHost<'db>, &'b GraphState<'db>, &'b OrderedSet<&'a GraphState<'db>>)> {

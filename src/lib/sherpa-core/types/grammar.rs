@@ -204,6 +204,7 @@ pub enum ASTToken {
   Defined(Arc<parser::Ascript>),
 }
 
+#[derive(Clone)]
 /// A custom parse state defined within a grammar e.g `state_name => ...`
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct CustomState {
@@ -212,6 +213,7 @@ pub struct CustomState {
   pub guid_name: IString,
   pub friendly_name: IString,
   pub symbols: OrderedSet<SymbolId>,
+  pub nterm_refs: OrderedSet<(Token, IString, NonTermId)>,
   pub state: Box<parser::State>,
   pub tok: Token,
 }

@@ -331,7 +331,7 @@ pub struct ErrorGroups {
 }
 
 pub trait ErrorContainerIter: Iterator<Item = SherpaError> + Sized + Clone {
-  fn debug_print(&self) {
+  fn _debug_print_(&self) {
     for error in self.clone() {
       eprintln!("{:?}", error);
     }

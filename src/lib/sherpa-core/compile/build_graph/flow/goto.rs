@@ -1,5 +1,5 @@
 use super::super::graph::*;
-use crate::{types::*, utils::hash_group_btreemap};
+use crate::{compile::build_graph::items::get_follow, types::*, utils::hash_group_btreemap};
 use std::collections::{BTreeSet, VecDeque};
 
 use GraphBuildState::*;
@@ -56,92 +56,89 @@ pub(crate) fn handle_nonterminal_shift<'db>(gb: &mut GraphBuilder<'db>) -> Sherp
 
   let used_nterm_groups = hash_group_btreemap(used_nterm_items, |_, t| t.nonterm_index_at_sym(mode).unwrap_or_default());
 
-  for (nterm, items) in &used_nterm_groups {
-    let are_shifting_a_goal_nonterm = is_at_root && gb.graph().goal_items().iter().rule_nonterm_ids().contains(&nterm);
+  for (target_nonterm, items) in &used_nterm_groups {
+    let are_shifting_a_goal_nonterm = is_at_root && gb.graph().goal_items().iter().rule_nonterm_ids().contains(&target_nonterm);
     let contains_completed_kernel_items = items.iter().any(|i| kernel_base.contains(i) && i.is_penultimate());
+    let contains_completed_items = items.iter().any(|i| i.is_penultimate());
+    let contains_incompleted_items = items.iter().any(|i| !i.is_penultimate());
 
     let mut incremented_items = items
       .iter() /* .map(|i| i.calculate_goto_distance(gb, parent_id)) */
       .try_increment();
     let nterm_shift_type = StateType::NonTerminalShiftLoop;
 
+    let should_include_oos = if gb.config.ALLOW_RECURSIVE_DESCENT && false {
+      if !contains_incompleted_items {
+        false
+      } else {
+        'outer: loop {
+          // See if the follow of any of the completed items contains a completed
+          // goal item.
+          for completed in items.iter().filter(|i| i.is_penultimate()) {
+            let (_, end) = get_follow(gb, completed.try_increment(), false);
+            if end.iter().any(|i| gb.graph().item_is_goal(i)) {
+              break 'outer true;
+            }
+          }
+          break false;
+        }
+      }
+    } else {
+      let contains_left_recursive_items = items.iter().any(|i| i.is_left_recursive(mode));
+      kernel_nterm_ids.remove(&target_nonterm) && is_at_root && contains_left_recursive_items && !contains_completed_items
+      //&& contains_incompleted_items
+    };
+
     // TODO(anthony): Only need to do this type of look ahead if one of the
     // following apply
     // - There is a shift reduce conflict
     // - There is a reduce - reduce conflict
-    if kernel_nterm_ids.remove(&nterm) {
-      let contains_left_recursive_items = items.iter().any(|i| i.is_left_recursive(mode));
 
-      if is_at_root && contains_left_recursive_items {
-        let local_nonterms = incremented_items.iter().nonterm_ids_at_index(mode);
-        //let item = Item::from_rule(db.nonterm_rules(*nterm)?[0], db);
-        //incremented_items.push(item.to_complete().to_origin(Origin::GoalCompleteOOS).
-        // to_oos_index().to_origin_state(parent));`
+    // if there is a path to complete a kernel item, then we need to inject oos
+    // lookahead items to ensure that we are not ignoring local ambiguity
+    if should_include_oos && false {
+      let local_nonterms = incremented_items.iter().nonterm_ids_at_index(mode);
+      // This state completes this NonTerminal, but there is also one or more items
+      // that transitions on the goal non-terminal. The trick is determining
+      // whether we should complete the non-terminal or allow further processing the
+      // left recursive items. This is a classic shift reduce problem, except
+      // the condition to reduce is dependent on external items that we have to pull
+      // into this scope. So we dump all items that shift on this
+      // non-terminal into this state. We call this Out-of-Scope items and are
+      // only used to determine if we should perform a reduction or a
+      // completion.
 
-        // This state completes this NonTerminal, but there is also one or more items
-        // that transitions on the goal non-terminal. The trick is determining
-        // whether we should complete the non-terminal or allow further processing the
-        // left recursive items. This is the classic shift reduce problem, except
-        // the condition to reduce is dependent on external items that we have to pull
-        // into this NonTerms scope. So we dump all items that shift on this
-        // non-terminal into this state. We call this Out-of-Scope items and are
-        // only used to determine if we should perform a reduction or a
-        // completion.
+      // We only need OOS items if there are no completed items after the non-terminal
+      // transition. This will handle the cases of left-recursion.
+      let canonical_incremented_items = incremented_items.iter().to_canonical::<ItemSet>();
+      let oos_items = ItemSet::from_iter(
+        db.nonterm_follow_items(*target_nonterm)
+          .filter_map(|i| match i.get_type() {
+            ItemType::Completed(_nterm) => None,
+            _ => Some(i.closure_iter()),
+          })
+          .flatten()
+          .filter(|i| {
+            i.nonterm_index() != *target_nonterm
+              && !local_nonterms.contains(&i.nonterm_index())
+              && !canonical_incremented_items.contains(&i.to_canonical())
+          })
+          .map(|i| i.to_oos_lane().to_origin(Origin::GoalCompleteOOS).to_origin_state(parent_id)),
+      );
 
-        // Collects the follow terminal items items from a non-terminal
-        // TODO(anthony): Move this to DB creation.
-        let mut nonterms = Queue::from_iter([*nterm]);
-        let mut seen = Set::from_iter([*nterm]);
-        seen.extend(local_nonterms.iter());
-
-        let mut oos_items = ItemSet::new();
-
-        while let Some(_nterm) = nonterms.pop_front() {
-          for item in db.nonterm_follow_items(_nterm) {
-            let item = item.try_increment().to_origin_state(parent_id);
-            match item.get_type() {
-              ItemType::Completed(_nterm) => {
-                if seen.insert(_nterm) {
-                  nonterms.push_back(_nterm)
-                }
-              }
-              ItemType::NonTerminal(non_terminal) => {
-                if !local_nonterms.contains(&non_terminal) {
-                  oos_items.extend(
-                    db.nonterm_rules(non_terminal)?
-                      .iter()
-                      .map(|r| Item::from_rule(*r, db))
-                      .closure::<Items>(parent_id)
-                      .term_items(mode),
-                  );
-                }
-              }
-              ItemType::TokenNonTerminal(..) | ItemType::Terminal(..) => {
-                oos_items.insert(item);
-              }
-            }
-          }
-        }
-
-        let canonical_incremented_items = incremented_items.iter().to_canonical::<ItemSet>();
-
-        let oos_items = oos_items
-          .iter()
-          .filter(|i| !canonical_incremented_items.contains(&i.to_canonical()))
-          .map(|i| i.to_oos_index().to_origin(Origin::GoalCompleteOOS).to_origin_state(parent_id));
-
-        // Only need to create a peek state if there are GoalCompleteOOS items that
-        // transition on the same symbols as the incremented items.
-
-        incremented_items.extend(oos_items);
-      }
+      incremented_items.extend(oos_items);
     }
 
     // A State following a goto point must either end with a return to that GOTO or
     // a completion of the gotos kernel items.
 
     if let Some(state) = gb
-      .create_state(NormalGoto, (nterm.to_sym(), 0).into(), nterm_shift_type, Some(incremented_items.into_iter().map(|i| i)))
+      .create_state(
+        NormalGoto,
+        (target_nonterm.to_sym(), 0).into(),
+        nterm_shift_type,
+        Some(incremented_items.into_iter().map(|i| i)),
+      )
       .to_pending()
     {
       if are_shifting_a_goal_nonterm && !contains_completed_kernel_items {

@@ -245,11 +245,11 @@ fn build_match<'db>(
   match matches {
     parser::ASTNode::Matches(box parser::Matches { matches, mode, scanner, .. }) => {
       input_type_key = match mode.as_str() {
-        InputType::TOKEN_STR => {
+        MatchInputType::TOKEN_STR => {
           scanner_address = get_proxy_address(scanner.to_token(), state_name_to_proxy);
-          InputType::Token
+          MatchInputType::Token
         }
-        s => InputType::from(s),
+        s => MatchInputType::from(s),
       } as u32;
       for m in matches.iter().rev() {
         match m {

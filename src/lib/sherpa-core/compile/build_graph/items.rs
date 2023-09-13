@@ -6,15 +6,25 @@ use crate::types::*;
 use sherpa_rust_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
 use std::collections::VecDeque;
 
+/// Returns all terminals that follow the item. This is equivalent to extracting
+/// the terminals from the closure of the item, including completed items, in
+/// which the closure of all non-terminal items that transition on the item is
+/// taken after performing the non-term shift
+pub(crate) fn get_follow_symbols<'a, 'db: 'a>(
+  gb: &'a GraphBuilder<'db>,
+  item: Item<'db>,
+) -> impl Iterator<Item = DBTermKey> + 'a {
+  get_follow_internal(gb.graph(), item, false)
+    .0
+    .into_iter()
+    .flat_map(|i| i.closure_iter().filter_map(|i| i.term_index_at_sym(gb.get_mode())))
+}
+
 /// Returns a tuple comprised of a vector of all items that follow the given
 /// item, provided the given item is in a complete state, and a list of a all
 /// items that are completed from directly or indirectly transitioning on the
 /// nonterminal of the given item.
-pub(crate) fn get_follow<'db>(
-  gb: &GraphBuilder<'db>,
-  item: Item<'db>,
-  single_reduction_only: bool,
-) -> SherpaResult<(Items<'db>, Items<'db>)> {
+pub(crate) fn get_follow<'db>(gb: &GraphBuilder<'db>, item: Item<'db>, single_reduction_only: bool) -> (Items<'db>, Items<'db>) {
   get_follow_internal(gb.graph(), item, single_reduction_only)
 }
 
@@ -26,11 +36,10 @@ pub(crate) fn get_follow_internal<'db>(
   graph: &GraphHost<'db>,
   item: Item<'db>,
   single_reduction_only: bool,
-) -> SherpaResult<(Items<'db>, Items<'db>)> {
+) -> (Items<'db>, Items<'db>) {
   if !item.is_complete() {
-    return SherpaResult::Ok((vec![item], vec![]));
+    return (vec![item], vec![]);
   }
-  let ____is_scan____ = graph.graph_type == GraphType::Scanner;
   let mut completed = OrderedSet::new();
   let mut follow = OrderedSet::new();
   let mut queue = VecDeque::from_iter(vec![item]);
@@ -46,57 +55,59 @@ pub(crate) fn get_follow_internal<'db>(
         continue;
       }
 
-      let closure = if item.goal_is_oos() {
-        db.nonterm_follow_items(nterm)
-          //graph[item.origin_state]
-          //  .get_root_closure_ref()?
-          //.iter()
-          .filter(|i| /* i.is_out_of_scope() && */ i.nonterm_index_at_sym(mode).unwrap_or_default() == nterm)
-          .map(|i| i.to_origin(item.origin).to_oos_index().to_origin_state(StateId::root()))
-          .collect::<Array<_>>()
+      if item.goal_is_oos() {
+        let closure = db
+          .nonterm_follow_items(nterm)
+          .filter(|i| i.nonterm_index_at_sym(mode) == Some(nterm))
+          .map(|i| i.to_origin(item.origin).to_oos_index().to_origin_state(StateId::root()));
+        process_closure(graph, closure, &mut queue, &mut follow, item);
       } else {
         let state = item.origin_state;
         let origin = item.origin;
         let goal = item.goal;
-        graph[item.origin_state]
+        let closure = graph[item.origin_state]
           .kernel_items_ref()
           .iter()
           .filter(|kernel| kernel.goal == goal)
-          .flat_map(|kernel| {
-            db.get_closure(kernel)
-              .map(|i| {
-                if i.is_canonically_equal(kernel) {
-                  *kernel
-                } else {
-                  i.to_origin_state(state).to_goal(goal).to_origin(origin)
-                }
-              })
-              .chain([kernel.clone()])
-          })
-          .filter(|i| i.nonterm_index_at_sym(mode) == Some(nterm))
-          .collect::<Array<_>>()
+          .flat_map(|kernel| kernel.closure_iter_align(kernel.to_origin_state(state).to_origin(origin)))
+          .filter(|i| i.nonterm_index_at_sym(mode) == Some(nterm));
+        process_closure(graph, closure, &mut queue, &mut follow, item);
       };
+    }
+  }
 
-      if closure.len() > 0 {
-        for item in closure.try_increment() {
-          match item.get_type() {
-            ItemType::Completed(_) => queue.push_back(item),
-            _ => {
-              follow.insert(item);
-            }
-          }
-        }
-      } else if !item.origin_state.is_root() {
-        let parent_state = graph[item.origin_state].get_parent();
-        queue.push_back(item.to_origin_state(parent_state));
-      } else if !____is_scan____ && !item.is_out_of_scope() {
-        let item: Item<'_> = item.to_oos_index();
-        queue.push_back(item);
+  (follow.to_vec(), completed.to_vec())
+}
+
+fn process_closure<'db, T: Iterator<Item = Item<'db>>>(
+  graph: &GraphHost<'db>,
+  closure: T,
+  queue: &mut VecDeque<Item<'db>>,
+  follow: &mut ItemSet<'db>,
+  item: Item<'db>,
+) {
+  let ____is_scan____ = graph.graph_type == GraphType::Scanner;
+
+  let mut closure_yielded_items = false;
+  for item in closure.map(|i| i.try_increment()) {
+    closure_yielded_items |= true;
+    match item.get_type() {
+      ItemType::Completed(_) => queue.push_back(item),
+      _ => {
+        follow.insert(item);
       }
     }
   }
 
-  SherpaResult::Ok((follow.to_vec(), completed.to_vec()))
+  if !closure_yielded_items {
+    if !item.origin_state.is_root() {
+      let parent_state = graph[item.origin_state].get_parent();
+      queue.push_back(item.to_origin_state(parent_state));
+    } else if !____is_scan____ && !item.is_out_of_scope() {
+      let item: Item<'_> = item.to_oos_index();
+      queue.push_back(item);
+    }
+  }
 }
 
 // Inserts out of scope sentinel items into the existing
@@ -110,7 +121,7 @@ pub(super) fn _get_oos_follow_from_completed<'db>(
   let mut out = OrderedSet::new();
   for completed_item in completed_items {
     if !completed_item.is_out_of_scope() {
-      let (_, completed) = get_follow(gb, *completed_item, false)?;
+      let (_, completed) = get_follow(gb, *completed_item, false);
 
       let goals: ItemSet = get_goal_items_from_completed(&completed, gb.graph());
 
@@ -122,7 +133,7 @@ pub(super) fn _get_oos_follow_from_completed<'db>(
             .to_origin(if gb.is_scanner() { Origin::ScanCompleteOOS } else { Origin::GoalCompleteOOS })
             .to_oos_index(),
           false,
-        )?;
+        );
         out.extend(&mut follow.into_iter().map(|f| -> Follow { (*completed_item, f, gb.get_mode()).into() }));
       }
     }
@@ -214,33 +225,4 @@ fn symbols_occlude(symA: &SymbolId, symB: &SymbolId) -> bool {
     SymbolId::Default => false,
     symA => *symA == *symB,
   }
-}
-
-pub(crate) fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
-  gb: &GraphBuilder<'db>,
-  completed: T,
-) -> SherpaResult<CompletedItemArtifacts<'db>> {
-  let mut follow_pairs = OrderedSet::new();
-  //let mut follow_items = ItemSet::new();
-  let mut default_only_items = ItemSet::new();
-
-  for c_i in completed {
-    let (f, _) = get_follow(gb, *c_i, false)?;
-
-    if f.is_empty() {
-      default_only_items.insert(*c_i);
-    } else {
-      follow_pairs.extend(f.iter().flat_map(|i| vec![*i].iter().closure::<Vec<_>>(gb.current_state_id())).map(|i| {
-        TransitionPair {
-          kernel: *c_i,
-          next:   i.to_origin(c_i.origin).to_origin_state(gb.current_state_id()),
-          prec:   i.token_precedence(),
-          sym:    i.sym(),
-        }
-      }));
-      //follow_items.append(&mut f.to_set());
-    }
-  }
-
-  SherpaResult::Ok(CompletedItemArtifacts { follow_pairs, default_only: default_only_items })
 }

@@ -19,7 +19,7 @@ fn test_full_grammar() -> SherpaResult<()> {
   let sherpa_grammar = grammar_folder.join("grammar.sg");
   let mut grammar = SherpaGrammarBuilder::new();
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar)?;
-  let parser = database.build_parser(ParserConfig::new().lr_only())?.optimize(false)?;
+  let parser = database.build_parser(ParserConfig::new().hybrid())?.optimize(false)?;
   let pkg = compile_bytecode(&parser, true)?;
 
   // Gather list of files to validata. This includes the latest sherpa grammar

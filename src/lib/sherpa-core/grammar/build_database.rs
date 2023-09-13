@@ -26,6 +26,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
   let custom_states = custom_states.read()?;
 
   let nonterminals: std::sync::RwLockReadGuard<'_, Vec<Box<NonTerminal>>> = nonterminals.read()?;
+
   let nonterminals = {
     let mut out_nterms = OrderedMap::new();
     for nterm in nonterminals.iter() {
@@ -78,7 +79,6 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
   let root_grammar = o_to_r(grammar_headers.get(&g.guid), "Could not find grammar")?.as_ref();
 
   // Build non-terminal list.
-
   let mut symbols = OrderedMap::from_iter(vec![(SymbolId::Default, 0)]);
   let mut nonterminal_queue =
     Queue::from_iter(root_grammar.pub_nterms.iter().map(|(_, p)| (p.1.clone(), root_grammar.identity.path, p.0)));
@@ -161,6 +161,8 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         (Some(state), None) => {
           let g_name = state.guid_name;
           let f_name = state.friendly_name;
+
+          nonterminal_queue.extend(state.nterm_refs.iter().cloned());
           add_nterm_and_rules(nterm_id.as_sym(), vec![], p_map, r_table, p_r_map, false);
           add_nterm_name(nterm_name_lu, g_name, f_name);
           add_custom_state(state.state.clone(), c_states);

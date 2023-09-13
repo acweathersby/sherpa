@@ -18,7 +18,7 @@ use crate::{
   },
   types::*,
 };
-use sherpa_rust_runtime::types::bytecode::InputType;
+use sherpa_rust_runtime::types::bytecode::MatchInputType;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 type Map<A, B> = BTreeMap<A, B>;
@@ -239,7 +239,7 @@ fn _create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
     // naked.
     if let Some(box parser::State { statement, .. }) = state.ast.as_ref() {
       if let Some(ASTNode::Matches(box parser::Matches { mode, matches, .. })) = &statement.branch {
-        if matches!(mode.as_str(), InputType::BYTE_STR | InputType::CODEPOINT_STR) && matches.len() == 1 {
+        if matches!(mode.as_str(), MatchInputType::BYTE_STR | MatchInputType::CODEPOINT_STR) && matches.len() == 1 {
           if let Some(ASTNode::IntMatch(int_match)) = matches.first() {
             single_byte_state.insert(*name, (**int_match).clone());
           }
@@ -253,7 +253,7 @@ fn _create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
 
     let Some(ASTNode::Matches(box parser::Matches { mode, matches, .. })) = &mut statement.branch else { continue };
 
-    if !matches!(mode.as_str(), InputType::BYTE_STR | InputType::CODEPOINT_STR) {
+    if !matches!(mode.as_str(), MatchInputType::BYTE_STR | MatchInputType::CODEPOINT_STR) {
       continue;
     }
 
@@ -317,7 +317,7 @@ fn inline_scanners<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMa
     let parser::Statement { branch, .. } = statement;
 
     if let Some(parser::Matches { mode, scanner, matches, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
-      if !matches!(mode.as_str(), InputType::TOKEN_STR) {
+      if !matches!(mode.as_str(), MatchInputType::TOKEN_STR) {
         return SherpaResult::Ok(());
       };
 
@@ -341,19 +341,19 @@ fn inline_scanners<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMa
       }) {
         // convert each match into a local branch
         let mut id_groups = hash_group_btreemap(tok_ids, |_, (i, _)| match *i {
-          SymbolId::Default => InputType::Default,
-          sym if sym.is_class() => InputType::Class,
-          sym if sym.is_codepoint(db.string_store()) => InputType::Codepoint,
-          _ => InputType::Byte,
+          SymbolId::Default => MatchInputType::Default,
+          sym if sym.is_class() => MatchInputType::Class,
+          sym if sym.is_codepoint(db.string_store()) => MatchInputType::Codepoint,
+          _ => MatchInputType::Byte,
         });
 
         // Remove the default statement if present. This will be appended to the end of
         // the last Matches block.
-        let default = id_groups.remove(&InputType::Default).and_then(|d| d.into_iter().next());
+        let default = id_groups.remove(&MatchInputType::Default).and_then(|d| d.into_iter().next());
 
         fn setup_match<'db>(
           db: &'db ParserDatabase,
-          queue: &mut VecDeque<(InputType, Vec<(SymbolId, &Box<Statement>)>)>,
+          queue: &mut VecDeque<(MatchInputType, Vec<(SymbolId, &Box<Statement>)>)>,
           match_stmt: &mut Matches,
           default: Option<(SymbolId, &Box<parser::Statement>)>,
         ) {
@@ -715,7 +715,8 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   fn canonicalize_goto_name(db: &ParserDatabase, name: String, name_lu: &Map<IString, IString>) -> SherpaResult<String> {
     let iname = name.to_token();
-    let canonical_name = *name_lu.get(&iname).expect("State name should exist");
+    let canonical_name =
+      *name_lu.get(&iname).expect(&("State name should exist: ".to_string() + &iname.to_string(db.string_store())));
 
     let name = if iname != canonical_name { canonical_name.to_string(db.string_store()) } else { name };
     SherpaResult::Ok(name)
@@ -800,7 +801,7 @@ fn traverse_statement<'db>(
 ) -> SherpaResult<()> {
   if let Some(branch) = &stmt.branch {
     match branch {
-      ASTNode::Matches(box Matches { scanner, mode, .. }) if mode.as_str() == InputType::TOKEN_STR => {
+      ASTNode::Matches(box Matches { scanner, mode, .. }) if mode.as_str() == MatchInputType::TOKEN_STR => {
         enqueue_state(scanner.to_token(), parse_states, queue, false)
       }
       _ => {}

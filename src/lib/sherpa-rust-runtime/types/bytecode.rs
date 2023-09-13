@@ -508,7 +508,7 @@ pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(u32)]
-pub enum InputType {
+pub enum MatchInputType {
   NonTerminal = 0,
   Token,
   Class,
@@ -522,7 +522,7 @@ pub enum InputType {
   ByteSequence,
 }
 
-impl InputType {
+impl MatchInputType {
   pub const BYTE_SCANLESS_STR: &'static str = "_BYTE_SCANLESS_";
   pub const BYTE_SEQUENCE_STR: &'static str = "_BYTE_SEQUENCE_";
   pub const BYTE_STR: &'static str = "_BYTE_";
@@ -536,16 +536,16 @@ impl InputType {
 
   pub fn as_str(&self) -> &'static str {
     match self {
-      Self::NonTerminal => InputType::NONTERMINAL_STR,
-      Self::Token => InputType::TOKEN_STR,
-      Self::Class => InputType::CLASS_STR,
-      Self::ClassScanless => InputType::CLASS_SCANLESS_STR,
-      Self::Codepoint => InputType::CODEPOINT_STR,
-      Self::CodepointScanless => InputType::CODEPOINT_SCANLESS_STR,
-      Self::Byte => InputType::BYTE_STR,
-      Self::ByteScanless => InputType::BYTE_SCANLESS_STR,
-      Self::EndOfFile => InputType::END_OF_FILE_STR,
-      Self::ByteSequence => InputType::BYTE_SEQUENCE_STR,
+      Self::NonTerminal => MatchInputType::NONTERMINAL_STR,
+      Self::Token => MatchInputType::TOKEN_STR,
+      Self::Class => MatchInputType::CLASS_STR,
+      Self::ClassScanless => MatchInputType::CLASS_SCANLESS_STR,
+      Self::Codepoint => MatchInputType::CODEPOINT_STR,
+      Self::CodepointScanless => MatchInputType::CODEPOINT_SCANLESS_STR,
+      Self::Byte => MatchInputType::BYTE_STR,
+      Self::ByteScanless => MatchInputType::BYTE_SCANLESS_STR,
+      Self::EndOfFile => MatchInputType::END_OF_FILE_STR,
+      Self::ByteSequence => MatchInputType::BYTE_SEQUENCE_STR,
       Self::Default => "",
     }
   }
@@ -560,13 +560,13 @@ impl InputType {
   }
 }
 
-impl Display for InputType {
+impl Display for MatchInputType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.as_str())
   }
 }
 
-impl From<u32> for InputType {
+impl From<u32> for MatchInputType {
   fn from(value: u32) -> Self {
     match value {
       0 => Self::NonTerminal,
@@ -584,7 +584,7 @@ impl From<u32> for InputType {
   }
 }
 
-impl From<&str> for InputType {
+impl From<&str> for MatchInputType {
   fn from(value: &str) -> Self {
     match value {
       Self::BYTE_SCANLESS_STR => Self::ByteScanless,
@@ -606,10 +606,10 @@ impl From<&str> for InputType {
       _ => {
         #[cfg(debug_assertions)]
         unreachable!("Unexpected InputType (for IR Matches) specifier: [{}];\nExpected one of {:?}", value, [
-          InputType::CLASS_STR,
-          InputType::CODEPOINT_STR,
-          InputType::BYTE_STR,
-          InputType::END_OF_FILE_STR,
+          MatchInputType::CLASS_STR,
+          MatchInputType::CODEPOINT_STR,
+          MatchInputType::BYTE_STR,
+          MatchInputType::END_OF_FILE_STR,
         ]);
         #[cfg(not(debug_assertions))]
         unreachable!()
@@ -618,7 +618,7 @@ impl From<&str> for InputType {
   }
 }
 
-impl From<String> for InputType {
+impl From<String> for MatchInputType {
   fn from(value: String) -> Self {
     Self::from(value.as_str())
   }
