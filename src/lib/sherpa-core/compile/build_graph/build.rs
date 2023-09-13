@@ -1,7 +1,6 @@
 use super::{
   errors::lr_disabled_error,
   flow::{
-    get_completed_item_artifacts,
     handle_bread_crumb_complete_groups,
     handle_peek_complete_groups,
     handle_peek_incomplete_items,
@@ -10,7 +9,7 @@ use super::{
     handle_regular_incomplete_items,
   },
   graph::*,
-  items::{get_oos_follow_from_completed, merge_follow_items_into_group, merge_occluding_token_items},
+  items::{get_completed_item_artifacts, merge_occluding_token_items},
 };
 use crate::{
   types::*,

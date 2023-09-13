@@ -10,15 +10,23 @@ use std::collections::VecDeque;
 /// item, provided the given item is in a complete state, and a list of a all
 /// items that are completed from directly or indirectly transitioning on the
 /// nonterminal of the given item.
-pub(crate) fn get_follow<'db>(gb: &GraphBuilder<'db>, item: Item<'db>) -> SherpaResult<(Items<'db>, Items<'db>)> {
-  get_follow_internal(gb.graph(), item)
+pub(crate) fn get_follow<'db>(
+  gb: &GraphBuilder<'db>,
+  item: Item<'db>,
+  first_level_only: bool,
+) -> SherpaResult<(Items<'db>, Items<'db>)> {
+  get_follow_internal(gb.graph(), item, first_level_only)
 }
 
 /// Returns a tuple comprised of a vector of all items that follow the given
 /// item, provided the given item is in a complete state, and a list of a all
 /// items that are completed from directly or indirectly transitioning on the
 /// nonterminal of the given item.
-pub(crate) fn get_follow_internal<'db>(graph: &GraphHost<'db>, item: Item<'db>) -> SherpaResult<(Items<'db>, Items<'db>)> {
+pub(crate) fn get_follow_internal<'db>(
+  graph: &GraphHost<'db>,
+  item: Item<'db>,
+  first_level_only: bool,
+) -> SherpaResult<(Items<'db>, Items<'db>)> {
   if !item.is_complete() {
     return SherpaResult::Ok((vec![item], vec![]));
   }
@@ -28,10 +36,16 @@ pub(crate) fn get_follow_internal<'db>(graph: &GraphHost<'db>, item: Item<'db>) 
   let mut queue = VecDeque::from_iter(vec![item]);
   let db = graph.get_db();
   let mode = graph.graph_type;
+  let root_nterm = item.nonterm_index();
 
   while let Some(item) = queue.pop_front() {
     if completed.insert(item) {
-      let nterm = item.nonterm_index();
+      let nterm: DBNonTermKey = item.nonterm_index();
+
+      if first_level_only && nterm != root_nterm {
+        continue;
+      }
+
       let closure = if item.goal_is_oos() {
         db.nonterm_follow_items(nterm)
           //graph[item.origin_state]
@@ -88,7 +102,7 @@ pub(crate) fn get_follow_internal<'db>(graph: &GraphHost<'db>, item: Item<'db>) 
 // Inserts out of scope sentinel items into the existing
 // items groups if we are in scanner mode and the item that
 // was completed belongs to the parse state goal set.
-pub(super) fn get_oos_follow_from_completed<'db>(
+pub(super) fn _get_oos_follow_from_completed<'db>(
   gb: &GraphBuilder<'db>,
   completed_items: &Items<'db>,
   handler: &mut dyn FnMut(Follows<'db>),
@@ -96,7 +110,7 @@ pub(super) fn get_oos_follow_from_completed<'db>(
   let mut out = OrderedSet::new();
   for completed_item in completed_items {
     if !completed_item.is_out_of_scope() {
-      let (_, completed) = get_follow(gb, *completed_item)?;
+      let (_, completed) = get_follow(gb, *completed_item, false)?;
 
       let goals: ItemSet = get_goal_items_from_completed(&completed, gb.graph());
 
@@ -107,6 +121,7 @@ pub(super) fn get_oos_follow_from_completed<'db>(
             .to_complete()
             .to_origin(if gb.is_scanner() { Origin::ScanCompleteOOS } else { Origin::GoalCompleteOOS })
             .to_oos_index(),
+          false,
         )?;
         out.extend(&mut follow.into_iter().map(|f| -> Follow { (*completed_item, f, gb.get_mode()).into() }));
       }
@@ -122,9 +137,9 @@ pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items<'db>, gr
   items.iter().filter(|i| graph.item_is_goal(*i)).cloned().collect()
 }
 
-pub(super) fn merge_follow_items_into_group<'db>(
+pub(super) fn _merge_follow_items_into_group<'db>(
   follows: &Vec<Follow<'db>>,
-  par: StateId,
+  _par: StateId,
   firsts_groups: &mut GroupedFirsts<'db>,
 ) {
   // Dumb symbols that could cause termination of parse into the intermediate
@@ -139,7 +154,7 @@ pub(super) fn merge_follow_items_into_group<'db>(
 
 pub(super) fn merge_occluding_token_items<'db>(from_groups: GroupedFirsts<'db>, into_groups: &mut GroupedFirsts<'db>) {
   for (sym, group) in into_groups.iter_mut() {
-    let mut occluding_items = get_set_of_occluding_token_items(sym, group, &from_groups);
+    let occluding_items = get_set_of_occluding_token_items(sym, group, &from_groups);
     group.1.extend(occluding_items);
   }
 }
@@ -199,4 +214,33 @@ fn symbols_occlude(symA: &SymbolId, symB: &SymbolId) -> bool {
     SymbolId::Default => false,
     symA => *symA == *symB,
   }
+}
+
+pub(crate) fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefContainerIter<'a, 'db>>(
+  gb: &GraphBuilder<'db>,
+  completed: T,
+) -> SherpaResult<CompletedItemArtifacts<'db>> {
+  let mut follow_pairs = OrderedSet::new();
+  //let mut follow_items = ItemSet::new();
+  let mut default_only_items = ItemSet::new();
+
+  for c_i in completed {
+    let (f, _) = get_follow(gb, *c_i, false)?;
+
+    if f.is_empty() {
+      default_only_items.insert(*c_i);
+    } else {
+      follow_pairs.extend(f.iter().flat_map(|i| vec![*i].iter().closure::<Vec<_>>(gb.current_state_id())).map(|i| {
+        TransitionPair {
+          next:   i.to_origin(c_i.origin),
+          kernel: *c_i,
+          prec:   i.token_precedence(),
+          sym:    i.sym(),
+        }
+      }));
+      //follow_items.append(&mut f.to_set());
+    }
+  }
+
+  SherpaResult::Ok(CompletedItemArtifacts { follow_pairs, default_only: default_only_items })
 }

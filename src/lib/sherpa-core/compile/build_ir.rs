@@ -1,6 +1,6 @@
 //! Functions for translating parse graphs into Sherpa IR code.
 use crate::{
-  compile::build_graph::graph::{GraphBuilder, GraphIterator, GraphState, StateId, StateType},
+  compile::build_graph::graph::{GraphIterator, GraphState, StateId, StateType},
   journal::Journal,
   types::*,
   utils::hash_group_btreemap,
@@ -138,7 +138,7 @@ fn convert_state_to_ir<'db>(
 
   if matches!(
     state.get_type(),
-    StateType::Complete | StateType::AssignAndFollow(..) | StateType::AssignToken(..) | StateType::Reduce(..)
+    StateType::CompleteToken | StateType::AssignAndFollow(..) | StateType::AssignToken(..) | StateType::Reduce(..)
   ) {
     let mut w = CodeWriter::new(vec![]);
     w.increase_indent();
@@ -148,7 +148,7 @@ fn convert_state_to_ir<'db>(
       StateType::AssignAndFollow(tok_id) | StateType::AssignToken(tok_id) => {
         let _ = (&mut w) + "set-tok " + db.tok_val(tok_id).to_string();
       }
-      StateType::Complete => w.write("pass")?,
+      StateType::CompleteToken => w.write("pass")?,
 
       StateType::Reduce(rule_id, completes) => {
         debug_assert!(!state.kernel_items_ref().iter().any(|i| i.is_out_of_scope()));
@@ -182,15 +182,6 @@ fn convert_state_to_ir<'db>(
     }
 
     out.push((state_id, Box::new(ir_state)));
-  } else if state.get_type() == StateType::DifferedReduce {
-    let (shifts, reduces): (Vec<_>, Vec<_>) = successors.iter().cloned().partition(|s| s.get_type() == StateType::ShiftPrefix);
-    let mut w = CodeWriter::new(vec![]);
-
-    w.w(" push ")?.w(&create_ir_state_name(graph, Some(state), &reduces[0]))?;
-    w.w(" then goto ")?.w(&create_ir_state_name(graph, Some(state), &shifts[0]))?;
-    let base_state = Box::new(create_ir_state(graph, w, state, None)?);
-
-    out.push((state_id.to_post_reduce(), base_state));
   } else if let Some(mut base_state) = base_state {
     if state_id.is_root() {
       base_state.hash_name = entry_name;
@@ -206,7 +197,7 @@ fn convert_state_to_ir<'db>(
         StateType::NonTerminalComplete
           | StateType::NonTermCompleteOOS
           | StateType::ScannerCompleteOOS
-          | StateType::Complete
+          | StateType::CompleteToken
           | StateType::AssignToken(..)
       ),
     "Graph state failed to generate ir states:\n{} \nGraph\n{}",
@@ -291,7 +282,8 @@ fn add_match_expr<'db>(
 
         for item in state.kernel_items_ref().iter().filter(|i| i.is_complete()) {
           let mode = graph.graph_type;
-          let (follow, _) = get_follow_internal(graph, *item).expect("Should be able to build follow sets");
+
+          let (follow, _) = get_follow_internal(graph, *item, false).expect("Should be able to build follow sets");
 
           if graph._goal_nonterm_index_is_(0) && state.id.0 == 351 {
             println!("{}", state._debug_string_(db));
@@ -389,50 +381,64 @@ fn build_body<'db>(
   let s_type = successor.get_type();
   let db = graph.get_db();
 
-  if match s_type {
-    StateType::Shift | StateType::KernelShift => {
-      let scan_expr = successor.get_symbol().sym().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
-      body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift").into());
-      true
-    }
-    StateType::PeekEndComplete(_) => {
-      debug_assert!(!is_scanner, "Peek states should not be present in graph");
-      body_string.push("reset".into());
-      true
-    }
-    StateType::Peek => {
-      debug_assert!(!is_scanner, "Peek states should not be present in graph");
-      body_string.push("peek".into());
-      true
-    }
-    StateType::NonTermCompleteOOS => {
-      debug_assert!(!is_scanner, "NonTermCompleteOOS states should only exist in normal parse graphs");
-      body_string.push("pop".into());
-      false
-    }
-    StateType::ScannerCompleteOOS => {
-      debug_assert!(is_scanner, "ScannerCompleteOOS states should only exist in scanner parse graphs");
-      body_string.push("pass".into());
-      false
-    }
-    StateType::Reduce(rule_id, completes) => {
-      debug_assert!(!successor.kernel_items_ref().iter().any(|i| i.is_out_of_scope()));
+  #[derive(PartialEq, Eq)]
+  enum ParserFlow {
+    CONTINUE,
+    HALT,
+  }
 
-      body_string.push(create_rule_reduction(rule_id, db));
+  use ParserFlow::*;
 
-      if completes > 0 {
-        body_string.push("pop ".to_string() + &completes.to_string());
+  if CONTINUE
+    == match s_type {
+      StateType::Shift | StateType::KernelShift => {
+        let scan_expr = successor.get_symbol().sym().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
+        body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift").into());
+        CONTINUE
       }
+      StateType::PeekEndComplete(_) => {
+        debug_assert!(!is_scanner, "Peek states should not be present in graph");
+        body_string.push("reset".into());
+        CONTINUE
+      }
+      StateType::Peek => {
+        debug_assert!(!is_scanner, "Peek states should not be present in graph");
+        body_string.push("peek".into());
+        CONTINUE
+      }
+      StateType::NonTermCompleteOOS => {
+        debug_assert!(!is_scanner, "NonTermCompleteOOS states should only exist in normal parse graphs");
+        body_string.push("pop".into());
+        HALT
+      }
+      StateType::ScannerCompleteOOS => {
+        debug_assert!(is_scanner, "ScannerCompleteOOS states should only exist in scanner parse graphs");
+        body_string.push("pass".into());
+        HALT
+      }
+      StateType::ReduceComplete(rule_id, completes) | StateType::Reduce(rule_id, completes) => {
+        debug_assert!(!successor.kernel_items_ref().iter().any(|i| i.is_out_of_scope()));
 
-      false
+        body_string.push(create_rule_reduction(rule_id, db));
+
+        if completes > 0 {
+          body_string.push("pop ".to_string() + &completes.to_string());
+        }
+
+        if matches!(s_type, StateType::ReduceComplete(_, _)) {
+          CONTINUE
+        } else {
+          HALT
+        }
+      }
+      StateType::Follow => CONTINUE,
+      StateType::AssignToken(..) | StateType::CompleteToken => {
+        body_string.push("pass".into());
+        HALT
+      }
+      _ => CONTINUE,
     }
-    StateType::Follow => true,
-    StateType::AssignToken(..) | StateType::Complete => {
-      body_string.push("pass".into());
-      false
-    }
-    _ => true,
-  } {
+  {
     // Add goto expressions
 
     match (&goto_state_id, s_type) {

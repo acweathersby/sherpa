@@ -3,7 +3,7 @@ use crate::types::*;
 
 use ErrorClass::*;
 
-pub(super) fn _create_reduce_reduce_error(iter: &GraphBuilder, end_items: ItemSet) -> SherpaError {
+pub(super) fn _create_reduce_reduce_error(_gb: &GraphBuilder, _end_items: ItemSet) -> SherpaError {
   /*   j.report_mut().add_error(SherpaError::SourcesError {
     id:       "reduce-conflict",
     msg:      "Unresolvable parse conflict encountered".into(),

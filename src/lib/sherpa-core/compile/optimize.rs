@@ -19,7 +19,7 @@ use crate::{
   types::*,
 };
 use sherpa_rust_runtime::types::bytecode::InputType;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 type Map<A, B> = BTreeMap<A, B>;
 type Set<A> = BTreeSet<A>;

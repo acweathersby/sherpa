@@ -116,12 +116,11 @@ pub enum StateType {
   /// A peek path has been resolved to a single peek group located in the peek
   /// origin state.
   PeekEndComplete(u64),
-  Complete,
+  CompleteToken,
   Follow,
-  DifferedReduce,
-  ShiftPrefix,
   AssignAndFollow(DBTermKey),
   Reduce(DBRuleKey, usize),
+  ReduceComplete(DBRuleKey, usize),
   AssignToken(DBTermKey),
   /// Calls made on items within a state's closure but
   /// are not kernel items.
@@ -236,10 +235,6 @@ impl<'db> GraphState<'db> {
 
   pub fn get_type(&self) -> StateType {
     self.t_type
-  }
-
-  pub fn has_goto_state(&self) -> bool {
-    self.nonterm_items.len() > 0
   }
 
   pub(crate) fn get_symbol(&self) -> PrecedentSymbol {
@@ -730,7 +725,7 @@ impl<'db> GraphBuilder<'db> {
           }
         }
       } else {
-        if let Ok((follow, _)) = get_follow_internal(graph, *item) {
+        if let Ok((follow, _)) = get_follow_internal(graph, *item, false) {
           for item in follow {
             if let Some(term) = item.term_index_at_sym(mode) {
               symbols.insert(term);
@@ -769,7 +764,7 @@ impl<'db> GraphBuilder<'db> {
         Normal,
         (SymbolId::Default, 0).into(),
         StateType::Start,
-        Some(kernel_items.iter().enumerate().map(|(i, mut item)| item.to_goal(i as u32))),
+        Some(kernel_items.iter().enumerate().map(|(i, item)| item.to_goal(i as u32))),
       )
       .to_enqueued();
   }
@@ -971,6 +966,7 @@ fn add_kernel_items<'db, T: ItemContainerIter<'db>>(state: &mut GraphState<'db>,
 pub struct GraphIterator<'a, 'db: 'a> {
   graph:       &'a GraphHost<'db>,
   queue:       Queue<StateId>,
+  #[allow(unused)]
   used_states: OrderedSet<StateId>,
   links:       OrderedMap<StateId, OrderedSet<&'a GraphState<'db>>>,
   empty_hash:  OrderedSet<&'a GraphState<'db>>,

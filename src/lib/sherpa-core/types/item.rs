@@ -45,18 +45,6 @@ impl<'db> TransitionPair<'db> {
     self.kernel.is_complete() && self.kernel.to_canonical() == self.next.to_canonical()
   }
 
-  pub fn is_follow(&self) -> bool {
-    self.kernel.is_complete() && !self.next.is_complete()
-  }
-
-  pub fn is_first(&self) -> bool {
-    !self.kernel.is_complete()
-  }
-
-  pub fn is_eof(&self) -> bool {
-    self.sym == SymbolId::EndOfFile || self.sym == SymbolId::Default || self.kernel == self.next
-  }
-
   pub fn is_out_of_scope(&self) -> bool {
     self.kernel.is_out_of_scope()
   }
