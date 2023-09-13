@@ -349,8 +349,6 @@ EXPORT B as B
 pub fn test_sgml_like_grammar_parsing() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r##"
-NAME wick_element
-
 IGNORE { c:sp c:nl }
 
 <> element_block > '<' component_identifier
@@ -555,6 +553,22 @@ fn escaped_string() -> SherpaResult<()> {
       ("default", r##""1234"a"##, true),
       ("default", r##""12\"34"a"##, true),
     ],
+  )
+}
+
+#[test]
+fn simple_newline_tracking_sanity() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r##"
+    IGNORE { c:sp c:nl }
+
+    <> test > 'hello' P
+
+    <> P > 'world' 'goodby' B
+
+    <> B > 'mango'
+        "##],
+    &[("default", "hello\nworld\n\ngoodby\nmango", true)],
   )
 }
 

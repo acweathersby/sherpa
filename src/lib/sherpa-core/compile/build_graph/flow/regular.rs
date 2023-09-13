@@ -153,7 +153,7 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
       if let Some(CreateCallResult { is_kernel, state_id, _transition_items }) =
         ____allow_rd____.then(|| create_call(gb, in_scope.clone(), prec_sym)).flatten()
       {
-        if is_kernel || _transition_items.len() == 1 {
+        if is_kernel {
           gb.enqueue_state(state_id);
         } else {
           if !____allow_ra____ {
@@ -167,13 +167,8 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
           gb.create_state(Normal, prec_sym, StateType::KernelShift, Some(group.iter().to_kernel().try_increment().into_iter()))
             .to_enqueued();
         } else if ____allow_ra____ || len == 1 {
-          let items = in_scope.to_inherited(gb.current_state_id()).iter().to_next().try_increment();
-
-          if len == 1 {
-            gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_enqueued();
-          } else {
-            gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_pending();
-          }
+          let items = in_scope.to_next().try_increment();
+          gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_pending();
         } else {
           if len > 1 {
             if !____allow_ra____ {

@@ -152,13 +152,13 @@ Stack:\n{}\n
       let nterm_name = nterm_name.split("____").last().unwrap();
 
       match item.reduction_type() {
-        ReductionType::LeftRecursive => {
+        /* ReductionType::LeftRecursive => {
           let mut items = stack.drain((stack.len() - item.len as usize)..);
           let mut first = items.next().unwrap();
           first.children.extend(items);
           stack.push(first);
-        }
-        t @ ReductionType::SemanticAction | t @ ReductionType::Mixed | t @ ReductionType::SingleTerminal => {
+        } */
+        t @ _ | t @ ReductionType::SemanticAction | t @ ReductionType::Mixed | t @ ReductionType::SingleTerminal => {
           let items = stack.drain((stack.len() - item.len as usize)..);
           let symbols = items.collect::<Vec<_>>();
 

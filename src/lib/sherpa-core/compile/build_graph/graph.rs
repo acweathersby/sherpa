@@ -23,6 +23,8 @@ pub enum Origin {
   BreadCrumb(DBRuleKey),
   Fork(DBRuleKey),
   PEG(DBNonTermKey),
+  Closure(StateId),
+  Goto(StateId),
   // Out of scope item that was generated from the
   // completion of a token non-terminal.
   ScanCompleteOOS,
@@ -658,7 +660,7 @@ impl<'db> GraphBuilder<'db> {
       state_id: StateId::default(),
       pending: Vec::new(),
       errors: Vec::new(),
-      state_queue: VecDeque::from_iter([StateId::root()]),
+      state_queue: VecDeque::default(),
       state_map: Default::default(),
       db,
       config,
@@ -675,13 +677,17 @@ impl<'db> GraphBuilder<'db> {
 
   pub fn run(&mut self) {
     while let Some(parent) = self.state_queue.pop_front() {
-      self.state_id = parent;
       self.pending.clear();
+      self.state_id = parent;
       match handle_kernel_items(self) {
         Err(err) => {
           self.errors.push(err);
         }
         _ => {}
+      }
+      for state_id in self.pending.drain(..).collect::<Vec<_>>() {
+        self.prepare_state(state_id);
+        self.enqueue_state(state_id);
       }
     }
   }
@@ -742,6 +748,10 @@ impl<'db> GraphBuilder<'db> {
     }
 
     Some(symbols)
+  }
+
+  pub fn get_pending_states(&self) -> Vec<StateId> {
+    self.pending.iter().cloned().collect()
   }
 
   pub fn get_pending_items(&self) -> ItemSet<'db> {
@@ -897,16 +907,6 @@ impl<'db> GraphBuilder<'db> {
     StateBuilder { state_id: id, builder: self }
   }
 
-  pub fn process_pending(&mut self, should_increment_gotos: bool) {
-    for state_id in self.pending.drain(..).collect::<Vec<_>>() {
-      if should_increment_gotos {
-        increment_gotos(self, state_id, self.current_state_id());
-      }
-      self.prepare_state(state_id);
-      self.enqueue_state(state_id);
-    }
-  }
-
   #[cfg(debug_assertions)]
   pub fn _print_state_(&self) {
     println!("{}", self.get_state(self.state_id)._debug_string_(self.db));
@@ -928,30 +928,7 @@ impl<'db> GraphBuilder<'db> {
   }
 }
 
-fn increment_gotos(gb: &mut GraphBuilder, next_state_id: StateId, current_id: StateId) {
-  if gb.get_state(next_state_id).peek_resolve_items.len() > 0 {
-    let resolve_states = gb
-      .get_state(next_state_id)
-      .peek_resolve_items
-      .iter()
-      .map(|(id, i)| {
-        (*id, i.iter().map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { *i }).collect::<ItemSet>())
-      })
-      .collect::<OrderedMap<_, _>>();
-    gb.get_state_mut(next_state_id).peek_resolve_items = resolve_states;
-  } else {
-    let items = gb
-      .get_state_mut(next_state_id)
-      .kernel_items
-      .iter()
-      .map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { *i })
-      .collect::<Items>();
-
-    set_kernel_items(gb.get_state_mut(next_state_id), items.into_iter())
-  }
-}
-
-fn set_kernel_items<'db, T: ItemContainerIter<'db>>(state: &mut GraphState<'db>, kernel_items: T) {
+pub(crate) fn set_kernel_items<'db, T: ItemContainerIter<'db>>(state: &mut GraphState<'db>, kernel_items: T) {
   state.kernel_items.clear();
   state.kernel_items.extend(kernel_items.map(|i| if i.origin_state.is_invalid() { i.to_origin_state(state.id) } else { i }));
 }

@@ -13,9 +13,9 @@ use std::collections::VecDeque;
 pub(crate) fn get_follow<'db>(
   gb: &GraphBuilder<'db>,
   item: Item<'db>,
-  first_level_only: bool,
+  single_reduction_only: bool,
 ) -> SherpaResult<(Items<'db>, Items<'db>)> {
-  get_follow_internal(gb.graph(), item, first_level_only)
+  get_follow_internal(gb.graph(), item, single_reduction_only)
 }
 
 /// Returns a tuple comprised of a vector of all items that follow the given
@@ -25,7 +25,7 @@ pub(crate) fn get_follow<'db>(
 pub(crate) fn get_follow_internal<'db>(
   graph: &GraphHost<'db>,
   item: Item<'db>,
-  first_level_only: bool,
+  single_reduction_only: bool,
 ) -> SherpaResult<(Items<'db>, Items<'db>)> {
   if !item.is_complete() {
     return SherpaResult::Ok((vec![item], vec![]));
@@ -42,7 +42,7 @@ pub(crate) fn get_follow_internal<'db>(
     if completed.insert(item) {
       let nterm: DBNonTermKey = item.nonterm_index();
 
-      if first_level_only && nterm != root_nterm {
+      if single_reduction_only && nterm != root_nterm {
         continue;
       }
 
@@ -65,7 +65,7 @@ pub(crate) fn get_follow_internal<'db>(
           .flat_map(|kernel| {
             db.get_closure(kernel)
               .map(|i| {
-                if i.is_canonical() == kernel.is_canonical() {
+                if i.is_canonically_equal(kernel) {
                   *kernel
                 } else {
                   i.to_origin_state(state).to_goal(goal).to_origin(origin)
@@ -232,8 +232,8 @@ pub(crate) fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefConta
     } else {
       follow_pairs.extend(f.iter().flat_map(|i| vec![*i].iter().closure::<Vec<_>>(gb.current_state_id())).map(|i| {
         TransitionPair {
-          next:   i.to_origin(c_i.origin),
           kernel: *c_i,
+          next:   i.to_origin(c_i.origin).to_origin_state(gb.current_state_id()),
           prec:   i.token_precedence(),
           sym:    i.sym(),
         }

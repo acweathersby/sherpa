@@ -138,7 +138,11 @@ fn convert_state_to_ir<'db>(
 
   if matches!(
     state.get_type(),
-    StateType::CompleteToken | StateType::AssignAndFollow(..) | StateType::AssignToken(..) | StateType::Reduce(..)
+    StateType::CompleteToken
+      | StateType::AssignAndFollow(..)
+      | StateType::AssignToken(..)
+      | StateType::Reduce(..)
+      //| StateType::ReduceComplete(..)
   ) {
     let mut w = CodeWriter::new(vec![]);
     w.increase_indent();
@@ -150,7 +154,7 @@ fn convert_state_to_ir<'db>(
       }
       StateType::CompleteToken => w.write("pass")?,
 
-      StateType::Reduce(rule_id, completes) => {
+      StateType::ReduceComplete(rule_id, completes) | StateType::Reduce(rule_id, completes) => {
         debug_assert!(!state.kernel_items_ref().iter().any(|i| i.is_out_of_scope()));
 
         w.write(&create_rule_reduction(rule_id, db))?;
@@ -200,9 +204,9 @@ fn convert_state_to_ir<'db>(
           | StateType::CompleteToken
           | StateType::AssignToken(..)
       ),
-    "Graph state failed to generate ir states:\n{} \nGraph\n{}",
+    "Graph state failed to generate ir states:\nSTATE\n\n {} \n\nGraph\n\n{}",
     state._debug_string_(db),
-    graph._debug_string_()
+    successors.iter().map(|s| s._debug_string_(db)).collect::<Vec<_>>().join("\n\n")
   );
 
   SherpaResult::Ok(out)

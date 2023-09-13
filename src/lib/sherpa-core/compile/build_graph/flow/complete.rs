@@ -36,14 +36,9 @@ fn complete_regular<'db>(first: TransitionPair<'db>, gb: &mut GraphBuilder<'db>,
   let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false;
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
 
-  if !____allow_ra____ && !gb.graph().item_is_goal(&completed_item)
-  /* || ____allow_fork____ */
-  {
-    let (follow, completed_items) = get_follow(gb, completed_item, true).expect("could no get follow");
+  if !gb.graph().item_is_goal(&completed_item) && !completed_item.from_goto_origin {
+    let (follow, completed_items) = get_follow(gb, completed_item, true).expect("could not get follow");
 
-    follow._debug_print_(&format!("FOLLOW after: \n {} \n", completed_item._debug_string_()));
-    completed_items._debug_print_(&format!("COMPLETED after: \n {} \n", completed_item._debug_string_()));
-    println!("-----------------");
     if follow.len() < 1 && completed_items.len() < 1 {
       panic!("TODO")
     } else {
@@ -51,9 +46,11 @@ fn complete_regular<'db>(first: TransitionPair<'db>, gb: &mut GraphBuilder<'db>,
         Normal,
         sym,
         StateType::ReduceComplete(completed_item.rule_id, completed_item.goto_distance as usize),
-        Some(follow.into_iter().chain(
-          completed_items.into_iter().filter(|i| !i.is_out_of_scope() && i.to_canonical() != completed_item.to_canonical()),
-        )),
+        Some(
+          follow
+            .into_iter()
+            .chain(completed_items.into_iter().filter(|i| !i.is_out_of_scope() && !i.is_canonically_equal(&completed_item))),
+        ),
       );
       state.set_reduce_item(completed_item);
       state.to_pending();
@@ -76,12 +73,8 @@ fn complete_scan<'db>(
   sym: PrecedentSymbol,
   first: TransitionPair<'db>,
 ) {
-  let (follow, completed_items): (Vec<Items>, Vec<Items>) = completed
-    .iter()
-    .to_inherited(gb.current_state_id())
-    .into_iter()
-    .map(|i| get_follow(gb, i.kernel, false).expect("could no get follow"))
-    .unzip();
+  let (follow, completed_items): (Vec<Items>, Vec<Items>) =
+    completed.iter().into_iter().map(|i| get_follow(gb, i.kernel, false).expect("could not get follow")).unzip();
 
   let follow = follow.into_iter().flatten().collect::<Items>();
   let completed_items = completed_items.into_iter().flatten().collect::<Items>();

@@ -34,7 +34,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
   let mut state = gb.create_state::<DefaultIter>(GraphBuildState::Peek(0), sym, transition_type, None);
 
   if let Some(completed_pairs) = completed_pairs {
-    let pairs = completed_pairs.to_inherited(state_id).into_iter().collect::<BTreeSet<_>>();
+    let pairs = completed_pairs.into_iter().cloned().collect::<BTreeSet<_>>();
 
     // All items here complete the same nonterminal, so we group them all into one
     // goal index.

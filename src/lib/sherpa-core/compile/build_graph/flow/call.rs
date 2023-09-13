@@ -101,7 +101,7 @@ fn climb_nonterms<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
             Some(id) => id == nterm && i.nonterm_index() != nterm,
             _ => false,
           })
-          .map(|i| -> TransitionPair { (p.kernel, i, gb.get_mode()).into() })
+          .map(|i| -> TransitionPair { (p.kernel, i.align(&p.next), gb.get_mode()).into() })
       })
       .collect::<Vec<_>>();
 
@@ -110,7 +110,7 @@ fn climb_nonterms<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
       return Some(candidate);
     }
 
-    Some((nterm, climbed_firsts.iter().to_inherited(gb.current_state_id()).iter().to_next().cloned().collect()))
+    Some((nterm, climbed_firsts.iter().to_next().cloned().collect()))
   } else {
     None
   }

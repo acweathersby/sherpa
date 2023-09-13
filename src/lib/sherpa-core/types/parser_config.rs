@@ -30,9 +30,9 @@ impl Default for ParserConfig {
   fn default() -> Self {
     Self {
       ALLOW_RECURSIVE_DESCENT: true,
-      ALLOW_LR: false,
-      ALLOW_LOOKAHEAD_MERGE: false,
-      ALLOW_PEEKING: false,
+      ALLOW_LR: true,
+      ALLOW_LOOKAHEAD_MERGE: true,
+      ALLOW_PEEKING: true,
       ALLOW_FORKING: false,
       max_k: usize::MAX,
     }

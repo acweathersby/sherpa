@@ -140,6 +140,6 @@ pub(crate) fn peek_not_allowed_error(gb: &GraphBuilder, parent: StateId) -> Sher
         .dedup(),
     }
   } else {
-    todo!("Handle normal LL case")
+    todo!("PEEKING_ERROR: Handle normal LL case")
   }
 }

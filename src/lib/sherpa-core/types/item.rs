@@ -28,21 +28,22 @@ pub type Follow<'db> = TransitionPair<'db>;
 pub type Follows<'db> = Array<Follow<'db>>;
 
 impl<'db> TransitionPair<'db> {
-  pub fn to_inherited(&self, state_id: StateId) -> Self {
+  pub fn _to_inherited(&self, state_id: StateId) -> Self {
     Self {
       kernel: self.kernel,
-      next:   self.next.align(&self.kernel).to_origin_state(state_id),
+      next:   self.next,
+      //next:   self.next.align(&self.kernel).to_origin_state(state_id),
       sym:    self.sym,
       prec:   self.prec,
     }
   }
 
   pub fn is_kernel_terminal(&self) -> bool {
-    !self.is_complete() && self.kernel.to_canonical() == self.next.to_canonical()
+    !self.is_complete() && self.kernel.is_canonically_equal(&self.next)
   }
 
   pub fn is_complete(&self) -> bool {
-    self.kernel.is_complete() && self.kernel.to_canonical() == self.next.to_canonical()
+    self.kernel.is_complete() && self.kernel.is_canonically_equal(&self.next)
   }
 
   pub fn is_out_of_scope(&self) -> bool {
@@ -100,8 +101,8 @@ pub trait TransitionPairRefIter<'a, 'db: 'a>: Iterator<Item = &'a TransitionPair
     self.map(|i| &i.kernel)
   }
 
-  fn to_inherited(self, state: StateId) -> Vec<TransitionPair<'db>> {
-    self.map(move |i| i.to_inherited(state)).collect()
+  fn _to_inherited(self, state: StateId) -> Vec<TransitionPair<'db>> {
+    self.map(move |i| i._to_inherited(state)).collect()
   }
 
   fn max_precedence(self) -> u16 {
@@ -152,6 +153,7 @@ pub struct Item<'db> {
   pub sym_index: u16,
   ////
   pub goto_distance: u8,
+  pub from_goto_origin: bool,
 }
 
 #[cfg(debug_assertions)]
@@ -214,6 +216,8 @@ impl<'db> Item<'db> {
       rule_id: self.rule_id,
       len: self.len,
       sym_index: self.sym_index,
+      goto_distance: 0,
+      from_goto_origin: false,
       ..other.clone()
     }
   }
@@ -253,6 +257,7 @@ impl<'db> Item<'db> {
       origin: Default::default(),
       goal: 0,
       goto_distance: 0,
+      from_goto_origin: false,
     }
   }
 
@@ -267,6 +272,7 @@ impl<'db> Item<'db> {
       origin: Default::default(),
       goal: 0,
       goto_distance: 0,
+      from_goto_origin: false,
     }
   }
 
@@ -277,6 +283,10 @@ impl<'db> Item<'db> {
 
   pub fn to_absolute(&self) -> Self {
     Self { goal: Default::default(), origin: Default::default(), ..self.clone() }
+  }
+
+  pub fn is_canonically_equal(&self, other: &Self) -> bool {
+    self.sym_index == other.sym_index && self.rule_id == other.rule_id
   }
 
   pub fn is_canonical(&self) -> bool {
@@ -333,6 +343,10 @@ impl<'db> Item<'db> {
 
   pub fn is_out_of_scope(&self) -> bool {
     self.goal == OUT_SCOPE_INDEX || self.origin.is_out_of_scope()
+  }
+
+  pub fn to_goto_origin(&self) -> Self {
+    Self { from_goto_origin: true, ..self.clone() }
   }
 
   pub fn to_start(&self) -> Self {
@@ -511,6 +525,14 @@ impl<'db> Item<'db> {
       #[cfg(not(debug_assertions))]
       let mut string = String::new();
 
+      if !self.is_canonical() {
+        if self.from_goto_origin {
+          string += &(" @".to_string() + &("[".to_string() + &self.goto_distance.to_string() + "] "));
+        } else {
+          string += &("[".to_string() + &self.goto_distance.to_string() + "] ");
+        }
+      }
+
       string += &self.nonterm_name().to_string(s_store);
 
       string += " >";
@@ -544,10 +566,6 @@ impl<'db> Item<'db> {
 
       if self.is_complete() {
         string += " •";
-      }
-
-      if !self.is_canonical() {
-        string += &(" [".to_string() + &self.goto_distance.to_string() + "]");
       }
 
       string.replace("\n", "\\n")
@@ -829,5 +847,7 @@ fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(comment: &str, items: T) 
 
 pub struct CompletedItemArtifacts<'db> {
   pub follow_pairs: OrderedSet<TransitionPair<'db>>,
+  /// Items that completed a nonterminal that did not lead to a transition
+  /// in the root closure.
   pub default_only: ItemSet<'db>,
 }
