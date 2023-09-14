@@ -9,6 +9,11 @@ use std::path::PathBuf;
 use super::utils::compile_and_run_grammars;
 
 #[test]
+pub fn construct_trivial_parser() -> SherpaResult<()> {
+  compile_and_run_grammars(&[r#"<> A > 'hello' ' ' 'world' "#], &[("default", "hello world", true)])
+}
+
+#[test]
 pub fn basic_scanner() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"

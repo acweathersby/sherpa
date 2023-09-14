@@ -327,8 +327,6 @@ pub fn process_parse_state<'a>(
 
         let name = process_state_nonterm(&gotos.goto.nonterminal, g, s, sr)?.to_string(s);
         gotos.goto.name = name;
-
-        println!("{}", gotos.goto.name);
       }
       ASTNode::IntMatch(int_match) => {
         process_statement(&mut int_match.statement, g, s, sr)?;
@@ -972,7 +970,7 @@ mod test {
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (mut nonterminals, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
+    let (nonterminals, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
 
     assert_eq!(nonterminals.len(), 0);
     assert_eq!(parse_states.len(), 1);

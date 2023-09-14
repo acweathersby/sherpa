@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::collections::VecDeque;
+
 use super::{
   super::{
     build::{GroupedFirsts, TransitionGroup},
@@ -28,9 +30,10 @@ pub(super) enum ShiftReduceConflictResolution {
   Fork,
 }
 
+const MAX_EVAL_K: usize = 8;
 pub(super) enum ReduceReduceConflictResolution<'db> {
   Reduce(Item<'db>),
-  BreadCrumb(Follows<'db>),
+  Fork(Follows<'db>),
   Peek(Follows<'db>),
   Nothing,
 }
@@ -39,24 +42,43 @@ pub(super) fn resolve_reduce_reduce_conflict<'db>(
   gb: &mut GraphBuilder<'db>,
   prec_sym: PrecedentSymbol,
   follow_pairs: Follows<'db>,
-) -> ReduceReduceConflictResolution<'db> {
+) -> SherpaResult<ReduceReduceConflictResolution<'db>> {
   if prec_sym.sym().is_default() {
-    ReduceReduceConflictResolution::Nothing
+    Ok(ReduceReduceConflictResolution::Nothing)
   } else {
-    ReduceReduceConflictResolution::Peek(follow_pairs)
+    match calculate_k_multi(gb, follow_pairs.iter().map(|i| [i].into_iter()).collect(), MAX_EVAL_K) {
+      KCalcResults::K(k) => {
+        if !gb.config.ALLOW_PEEKING || k >= MAX_EVAL_K {
+          if gb.config.ALLOW_FORKING {
+            return Ok(ReduceReduceConflictResolution::Fork(follow_pairs));
+          }
+          return peek_not_allowed_error(
+            gb,
+            follow_pairs.into_iter().map(|i| vec![i]).collect::<Vec<_>>().as_slice(),
+            &format!("Either peeking or forking must be enabled to resolve this ambiguity, which requires a lookahead of k={k}"),
+          );
+        } else if k > gb.config.max_k {
+          return peek_not_allowed_error(
+            gb,
+            follow_pairs.into_iter().map(|i| vec![i]).collect::<Vec<_>>().as_slice(),
+            &format!(
+              "A lookahead of k={k} is required, but lookahead cannot be greater than k={} with the current configuration",
+              gb.config.max_k
+            ),
+          );
+        }
+        Ok(ReduceReduceConflictResolution::Peek(follow_pairs))
+      }
+      _ => todo!("Resolve lookahead conflicts"),
+    }
   }
 }
 
 pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &GraphBuilder<'db>,
+  gb: &mut GraphBuilder<'db>,
   shifts: T,
   reduces: T,
 ) -> SherpaResult<ShiftReduceConflictResolution> {
-  // gb._print_graph_();
-  // gb._print_state_();
-  // reduces.clone()._debug_print_("REDUCES");
-  // shifts.clone()._debug_print_("SHIFTS");
-
   let mode = gb.get_mode();
 
   let compl_prec = reduces.clone().map(|i| i.kernel.decrement().unwrap().precedence(gb.get_mode())).max().unwrap_or_default();
@@ -70,18 +92,16 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
   let compl_nterm_set: OrderedSet<DBNonTermKey> = reduces.clone().map(|i| i.kernel.nonterm_index()).collect();
 
   if incom_nterm_set.len() == 1 && incom_nterm_set.is_superset(&compl_nterm_set) {
-    //println!("precedence climbing? else!?!");
     return if incom_prec > compl_prec {
       Ok(ShiftReduceConflictResolution::Shift)
     } else {
       Ok(ShiftReduceConflictResolution::Reduce)
     };
   }
-  const MAX_EVALUATION_K: usize = 8;
   /// This conflict requires some form of lookahead or fork to disambiguate,
   /// prefer peeking unless k is too large or the ambiguity is resolved outside
   /// the goal non-terminal
-  match calculate_k(gb, reduces.clone(), shifts.clone(), MAX_EVALUATION_K) {
+  match calculate_k(gb, reduces.clone(), shifts.clone(), MAX_EVAL_K) {
     KCalcResults::K(k) => {
       if !gb.config.ALLOW_PEEKING {
         if gb.config.ALLOW_FORKING {
@@ -90,12 +110,8 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
         peek_not_allowed_error(
           gb,
           &[shifts.cloned().collect(), reduces.cloned().collect()],
-          &format!("Either peeking or forking must be enabled to resolve ambiguity, which is k={k}"),
+          &format!("Either peeking or forking must be enabled to resolve this ambiguity, which requires a lookahead of k={k}"),
         )?;
-      } else if k >= MAX_EVALUATION_K {
-        //peek_not_allowed_error(gb, &[shifts.cloned().collect(),
-        // reduces.cloned().collect()], "Max")?;
-        return Ok(ShiftReduceConflictResolution::Peek);
       } else if k > gb.config.max_k {
         peek_not_allowed_error(gb, &[shifts.cloned().collect(), reduces.cloned().collect()], "")?;
       }
@@ -129,7 +145,9 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
         peek_not_allowed_error(
           gb,
           &[shifts.cloned().collect(), reduces.cloned().collect()],
-          &format!("Either peeking or forking must be enabled to resolve ambiguity, which requires k > {k} to resolve"),
+          &format!(
+            "Either peeking or forking must be enabled to resolve ambiguity, which requires a lookahead of k>={k} to resolve"
+          ),
         )?;
       }
       Ok(ShiftReduceConflictResolution::Peek)
@@ -138,6 +156,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
 }
 
 enum KCalcResults {
+  /// Return the k if it is less or equal to then the maximum eval k
   K(usize),
   /// The peek paths contains recursive items, which will requires infinite time
   /// and space to resolve.
@@ -147,54 +166,40 @@ enum KCalcResults {
   LargerThanMaxLimit(usize),
 }
 
+fn get_follow_artifacts<'db>(
+  i_reduce: &Vec<Item<'db>>,
+  gb: &mut GraphBuilder<'db>,
+) -> (OrderedSet<Item<'db>>, OrderedSet<DBTermKey>) {
+  let mut out = OrderedSet::default();
+  let mut syms = OrderedSet::default();
+  for item in i_reduce {
+    let (follow, default) = get_follow(gb, *item, false);
+
+    let items = follow.iter().flat_map(|i| i.closure_iter_align(*i));
+
+    syms.extend(items.clone().filter_map(|i| i.term_index_at_sym(gb.get_mode())));
+    out.extend(items);
+  }
+  (out, syms)
+}
+
 fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &GraphBuilder<'db>,
+  gb: &mut GraphBuilder<'db>,
   reduces: B,
   shifts: A,
-  MAX_EVALUATION_K: usize,
+  max_eval: usize,
 ) -> KCalcResults {
-  fn get_follow_artifacts<'db>(
-    i_reduce: &Vec<Item<'db>>,
-    gb: &GraphBuilder<'db>,
-  ) -> (OrderedSet<Item<'db>>, OrderedSet<DBTermKey>) {
-    let mut out = OrderedSet::default();
-    let mut syms = OrderedSet::default();
-    for item in i_reduce {
-      let (follow, default) = get_follow(gb, *item, false);
-
-      let items = follow.iter().flat_map(|i| i.closure_iter_align(*i));
-
-      syms.extend(items.clone().filter_map(|i| i.term_index_at_sym(gb.get_mode())));
-      out.extend(items);
-    }
-    (out, syms)
-  }
-
   // Find max K for the conflicts to determine if we should us the peek mechanism
 
   let mut reduce_items: ItemSet = reduces.clone().to_next().cloned().collect();
   let mut shift_items: ItemSet = shifts.clone().to_next().cloned().collect();
 
-  for k in 2..=(MAX_EVALUATION_K) {
+  for k in 2..=(max_eval) {
     let (out, reduce_syms) = get_follow_artifacts(&reduce_items.try_increment(), gb);
     reduce_items = out;
 
     let (out, shift_syms) = get_follow_artifacts(&shift_items.try_increment(), gb);
     shift_items = out;
-
-    // reduce_items._debug_print_("REDUCE ITEMS");
-    // shift_items._debug_print_("SHIFT_ITEMS");
-
-    // println!(
-    //   " shift_syms: {}",
-    //   shift_syms.iter().map(|s|
-    // gb.db.token(*s).name.to_string(gb.db.string_store())).collect::<Vec<_>>().
-    // join(" | ") );
-    // println!(
-    //   "reduce_syms: {}",
-    //   reduce_syms.iter().map(|s|
-    // gb.db.token(*s).name.to_string(gb.db.string_store())).collect::<Vec<_>>().
-    // join(" | ") );
 
     if reduce_syms.intersection(&shift_syms).next().is_none() {
       // Have to consider items outside the domain of the goal-nonterminal, so we'll
@@ -203,18 +208,61 @@ fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: Transi
     }
 
     if shift_items.iter().filter(|i| i.is_recursive()).any(|i| reduce_items.contains(i)) {
-      //println!("----\nk={k}");
-      //shift_items.iter().filter(|i| i.is_recursive())._debug_print_(
-      //  "RECUSIVE
-      // SHIFT",
-      //);
-      //reduce_items.iter().filter(|i| i.is_recursive())._debug_print_("RECUSIVE
-      // REDUCE"); println!("----\n");
       return KCalcResults::RecursiveAt(k);
     }
   }
 
-  KCalcResults::LargerThanMaxLimit(MAX_EVALUATION_K)
+  KCalcResults::LargerThanMaxLimit(max_eval)
+}
+
+fn calculate_k_multi<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
+  gb: &mut GraphBuilder<'db>,
+  transition_groups: Vec<T>,
+  max_eval: usize,
+) -> KCalcResults {
+  let mut groups = transition_groups.into_iter().map(|i| i.to_next().cloned().collect::<ItemSet>()).collect::<Vec<_>>();
+
+  // Find max K for the conflicts to determine if we should us the peek mechanism
+
+  for k in 2..=(max_eval) {
+    let mut queue = groups.iter().map(|items| get_follow_artifacts(&items.try_increment(), gb)).collect::<Vec<_>>();
+
+    //queue.iter().enumerate().for_each(|(i, f)| f.0._debug_print_(&format!("set {}
+
+    // at k={}", i, k)));
+    let sym_table = queue.iter().flat_map(|(_, syms)| syms.iter()).fold(OrderedMap::<DBTermKey, u32>::new(), |mut map, sym| {
+      (*map.entry(*sym).or_default()) += 1;
+      map
+    });
+
+    if !sym_table.iter().any(|i| *i.1 > 1) {
+      return KCalcResults::K(k);
+    }
+
+    let recursive = queue
+      .iter()
+      .flat_map(|((items, _))| items.iter())
+      .filter_map(|i| -> Option<usize> { i.is_recursive().then_some(i.rule_id.into()) })
+      .fold(OrderedMap::<usize, u32>::new(), |mut map, sym| {
+        (*map.entry(sym).or_default()) += 1;
+        map
+      });
+
+    if recursive.iter().any(|i| *i.1 > 1) {
+      return KCalcResults::RecursiveAt(k);
+    }
+
+    let sym_table = sym_table.into_iter().filter_map(|(sym, i)| (i > 1).then_some(sym)).collect::<OrderedSet<_>>();
+
+    groups =
+      queue.into_iter().filter_map(|(follow, syms)| syms.intersection(&sym_table).next().is_some().then_some(follow)).collect();
+
+    if groups.len() < 2 {
+      return KCalcResults::K(k);
+    }
+  }
+
+  KCalcResults::LargerThanMaxLimit(max_eval)
 }
 
 pub(crate) fn resolve_conflicting_tokens<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(

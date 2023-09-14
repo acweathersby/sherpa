@@ -11,32 +11,6 @@ pub enum ItemType {
 
 pub type StaticItem = (DBRuleKey, u16);
 
-pub(crate) struct ItemIndex(u32);
-
-impl ItemIndex {
-  pub fn get_parts(&self) -> (usize, usize) {
-    ((self.0 >> 8) as usize, (self.0 & 0xFF) as usize)
-  }
-}
-
-impl<'db> From<Item<'db>> for ItemIndex {
-  fn from(i: Item<'db>) -> Self {
-    let rule_index: u32 = i.rule_id.into();
-    Self((rule_index << 8) | ((i.sym_index & 0xFF) as u32))
-  }
-}
-
-impl From<u32> for ItemIndex {
-  fn from(value: u32) -> Self {
-    Self(value)
-  }
-}
-
-impl Into<u32> for ItemIndex {
-  fn into(self) -> u32 {
-    self.0
-  }
-}
 /// Represents either a FIRST or a FOLLOW depending on whether the root item
 /// is incomplete or not.
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -54,16 +28,6 @@ pub type Follow<'db> = TransitionPair<'db>;
 pub type Follows<'db> = Array<Follow<'db>>;
 
 impl<'db> TransitionPair<'db> {
-  pub fn _to_inherited(&self, state_id: StateId) -> Self {
-    Self {
-      kernel: self.kernel,
-      next:   self.next,
-      //next:   self.next.align(&self.kernel).to_origin_state(state_id),
-      sym:    self.sym,
-      prec:   self.prec,
-    }
-  }
-
   pub fn is_kernel_terminal(&self) -> bool {
     !self.is_complete() && self.kernel.is_canonically_equal(&self.next)
   }
@@ -125,10 +89,6 @@ pub trait TransitionPairRefIter<'a, 'db: 'a>: Iterator<Item = &'a TransitionPair
 
   fn to_kernel(self) -> impl ItemRefContainerIter<'a, 'db> {
     self.map(|i| &i.kernel)
-  }
-
-  fn _to_inherited(self, state: StateId) -> Vec<TransitionPair<'db>> {
-    self.map(move |i| i._to_inherited(state)).collect()
   }
 
   fn max_precedence(self) -> u16 {
@@ -262,11 +222,11 @@ impl<'db> Item<'db> {
   }
 
   pub fn to_oos_index(&self) -> Self {
-    Self { goal: OUT_SCOPE_INDEX, ..self.clone() }
+    Self { goal: OUT_SCOPE_LANE, ..self.clone() }
   }
 
   pub fn goal_is_oos(&self) -> bool {
-    self.goal == OUT_SCOPE_INDEX
+    self.goal == OUT_SCOPE_LANE
   }
 
   pub fn to_origin_state(&self, origin_state: StateId) -> Self {
@@ -360,6 +320,13 @@ impl<'db> Item<'db> {
     self.sym_index == 0
   }
 
+  pub fn is_recursive(&self) -> bool {
+    match self.db.nonterm_recursion_type(self.nonterm_index()) {
+      RecursionType::None => false,
+      _ => true,
+    }
+  }
+
   pub fn decrement(&self) -> Option<Self> {
     if !self.is_start() {
       Some(Self { len: self.len, sym_index: self.sym_index - 1, ..self.clone() })
@@ -369,7 +336,7 @@ impl<'db> Item<'db> {
   }
 
   pub fn is_out_of_scope(&self) -> bool {
-    self.goal == OUT_SCOPE_INDEX || self.origin.is_out_of_scope()
+    self.goal == OUT_SCOPE_LANE || self.origin.is_out_of_scope()
   }
 
   pub fn to_goto_origin(&self) -> Self {

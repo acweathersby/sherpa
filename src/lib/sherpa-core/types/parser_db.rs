@@ -414,11 +414,6 @@ impl ParserDatabase {
     self.item_closures[item.rule_id.0 as usize][item.sym_index as usize].iter().map(|s| Item::from_static(*s, self))
   }
 
-  pub(crate) fn get_closure_from_index<'db>(&'db self, index: ItemIndex) -> impl ItemContainerIter {
-    let (rule_id, sym_index) = index.get_parts();
-    self.item_closures[rule_id][sym_index].iter().map(|s| Item::from_static(*s, self))
-  }
-
   /// Returns all regular (non token) nonterminals.
   pub fn parser_nonterms<'db>(&'db self) -> Array<DBNonTermKey> {
     self
@@ -435,7 +430,7 @@ impl ParserDatabase {
   /// Returns an iterator of all items that transition on a givin nonterminal,
   /// including items that are derived from reducing to another non-terminal
   /// after transitioning over the initial non-terminal
-  pub fn nonterm_follow_items<'db>(&'db self, nonterm: DBNonTermKey) -> impl Iterator<Item = Item<'db>> {
+  pub fn nonterm_follow_items<'db>(&'db self, nonterm: DBNonTermKey) -> impl Iterator<Item = Item<'db>> + Clone {
     self.follow_items[nonterm.0 as usize].iter().map(|i| Item::from_static(*i, self))
   }
 }

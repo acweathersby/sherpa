@@ -99,10 +99,8 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
     let graph = build(&mut j, scanner, GraphType::Scanner, start_items, db, config)?;
 
     let ir = build_ir(&mut j, GraphIterator::new(&graph), scanner)?;
-    // println!("{}", graph.debug_string());
+
     for state in ir {
-      //  println!("{} {}", state.name.to_str(db.string_store()).as_str(),
-      // state.code);
       states.insert(state.hash_name, state);
     }
   }
@@ -133,8 +131,6 @@ fn create_parse_states_from_prod<'db>(
 
   if let Some(custom_state) = db.custom_state(nterm_key) {
     let name = db.nonterm_guid_name(nterm_key);
-
-    println!("Custom State: {}", name.to_string(db.string_store()));
 
     let state = ParseState {
       hash_name:     name,

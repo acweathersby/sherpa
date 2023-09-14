@@ -28,7 +28,6 @@ use sherpa_core::{
 };
 use std::{
   collections::{btree_map, BTreeSet, HashSet, VecDeque},
-  fmt::format,
   vec,
 };
 

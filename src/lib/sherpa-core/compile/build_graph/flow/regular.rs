@@ -146,9 +146,9 @@ pub(crate) fn handle_regular_complete_groups<'db>(
           todo!("(anthony) Handle default only completed items (e.i. kernel goal items)")
         }
 
-        match resolve_reduce_reduce_conflict(gb, prec_sym, follow_pairs) {
+        match resolve_reduce_reduce_conflict(gb, prec_sym, follow_pairs)? {
           ReduceReduceConflictResolution::Nothing => {}
-          ReduceReduceConflictResolution::BreadCrumb(_) => {}
+          ReduceReduceConflictResolution::Fork(_) => {}
           ReduceReduceConflictResolution::Reduce(item) => todo!("Handle reduce result from reduce-reduce conflict resolution"),
           ReduceReduceConflictResolution::Peek(follow_pairs) => {
             let state = create_peek(gb, prec_sym, [].iter(), Some(follow_pairs.iter()), true, StateType::Peek)?;

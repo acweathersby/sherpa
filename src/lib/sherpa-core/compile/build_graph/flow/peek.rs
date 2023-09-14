@@ -24,10 +24,13 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
   need_increment: bool,
   transition_type: StateType,
 ) -> SherpaResult<StateId> {
+  debug_assert!(
+    gb.config.ALLOW_PEEKING && gb.config.max_k > 1,
+    "Peek states should not be created when peeking is not allowed or k=1"
+  );
   debug_assert!(!gb.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
   let state_id = gb.current_state_id();
   let mut kernel_items = Array::default();
-  let ALLOW_PEEKING = gb.config.ALLOW_PEEKING;
 
   let existing_items: ItemSet = incomplete_items.clone().to_next().to_absolute();
 
@@ -84,13 +87,13 @@ fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>>>(
   sym: PrecedentSymbol,
 ) -> SherpaResult<()> {
   let (index, items) = get_kernel_items_from_peek_origin(gb, resolved.next().unwrap().kernel.origin);
-
-  gb.create_state(NormalGoto, sym, StateType::PeekEndComplete(index), Some(items.iter().cloned())).to_enqueued();
+  let items = Some(items.iter().cloned());
+  gb.create_state(NormalGoto, sym, StateType::PeekEndComplete(index), items).to_enqueued();
 
   Ok(())
 }
 
-pub(crate) fn get_kernel_items_from_peek_origin<'a, 'db: 'a>(
+pub(crate) fn get_kernel_items_from_peek_origin<'a, 'graph, 'db: 'graph>(
   gb: &'a mut GraphBuilder<'db>,
   peek_origin: Origin,
 ) -> (u64, ItemSet<'db>) {
@@ -98,14 +101,17 @@ pub(crate) fn get_kernel_items_from_peek_origin<'a, 'db: 'a>(
     unreachable!("Invalid peek origin");
   };
 
-  (peek_index, gb.graph()[peek_origin].get_resolve_item_set(peek_index))
+  (peek_index, gb.get_state(peek_origin).get_resolve_item_set(peek_index).clone())
 }
 
-pub(crate) fn get_kernel_items_from_peek_item<'a, 'db: 'a>(gb: &'a GraphBuilder<'db>, peek_item: &Item<'db>) -> ItemSet<'db> {
+pub(crate) fn get_kernel_items_from_peek_item<'graph, 'db: 'graph>(
+  gb: &'graph GraphBuilder<'db>,
+  peek_item: &Item<'db>,
+) -> &'graph ItemSet<'db> {
   let Origin::Peek(peek_index, peek_origin) = peek_item.origin else {
     unreachable!("Invalid peek origin");
   };
-  gb.graph()[peek_origin].get_resolve_item_set(peek_index)
+  gb.get_state(peek_origin).get_resolve_item_set(peek_index)
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -193,7 +199,7 @@ pub(crate) fn handle_peek_complete_groups<'db>(
         gb.graph().goal_items().to_debug_string( "\n"),
         cmpl.to_debug_string("\n"),
         kernel_items.iter().map(|s| s.to_debug_string("\n")).collect::<Vec<_>>().join("\n"),
-        gb.current_state()._debug_string_(gb.db),
+        gb.current_state()._debug_string_(),
         //graph.debug_string()
       );
         }
@@ -239,7 +245,7 @@ fn peek_items_are_from_goto_state(cmpl: &Items, graph: &GraphHost) -> bool {
     1
   );
   match cmpl[0].origin {
-    Origin::Peek(_, origin) => graph[origin].get_type().is_goto(),
+    Origin::Peek(_, origin) => graph[origin].as_ref(graph).get_type().is_goto(),
     _ => false,
   }
 }
@@ -249,7 +255,7 @@ fn peek_items_are_from_oos<'db>(gb: &GraphBuilder<'db>, follows: &Follows<'db>) 
     .iter()
     .to_kernel()
     .map(|i| match i.origin {
-      Origin::Peek(key, origin) => gb.graph()[origin].get_resolve_item_set(key),
+      Origin::Peek(key, origin) => gb.get_state(origin).get_resolve_item_set(key).clone(),
       _ => unreachable!(),
     })
     .all(|set| set.iter().next().unwrap().origin.is_out_of_scope())

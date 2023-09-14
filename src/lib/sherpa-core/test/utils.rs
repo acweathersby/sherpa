@@ -60,7 +60,7 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
 
   let root_path = source_path.join("A");
 
-  let config = ParserConfig::new();
+  let config = ParserConfig::default();
 
   if optimize {
     test_fn(grammar.build_db(&root_path)?.build_parser(config)?.optimize(false)?.into())

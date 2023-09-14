@@ -4,14 +4,14 @@ use std::collections::{BTreeSet, VecDeque};
 
 use GraphBuildState::*;
 
-pub(crate) fn handle_nonterminal_shift<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<bool> {
+pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db>) -> SherpaResult<bool> {
   if gb.is_scanner() || gb.current_state_id().state().currently_peeking() {
     return Ok(false);
   };
 
   let mode = gb.get_mode();
   let db = gb.db;
-  let kernel_base: ItemSet = gb.current_state().kernel_items_ref().iter().inscope_items();
+  let kernel_base: ItemSet = gb.current_state().get_kernel_items().iter().inscope_items();
   let state_id = gb.current_state_id();
   let origin = Origin::Goto(state_id);
 
@@ -123,7 +123,7 @@ pub(crate) fn handle_nonterminal_shift<'db>(gb: &mut GraphBuilder<'db>) -> Sherp
               && !local_nonterms.contains(&i.nonterm_index())
               && !canonical_incremented_items.contains(&i.to_canonical())
           })
-          .map(|i| i.to_oos_lane().to_origin(Origin::GoalCompleteOOS).to_origin_state(parent_id)),
+          .map(|i| i.to_oos_index().to_origin(Origin::GoalCompleteOOS).to_origin_state(parent_id)),
       );
 
       incremented_items.extend(oos_items);
@@ -193,31 +193,33 @@ fn get_used_nonterms<'db>(
 fn increment_gotos(gb: &mut GraphBuilder) {
   let current_id = gb.current_state_id();
 
-  for next_state_id in gb.get_pending_states() {
-    if gb.get_state(next_state_id).peek_resolve_items.len() > 0 {
-      let resolve_states = gb
-        .get_state(next_state_id)
-        .peek_resolve_items
-        .iter()
-        .map(|(id, i)| {
-          (
-            *id,
-            i.iter()
-              .map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { i.to_goto_origin() })
-              .collect::<ItemSet>(),
-          )
-        })
-        .collect::<OrderedMap<_, _>>();
-      gb.get_state_mut(next_state_id).peek_resolve_items = resolve_states;
+  gb.iter_pending_states_mut(&|mut sb| {
+    let peek_items = sb.state_ref().get_peek_resolve_items().map(|i| i.map(|(i, v)| (i, v.clone())).collect::<Vec<_>>());
+    if let Some(peek_resolve_items) = peek_items {
+      let old_kernel_items = sb.state_ref().get_kernel_items().clone();
+      let mut new_kernel_items: Items = Default::default();
+      for (v, items) in peek_resolve_items {
+        let old_origin = Origin::Peek(v, sb.state_ref().id);
+        let new_items = items
+          .iter()
+          .map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { i.to_goto_origin() })
+          .collect::<ItemSet>();
+
+        let origin = sb.set_peek_resolve_state(&new_items);
+
+        new_kernel_items.extend(old_kernel_items.iter().filter(|i| i.origin == old_origin).map(|i| i.to_origin(origin)));
+      }
+
+      sb.set_kernel_items(new_kernel_items.into_iter());
     } else {
-      let items = gb
-        .get_state_mut(next_state_id)
-        .kernel_items
+      let items = sb
+        .state_ref()
+        .get_kernel_items()
         .iter()
         .map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { i.to_goto_origin() })
         .collect::<Items>();
 
-      set_kernel_items(gb.get_state_mut(next_state_id), items.into_iter())
+      sb.set_kernel_items(items.into_iter());
     }
-  }
+  });
 }

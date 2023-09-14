@@ -36,8 +36,9 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
 // of each item. The item's are then catagorized by these nonterminal symbols.
 // Completed items are catagorized by the default symbol.
 fn get_firsts<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<GroupedFirsts<'db>> {
-  let iter = gb.current_state().kernel_items_ref().iter().flat_map(|i| {
-    i.closure_iter().term_items_iter(gb.is_scanner()).enumerate().map(|(t, t_item)| -> TransitionPair {
+  let state = gb.current_state();
+  let iter = state.get_kernel_items().iter().flat_map(|i| {
+    i.closure_iter().term_items_iter(gb.is_scanner()).enumerate().map(|(_, t_item)| -> TransitionPair {
       if i.is_canonically_equal(&t_item) {
         (*i, *i, gb.get_mode()).into()
       } else {
@@ -112,7 +113,7 @@ fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedF
   if let Some(completed) = groups.remove(&SymbolId::Default) {
     max_precedence = max_precedence.max(completed.0);
 
-    let CompletedItemArtifacts { mut follow_pairs, default_only, .. } =
+    let CompletedItemArtifacts { follow_pairs, default_only, .. } =
       get_completed_item_artifacts(gb, completed.1.iter().map(|i| &i.kernel))?;
 
     if ____is_scan____ {
