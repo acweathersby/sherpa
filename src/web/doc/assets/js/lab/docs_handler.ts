@@ -1,6 +1,6 @@
 import { ScrollHandler } from '../controls/scroll';
-import { log } from './logger';
-import { set_grammar, set_input } from './session_storage';
+import { log } from '../common/logger';
+import { set_grammar, set_input } from '../common/session_storage';
 
 export function setData(target: HTMLElement, doc: Document = document, win: Window = window) {
     let id = target.dataset.id;

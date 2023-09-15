@@ -283,7 +283,26 @@ IGNORE { tk:space }
 
 1 + 2 * 2 ^ 2 + 2 * 2 + 1 + 1
 
+
+
+
 ```
+# The secret sauce. The one thing that makes sherpa different from all other parser compilers is it exposes itself to you for your pleasure.
+
+
+```sherpa { lab=true }
+IGNORE { c:sp  } 
+
+A => match : BYTE (65 /* A */ | 66 /* B */) { goto B }
+
+B => shift then pass
+
+============
+
+A
+
+```
+
 
 ```sherpa { lab=true }
 IGNORE { c:sp  } 

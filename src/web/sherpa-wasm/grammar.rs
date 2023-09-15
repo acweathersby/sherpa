@@ -12,7 +12,7 @@ use sherpa_rust_runtime::{
 use std::{path::PathBuf, rc::Rc};
 use wasm_bindgen::prelude::*;
 
-use crate::error::PositionedErrors;
+use crate::{error::PositionedErrors, JSParserConfig};
 
 /// A Grammar Identity
 #[wasm_bindgen]
@@ -112,14 +112,18 @@ pub fn create_rust_ast_output(js_db: &JSParserDB) -> Result<String, PositionedEr
 
 /// Temporary simple AST output implementation.
 #[wasm_bindgen]
-pub fn create_parser_states(js_db: &JSParserDB, optimize_states: bool) -> Result<JSParseStates, PositionedErrors> {
+pub fn create_parser_states(
+  js_db: &JSParserDB,
+  optimize_states: bool,
+  config: JSParserConfig,
+) -> Result<JSParseStates, PositionedErrors> {
   let mut j = Journal::new();
 
   j.set_active_report("state construction", sherpa_core::ReportType::Any);
 
   let db = js_db.0.as_ref();
 
-  let parser = db.build_parser(Default::default()).map_err(to_err)?;
+  let parser = db.build_parser(config.into()).map_err(to_err)?;
 
   let parser = if optimize_states { parser.optimize(true).map_err(to_err)? } else { parser };
 

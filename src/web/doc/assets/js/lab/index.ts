@@ -1,13 +1,13 @@
 import init_sherpa, * as sherpa from "js/sherpa/sherpa_wasm.js";
 import { basicSetup, EditorView, } from 'codemirror';
-import { log } from 'js/lab/logger';
 import { ScrollHandler } from "../controls/scroll";
 import docs_handler from './docs_handler';
 import { sherpaLang } from './sherpa_lang';
-import { parserHost } from './parser';
 import { GrammarContext } from './grammar_context';
-import { get_grammar, get_input, init, set_grammar_update_handler, set_parser_update_handler } from "./session_storage";
-import { DebuggerButton, DebuggerCheckbox } from "./debugger_buttons";
+import { get_grammar, get_input, init, set_grammar_update_handler, set_parser_update_handler } from "../common/session_storage";
+import { DebuggerButton, DebuggerCheckbox } from "./debugger/debugger_buttons";
+import { initDebugger } from "./debugger/debugger";
+import { log } from "js/common/logger";
 
 
 
@@ -55,16 +55,7 @@ export default async function (
 
     set_grammar_update_handler(grammar_str => grammar_editor.dispatch({ changes: { from: 0, to: grammar_editor.state.doc.length, insert: grammar_str } }));
 
-    const parser_editor = new EditorView({
-        doc: get_input(),
-        extensions: [basicSetup, parserHost(ctx, {
-            debugger_output,
-            debugger_entry_selection,
-        })],
-        parent: codemirror_parser_host
-    });
-
-    set_parser_update_handler(parser_str => { console.log(parser_str); parser_editor.dispatch({ changes: { from: 0, to: parser_editor.state.doc.length, insert: parser_str } }) });
+    let sherpa_debugger = initDebugger(ctx, codemirror_parser_host, debugger_entry_selection);
 
 }
 

@@ -35,7 +35,7 @@ impl Default for ParserConfig {
     Self {
       ALLOW_RECURSIVE_DESCENT: true,
       ALLOW_LR: true,
-      ALLOW_LOOKAHEAD_MERGE: false,
+      ALLOW_LOOKAHEAD_MERGE: true,
       ALLOW_PEEKING: true,
       ALLOW_FORKING: false,
       CONTEXT_FREE: false,

@@ -4,12 +4,14 @@ export class DebuggerButton {
 
     public ele: HTMLElement
 
+    removeEventListener: HTMLElement["removeEventListener"];
+    addEventListener: HTMLElement["addEventListener"];
+
     constructor(ele: HTMLElement) {
         this.ele = ele;
         this.addEventListener = ele.addEventListener.bind(ele);
+        this.removeEventListener = ele.removeEventListener.bind(ele);
     }
-
-    addEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: HTMLElement, ev: HTMLElementEventMap[K]) => any, options?: boolean | AddEventListenerOptions | undefined) { }
 
     set active(active: boolean) {
         if (active)
@@ -43,12 +45,14 @@ export class DebuggerCheckbox {
 
     public _ele: HTMLInputElement
 
+    removeEventListener: HTMLElement["removeEventListener"];
+    addEventListener: HTMLElement["addEventListener"];
+
     constructor(ele: HTMLInputElement) {
         this._ele = ele;
         this.addEventListener = ele.addEventListener.bind(ele);
+        this.removeEventListener = ele.removeEventListener.bind(ele);
     }
-
-    addEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: HTMLElement, ev: HTMLElementEventMap[K]) => any, options?: boolean | AddEventListenerOptions | undefined) { }
 
     set active(active: boolean) {
         if (active)

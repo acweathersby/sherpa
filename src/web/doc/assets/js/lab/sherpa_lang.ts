@@ -9,7 +9,7 @@ import { tags, Tag, styleTags, tagHighlighter } from '@lezer/highlight';
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language';
 import { linter, Diagnostic } from "@codemirror/lint";
 import { GrammarContext } from "./grammar_context";
-import { set_grammar } from "./session_storage";
+import { set_grammar } from "../common/session_storage";
 
 class SherpaParser extends Parser {
 
