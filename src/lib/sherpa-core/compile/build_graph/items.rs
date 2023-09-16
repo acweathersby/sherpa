@@ -124,7 +124,7 @@ fn process_closure<'db>(
     match item.get_type() {
       ItemType::Completed(_) => queue.push_back(item),
       _ => {
-        if item.is_out_of_scope() {
+        if item.origin_state.is_oos() {
           oos_queue.push_front(item);
         } else {
           follow.insert(item);

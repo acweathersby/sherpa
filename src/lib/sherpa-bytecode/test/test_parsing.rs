@@ -10,7 +10,7 @@ use super::utils::compile_and_run_grammars;
 
 #[test]
 pub fn construct_trivial_parser() -> SherpaResult<()> {
-  compile_and_run_grammars(&[r#"<> A > 'hello' ' ' 'world' "#], &[("default", "hello world", true)])
+  compile_and_run_grammars(&[r#"<> A > 'hello' ' ' 'world' "#], &[("default", "hello world", true)], Default::default())
 }
 
 #[test]
@@ -30,6 +30,7 @@ pub fn basic_scanner() -> SherpaResult<()> {
 
   "#],
     &[("default", "sym?^name", true)],
+    Default::default(),
   )
 }
 
@@ -41,6 +42,7 @@ pub fn basic_left_recursion() -> SherpaResult<()> {
           | c:num
   "#],
     &[("default", "123", true)],
+    Default::default(),
   )
 }
 
@@ -63,6 +65,7 @@ pub fn bread_crumb_parsing() -> SherpaResult<()> {
       <> I > "id"
   "#],
     &[("default", "id=>() A-test", true)],
+    Default::default(),
   )
 }
 
@@ -80,6 +83,7 @@ pub fn construct_recursive_ascent() -> SherpaResult<()> {
     <> Y > 'x' Y?
 "#],
     &[("default", "xd", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
+    Default::default(),
   )
 }
 
@@ -91,6 +95,7 @@ pub fn recursive_nonterminal() -> SherpaResult<()> {
       <> expr > expr "+" expr      | c:num 
   "#],
     &[("default", "1+2+3", true)],
+    Default::default(),
   )
 }
 
@@ -114,6 +119,7 @@ pub fn expr_term() -> SherpaResult<()> {
 
 "#],
     &[("default", "0+(1-1)", true)],
+    Default::default(),
   )
 }
 
@@ -134,6 +140,7 @@ pub fn precedence() -> SherpaResult<()> {
 
 "#],
     &[("default", "11 + 2 * 2 ^ 2 + 2 * 2 + 1 + 1", true)],
+    Default::default(),
   )
 }
 
@@ -154,11 +161,36 @@ IGNORE { c:sp  }
 
 "#],
     &[("default", "t:a >> e:b", true)],
+    Default::default(),
   )
 }
 
 #[test]
-pub fn other_symbols_requiring_peek() -> SherpaResult<()> {
+pub fn other_symbols_requiring_peek_hybrid() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> A > ( B | ":" C )(+)
+
+<> B > id "=>" c:id
+
+<> C > a_id(+)
+
+<> a_id > id "!"? 
+
+<> id > tk:id_tok
+
+<> id_tok > c:id
+
+"#],
+    &[("default", "t => g :t t", true), ("default", ":t t => a :t!", true), ("default", ":t t => g :t! t!", true)],
+    Default::default(),
+  )
+}
+
+#[test]
+pub fn other_symbols_requiring_peek_lr2() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
 IGNORE { c:sp  } 
@@ -177,12 +209,17 @@ IGNORE { c:sp  }
 
 "#],
     &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
+    ParserConfig::default().lrk(2),
   )
 }
 
 #[test]
 pub fn construct_basic_recursive_descent() -> SherpaResult<()> {
-  compile_and_run_grammars(&[r#"<> A > B ' ' C <> B > 'hello' <> C > 'world' "#], &[("default", "hello world", true)])
+  compile_and_run_grammars(
+    &[r#"<> A > B ' ' C <> B > 'hello' <> C > 'world' "#],
+    &[("default", "hello world", true)],
+    Default::default(),
+  )
 }
 
 #[test]
@@ -200,6 +237,7 @@ pub fn construct_descent_on_scanner_symbol() -> SherpaResult<()> {
     <> D > 'a' 'b'
 "#],
     &[("default", "aabcc", true)],
+    Default::default(),
   )
 }
 
@@ -212,6 +250,7 @@ pub fn tokens_with_hyphens_and_underscores() -> SherpaResult<()> {
     <> id_tok > ( "-" | "_" | c:id ) ( c:id | c:num | '_' | '-'  )(*)
 "#],
     &[("default", "test-test a", true)],
+    Default::default(),
   )
 }
 
@@ -226,6 +265,7 @@ pub fn local_rule_append() -> SherpaResult<()> {
     +> A > "two"
 "#],
     &[("default", "one", true), ("default", "two", true)],
+    Default::default(),
   )
 }
 
@@ -246,6 +286,7 @@ IMPORT A as A
 "#,
     ],
     &[("default", "one", true), ("default", "two", true)],
+    Default::default(),
   )
 }
 
@@ -270,6 +311,7 @@ IGNORE { c:sp }
 "#,
     ],
     &[("default", "A test as id end", true)],
+    Default::default(),
   )
 }
 
@@ -282,6 +324,7 @@ pub fn skipped_symbol() -> SherpaResult<()> {
     <> A > "B" "T"
 "#],
     &[("default", "BAT", true), ("default", "BT", true), ("default", "BA AT", false)],
+    Default::default(),
   )
 }
 
@@ -302,6 +345,7 @@ pub fn skipped_nonterm_token_symbol() -> SherpaResult<()> {
       ("default", "BOT", true),
       ("default", "BYTE", true),
     ],
+    Default::default(),
   )
 }
 
@@ -314,6 +358,7 @@ fn parser_of_grammar_with_append_nonterminals() -> SherpaResult<()> {
   +> A >  "D"
 "#],
     &[("default", "B", true), ("default", "C", true), ("default", "D", true), ("default", "d", false)],
+    Default::default(),
   )
 }
 
@@ -327,16 +372,18 @@ fn parsing_using_trivial_custom_state() -> SherpaResult<()> {
   
   "##],
     &[("default", "A", true), ("default", "B", true), ("default", "C", false)],
+    Default::default(),
   )
 }
 
 #[test]
 fn json_parser() -> SherpaResult<()> {
   let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
-  compile_and_run_grammars(&[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()], &[
-    ("entry", r##"[]"##, true),
-    ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true),
-  ])
+  compile_and_run_grammars(
+    &[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()],
+    &[("entry", r##"[]"##, true), ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true)],
+    Default::default(),
+  )
 }
 
 #[test]
@@ -351,6 +398,7 @@ EXPORT B as B
 <> B > "c" "b" "a"    
     "##],
     &[("A", "abc ", false), ("A", "abc", true), ("B", "cba", true), ("B", "cba", true)],
+    Default::default(),
   )
 }
 
@@ -395,6 +443,7 @@ IGNORE { c:sp c:nl }
 <> tok_identifier > ( c:id | c:num )(+)
 "##],
     &[("default", "<i -t: a>", true), ("default", "<i -test : soLongMySwanSong - store { test } <i> <i>>", true)],
+    Default::default(),
   )
 }
 
@@ -437,6 +486,7 @@ IGNORE { c:sp c:nl }
       "##,
       true,
     )],
+    Default::default(),
   )
 }
 
@@ -450,6 +500,7 @@ pub fn intermediate_exclusive_symbols() -> SherpaResult<()> {
 <> A > "test"{:1} | "tester"{:1} | 'testing'
 "##],
     &[("default", "testly", true), ("default", "testerly", true), ("default", "testingly", false)],
+    Default::default(),
   )
 }
 
@@ -471,6 +522,7 @@ pub fn c_style_comment_blocks() -> SherpaResult<()> {
       ("default", r##"/* triangle */"##, true),
       ("default", r##"walker"##, true),
     ],
+    Default::default(),
   )
 }
 
@@ -491,6 +543,7 @@ pub fn recursive_skipped_comments() -> SherpaResult<()> {
       ("default", r##"hello /* This is the only way to go /* to */ the moon */ world"##, true),
       ("default", r##"hello /* This is the only way to go /* to */ the moon / world"##, false),
     ],
+    Default::default(),
   )
 }
 
@@ -516,6 +569,7 @@ fn json_object_with_specialized_key() -> SherpaResult<()> {
       ("default", r##"{ "tester" : 2  }"##, false),
       ("default", r##"{ "test" : "mango"  }"##, false),
     ],
+    Default::default(),
   )
 }
 
@@ -528,6 +582,7 @@ fn scientific_number() -> SherpaResult<()> {
     <> number > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | '-' )? c:num(+) )?
     "##],
     &[("default", r##"2.3e-22"##, true), ("default", r##"0.3e-22"##, true)],
+    Default::default(),
   )
 }
 
@@ -543,6 +598,7 @@ fn escaped_values() -> SherpaResult<()> {
            | '\\'
         "##],
     &[("default", r##"\"##, true)],
+    Default::default(),
   )
 }
 
@@ -562,6 +618,7 @@ fn escaped_string() -> SherpaResult<()> {
       ("default", r##""1234"a"##, true),
       ("default", r##""12\"34"a"##, true),
     ],
+    Default::default(),
   )
 }
 
@@ -578,6 +635,7 @@ fn simple_newline_tracking_sanity() -> SherpaResult<()> {
     <> B > 'mango'
         "##],
     &[("default", "hello\nworld\n\ngoodby\nmango", true)],
+    Default::default(),
   )
 }
 

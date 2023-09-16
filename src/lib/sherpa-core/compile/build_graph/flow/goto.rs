@@ -1,5 +1,5 @@
 use super::super::graph::*;
-use crate::{compile::build_graph::items::get_follow, types::*, utils::hash_group_btreemap};
+use crate::{types::*, utils::hash_group_btreemap};
 use std::collections::{BTreeSet, VecDeque};
 
 use GraphBuildState::*;
@@ -60,43 +60,18 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
     let are_shifting_a_goal_nonterm = is_at_root && gb.graph().goal_items().iter().rule_nonterm_ids().contains(&target_nonterm);
     let contains_completed_kernel_items = items.iter().any(|i| kernel_base.contains(i) && i.is_penultimate());
     let contains_completed_items = items.iter().any(|i| i.is_penultimate());
-    let contains_incompleted_items = items.iter().any(|i| !i.is_penultimate());
 
-    let mut incremented_items = items
-      .iter() /* .map(|i| i.calculate_goto_distance(gb, parent_id)) */
-      .try_increment();
+    let mut incremented_items = items.iter().try_increment();
     let nterm_shift_type = StateType::NonTerminalShiftLoop;
 
-    let should_include_oos = if gb.config.ALLOW_RECURSIVE_DESCENT && false {
-      if !contains_incompleted_items {
-        false
-      } else {
-        'outer: loop {
-          // See if the follow of any of the completed items contains a completed
-          // goal item.
-          for completed in items.iter().filter(|i| i.is_penultimate()) {
-            let (_, end) = get_follow(gb, completed.try_increment(), false);
-            if end.iter().any(|i| gb.graph().item_is_goal(i)) {
-              break 'outer true;
-            }
-          }
-          break false;
-        }
-      }
-    } else {
+    let should_include_oos = {
       let contains_left_recursive_items = items.iter().any(|i| i.is_left_recursive(mode));
       kernel_nterm_ids.remove(&target_nonterm) && is_at_root && contains_left_recursive_items && !contains_completed_items
-      //&& contains_incompleted_items
     };
-
-    // TODO(anthony): Only need to do this type of look ahead if one of the
-    // following apply
-    // - There is a shift reduce conflict
-    // - There is a reduce - reduce conflict
 
     // if there is a path to complete a kernel item, then we need to inject oos
     // lookahead items to ensure that we are not ignoring local ambiguity
-    if should_include_oos && false {
+    if should_include_oos {
       let local_nonterms = incremented_items.iter().nonterm_ids_at_index(mode);
       // This state completes this NonTerminal, but there is also one or more items
       // that transitions on the goal non-terminal. The trick is determining
@@ -123,7 +98,7 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
               && !local_nonterms.contains(&i.nonterm_index())
               && !canonical_incremented_items.contains(&i.to_canonical())
           })
-          .map(|i| i.to_oos_index().to_origin(Origin::GoalCompleteOOS).to_origin_state(parent_id)),
+          .map(|i| i.to_origin(Origin::GoalCompleteOOS).to_origin_state(parent_id)),
       );
 
       incremented_items.extend(oos_items);
