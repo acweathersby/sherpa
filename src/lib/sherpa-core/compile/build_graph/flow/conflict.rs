@@ -33,15 +33,15 @@ pub(super) enum ShiftReduceConflictResolution {
 const MAX_EVAL_K: usize = 8;
 pub(super) enum ReduceReduceConflictResolution<'db> {
   Reduce(Item<'db>),
-  Fork(Follows<'db>),
-  Peek(u16, Follows<'db>),
+  Fork(Lookaheads<'db>),
+  Peek(u16, Lookaheads<'db>),
   Nothing,
 }
 
 pub(super) fn resolve_reduce_reduce_conflict<'db>(
   gb: &mut GraphBuilder<'db>,
   prec_sym: PrecedentSymbol,
-  follow_pairs: Follows<'db>,
+  follow_pairs: Lookaheads<'db>,
 ) -> SherpaResult<ReduceReduceConflictResolution<'db>> {
   if prec_sym.sym().is_default() {
     Ok(ReduceReduceConflictResolution::Nothing)
@@ -185,6 +185,7 @@ fn get_follow_artifacts<'db>(
     let items = follow.iter().flat_map(|i| i.closure_iter_align(*i));
 
     syms.extend(items.clone().filter_map(|i| i.term_index_at_sym(gb.get_mode())));
+
     out.extend(items);
   }
   (out, syms)
@@ -234,9 +235,6 @@ fn calculate_k_multi<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
   for k in 2..=(max_eval) {
     let mut queue = groups.iter().map(|items| get_follow_artifacts(&items.try_increment(), gb)).collect::<Vec<_>>();
 
-    //queue.iter().enumerate().for_each(|(i, f)| f.0._debug_print_(&format!("set {}
-
-    // at k={}", i, k)));
     let sym_table = queue.iter().flat_map(|(_, syms)| syms.iter()).fold(OrderedMap::<DBTermKey, u32>::new(), |mut map, sym| {
       (*map.entry(*sym).or_default()) += 1;
       map
@@ -285,7 +283,7 @@ pub(crate) fn resolve_conflicting_tokens<'a, 'db: 'a, T: TransitionPairRefIter<'
   let base_precedence_groups = hash_group_btreemap(token_precedence_groups, |_, ((_, sym), _)| sym.conflict_precedence());
 
   if let Some((_, groups)) = base_precedence_groups.into_iter().rev().next() {
-    let mut _completed: Option<&Follows> = None;
+    let mut _completed: Option<&Lookaheads> = None;
 
     if groups.len() == 1 {
       _completed = Some(groups.values().next().unwrap());

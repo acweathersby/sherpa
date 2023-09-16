@@ -155,7 +155,6 @@ fn create_parse_states_from_prod<'db>(
     states.insert(name, Box::new(state));
   } else {
     let start_items = ItemSet::start_items(nterm_key, db).to_origin(Origin::NonTermGoal(nterm_key));
-
     match nterm_sym {
       SymbolId::NonTerminal { .. } => {
         let (class, graph) = build(j, db.nonterm_guid_name(nterm_key), GraphType::Parser, start_items, db, config)?;

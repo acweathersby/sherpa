@@ -80,13 +80,19 @@ pub(crate) fn get_follow_internal<'db>(
       } else {
         let origin_state_id = c_item.origin_state;
         let origin = c_item.origin;
-        let goal = c_item.goal;
+        let lane = c_item.lane;
         let state = gb.get_state(c_item.origin_state);
+
+        //for item in state.get_kernel_items().iter() {
+        //  debug_assert_eq!(item.lane.get_curr(), item.index().into(), "{:?} {:?}",
+        // item.lane, item.index());
+        //}
+
         let closure = state
           .get_kernel_items()
           .iter()
-          .filter(|kernel| kernel.goal == goal)
-          .flat_map(|kernel| kernel.closure_iter_align(kernel.to_origin_state(origin_state_id).to_origin(origin)))
+          .filter(|k_i| lane.is_from_lane(k_i.lane))
+          .flat_map(|k_i| k_i.closure_iter_align_with_lane_split(k_i.to_origin_state(origin_state_id).to_origin(origin)))
           .filter(|i| i.nonterm_index_at_sym(mode) == Some(nterm))
           .filter_map(|i| i.increment());
         process_closure(closure, &mut queue, &mut follow)
@@ -122,7 +128,12 @@ fn process_closure<'db>(
   for item in closure {
     closure_yielded_items |= true;
     match item.get_type() {
-      ItemType::Completed(_) => queue.push_back(item),
+      ItemType::Completed(_) => {
+        if item.lane.has_split() {
+          queue.push_back(item.to_lane(item.lane.to_prev()))
+        }
+        queue.push_back(item)
+      }
       _ => {
         if item.origin_state.is_oos() {
           oos_queue.push_front(item);
@@ -148,10 +159,11 @@ pub(crate) fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefConta
   }
 
   for k_i in completed {
-    let (f, _) = get_follow(gb, *k_i, false);
-
+    let (f, d) = get_follow_internal(gb, *k_i, false);
     if f.is_empty() {
+      debug_assert!(!d.is_empty());
       default_only_items.insert(*k_i);
+      follow_pairs.extend([create_pair(*k_i, *k_i)]);
     } else {
       for k_follow in f {
         if let Origin::__OOS_CLOSURE__ = k_follow.origin {
@@ -161,7 +173,10 @@ pub(crate) fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefConta
         } else {
           follow_pairs.extend(
             k_follow
-              .closure_iter_align(k_follow.to_origin_state(gb.current_state_id()).to_origin(k_follow.origin))
+              .closure_iter_align(
+                //k_follow.to_lane(k_follow.lane.to_curr()).to_origin_state(gb.current_state_id()).to_origin(k_follow.origin),
+                k_follow.to_origin(k_i.origin),
+              )
               .map(|i| create_pair(*k_i, i)),
           )
         }
@@ -169,41 +184,7 @@ pub(crate) fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefConta
     }
   }
 
-  SherpaResult::Ok(CompletedItemArtifacts { follow_pairs, default_only: default_only_items })
-}
-
-// Inserts out of scope sentinel items into the existing
-// items groups if we are in scanner mode and the item that
-// was completed belongs to the parse state goal set.
-pub(super) fn _get_oos_follow_from_completed<'db>(
-  gb: &mut GraphBuilder<'db>,
-  completed_items: &Items<'db>,
-  handler: &mut dyn FnMut(Follows<'db>),
-) -> SherpaResult<()> {
-  let mut out = OrderedSet::new();
-  for completed_item in completed_items {
-    if !completed_item.is_out_of_scope() {
-      let (_, completed) = get_follow(gb, *completed_item, false);
-
-      let goals: ItemSet = get_goal_items_from_completed(&completed, gb.graph());
-
-      for goal in goals {
-        let (follow, _) = get_follow(
-          gb,
-          goal
-            .to_complete()
-            .to_origin(if gb.is_scanner() { Origin::ScanCompleteOOS } else { Origin::GoalCompleteOOS })
-            .to_oos_index(),
-          false,
-        );
-        out.extend(&mut follow.into_iter().map(|f| -> Follow { (*completed_item, f, gb.get_mode()).into() }));
-      }
-    }
-  }
-  if !out.is_empty() {
-    handler(out.into_iter().collect());
-  }
-  SherpaResult::Ok(())
+  SherpaResult::Ok(CompletedItemArtifacts { lookahead_pairs: follow_pairs, default_only: default_only_items })
 }
 
 pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items<'db>, graph: &GraphHost<'db>) -> ItemSet<'db> {
@@ -211,7 +192,7 @@ pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items<'db>, gr
 }
 
 pub(super) fn _merge_follow_items_into_group<'db>(
-  follows: &Vec<Follow<'db>>,
+  follows: &Vec<Lookahead<'db>>,
   _par: StateId,
   firsts_groups: &mut GroupedFirsts<'db>,
 ) {
@@ -236,8 +217,8 @@ pub(super) fn get_set_of_occluding_token_items<'db>(
   into_sym: &SymbolId,
   into_group: &TransitionGroup<'db>,
   groups: &GroupedFirsts<'db>,
-) -> Firsts<'db> {
-  let mut occluding = Firsts::new();
+) -> Lookaheads<'db> {
+  let mut occluding = Lookaheads::new();
   let into_prec = into_group.0;
 
   if into_prec >= 9999 {

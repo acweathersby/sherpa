@@ -22,7 +22,15 @@ pub(crate) fn build<'follow, 'db: 'follow>(
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
   if !gb.is_scanner() {
-    crate::test::utils::write_debug_file(db, "parse_graph.tmp", gb.graph()._debug_string_(), true)?;
+    crate::test::utils::write_debug_file(
+      db,
+      "parse_graph.tmp",
+      "----------------------------------------------\n".to_string()
+        + &gb.get_classification().get_type()
+        + "\n"
+        + &gb.graph()._debug_string_(),
+      true,
+    )?;
   } else {
     crate::test::utils::write_debug_file(db, "scanner_graph.tmp", gb.graph()._debug_string_(), true)?;
   }

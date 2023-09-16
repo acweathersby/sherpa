@@ -104,11 +104,11 @@ class GrammarDocListener extends FlowNode<DebuggerData> {
                     this.configure_entry_options(data.grammar_ctx.db, data.debugger_entry_selection)
                     return [this, new ParseBuilder]
                 } else {
-                    return [this, new DebuggerError("Grammar is invalid")];
+                    return [this, new DebuggerError("<<< grammar is invalid <<<")];
                 }
             };
             case "malformed_grammar":
-                return [this, new DebuggerError("grammar is invalid")];
+                return [this, new DebuggerError("<<< grammar is invalid <<<")];
         }
 
         return [this];

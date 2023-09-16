@@ -9,8 +9,7 @@ use std::collections::{HashMap, VecDeque};
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ParserDatabase {
   /// The name of the parser as defined by the `NAME <name>` preamble in
-  /// the root grammar, or by the filename stem in the path for the root
-  /// grammar.
+  /// the root grammar, or by the filename stem of of the root grammar's path.
   pub name: IString,
   /// Table of symbols.
   nonterm_symbols: Array<SymbolId>,
@@ -39,9 +38,12 @@ pub struct ParserDatabase {
   /// the case if, for example, the database is comprised of rules that
   /// reference non-extant non-terminals.
   valid: bool,
+  /// items
+
   /// All items that follow a non-terminal
   follow_items: Array<Array<StaticItem>>,
-  /// Item closures
+  /// Item closures, stores the closure of all items, excluding the closure's of
+  /// items that are complete.
   item_closures: Array<Array<Array<StaticItem>>>,
   ///NonTerminal Recursion Type
   recursion_types: Array<u8>,
@@ -427,9 +429,10 @@ impl ParserDatabase {
       .collect()
   }
 
-  /// Returns an iterator of all items that transition on a givin nonterminal,
-  /// including items that are derived from reducing to another non-terminal
-  /// after transitioning over the initial non-terminal
+  /// Returns an iterator of all items that are `_ = ...•Aa`  for some
+  /// [DBNonTermKey] `A`, or in other words this returns the list of items that
+  /// would shift over the [DBNonTermKey] `A`. If an item is `B = ...•A`, then
+  /// this also returns items that are `_ = ...•Ba`
   pub fn nonterm_follow_items<'db>(&'db self, nonterm: DBNonTermKey) -> impl Iterator<Item = Item<'db>> + Clone {
     self.follow_items[nonterm.0 as usize].iter().map(|i| Item::from_static(*i, self))
   }
@@ -548,6 +551,23 @@ pub enum RecursionType {
   LeftRecursive = 1,
   RightRecursive = 2,
   LeftRightRecursive = 3,
+}
+
+impl RecursionType {
+  #[inline]
+  pub fn is_recursive(&self) -> bool {
+    self.is_left_recursive() || self.is_right_recursive()
+  }
+
+  #[inline]
+  pub fn is_left_recursive(&self) -> bool {
+    matches!(self, Self::LeftRecursive | Self::LeftRightRecursive)
+  }
+
+  #[inline]
+  pub fn is_right_recursive(&self) -> bool {
+    matches!(self, Self::RightRecursive | Self::LeftRightRecursive)
+  }
 }
 
 #[cfg_attr(debug_assertions, derive(Debug))]

@@ -14,6 +14,35 @@ pub fn construct_trivial_parser() -> SherpaResult<()> {
 }
 
 #[test]
+pub fn right_recursive() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    <> E > "d" E | "b"
+
+  "#],
+    &[("default", "ddb", true)],
+    ParserConfig::default().llk(2),
+  )
+}
+
+#[test]
+pub fn identifier() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+      <> id > tk:identifier
+
+      <> identifier > "_"(+) ( c:id | c:num )  id_rest(*)
+          | c:id id_rest(*)
+
+      <> id_rest > c:id | c:num | '-' | '_'
+
+  "#],
+    &[("default", "a_b", true)],
+    Default::default(),
+  )
+}
+
+#[test]
 pub fn basic_scanner() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
@@ -83,7 +112,7 @@ pub fn construct_recursive_ascent() -> SherpaResult<()> {
     <> Y > 'x' Y?
 "#],
     &[("default", "xd", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
-    Default::default(),
+    ParserConfig::default().lalr(),
   )
 }
 
@@ -211,6 +240,32 @@ IGNORE { c:sp  }
     &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
     ParserConfig::default().lrk(2),
   )
+}
+
+#[test]
+pub fn other_symbols_requiring_peek_ll() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> A > ( B | ":" C )(+)
+
+<> B > id "=>" c:id
+
+<> C > a_id(+)
+
+<> a_id > id "!"? 
+
+<> id > tk:id_tok
+
+<> id_tok > c:id
+
+"#],
+    &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
+    ParserConfig::default().llk(8),
+  )
+  .expect_err("Should fail to compile LL/RD parser");
+  Ok(())
 }
 
 #[test]

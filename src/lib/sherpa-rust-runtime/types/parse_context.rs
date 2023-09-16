@@ -26,7 +26,7 @@ impl Default for Goto {
   }
 }
 
-enum Symbol {
+/* enum Symbol {
   Skip(Token),
   Terminal(Token),
   Nonterminal(u32, Box<Symbol>, Box<Vec<Symbol>>),
@@ -63,7 +63,7 @@ pub struct ParseStack {
 
 pub struct ParseStacks {
   stacks: Box<ParseStack>,
-}
+} */
 
 /// This function should set up a new input window,
 /// Respecting the the relative offsets of the parsing pointers.

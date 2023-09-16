@@ -53,7 +53,6 @@ export class TransportHandler extends FlowNode<DebuggerData> {
         this.active_state_source = '';
         this.last_step = null;
         this.active_scanner_state_source = '';
-        this.step_to_next_action = false;
         this.parser_off = [0, 0];
         this.scanner_off = [0, 0];
         this.cst_nodes = [];
@@ -122,7 +121,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
         }
     }
 
-    step(data: DebuggerData) {
+    step(data: DebuggerData, step_to_next_action: boolean = false): void {
         let { states, bytecode, grammar_ctx: { db }, parser_editor } = data;
 
         let parser = this.parser;
@@ -145,7 +144,6 @@ export class TransportHandler extends FlowNode<DebuggerData> {
 
         let step;
         outer: while ((step = this.debugger_steps[this.debugger_offset])) {
-
             switch (step.type) {
                 case "ExecuteState": {
                     let ctx = <sherpa.JSCTXState>step.ctx;
@@ -208,7 +206,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
                         this.active_scanner_state_source = "";
                     }
 
-                    if (this.step_to_next_action) { break; }
+                    if (step_to_next_action) { break; }
 
                     this.printInstruction(data);
 
@@ -222,7 +220,10 @@ export class TransportHandler extends FlowNode<DebuggerData> {
                 };
                 case "Skip": {
                     this.printInstruction(data);
-                } break outer;;
+                    if (step_to_next_action) {
+                        return this.step(data, true)
+                    }
+                } break outer;
                 case "Shift": {
                     let { offset_start, offset_end } = step;
                     this.cst_nodes.push(new CSTNode(input.slice(offset_start, offset_end), "", true));
@@ -296,6 +297,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
 
             this.debugger_offset++;
         }
+
     }
 
     update(t: string, data: DebuggerData): FlowNode<DebuggerData>[] {
@@ -329,36 +331,42 @@ export class TransportHandler extends FlowNode<DebuggerData> {
                 }
 
                 this.debugger_offset = -1;
-                this.PARSING = true;
                 this.resetData(data);
+                this.PARSING = true;
 
                 return [...base_return, new EnableTransportButtons];
             }
             case "TransportHandler_stepInstruction": {
-                this.step_to_next_action = false;
                 this.step(data);
+                return base_return
             }
             case "TransportHandler_stepAction": {
-                this.step_to_next_action = true;
-                this.step(data);
-                this.step_to_next_action = false;
+                this.step(data, true);
+                return base_return
             }
             case "TransportHandler_togglePlay": {
                 this.allow_play = !this.allow_play;
                 if (this.allow_play) {
                     this.emit("TransportHandler_play");
                 }
+                return base_return
             }
             case "TransportHandler_step": {
                 if (this.PARSING)
                     this.step(data);
+                return base_return
             }
             case "TransportHandler_play": {
-                if (this.allow_play && this.PARSING) { this.step(data); this.emit("TransportHandler_play"); } else {
+                if (this.allow_play && this.PARSING) {
+                    for (let i = 0; i < 5 && this.PARSING; i++) { this.step(data, true); }
+                    if (this.PARSING) { this.emit("TransportHandler_play"); }
+                } else {
                     this.allow_play = false;
                 }
+                return base_return
             }
             case "Input_changed": {
+                console.log("AAAAAAAAAAAAAA")
                 return base_return;
             }
             case "TransportHandler_disableTransportButtons":

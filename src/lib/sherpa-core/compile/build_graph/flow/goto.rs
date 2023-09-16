@@ -5,21 +5,34 @@ use std::collections::{BTreeSet, VecDeque};
 use GraphBuildState::*;
 
 pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db>) -> SherpaResult<bool> {
-  if gb.is_scanner() || gb.current_state_id().state().currently_peeking() {
+  if gb.is_scanner() || !gb.config.ALLOW_LR || gb.current_state_id().state().currently_peeking() {
     return Ok(false);
   };
 
   let mode = gb.get_mode();
   let db = gb.db;
   let kernel_base: ItemSet = gb.current_state().get_kernel_items().iter().inscope_items();
+
+  let conanical: ItemSet =
+    if gb.current_state_id().is_root() { kernel_base.iter().map(|i| i.to_canonical()).collect() } else { Default::default() };
+  let conanical = &conanical; // Make a reference to allow its use within closures.
+
   let state_id = gb.current_state_id();
   let origin = Origin::Goto(state_id);
 
+  let mut offset = kernel_base.iter().map(|i| i.lane.get_curr()).max().unwrap_or_default();
+  let offset = &mut offset;
+
   let mut nterm_items = kernel_base.iter().nonterm_items::<ItemSet>(mode);
   nterm_items.extend(kernel_base.iter().filter(|i| !i.is_complete()).flat_map(|i| {
-    db.get_closure(i)
-      .filter(move |i| i.is_nonterm(mode))
-      .map(move |a| a.to_goal(i.goal).to_origin(origin).to_origin_state(state_id).to_goto_origin())
+    let basis = i.to_origin(origin).to_origin_state(state_id);
+    let closure = i
+      .closure_iter_align_with_lane_split(basis)
+      .filter(move |i| i.is_nonterm(mode) && !conanical.contains(&i.to_canonical()))
+      .enumerate()
+      .map(|(index, i)| (index > 0).then_some(i.to_goto_origin()).unwrap_or(i));
+    *offset = closure.clone().map(|i| i.lane.get_curr()).max().unwrap_or_default();
+    closure
   }));
 
   let out_items = gb.get_pending_items();
@@ -33,7 +46,8 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
     out_items.into_iter().filter(|i| i.origin_state == parent_id && (!kernel_base.contains(i) || i.is_start())).collect()
   };
 
-  if out_items.is_empty() || (nterm_items.len() <= 1 && nterm_items.first().is_some_and(|i| !i.is_left_recursive(mode))) {
+  if out_items.is_empty()
+  {
     return Ok(false);
   }
 
@@ -88,13 +102,10 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
       let canonical_incremented_items = incremented_items.iter().to_canonical::<ItemSet>();
       let oos_items = ItemSet::from_iter(
         db.nonterm_follow_items(*target_nonterm)
-          .filter_map(|i| match i.get_type() {
-            ItemType::Completed(_nterm) => None,
-            _ => Some(i.closure_iter()),
-          })
-          .flatten()
+          .filter_map(|i| i.increment())
           .filter(|i| {
-            i.nonterm_index() != *target_nonterm
+            i.nonterm_index_at_sym(mode) == Some(*target_nonterm)
+              && i.nonterm_index() != *target_nonterm
               && !local_nonterms.contains(&i.nonterm_index())
               && !canonical_incremented_items.contains(&i.to_canonical())
           })
@@ -137,7 +148,7 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
 
   increment_gotos(gb);
 
-  gb.set_classification(ParserClassification { gotos_present: true, ..Default::default() });
+  gb.set_classification(ParserClassification { gotos_present: true, bottom_up: true, ..Default::default() });
 
   SherpaResult::Ok(true)
 }

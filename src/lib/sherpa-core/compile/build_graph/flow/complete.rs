@@ -10,7 +10,7 @@ use GraphBuildState::*;
 
 pub(crate) fn handle_completed_item<'db, 'follow>(
   gb: &mut GraphBuilder<'db>,
-  completed: Follows<'db>,
+  completed: Lookaheads<'db>,
   sym: PrecedentSymbol,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
@@ -18,52 +18,56 @@ pub(crate) fn handle_completed_item<'db, 'follow>(
   let first = completed[0];
 
   if first.kernel.origin == Origin::GoalCompleteOOS {
-    gb.create_state::<DefaultIter>(Normal, sym, StateType::NonTermCompleteOOS, None).to_leaf()
+    gb.create_state::<DefaultIter>(Normal, sym, StateType::NonTermCompleteOOS, None).to_leaf();
   } else if ____is_scan____ {
     complete_scan(completed, gb, sym, first)
   } else {
-    complete_regular(first, gb, sym)
+    complete_regular(completed, gb, sym)
   }
 
   SherpaResult::Ok(())
 }
 
-fn complete_regular<'db>(first: TransitionPair<'db>, gb: &mut GraphBuilder<'db>, sym: PrecedentSymbol) {
-  let completed_item = first.kernel;
+fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuilder<'db>, sym: PrecedentSymbol) {
+  let root_item = completed[0].kernel;
   let ____is_scan____ = gb.is_scanner();
   let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
   let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
   let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false; // Forking is disabled
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
 
-  if !gb.graph().item_is_goal(&completed_item) && !completed_item.from_goto_origin {
-    let (follow, completed_items) = get_follow(gb, completed_item, true);
+  if !gb.graph().item_is_goal(&root_item) && !root_item.from_goto_origin {
+    let (follow, completed_items): (Vec<Items>, Vec<Items>) =
+      completed.iter().into_iter().map(|i| get_follow(gb, i.kernel, true)).unzip();
 
-    if follow.len() < 1 && completed_items.len() < 1 {
+    let follow = follow.into_iter().flatten();
+    let completed_items = completed_items.into_iter().flatten();
+
+    if follow.clone().next().is_none() && completed_items.clone().next().is_none() {
       panic!("TODO")
     } else {
       let mut state = gb.create_state(
         Normal,
         sym,
-        StateType::ReduceComplete(completed_item.rule_id, completed_item.goto_distance as usize),
+        StateType::ReduceComplete(root_item.rule_id, root_item.goto_distance as usize),
         Some(
           follow
             .into_iter()
-            .chain(completed_items.into_iter().filter(|i| !i.is_out_of_scope() && !i.is_canonically_equal(&completed_item)))
+            .chain(completed_items.into_iter().filter(|i| !i.is_out_of_scope() && !i.is_canonically_equal(&root_item)))
             .into_iter(),
         ),
       );
-      state.set_reduce_item(completed_item);
+      state.set_reduce_item(root_item);
       state.to_pending();
     }
   } else {
     let mut state = gb.create_state(
       Normal,
       sym,
-      StateType::Reduce(completed_item.rule_id, completed_item.goto_distance as usize),
-      Some([completed_item].into_iter()),
+      StateType::Reduce(root_item.rule_id, root_item.goto_distance as usize),
+      Some([root_item].into_iter()),
     );
-    state.set_reduce_item(completed_item);
+    state.set_reduce_item(root_item);
     state.to_leaf();
   }
 }
@@ -79,9 +83,10 @@ fn complete_scan<'db>(
 
   let follow = follow.into_iter().flatten().collect::<Items>();
   let completed_items = completed_items.into_iter().flatten().collect::<Items>();
+
   let goals = get_goal_items_from_completed(&completed_items, gb.graph());
   let is_continue = !follow.is_empty();
-  let is_goal = !goals.is_empty();
+  let completes_goal = !goals.is_empty();
 
   let mut state = gb.create_state(
     Normal,
@@ -97,13 +102,14 @@ fn complete_scan<'db>(
 
   state.set_reduce_item(first.kernel);
 
-  if is_continue {
-    if is_goal {
-      state.to_enqueued_leaf();
+  let _ = if is_continue {
+    if completes_goal {
+      state.to_enqueued_leaf()
     } else {
-      state.to_enqueued();
+      state.to_enqueued()
     }
   } else {
-    state.to_leaf()
-  }
+    debug_assert!(completes_goal);
+    Some(state.to_leaf())
+  };
 }

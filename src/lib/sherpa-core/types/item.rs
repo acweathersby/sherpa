@@ -2,6 +2,8 @@ use super::super::types::*;
 use crate::compile::build_graph::graph::*;
 use std::hash::Hash;
 
+const OUT_SCOPE_LANE: u32 = 0x80_00_00_00;
+
 pub enum ItemType {
   Terminal(SymbolId),
   NonTerminal(DBNonTermKey),
@@ -11,116 +13,141 @@ pub enum ItemType {
 
 pub type StaticItem = (DBRuleKey, u16);
 
-/// Represents either a FIRST or a FOLLOW depending on whether the root item
-/// is incomplete or not.
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TransitionPair<'db> {
-  pub kernel: Item<'db>,
-  pub next:   Item<'db>,
-  pub sym:    SymbolId,
-  pub prec:   u16,
-}
+/// Stores an item in a compact form.
+#[derive(Clone, Copy)]
+pub struct ItemIndex(u32);
 
-pub type First<'db> = TransitionPair<'db>;
-pub type Firsts<'db> = Array<First<'db>>;
-pub type Follow<'db> = TransitionPair<'db>;
-pub type Follows<'db> = Array<Follow<'db>>;
+impl ItemIndex {
+  const RULE_SHIFT: u32 = 10;
 
-impl<'db> TransitionPair<'db> {
-  pub fn is_kernel_terminal(&self) -> bool {
-    !self.is_complete() && self.kernel.is_canonically_equal(&self.next)
-  }
-
-  pub fn is_complete(&self) -> bool {
-    self.kernel.is_complete() && self.kernel.is_canonically_equal(&self.next)
-  }
-
-  pub fn is_out_of_scope(&self) -> bool {
-    self.kernel.is_out_of_scope()
-  }
-
-  #[cfg(debug_assertions)]
-  pub fn _debug_string_(&self) -> String {
-    format!(
-      "\nsym {}{{{}}} oos:{}\n  base: {}\n  next: {}",
-      self.sym.debug_string(self.kernel.db),
-      self.prec,
-      self.is_out_of_scope(),
-      self.kernel._debug_string_(),
-      self.next._debug_string_()
-    )
+  /// Returns a tuple comprised of the item's rule and symbol offset
+  pub fn get_parts(&self) -> StaticItem {
+    (((self.0 >> 10) as usize).into(), (self.0 & 0x3FF) as u16)
   }
 }
 
-impl<'db> From<(Item<'db>, Item<'db>, GraphType)> for TransitionPair<'db> {
-  fn from((root, next, mode): (Item<'db>, Item<'db>, GraphType)) -> Self {
-    Self {
-      kernel: root,
-      next,
-      sym: if next.is_complete() { SymbolId::Default } else { next.sym() },
-      prec: next.precedence(mode),
+impl<'db> From<(u32, u32)> for ItemIndex {
+  #[inline(always)]
+  fn from((rule_id, sym_id): (u32, u32)) -> Self {
+    debug_assert!(rule_id < (1 << (32 - ItemIndex::RULE_SHIFT)), "Rule index is too high to store in this form");
+    debug_assert!(sym_id < (1 << ItemIndex::RULE_SHIFT), "Symbol index is too high to store in this form");
+    Self((rule_id << ItemIndex::RULE_SHIFT) | ((sym_id & 0b1111_1111_1111) as u32))
+  }
+}
+
+impl<'db> From<Item<'db>> for ItemIndex {
+  #[inline(always)]
+  fn from(i: Item<'db>) -> Self {
+    Self::from((i.rule_id.into(), i.sym_index as u32))
+  }
+}
+
+impl From<u32> for ItemIndex {
+  fn from(value: u32) -> Self {
+    Self(value)
+  }
+}
+
+impl Into<u32> for ItemIndex {
+  fn into(self) -> u32 {
+    self.0
+  }
+}
+
+#[cfg(debug_assertions)]
+impl std::fmt::Debug for ItemIndex {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let (r, off) = self.get_parts();
+    f.write_str(&("r".to_string() + &r.to_string() + "•" + &off.to_string()))
+  }
+}
+
+#[derive(Clone, Copy, Default, Hash, Eq, PartialOrd, Ord, PartialEq)]
+pub struct ItemLane {
+  /// The previous lane the item was in. This usually a kernel
+  /// item from which the closure of this item was derived.
+  prev: u32,
+  /// The current lane the item is in
+  curr: u32,
+}
+
+impl ItemLane {
+  pub fn is_from_lane(&self, other: Self) -> bool {
+    self.curr == other.curr || self.prev == other.curr
+  }
+
+  pub fn new(lane: ItemIndex) -> Self {
+    Self { prev: lane.into(), curr: lane.into() }
+  }
+
+  pub fn oos() -> Self {
+    Self { prev: OUT_SCOPE_LANE, curr: OUT_SCOPE_LANE }
+  }
+
+  pub fn is_oos(&self) -> bool {
+    (self.prev & OUT_SCOPE_LANE) == OUT_SCOPE_LANE
+  }
+
+  pub fn is_oos_closure(&self) -> bool {
+    self.is_oos() && self.curr != OUT_SCOPE_LANE
+  }
+
+  pub fn has_split(&self) -> bool {
+    self.curr != self.prev
+  }
+
+  pub fn get_curr(&self) -> u32 {
+    self.curr & !OUT_SCOPE_LANE
+  }
+
+  pub fn get_prev(&self) -> u32 {
+    self.prev & !OUT_SCOPE_LANE
+  }
+
+  pub fn to_prev(&self) -> Self {
+    Self { prev: self.prev, curr: self.prev }
+  }
+
+  pub fn to_curr(&self) -> Self {
+    Self { prev: self.curr, curr: self.curr }
+  }
+
+  pub fn split(&self, new_lane: ItemIndex) -> Self {
+    if self.is_oos() {
+      //Self { prev: self.curr | OUT_SCOPE_LANE, curr: new_lane | OUT_SCOPE_LANE }
+      *self
+    } else {
+      Self { prev: self.curr, curr: new_lane.into() }
     }
   }
 }
 
-impl<'db> From<(&Item<'db>, &Item<'db>, GraphType)> for TransitionPair<'db> {
-  fn from((root, next, mode): (&Item<'db>, &Item<'db>, GraphType)) -> Self {
-    (*root, *next, mode).into()
+#[cfg(debug_assertions)]
+impl std::fmt::Debug for ItemLane {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut t = f.debug_tuple("");
+
+    if self.is_oos() {
+      if self.has_split() {
+        t.field(&self.prev);
+        t.field(&self.curr);
+      } else {
+        t.field(&self.curr);
+      }
+    } else {
+      let curr: ItemIndex = self.curr.into();
+      let prev: ItemIndex = self.prev.into();
+      if self.has_split() {
+        t.field(&prev);
+        t.field(&curr);
+      } else {
+        t.field(&curr);
+      }
+    }
+    t.finish()
   }
 }
 
-pub trait TransitionPairIter<'db>: Iterator<Item = TransitionPair<'db>> + Sized + Clone {
-  fn to_next(self) -> impl ItemContainerIter<'db> {
-    self.map(|i| i.next)
-  }
-
-  fn to_root(self) -> impl ItemContainerIter<'db> {
-    self.map(|i| i.kernel)
-  }
-}
-
-impl<'db, T: Iterator<Item = TransitionPair<'db>> + Sized + Clone> TransitionPairIter<'db> for T {}
-
-pub trait TransitionPairRefIter<'a, 'db: 'a>: Iterator<Item = &'a TransitionPair<'db>> + Sized + Clone {
-  fn to_next(self) -> impl ItemRefContainerIter<'a, 'db> {
-    self.map(|i| &i.next)
-  }
-
-  fn to_kernel(self) -> impl ItemRefContainerIter<'a, 'db> {
-    self.map(|i| &i.kernel)
-  }
-
-  fn max_precedence(self) -> u16 {
-    self.map(|i| i.prec).max().unwrap_or_default()
-  }
-
-  fn in_scope(self) -> impl TransitionPairRefIter<'a, 'db> {
-    self.filter(|i| !i.is_out_of_scope())
-  }
-
-  fn out_scope(self) -> impl TransitionPairRefIter<'a, 'db> {
-    self.filter(|i| i.is_out_of_scope())
-  }
-
-  fn kernel_nonterm_sym(self, mode: GraphType) -> OrderedSet<Option<DBNonTermKey>> {
-    self.map(|p| p.kernel.nonterm_index_at_sym(mode)).collect()
-  }
-
-  #[cfg(debug_assertions)]
-  fn _debug_print_(self, message: &str) {
-    println!("=====> {}\n{}\n=====<\n", message, self._debug_string_())
-  }
-
-  #[cfg(debug_assertions)]
-  fn _debug_string_(self) -> String {
-    format!("{}", self.map(|i| i._debug_string_()).collect::<Vec<_>>().join("\n"))
-  }
-}
-
-impl<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>> + Sized + Clone> TransitionPairRefIter<'a, 'db> for T {}
-
-const OUT_SCOPE_LANE: u32 = 0x80_00_00_00;
 #[derive(Clone, Copy)]
 pub struct Item<'db> {
   /// The non-terminal or token that the item directly or
@@ -132,7 +159,7 @@ pub struct Item<'db> {
   /// The index location of the item's Rule
   pub rule_id: DBRuleKey,
   /// The graph goal lane
-  pub goal: u32,
+  pub lane: ItemLane,
   /// The number of symbols that comprise the items's Rule
   pub len: u16,
   /// The index of the active symbol. If `len == sym_index` then
@@ -149,9 +176,18 @@ impl<'db> std::fmt::Debug for Item<'db> {
     let mut s = f.debug_struct("ItemRef");
     s.field("val", &self._debug_string_());
     s.field("origin", &self.origin);
-    s.field("goal", &self.goal);
+    s.field("lane", &self.lane);
     s.field("origin_state", &self.origin_state);
     s.finish()
+  }
+}
+
+impl<'db> From<(ItemIndex, &'db ParserDatabase)> for Item<'db> {
+  fn from(value: (ItemIndex, &'db ParserDatabase)) -> Self {
+    let (rule_id, sym_index) = value.0.get_parts();
+    let mut item = Self::from_rule(rule_id.into(), value.1);
+    item.sym_index = sym_index as u16;
+    item
   }
 }
 
@@ -161,7 +197,7 @@ impl<'db> Hash for Item<'db> {
       self.rule_id,
       self.origin,
       self.origin_state,
-      self.goal,
+      self.lane,
       self.len,
       self.sym_index,
       self.token_precedence(),
@@ -173,8 +209,8 @@ impl<'db> Hash for Item<'db> {
 
 impl<'a> PartialEq for Item<'a> {
   fn eq(&self, other: &Self) -> bool {
-    let a = (self.rule_id, self.origin, self.goal, self.len, self.sym_index, self.origin_state);
-    let b = (other.rule_id, other.origin, other.goal, other.len, other.sym_index, other.origin_state);
+    let a = (self.rule_id, self.origin, self.lane, self.len, self.sym_index, self.origin_state);
+    let b = (other.rule_id, other.origin, other.lane, other.len, other.sym_index, other.origin_state);
     a == b
   }
 }
@@ -183,8 +219,8 @@ impl<'a> Eq for Item<'a> {}
 
 impl<'a> PartialOrd for Item<'a> {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    let a = (self.rule_id, self.origin, self.goal, self.len, self.sym_index, self.origin_state);
-    let b = (other.rule_id, other.origin, other.goal, other.len, other.sym_index, other.origin_state);
+    let a = (self.origin, self.rule_id, self.lane, self.len, self.sym_index, self.origin_state);
+    let b = (other.origin, other.rule_id, other.lane, other.len, other.sym_index, other.origin_state);
     Some(a.cmp(&b))
   }
 }
@@ -209,6 +245,10 @@ impl<'db> Item<'db> {
     }
   }
 
+  pub fn index(&self) -> ItemIndex {
+    (*self).into()
+  }
+
   pub fn get_db(&self) -> &ParserDatabase {
     self.db
   }
@@ -217,16 +257,12 @@ impl<'db> Item<'db> {
     Self { origin, ..self.clone() }
   }
 
-  pub fn to_goal(&self, goal: u32) -> Self {
-    Self { goal, ..self.clone() }
+  pub fn to_lane(&self, lane: ItemLane) -> Self {
+    Self { lane, ..self.clone() }
   }
 
-  pub fn to_oos_index(&self) -> Self {
-    Self { goal: OUT_SCOPE_LANE, ..self.clone() }
-  }
-
-  pub fn goal_is_oos(&self) -> bool {
-    self.goal == OUT_SCOPE_LANE
+  pub fn to_oos_lane(&self) -> Self {
+    Self { lane: ItemLane::oos(), ..self.clone() }
   }
 
   pub fn to_origin_state(&self, origin_state: StateId) -> Self {
@@ -242,7 +278,7 @@ impl<'db> Item<'db> {
       origin_state: StateId::default(),
       sym_index: 0,
       origin: Default::default(),
-      goal: 0,
+      lane: Default::default(),
       goto_distance: 0,
       from_goto_origin: false,
     }
@@ -257,7 +293,7 @@ impl<'db> Item<'db> {
       origin_state: StateId::default(),
       sym_index,
       origin: Default::default(),
-      goal: 0,
+      lane: Default::default(),
       goto_distance: 0,
       from_goto_origin: false,
     }
@@ -269,7 +305,7 @@ impl<'db> Item<'db> {
   }
 
   pub fn to_absolute(&self) -> Self {
-    Self { goal: Default::default(), origin: Default::default(), ..self.clone() }
+    Self { lane: Default::default(), origin: Default::default(), ..self.clone() }
   }
 
   pub fn is_canonically_equal(&self, other: &Self) -> bool {
@@ -284,7 +320,7 @@ impl<'db> Item<'db> {
   /// attributes aside from its rule id and symbol offset
   pub fn to_canonical(&self) -> Self {
     Self {
-      goal: Default::default(),
+      lane: Default::default(),
       origin: Default::default(),
       origin_state: StateId::default(),
       goto_distance: 0,
@@ -310,7 +346,8 @@ impl<'db> Item<'db> {
   /// otherwise returns the Item as is.
   pub fn try_increment(&self) -> Self {
     if !self.is_complete() {
-      self.increment().unwrap()
+      let new_item = self.increment().unwrap();
+      new_item.to_lane(ItemLane { prev: self.lane.prev, curr: new_item.index().into() })
     } else {
       self.clone()
     }
@@ -335,8 +372,12 @@ impl<'db> Item<'db> {
     }
   }
 
+  pub fn split_lane(&self, new_lane: ItemIndex) -> Self {
+    self.to_lane(self.lane.split(new_lane))
+  }
+
   pub fn is_out_of_scope(&self) -> bool {
-    self.goal == OUT_SCOPE_LANE || self.origin.is_out_of_scope()
+    self.lane == ItemLane::oos() || self.origin.is_out_of_scope()
   }
 
   pub fn to_goto_origin(&self) -> Self {
@@ -512,6 +553,20 @@ impl<'db> Item<'db> {
     [*self].into_iter().chain(self.db.get_closure(self).map(move |i| i.align(&other)))
   }
 
+  pub fn closure_iter_align_with_lane_split<'a>(&self, other: Self) -> impl ItemContainerIter<'db> {
+    let index = self.lane.to_curr();
+    [*self].into_iter().chain(self.db.get_closure(self).map(move |i| i.align(&other).to_lane(index).split_lane(i.index())))
+  }
+
+  #[cfg(debug_assertions)]
+  pub fn _debug_print_(&self, label: &str) {
+    if label.len() > 0 {
+      println!("\n{label}: {}", self._debug_string_());
+    } else {
+      println!("\n{}", self._debug_string_());
+    }
+  }
+
   pub fn _debug_string_(&self) -> String {
     if self.is_null() {
       "null".to_string()
@@ -523,7 +578,7 @@ impl<'db> Item<'db> {
         .origin
         .is_none()
         .then_some(String::new())
-        .unwrap_or_else(|| format!("<[{}-{:?}]  [{:X}] ", self.origin.debug_string(self.db), self.origin_state, self.goal));
+        .unwrap_or_else(|| format!("<[{}-{:?}]  {:?} ", self.origin.debug_string(self.db), self.origin_state, self.lane));
       #[cfg(not(debug_assertions))]
       let mut string = String::new();
 
@@ -575,6 +630,115 @@ impl<'db> Item<'db> {
   }
 }
 
+/// Represents either a FIRST or a FOLLOW depending on whether the root item
+/// is incomplete or not.
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TransitionPair<'db> {
+  pub kernel: Item<'db>,
+  pub next:   Item<'db>,
+  pub sym:    SymbolId,
+  pub prec:   u16,
+}
+
+pub type First<'db> = TransitionPair<'db>;
+pub type Firsts<'db> = Array<First<'db>>;
+pub type Lookahead<'db> = TransitionPair<'db>;
+pub type Lookaheads<'db> = Array<Lookahead<'db>>;
+
+impl<'db> TransitionPair<'db> {
+  pub fn is_kernel_terminal(&self) -> bool {
+    !self.is_complete() && self.kernel.is_canonically_equal(&self.next)
+  }
+
+  pub fn is_complete(&self) -> bool {
+    self.kernel.is_complete() && self.kernel.is_canonically_equal(&self.next)
+  }
+
+  pub fn is_out_of_scope(&self) -> bool {
+    self.kernel.is_out_of_scope()
+  }
+
+  #[cfg(debug_assertions)]
+  pub fn _debug_string_(&self) -> String {
+    format!(
+      "\nsym {}{{{}}} oos:{}\n  base: {}\n  next: {}",
+      self.sym.debug_string(self.kernel.db),
+      self.prec,
+      self.is_out_of_scope(),
+      self.kernel._debug_string_(),
+      self.next._debug_string_()
+    )
+  }
+}
+
+impl<'db> From<(Item<'db>, Item<'db>, GraphType)> for TransitionPair<'db> {
+  fn from((root, next, mode): (Item<'db>, Item<'db>, GraphType)) -> Self {
+    Self {
+      kernel: root,
+      next,
+      sym: if next.is_complete() { SymbolId::Default } else { next.sym() },
+      prec: next.precedence(mode),
+    }
+  }
+}
+
+impl<'db> From<(&Item<'db>, &Item<'db>, GraphType)> for TransitionPair<'db> {
+  fn from((root, next, mode): (&Item<'db>, &Item<'db>, GraphType)) -> Self {
+    (*root, *next, mode).into()
+  }
+}
+
+pub trait TransitionPairIter<'db>: Iterator<Item = TransitionPair<'db>> + Sized + Clone {
+  fn to_next(self) -> impl ItemContainerIter<'db> {
+    self.map(|i| i.next)
+  }
+
+  fn to_root(self) -> impl ItemContainerIter<'db> {
+    self.map(|i| i.kernel)
+  }
+}
+
+impl<'db, T: Iterator<Item = TransitionPair<'db>> + Sized + Clone> TransitionPairIter<'db> for T {}
+
+pub trait TransitionPairRefIter<'a, 'db: 'a>: Iterator<Item = &'a TransitionPair<'db>> + Sized + Clone {
+  fn to_next(self) -> impl ItemRefContainerIter<'a, 'db> {
+    self.map(|i| &i.next)
+  }
+
+  fn to_kernel(self) -> impl ItemRefContainerIter<'a, 'db> {
+    self.map(|i| &i.kernel)
+  }
+
+  fn max_precedence(self) -> u16 {
+    self.map(|i| i.prec).max().unwrap_or_default()
+  }
+
+  fn in_scope(self) -> impl TransitionPairRefIter<'a, 'db> {
+    self.filter(|i| !i.is_out_of_scope())
+  }
+
+  fn out_scope(self) -> impl TransitionPairRefIter<'a, 'db> {
+    self.filter(|i| i.is_out_of_scope())
+  }
+
+  fn kernel_nonterm_sym(self, mode: GraphType) -> OrderedSet<Option<DBNonTermKey>> {
+    self.map(|p| p.kernel.nonterm_index_at_sym(mode)).collect()
+  }
+
+  #[cfg(debug_assertions)]
+  fn _debug_print_(self, message: &str) {
+    println!("=====> {}\n{}\n=====<\n", message, self._debug_string_())
+  }
+
+  #[cfg(debug_assertions)]
+  fn _debug_string_(self) -> String {
+    format!("{}", self.map(|i| i._debug_string_()).collect::<Vec<_>>().join("\n"))
+  }
+}
+
+impl<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>> + Sized + Clone> TransitionPairRefIter<'a, 'db> for T {}
+
 pub type ItemSet<'db> = OrderedSet<Item<'db>>;
 pub type Items<'db> = Array<Item<'db>>;
 
@@ -610,7 +774,7 @@ macro_rules! common_iter_functions {
     }
 
     #[cfg(debug_assertions)]
-    fn debug_print(self, _comment: &str) {
+    fn _debug_print_(self, _comment: &str) {
       println!("------>{} \n {}", _comment, self.to_debug_string("\n\n"));
     }
 
@@ -652,6 +816,16 @@ macro_rules! common_iter_functions {
         (1, Some(Origin::Peek(..))) => true,
         _ => false,
       }
+    }
+
+    fn items_are_the_same_rule(self) -> bool {
+      let mut base_rule: Option<_> = None;
+      for next in self {
+        if *(base_rule.get_or_insert(next.rule_id)) != next.rule_id {
+          return false;
+        }
+      }
+      return true;
     }
 
     fn nonterm_items<T: ItemContainer<'db>>(self, mode: GraphType) -> T {
@@ -848,8 +1022,8 @@ fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(comment: &str, items: T) 
 }
 
 pub struct CompletedItemArtifacts<'db> {
-  pub follow_pairs: OrderedSet<TransitionPair<'db>>,
+  pub lookahead_pairs: OrderedSet<TransitionPair<'db>>,
   /// Items that completed a nonterminal that did not lead to a transition
   /// in the root closure.
-  pub default_only: ItemSet<'db>,
+  pub default_only:    ItemSet<'db>,
 }

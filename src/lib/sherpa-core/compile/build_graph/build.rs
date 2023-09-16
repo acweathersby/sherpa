@@ -37,15 +37,12 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
 // Completed items are catagorized by the default symbol.
 fn get_firsts<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<GroupedFirsts<'db>> {
   let state = gb.current_state();
-  let iter = state.get_kernel_items().iter().flat_map(|i| {
-    i.closure_iter().term_items_iter(gb.is_scanner()).enumerate().map(|(_, t_item)| -> TransitionPair {
-      if i.is_canonically_equal(&t_item) {
-        (*i, *i, gb.get_mode()).into()
-      } else {
-        (*i, t_item.align(i).to_origin_state(gb.current_state_id()), gb.get_mode())
-      }
-      .into()
-    })
+  let iter = state.get_kernel_items().iter().flat_map(|k_i| {
+    let basis = k_i.to_origin_state(gb.current_state_id()).to_lane(k_i.lane.to_curr());
+    k_i
+      .closure_iter_align(basis)
+      .term_items_iter(gb.is_scanner())
+      .map(|t_item| -> TransitionPair { (*k_i, t_item, gb.get_mode()).into() })
   });
 
   let groups = hash_group_btree_iter::<Vec<_>, _, _, _, _>(iter, |_, first| first.sym);
@@ -113,55 +110,15 @@ fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedF
   if let Some(completed) = groups.remove(&SymbolId::Default) {
     max_precedence = max_precedence.max(completed.0);
 
-    let CompletedItemArtifacts { follow_pairs, default_only, .. } =
-      get_completed_item_artifacts(gb, completed.1.iter().map(|i| &i.kernel))?;
+    let CompletedItemArtifacts { lookahead_pairs, .. } = get_completed_item_artifacts(gb, completed.1.iter().map(|i| &i.kernel))?;
 
-    if ____is_scan____ {
-      //gb.add_kernel_items(follow_pairs.iter().to_next().filter(|i|
-      // !i.is_complete()).cloned().collect::<Vec<_>>());
-      /*       merge_occluding_token_items(
-        hash_group_btree_iter::<Vec<_>, _, _, _, _>(follow_pairs.iter(), |_, item| match item.next.get_type() {
-          ItemType::Terminal(sym) => sym,
-          _ => SymbolId::Undefined,
-        })
-        .into_iter()
-        .map(|(g, s)| (g, (0u16, s)))
-        .collect(),
-        groups,
-      ); */
-      /* get_oos_follow_from_completed(gb, &completed.1.iter().to_kernel().to_vec(), &mut |follow| {
-        merge_follow_items_into_group(&follow, gb.state_id(), groups)
-      })?; */
-    } /* else {
-        follow_pairs = follow_pairs
-          .into_iter()
-          .map(|pair| {
-            if false {
-              (pair.kernel, pair.next.to_oos_index().to_origin(Origin::GoalCompleteOOS), gb.get_mode()).into()
-            } else {
-              pair
-            }
-          })
-          .collect();
-      } */
-
-    let contains_in_scope_items = completed.1.iter().any(|i| !i.next.goal_is_oos());
-
-    let default: Follows = if contains_in_scope_items {
-      completed.1.iter().filter(|i| !i.is_out_of_scope()).cloned().collect()
-    } else {
-      completed.1.iter().map(|i| -> TransitionPair<'db> { (i.kernel, i.kernel, gb.get_mode()).into() }).collect()
-    };
-
-    handle_completed_groups(gb, groups, SymbolId::Default, default, &default_only)?;
-
-    if !follow_pairs.is_empty() {
+    if !lookahead_pairs.is_empty() {
       // Create reduce states for follow items that have not already been covered.
       let mut completed_groups: OrderedMap<SymbolId, Vec<TransitionPair>> =
-        hash_group_btree_iter(follow_pairs.into_iter(), |_, fp| match fp.next.get_type() {
-          ItemType::Completed(_) => {
-            unreachable!("Should be handled outside this path")
-          }
+        hash_group_btree_iter(lookahead_pairs.iter(), |_, fp| match fp.next.get_type() {
+          //ItemType::Completed(_) => {
+          //  unreachable!("Should be handled outside this path")
+          //}
           ItemType::TokenNonTerminal(_, sym) if !gb.is_scanner() => sym,
           ItemType::Terminal(sym) => sym,
           _ => SymbolId::Undefined,
@@ -170,8 +127,27 @@ fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedF
       completed_groups.remove(&SymbolId::Undefined);
 
       for (sym, follow_pairs) in completed_groups {
-        handle_completed_groups(gb, groups, sym, follow_pairs, &default_only)?;
+        handle_completed_groups(gb, groups, sym, follow_pairs)?;
       }
+    }
+
+    // If there is a single rule that is being reduced then we can create a default
+    // state for tha rule Otherwise lookaheads are used to disambiguate the
+    // completed items, and items that have no lookahead need to be
+    // disambiguated dynamically.
+
+    // TODO(anthony) - create the correct filter to identify the number of rules
+    // that are being reduced (compare item indices.)
+    let default: Lookaheads = if completed.1.iter().to_kernel().items_are_the_same_rule() {
+      completed.1
+    } else {
+      lookahead_pairs.iter().filter(|i| i.is_complete()).cloned().collect()
+    };
+
+    if default.len() > 0 {
+      handle_completed_groups(gb, groups, SymbolId::Default, default)?;
+    } else {
+      debug_assert!(!lookahead_pairs.is_empty())
     }
   }
 
@@ -182,16 +158,15 @@ pub(crate) fn handle_completed_groups<'db>(
   gb: &mut GraphBuilder<'db>,
   groups: &mut GroupedFirsts<'db>,
   sym: SymbolId,
-  follow_pairs: Follows<'db>,
-  default_only_items: &ItemSet<'db>,
+  follow_pairs: Lookaheads<'db>,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
   let prec_sym: PrecedentSymbol = (sym, follow_pairs.iter().max_precedence()).into();
 
   match gb.current_state_id().state() {
-    GraphBuildState::PEG => handle_bread_crumb_complete_groups(gb, groups, prec_sym, follow_pairs, default_only_items),
-    GraphBuildState::BreadCrumb(_) => handle_peg_complete_groups(gb, groups, prec_sym, follow_pairs, default_only_items),
-    GraphBuildState::Peek(_) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs, default_only_items),
-    _REGULAR_ => handle_regular_complete_groups(gb, groups, prec_sym, follow_pairs, default_only_items),
+    GraphBuildState::PEG => handle_bread_crumb_complete_groups(gb, groups, prec_sym, follow_pairs),
+    GraphBuildState::BreadCrumb(_) => handle_peg_complete_groups(gb, groups, prec_sym, follow_pairs),
+    GraphBuildState::Peek(_) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs),
+    _REGULAR_ => handle_regular_complete_groups(gb, groups, prec_sym, follow_pairs),
   }
 }

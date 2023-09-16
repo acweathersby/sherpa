@@ -3,7 +3,7 @@ use crate::{
   compile::build_graph::graph::{GraphIterator, GraphStateReference, StateId, StateType},
   journal::Journal,
   types::*,
-  utils::hash_group_btreemap,
+  utils::{hash_group_btree_iter, hash_group_btreemap},
   writer::code_writer::CodeWriter,
 };
 use sherpa_rust_runtime::types::bytecode::MatchInputType;
@@ -108,6 +108,23 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
   let state_id = state.get_id();
   let db: &ParserDatabase = state.graph.get_db();
   let s_store = db.string_store();
+  let graph = state.graph;
+
+  let mut gotos = successors
+    .iter()
+    .filter_map(|goto_state| match goto_state.get_type() {
+      StateType::ShiftFrom(s) => Some((s, create_ir_state_name(GRAPH_STATE_NONE, goto_state).intern(s_store))),
+      _ => None,
+    })
+    .collect::<OrderedMap<_, _>>();
+
+  debug_assert!(gotos.is_empty() || goto_state_id.is_none());
+
+  if gotos.is_empty() {
+    if let Some(goto_string) = goto_state_id {
+      gotos.extend(successors.iter().map(|i| (i.id, goto_string)))
+    }
+  }
 
   let successor_groups = hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
     StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop => SType::GotoSuccessors,
@@ -123,7 +140,7 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
 
     let mut classes = classify_successors(successors, db);
 
-    let scanner_data = add_match_expr(&mut w, state, &mut classes, goto_state_id);
+    let scanner_data = add_match_expr(&mut w, state, &mut classes, &gotos);
 
     Some(Box::new(create_ir_state(w, &state, scanner_data)?))
   } else {
@@ -200,8 +217,9 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
           | StateType::CompleteToken
           | StateType::AssignToken(..)
       ),
-    "Graph state failed to generate ir states:\nSTATE\n\n {} \n\nGraph\n\n{}",
+    "Graph state failed to generate ir states:\nSTATE\n\n {} \n\nGraph\n{}\n{}",
     state._debug_string_(),
+    "", // state.graph._debug_string_(),
     successors.iter().map(|s| s._debug_string_()).collect::<Vec<_>>().join("\n\n")
   );
 
@@ -239,18 +257,20 @@ fn classify_successors<'graph, 'db: 'graph>(
   _db: &'db ParserDatabase,
 ) -> Queue<((u32, MatchInputType), OrderedSet<GraphStateRef<'graph, 'db>>)> {
   Queue::from_iter(
-    hash_group_btreemap(successors.clone(), |_, s| match s.get_symbol().sym() {
-      SymbolId::EndOfFile { .. } => (0, MatchInputType::EndOfFile),
-      SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (4, MatchInputType::Token),
-      SymbolId::Char { .. } => (1, MatchInputType::Byte),
-      SymbolId::Codepoint { .. } => (2, MatchInputType::Codepoint),
-      SymbolId::Default => (5, MatchInputType::Default),
-      sym if sym.is_class() => (3, MatchInputType::Class),
-      _sym => {
-        #[cfg(debug_assertions)]
-        unreachable!("{_sym:?} {}", s._debug_string_());
-        #[cfg(not(debug_assertions))]
-        unreachable!()
+    hash_group_btree_iter(successors.iter().filter(|i| !matches!(i.get_type(), StateType::ShiftFrom(_))), |_, s| {
+      match s.get_symbol().sym() {
+        SymbolId::EndOfFile { .. } => (0, MatchInputType::EndOfFile),
+        SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (4, MatchInputType::Token),
+        SymbolId::Char { .. } => (1, MatchInputType::Byte),
+        SymbolId::Codepoint { .. } => (2, MatchInputType::Codepoint),
+        SymbolId::Default => (5, MatchInputType::Default),
+        sym if sym.is_class() => (3, MatchInputType::Class),
+        _sym => {
+          #[cfg(debug_assertions)]
+          unreachable!("{_sym:?} {}", s._debug_string_());
+          #[cfg(not(debug_assertions))]
+          unreachable!()
+        }
       }
     })
     .into_iter(),
@@ -261,7 +281,7 @@ fn add_match_expr<'graph, 'db: 'graph>(
   mut w: &mut CodeWriter<Vec<u8>>,
   state: GraphStateRef<'graph, 'db>,
   branches: &mut Queue<((u32, MatchInputType), OrderedSet<GraphStateRef<'graph, 'db>>)>,
-  goto_state_id: Option<IString>,
+  goto_state_id: &OrderedMap<StateId, IString>,
 ) -> Option<(IString, OrderedSet<PrecedentDBTerm>)> {
   let graph = state.graph;
   let db = state.graph.get_db();
@@ -358,7 +378,7 @@ fn add_match_expr<'graph, 'db: 'graph>(
 fn build_body<'graph, 'db: 'graph>(
   state: GraphStateRef<'graph, 'db>,
   successor: GraphStateRef<'graph, 'db>,
-  goto_state_id: Option<IString>,
+  goto_state_id: &OrderedMap<StateId, IString>,
 ) -> Vec<String> {
   let graph = state.graph;
   let is_scanner = state.graph.is_scanner();
@@ -426,7 +446,7 @@ fn build_body<'graph, 'db: 'graph>(
   {
     // Add goto expressions
 
-    match (&goto_state_id, s_type) {
+    match (&goto_state_id.get(&successor.id), s_type) {
       // Kernel calls can bypass gotos.
       (_, StateType::KernelCall(..)) | (_, StateType::KernelShift) => {}
       (Some(gt), _) => body_string.push("push ".to_string() + &gt.to_string(db.string_store())),

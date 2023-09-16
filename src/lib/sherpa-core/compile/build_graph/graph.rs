@@ -136,6 +136,9 @@ pub enum StateType {
   InternalCall(DBNonTermKey),
   /// Calls made on kernel items
   KernelCall(DBNonTermKey),
+  /// A shift that pushes pushes a non-terminal shift onto the stack before
+  /// jumping to a terminal shift shifts into a terminal state
+  ShiftFrom(StateId),
   /// Creates a leaf state that has a single `pop` instruction. This represents
   /// the completion of a non-terminal that had a left recursive rule.
   NonTermCompleteOOS,
@@ -179,6 +182,9 @@ impl StateType {
       Self::Reduce(nterm, _) => {
         format!("Reduce({nterm:?})",)
       }
+      Self::ShiftFrom(state_id) => {
+        format!("ShiftOver({state_id:?})",)
+      }
       _ => format!("{:?}", self),
     }
   }
@@ -195,6 +201,7 @@ pub struct GraphState {
   lookahead_hash: u64,
   symbol_set_id: u64,
   leaf_state: bool,
+  used: bool,
 }
 
 impl<'graph, 'db: 'graph> GraphState {
@@ -213,6 +220,10 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
 
   fn get_hash(&'graph self) -> u64 {
     self.internal().lookahead_hash
+  }
+
+  fn get_conanical_hash(&'graph self) -> u64 {
+    self.internal().canonical_hash
   }
 
   fn get_id(&self) -> StateId {
@@ -458,7 +469,7 @@ pub enum GraphType {
 
 use GraphBuildState::*;
 
-use super::{build::handle_kernel_items, items::get_follow_internal};
+use super::{build::handle_kernel_items, items::get_follow};
 impl GraphBuildState {
   pub fn peek_level(&self) -> usize {
     match self {
@@ -564,6 +575,9 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
     for state in &self.states {
       let state_ref = state.as_ref(self);
       let is_leaf_state = self.leaf_states.contains(&state.id);
+      if !state.used && !is_leaf_state {
+        continue;
+      }
       if is_leaf_state {
         string += "\n\nLEAF ======================================\n";
         string += &state_ref._debug_string_();
@@ -712,6 +726,11 @@ impl PartialEq<u32> for GraphState {
   }
 }
 
+pub(crate) enum EnqueResult {
+  Enqueued(StateId),
+  Merged(StateId),
+}
+
 pub struct StateBuilder<'graph_builder, 'db: 'graph_builder> {
   state_id: StateId,
   builder:  &'graph_builder mut GraphBuilder<'db>,
@@ -758,12 +777,15 @@ impl<'graph_iter, 'db: 'graph_iter> StateBuilder<'graph_iter, 'db> {
     builder.graph.reduce_item.insert(*state_id, item);
   }
 
-  pub fn to_leaf(self) {
+  pub fn to_leaf(self) -> StateId {
     let StateBuilder { state_id, builder, resolved } = self;
+
     if !resolved {
       builder.prepare_state(state_id);
-      builder.graph.add_leaf_state(state_id)
+      builder.graph.add_leaf_state(state_id);
     }
+
+    state_id
   }
 
   pub fn to_pending(self) -> Option<StateId> {
@@ -781,7 +803,7 @@ impl<'graph_iter, 'db: 'graph_iter> StateBuilder<'graph_iter, 'db> {
     let StateBuilder { state_id, builder, resolved } = self;
     if !resolved {
       builder.prepare_state(state_id);
-      if let Some(_) = builder.enqueue_state(state_id) {
+      if let EnqueResult::Enqueued(_) = builder.enqueue_state(state_id) {
         builder.graph.add_leaf_state(state_id);
         Some(state_id)
       } else {
@@ -796,7 +818,9 @@ impl<'graph_iter, 'db: 'graph_iter> StateBuilder<'graph_iter, 'db> {
     let StateBuilder { state_id, builder, resolved } = self;
     if !resolved {
       builder.prepare_state(state_id);
-      builder.enqueue_state(state_id)
+      match builder.enqueue_state(state_id) {
+        EnqueResult::Enqueued(s) | EnqueResult::Merged(s) => Some(s),
+      }
     } else {
       None
     }
@@ -863,7 +887,7 @@ impl<'db> GraphBuilder<'db> {
         .db
         .nonterm_follow_items(nterm)
         //.filter(|i| i.nonterm_index_at_sym(self.get_mode()) == Some(nterm))
-        .map(|i| i.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(id).to_oos_index())
+        .map(|i| i.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(id).to_oos_lane())
         .filter_map(|i| i.increment());
 
       let state = GraphState {
@@ -949,13 +973,17 @@ impl<'db> GraphBuilder<'db> {
       item.rule_id.hash(hasher);
       item.sym_index.hash(hasher);
       item.origin.hash(hasher);
-      item.goal.hash(hasher);
-      item.goto_distance.hash(hasher);
+      item.lane.hash(hasher);
+      // item.goto_distance.hash(hasher);
     }
 
     lookahead.hash(hasher);
 
     hasher.finish()
+  }
+
+  pub fn get_classification(&mut self) -> ParserClassification {
+    self.classification
   }
 
   pub fn set_classification(&mut self, classification: ParserClassification) {
@@ -981,7 +1009,7 @@ impl<'db> GraphBuilder<'db> {
           }
         }
       } else {
-        let (follow, _) = get_follow_internal(self, item, false);
+        let (follow, _) = get_follow(self, item, false);
         for item in follow {
           if let Some(term) = item.term_index_at_sym(mode) {
             symbols.insert(term);
@@ -1030,7 +1058,7 @@ impl<'db> GraphBuilder<'db> {
         Normal,
         (SymbolId::Default, 0).into(),
         StateType::Start,
-        Some(kernel_items.iter().enumerate().map(|(i, item)| item.to_goal(i as u32))),
+        Some(kernel_items.iter().map(|item| item.to_lane(ItemLane::new(item.index())))),
       )
       .to_enqueued();
   }
@@ -1055,7 +1083,7 @@ impl<'db> GraphBuilder<'db> {
     self.graph[state_id].lookahead_hash = hash_id_value_u64((hash, lookahead_id));
   }
 
-  pub fn enqueue_state(&mut self, state_id: StateId) -> Option<StateId> {
+  pub fn enqueue_state(&mut self, state_id: StateId) -> EnqueResult {
     let core_state = self.get_state(state_id).internal();
     let Self { config, graph, .. } = self;
     let hash_id = core_state.canonical_hash;
@@ -1086,12 +1114,13 @@ impl<'db> GraphBuilder<'db> {
           }
         }
 
-        None
+        EnqueResult::Merged(original_state)
       }
       _ => {
+        self.graph[state_id].used = true;
         self.state_map.insert(hash_id, state_id);
         self.state_queue.push_back(state_id);
-        Some(state_id)
+        EnqueResult::Enqueued(state_id)
       }
     }
   }
@@ -1171,13 +1200,15 @@ impl<'db> GraphBuilder<'db> {
   }
 
   #[cfg(debug_assertions)]
+  pub fn _is_terminal_state_(&self, nterm_id: u32, state_id: u32) -> bool {
+    self.graph.goal_items().iter().any(|i| i.origin.get_symbol_key() == DBTermKey::from(nterm_id))
+      && self.current_state_id().0 == state_id
+      || self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.current_state_id().0 == state_id
+  }
+
+  #[cfg(debug_assertions)]
   pub fn _is_nonterminal_state_(&self, nterm_id: u32, state_id: u32) -> bool {
-    if self.is_scanner() {
-      self.graph.goal_items().iter().any(|i| i.origin.get_symbol_key() == DBTermKey::from(nterm_id))
-        && self.current_state_id().0 == state_id
-    } else {
-      self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.current_state_id().0 == state_id
-    }
+    self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.current_state_id().0 == state_id
   }
 }
 

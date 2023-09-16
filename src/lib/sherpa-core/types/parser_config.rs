@@ -1,4 +1,5 @@
 #[derive(Clone, Copy)]
+#[allow(non_snake_case)]
 /// Settings for configuring the type of parser Sherpa will generate.
 pub struct ParserConfig {
   /// When enable, recursive descent style `Call` states will be generated
@@ -49,6 +50,17 @@ impl ParserConfig {
     Self::default().set_k(8).enable_fork(false)
   }
 
+  pub fn to_classification(&self) -> ParserClassification {
+    ParserClassification {
+      max_k:         self.max_k as u16,
+      bottom_up:     self.ALLOW_LR,
+      gotos_present: self.ALLOW_LR,
+      calls_present: self.ALLOW_RECURSIVE_DESCENT,
+      peeks_present: self.ALLOW_PEEKING,
+      forks_present: self.ALLOW_FORKING,
+    }
+  }
+
   pub fn hybrid(self) -> Self {
     Self::new()
   }
@@ -81,10 +93,10 @@ impl ParserConfig {
   }
 
   pub fn lrk(mut self, k: usize) -> Self {
-    self.ALLOW_LOOKAHEAD_MERGE = false;
-    self.ALLOW_LR = true;
     self.ALLOW_RECURSIVE_DESCENT = false;
+    self.ALLOW_LOOKAHEAD_MERGE = false;
     self.ALLOW_FORKING = false;
+    self.ALLOW_LR = true;
     self.set_k(k)
   }
 
@@ -103,7 +115,7 @@ impl ParserConfig {
   }
 
   pub fn lalr(self) -> Self {
-    self.llk(1).enable_lookahead_merge(true)
+    self.lrk(1).enable_lookahead_merge(true)
   }
 
   pub fn set_k(mut self, k: usize) -> Self {
@@ -213,7 +225,7 @@ impl ParserClassification {
 
     let g = if self.forks_present { "G" } else { "" };
 
-    let k = if self.peeks_present { "(".to_string() + &self.max_k.to_string() + ")" } else { "(1)".into() };
+    let k = if self.max_k > 32 { "(k>32)".to_string() } else { "(".to_string() + &self.max_k.to_string() + ")" };
 
     g.to_string() + base + &k
   }

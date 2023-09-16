@@ -16,7 +16,7 @@ use GraphBuildState::*;
 /// Peek needs --- collection nonterminal and terminal symbols to complete, and
 /// a set of follow items for each kernel item
 
-pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair<'db>> + Sized + Clone>(
+pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair<'db>> + Clone>(
   gb: &mut GraphBuilder<'db>,
   sym: PrecedentSymbol,
   incomplete_items: Pairs,
@@ -47,7 +47,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
     for (_, items) in reduced_pairs {
       let follow: ItemSet = items
         .iter()
-        .filter_map(|Follow { next: follow, .. }| if existing_items.contains(follow) { None } else { Some(*follow) })
+        .filter_map(|Lookahead { next: follow, .. }| if existing_items.contains(follow) { None } else { Some(*follow) })
         .collect();
 
       if !follow.is_empty() {
@@ -59,7 +59,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
     }
   }
 
-  for (_, nonterms) in hash_group_btree_iter::<Firsts, _, _, _, _>(incomplete_items.clone(), |_, i| i.is_out_of_scope()) {
+  for (_, nonterms) in hash_group_btree_iter::<Lookaheads, _, _, _, _>(incomplete_items.clone(), |_, i| i.is_out_of_scope()) {
     let origin = state.set_peek_resolve_state(&nonterms.iter().to_kernel().to_vec());
 
     for nonterm in &nonterms {
@@ -125,8 +125,7 @@ pub(crate) fn handle_peek_complete_groups<'db>(
   gb: &mut GraphBuilder<'db>,
   groups: &mut GroupedFirsts<'db>,
   prec_sym: PrecedentSymbol,
-  follows: Follows<'db>,
-  _default_only_items: &ItemSet<'db>,
+  follows: Lookaheads<'db>,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
   let mut cmpl = follows.iter().to_next();
@@ -209,7 +208,7 @@ pub(crate) fn handle_peek_complete_groups<'db>(
     }
 
     (_, Some((_, group))) => {
-      todo!("Resolve intermediate peek!");
+      todo!("(anthony): Resolve intermediate peek! Also figure out what \"intermediate peek\" means ");
     }
   }
   Ok(())
@@ -250,7 +249,7 @@ fn peek_items_are_from_goto_state(cmpl: &Items, graph: &GraphHost) -> bool {
   }
 }
 
-fn peek_items_are_from_oos<'db>(gb: &GraphBuilder<'db>, follows: &Follows<'db>) -> bool {
+fn peek_items_are_from_oos<'db>(gb: &GraphBuilder<'db>, follows: &Lookaheads<'db>) -> bool {
   follows
     .iter()
     .to_kernel()
@@ -261,6 +260,6 @@ fn peek_items_are_from_oos<'db>(gb: &GraphBuilder<'db>, follows: &Follows<'db>) 
     .all(|set| set.iter().next().unwrap().origin.is_out_of_scope())
 }
 
-fn peek_items_are_from_same_origin<'db>(gb: &GraphBuilder<'db>, follows: &Follows<'db>) -> bool {
+fn peek_items_are_from_same_origin<'db>(gb: &GraphBuilder<'db>, follows: &Lookaheads<'db>) -> bool {
   follows.iter().to_kernel().map(|i| i.origin).collect::<Set<_>>().len() == 1
 }

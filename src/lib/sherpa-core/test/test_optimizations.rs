@@ -41,5 +41,6 @@ fn basic_optimize_unknown() -> R<()> {
 
       R::Ok(())
     },
+    Default::default(),
   )
 }

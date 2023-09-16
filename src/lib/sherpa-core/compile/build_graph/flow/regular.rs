@@ -49,7 +49,7 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
   let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
-  let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
+  let ____allow_lr____: bool = gb.config.ALLOW_LR || ____is_scan____;
   let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false;
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
 
@@ -78,8 +78,8 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
         if is_kernel {
           gb.enqueue_state(state_id);
         } else {
-          if !____allow_ra____ {
-            lr_disabled_error(gb, _transition_items)?;
+          if !____allow_lr____ {
+            return lr_disabled_error(gb, _transition_items);
           }
           gb.add_pending(state_id);
         }
@@ -88,23 +88,49 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
         if group.iter().all(|p| p.is_kernel_terminal()) {
           gb.create_state(Normal, prec_sym, StateType::KernelShift, Some(group.iter().to_kernel().try_increment().into_iter()))
             .to_enqueued();
-        } else if ____allow_ra____ || len == 1 {
+        } else if len == 1 {
+          let items = in_scope.clone().to_next().try_increment();
+          let kernel_item = in_scope.clone().to_kernel().next().unwrap();
+
+          if !____allow_lr____ {
+            if let Some(non_term) = kernel_item.nonterm_index_at_sym(gb.get_mode()) {
+              // Check for left recursion. If present, the grammar is not LL
+              if gb.db.nonterm_recursion_type(non_term).is_left_recursive() {
+                return lr_disabled_error(gb, in_scope.to_kernel().cloned().collect());
+              } else {
+                let state = gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_enqueued().unwrap();
+                let mut nterm_shift_state = gb.create_state(
+                  Normal,
+                  (kernel_item.sym(), 0).into(),
+                  StateType::ShiftFrom(state),
+                  Some([kernel_item.try_increment()].into_iter()),
+                );
+                //nterm_shift_state.set_parent(state);
+                nterm_shift_state.to_enqueued();
+              }
+            } else {
+              gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_pending();
+            }
+          } else {
+            gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_pending();
+          }
+        } else if ____allow_lr____ {
           let items = in_scope.to_next().try_increment();
 
           gb.set_classification(ParserClassification { bottom_up: true, ..Default::default() });
 
           gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_pending();
         } else {
-          if len > 1 {
-            if !____allow_ra____ {
-              lr_disabled_error(gb, in_scope.to_next().cloned().collect())?;
-            } else if !____allow_fork____ {
-              todo!("Create warning about k=1 conflicts: enable fork")
-            }
-          } else if !____allow_ra____ {
-            lr_disabled_error(gb, in_scope.to_next().cloned().collect())?;
+          /// If forking is allowed then use that. Other wise this grammar is no
+          /// LL and LR and/or RD has been disabled.
+          if ____allow_fork____ {
+            return Err(SherpaError::Text("Forking has not been implemented".into()));
+          } else if !____allow_lr____ {
+            return lr_disabled_error(gb, in_scope.to_kernel().cloned().collect());
           } else {
-            todo!("Warn about no strategy for handling items")
+            return Err(SherpaError::Text(
+              "Not sure what happened, but this parser cannot be built with the current configuration".into(),
+            ));
           }
         }
       }
@@ -114,42 +140,59 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
   Ok(())
 }
 
+fn single_shift_allowed<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(in_scope: &T, gb: &mut GraphBuilder<'_>) -> bool {
+  let ____allow_lr____: bool = gb.config.ALLOW_LR || gb.is_scanner();
+
+  if ____allow_lr____ {
+    gb.set_classification(ParserClassification { bottom_up: true, ..Default::default() });
+  } else if let Some(non_term) = in_scope.clone().to_kernel().next().and_then(|i| i.nonterm_index_at_sym(gb.get_mode())) {
+    // Check for left recursion. If present, the grammar is not LL
+    if gb.db.nonterm_recursion_type(non_term).is_left_recursive() {
+      return false;
+    }
+  }
+
+  true
+}
+
 pub(crate) fn handle_regular_complete_groups<'db>(
   gb: &mut GraphBuilder<'db>,
-  groups: &mut GroupedFirsts<'db>,
+  shift_groups: &mut GroupedFirsts<'db>,
   prec_sym: PrecedentSymbol,
-  mut follow_pairs: Follows<'db>,
-  default_only_items: &ItemSet<'db>,
+  mut lookahead_pairs: Lookaheads<'db>,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
   let ____allow_peek____ = gb.config.ALLOW_PEEKING;
-  let mut cmpl = follow_pairs.iter().to_next().to_vec();
+  let mut cmpl = lookahead_pairs.iter().to_next().to_vec();
   let sym = prec_sym.sym();
   // Non-Peeking States
-  match (follow_pairs.len(), groups.remove(&prec_sym.sym())) {
+  match (lookahead_pairs.len(), shift_groups.remove(&prec_sym.sym())) {
     (1, None) => {
-      handle_completed_item(gb, follow_pairs, prec_sym)?;
+      handle_completed_item(gb, lookahead_pairs, prec_sym)?;
     }
     (2.., None) => {
+      // `k` must be > 0 to handle reduce reduce conflicts.
+      gb.set_classification(ParserClassification { max_k: 1, ..Default::default() });
+
       if ____is_scan____ {
         // We may be able to continue parsing using follow items, after we
         // determine whether we have symbol ambiguities.
-        resolve_conflicting_tokens(gb, sym, follow_pairs.iter())?;
-      } else if follow_pairs.iter().to_kernel().to_absolute::<ItemSet>().len() == 1 {
+        resolve_conflicting_tokens(gb, sym, lookahead_pairs.iter())?;
+      } else if prec_sym.sym() == SymbolId::Default {
+        if lookahead_pairs.iter().to_kernel().items_are_the_same_rule() {
+          handle_completed_item(gb, lookahead_pairs, prec_sym)?;
+        } else {
+          todo!("(anthony) Handle default completed item conflicts (e.i. kernel goal items)")
+        }
+      } else if lookahead_pairs.iter().to_kernel().to_absolute::<ItemSet>().len() == 1 {
         // The same non-terminal is generated from this completed item, regardless
         // of the origins. This is a valid outcome.
-        handle_completed_item(gb, follow_pairs, prec_sym)?;
-      } else if follow_pairs.iter().all(|p| p.is_out_of_scope()) {
-        // We are at the end of a lookahead that results in the completion of
-        // some existing item.
+        handle_completed_item(gb, lookahead_pairs, prec_sym)?;
+      } else if lookahead_pairs.iter().all(|p| p.is_out_of_scope()) {
         let item: Item<'_> = *o_to_r(cmpl.first(), "Item list is empty")?;
         handle_completed_item(gb, vec![(item, item, gb.get_mode()).into()], prec_sym)?;
       } else {
-        if default_only_items.len() > 0 {
-          todo!("(anthony) Handle default only completed items (e.i. kernel goal items)")
-        }
-
-        match resolve_reduce_reduce_conflict(gb, prec_sym, follow_pairs)? {
+        match resolve_reduce_reduce_conflict(gb, prec_sym, lookahead_pairs)? {
           ReduceReduceConflictResolution::Nothing => {}
           ReduceReduceConflictResolution::Fork(_) => {
             gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
@@ -157,7 +200,6 @@ pub(crate) fn handle_regular_complete_groups<'db>(
           ReduceReduceConflictResolution::Reduce(item) => todo!("Handle reduce result from reduce-reduce conflict resolution"),
           ReduceReduceConflictResolution::Peek(max_k, follow_pairs) => {
             gb.set_classification(ParserClassification { peeks_present: true, max_k, ..Default::default() });
-
             let state = create_peek(gb, prec_sym, [].iter(), Some(follow_pairs.iter()), true, StateType::Peek)?;
             gb.add_pending(state);
           }
@@ -165,26 +207,27 @@ pub(crate) fn handle_regular_complete_groups<'db>(
       }
     }
     (_, Some((prec, mut group))) => {
+      // `k` must be > 0 to handle shift reduce conflicts.
+      gb.set_classification(ParserClassification { max_k: 1, ..Default::default() });
+
       if ____is_scan____ {
         let item: Item<'_> = cmpl[0];
-        follow_pairs.extend(group);
-        handle_completed_item(gb, follow_pairs, prec_sym)?;
-      } else if group.iter().all(|i| i.is_out_of_scope()) && follow_pairs.iter().all(|i| i.is_out_of_scope()) {
-        create_out_of_scope_complete_state(gb, follow_pairs.iter(), prec_sym);
+        lookahead_pairs.extend(group);
+        handle_completed_item(gb, lookahead_pairs, prec_sym)?;
+      } else if group.iter().all(|i| i.is_out_of_scope()) && lookahead_pairs.iter().all(|i| i.is_out_of_scope()) {
+        create_out_of_scope_complete_state(gb, lookahead_pairs.iter(), prec_sym);
       } else {
-        // WE can use precedence to resolve shift reduce conflicts.  For now favor
-        // shift.
-        match resolve_shift_reduce_conflict(gb, group.iter(), follow_pairs.iter())? {
+        match resolve_shift_reduce_conflict(gb, group.iter(), lookahead_pairs.iter())? {
           ShiftReduceConflictResolution::Shift => {
-            groups.insert(sym, (prec, group));
+            shift_groups.insert(sym, (prec, group));
           }
           ShiftReduceConflictResolution::Reduce => {
-            handle_completed_groups(gb, &mut Default::default(), sym, follow_pairs, &cmpl.to_set())?;
+            handle_completed_groups(gb, &mut Default::default(), sym, lookahead_pairs)?;
           }
           ShiftReduceConflictResolution::Peek(max_k) => {
             gb.set_classification(ParserClassification { peeks_present: true, max_k, ..Default::default() });
 
-            let state = create_peek(gb, prec_sym, group.iter(), Some(follow_pairs.iter()), true, StateType::Peek)?;
+            let state = create_peek(gb, prec_sym, group.iter(), Some(lookahead_pairs.iter()), true, StateType::Peek)?;
             gb.add_pending(state);
           }
           ShiftReduceConflictResolution::Fork => {

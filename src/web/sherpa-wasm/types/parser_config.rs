@@ -3,6 +3,7 @@ use sherpa_core::{ParserClassification, ParserConfig, ParserMetrics};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
+#[allow(non_snake_case)]
 pub struct JSParserConfig {
   /// When enable, recursive descent style `Call` states will be generated
   pub ALLOW_RECURSIVE_DESCENT: bool,

@@ -29,7 +29,7 @@ pub(super) fn _create_reduce_reduce_error(_gb: &GraphBuilder, _end_items: ItemSe
   SherpaError::StaticText("TODO - create error message for reduce-reduce conflicts")
 }
 
-/// Produces errors that result the banning of LR states.
+/// Produces errors that result from the banning of LR states.
 pub(super) fn lr_disabled_error<'db>(gb: &GraphBuilder, lr_items: Items) -> SherpaResult<()> {
   let db = gb.graph().get_db();
 
@@ -73,7 +73,7 @@ pub(super) fn lr_disabled_error<'db>(gb: &GraphBuilder, lr_items: Items) -> Sher
 
 pub(crate) fn conflicting_symbols_error<'db>(
   gb: &GraphBuilder<'db>,
-  groups: OrderedMap<(u16, SymbolId), Follows<'db>>,
+  groups: OrderedMap<(u16, SymbolId), Lookaheads<'db>>,
 ) -> SherpaError {
   let graph = gb.graph();
   let db = graph.get_db();
