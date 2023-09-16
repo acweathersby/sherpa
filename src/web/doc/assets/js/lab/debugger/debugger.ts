@@ -1,5 +1,5 @@
 import { JSParserConfig } from "js/sherpa/sherpa_wasm";
-import { DebuggerButton, DebuggerCheckbox } from "./debugger_buttons";
+import { DebuggerButton, DebuggerCheckbox, DebuggerField } from "./debugger_io";
 import { FlowNode, RootFlowNode } from "../../common/flow";
 import { EventType as GrammarEventType, GrammarContext } from "../grammar_context";
 import { get_input } from "../../common/session_storage";
@@ -21,16 +21,38 @@ export type DebuggerData = {
     config: JSParserConfig
 };
 
-export class DebuggerError extends FlowNode<DebuggerData> {
-    message: string
+export class ClearDebuggerError extends FlowNode<DebuggerData> {
+    error_bar: HTMLElement;
+    error_blackout: HTMLElement;
 
-    constructor(message: string) {
+    constructor() {
         super();
-        this.message = message
+        this.error_bar = <any>document.getElementById("error-bar");
+        this.error_blackout = <any>document.getElementById("error-blackout");
+        this.error_blackout.classList.remove("show");
+        this.error_bar.classList.remove("show");
     }
 
     update(t: string, data: DebuggerData) {
-        alert(this.message);
+        return []
+    }
+}
+
+
+export class DebuggerError extends FlowNode<DebuggerData> {
+    error_bar: HTMLElement;
+    error_blackout: HTMLElement;
+
+    constructor(message: string) {
+        super();
+        this.error_bar = <any>document.getElementById("error-bar");
+        this.error_blackout = <any>document.getElementById("error-blackout");
+        this.error_blackout.classList.add("show");
+        this.error_bar.classList.add("show");
+        this.error_bar.innerHTML = message;
+    }
+
+    update(t: string, data: DebuggerData) {
         return []
     }
 }
@@ -74,17 +96,19 @@ class GrammarDocListener extends FlowNode<DebuggerData> {
         switch (t) {
             case "init": {
                 data.grammar_ctx.addListener(GrammarEventType.DBCreated, this.db_created.bind(this));
-                data.grammar_ctx.addListener(GrammarEventType.DBDeleted, this.db_created.bind(this));
+                data.grammar_ctx.addListener(GrammarEventType.DBDeleted, this.db_deleted.bind(this));
+                data.grammar_ctx.addListener(GrammarEventType.MalformedGrammar, this.malformed_grammar.bind(this));
             } break;
             case "db_created": {
                 if (data.grammar_ctx.db) {
                     this.configure_entry_options(data.grammar_ctx.db, data.debugger_entry_selection)
                     return [this, new ParseBuilder]
                 } else {
-                    return [this, new DebuggerError("Grammar Database is invalid")];
+                    return [this, new DebuggerError("Grammar is invalid")];
                 }
             };
-            case "db_deleted": return [this];
+            case "malformed_grammar":
+                return [this, new DebuggerError("grammar is invalid")];
         }
 
         return [this];
@@ -98,18 +122,57 @@ class GrammarDocListener extends FlowNode<DebuggerData> {
     db_deleted(ctx: GrammarContext) {
         this.emit("db_deleted");
     }
+
+    malformed_grammar(ctx: GrammarContext) {
+        this.emit("malformed_grammar");
+    }
 }
 
 class ParseBuilder extends FlowNode<DebuggerData> {
-    buttonListener: any
     config: JSParserConfig = new JSParserConfig;
     _updateConfig: any;
+    _handleKeyEvents: any;
+    _buildParserSignal: any
     optimize: boolean = false;
+    parser_valid: boolean = false;
 
     constructor() {
         super()
-        this.buttonListener = this.buildParserSignal.bind(this);
+        this._buildParserSignal = this.buildParserSignal.bind(this);
         this._updateConfig = this.updateConfig.bind(this);
+        this._handleKeyEvents = this.handleKeyEvents.bind(this);
+    }
+
+    buildParserSignal(e: Event) {
+        this.emit("ParseBuilder_build")
+    }
+
+    handleKeyEvents(e: KeyboardEvent) {
+        if (e.altKey) {
+            switch (e.key) {
+                case "b":
+                    this.buildParserSignal(e);
+                    e.stopImmediatePropagation();
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return false
+            }
+        }
+    }
+
+    updateConfig() {
+        this.setConfig();
+        this.emit("config_changed");
+    }
+
+    private setConfig() {
+        this.config.CONTEXT_FREE = DebuggerCheckbox.get("cf-enable").ele.checked;
+        this.config.ALLOW_LR = DebuggerCheckbox.get("lr-enable").ele.checked;
+        this.config.ALLOW_LOOKAHEAD_MERGE = DebuggerCheckbox.get("la-enable").ele.checked;
+        this.config.ALLOW_RECURSIVE_DESCENT = DebuggerCheckbox.get("rd-enable").ele.checked;
+        this.config.ALLOW_FORKING = DebuggerCheckbox.get("fk-enable").ele.checked;
+        this.config.ALLOW_PEEKING = DebuggerCheckbox.get("pk-enable").ele.checked;
+        this.optimize = DebuggerCheckbox.get("op-enable").ele.checked;
     }
 
     setupInputs() {
@@ -120,7 +183,9 @@ class ParseBuilder extends FlowNode<DebuggerData> {
         DebuggerCheckbox.get("fk-enable").addEventListener("change", this._updateConfig);
         DebuggerCheckbox.get("pk-enable").addEventListener("change", this._updateConfig);
         DebuggerCheckbox.get("op-enable").addEventListener("change", this._updateConfig);
-        DebuggerButton.get("build").addEventListener("click", this.buttonListener);
+        DebuggerCheckbox.get("op-enable").addEventListener("change", this._handleKeyEvents);
+        DebuggerButton.get("build").addEventListener("click", this._buildParserSignal);
+        window.addEventListener("keydown", this._handleKeyEvents);
     }
 
     destroyInputs() {
@@ -131,68 +196,91 @@ class ParseBuilder extends FlowNode<DebuggerData> {
         DebuggerCheckbox.get("rd-enable").removeEventListener("change", this._updateConfig);
         DebuggerCheckbox.get("fk-enable").removeEventListener("change", this._updateConfig);
         DebuggerCheckbox.get("pk-enable").removeEventListener("change", this._updateConfig);
-        DebuggerButton.get("build").removeEventListener("click", this.buttonListener);
+        DebuggerButton.get("build").removeEventListener("click", this._buildParserSignal);
+        window.removeEventListener("keydown", this._handleKeyEvents);
         this.config.free();
-    }
-
-    updateConfig() {
-        this.config.CONTEXT_FREE = DebuggerCheckbox.get("cf-enable").ele.checked;
-        this.config.ALLOW_LR = DebuggerCheckbox.get("lr-enable").ele.checked;
-        this.config.ALLOW_LOOKAHEAD_MERGE = DebuggerCheckbox.get("la-enable").ele.checked;
-        this.config.ALLOW_RECURSIVE_DESCENT = DebuggerCheckbox.get("rd-enable").ele.checked;
-        this.config.ALLOW_FORKING = DebuggerCheckbox.get("fk-enable").ele.checked;
-        this.config.ALLOW_FORKING = DebuggerCheckbox.get("pk-enable").ele.checked;
-        this.optimize = DebuggerCheckbox.get("op-enable").ele.checked;
-        this.emit("config_changed");
     }
 
     update(t: string, data: DebuggerData): FlowNode<DebuggerData>[] {
         switch (t) {
             case "init": {
                 this.setupInputs();
-                this.updateConfig();
-                return [this];
+                this.setConfig();
+                this.parser_valid = false;
+                return [this, new DisableBuildButton, new EnableBuildButton, new DebuggerError(
+                    `grammar looks good, parser needs to be compiled
+                    &nbsp; <i class="fa-solid fa-wrench hover inactive"></i> (alt+b)`
+                )];
             };
 
             case "config_changed": {
-                return [this, new DisableBuildButton, new EnableBuildButton];
+                DebuggerField.get("parser-type").ele.value = "";
+                DebuggerField.get("num-of-states").ele.value = "";
+                data.grammar_ctx.setParserErrors([]);
+                this.parser_valid = false;
+                return [this, new DisableBuildButton, new EnableBuildButton, new DebuggerError(
+                    `configuration changed, parser needs to be compiled
+                    &nbsp; <i class="fa-solid fa-wrench hover inactive"></i> (alt+b)`
+                )];
             };
 
             case "db_deleted":
+                DebuggerField.get("parser-type").ele.value = "";
+                DebuggerField.get("num-of-states").ele.value = "";
+                data.grammar_ctx.setParserErrors([]);
                 this.destroyInputs();
                 return [new DisableBuildButton];
 
 
             case "ParseBuilder_build": {
+                if (this.parser_valid) {
+                    return [this]
+                }
+
                 let db = data.grammar_ctx.db;
                 if (!db)
                     return [new DebuggerError("Database is invalid")];
 
-                if (data.states) data.states.free();
-                if (data.bytecode) data.bytecode.free();
+
+                if (data.states) { data.states.free(); data.states = null }
+                if (data.bytecode) { data.bytecode.free(); data.bytecode = null }
 
                 let states, bytecode;
 
                 try {
-                    states = sherpa.create_parser_states(db, this.optimize);
+                    states = sherpa.create_parser_states(db, this.optimize, this.config);
+
+                    DebuggerField.get("parser-type").ele.value = states.parser_metrics.classification.get_type();
+                    DebuggerField.get("num-of-states").ele.value = states.parser_metrics.num_of_states + "";
+
                     bytecode = sherpa.create_bytecode(states);
                     data.states = states;
                     data.bytecode = bytecode;
+                    this.parser_valid = true;
+                    return [this, new LockBuildButton, new TransportHandler, new ClearDebuggerError];
                 } catch (e) {
-                    if (states) states.free();
-                    if (bytecode) bytecode.free();
-                    return [new DebuggerError(`Failed to compile parser data ${e}`)]
+                    if (e instanceof sherpa.PositionedErrors) {
+                        let errors = [];
+                        for (let i = 0; i < e.length; i++) {
+                            let error = e.get_error_at(i);
+                            if (error)
+                                errors.push(error);
+                        }
+                        e.free();
+                        data.grammar_ctx.setParserErrors(errors);
+                        return [this, new DebuggerError(`Failed to compile parser data <<< check grammar errors <<<`)]
+                    } else {
+                        console.log(e);
+                        if (states) states.free();
+                        if (bytecode) bytecode.free();
+                        return [this, new DebuggerError(`Failed to compile parser data, unexpected error ${e}`)]
+                    }
                 }
 
-                return [this, new LockBuildButton, new TransportHandler];
             }
             default:
                 return [this]
         }
-    }
-
-    buildParserSignal(e: Event) {
-        this.emit("ParseBuilder_build")
     }
 }
 
@@ -273,7 +361,7 @@ export function initDebugger(
     DebuggerCheckbox.get("la-enable").ele.checked = default_config.ALLOW_LOOKAHEAD_MERGE;
     DebuggerCheckbox.get("rd-enable").ele.checked = default_config.ALLOW_RECURSIVE_DESCENT;
     DebuggerCheckbox.get("fk-enable").ele.checked = default_config.ALLOW_FORKING;
-    DebuggerCheckbox.get("pk-enable").ele.checked = default_config.ALLOW_FORKING;
+    DebuggerCheckbox.get("pk-enable").ele.checked = default_config.ALLOW_PEEKING;
 
     DebuggerCheckbox.get("fk-enable").disable = true;
 
@@ -294,6 +382,7 @@ export function initDebugger(
         [
             new InitCodeMirror(),
             new DisableButtons(),
+            new DebuggerError("Parser needs to be compiled"),
         ]
     );
 }

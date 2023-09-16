@@ -3,7 +3,9 @@ import * as sherpa from "js/sherpa/sherpa_wasm.js";
 export const enum EventType {
     DBDeleted = "db-deleted",
     DBCreated = "db-created",
+    NewErrors = "parser-errors",
     GrammarAdded = "grammar-added",
+    MalformedGrammar = "grammar-malformed"
 }
 
 /// Maintains a general context that tracks the state of the grammar
@@ -24,6 +26,8 @@ export class GrammarContext {
 
     private current_db_errors: sherpa.JSSherpaSourceError[];
 
+    private current_parser_errors: sherpa.JSSherpaSourceError[];
+
     /// Should only be called after sherpa is initialized
     constructor() {
         this.soup_ = sherpa.create_soup();
@@ -32,6 +36,7 @@ export class GrammarContext {
         this.RUNNING_EVENTS = false;
         this.db_ = null;
         this.current_parse_errors = [];
+        this.current_parser_errors = [];
         this.current_db_errors = [];
     }
 
@@ -51,38 +56,73 @@ export class GrammarContext {
         return this.current_db_errors;
     }
 
-    public addGrammar(input_string: string, grammar_name: string) {
+    get parser_errors(): sherpa.JSSherpaSourceError[] {
+        return this.current_parser_errors;
+    }
 
+    get ast_errors(): sherpa.JSSherpaSourceError[] {
+        return []
+    }
+
+    private clearErrors() {
+        this.clearParseErrors();
+        this.clearParserErrors();
+        this.clearDBErrors();
+    }
+
+    private clearParseErrors() {
         this.current_parse_errors.map(e => e.free());
         this.current_parse_errors.length = 0;
+    }
+
+    private clearDBErrors() {
+        this.current_db_errors.map(e => e.free());
+        this.current_db_errors.length = 0;
+    }
+
+    private clearParserErrors() {
+        this.current_parser_errors.map(e => e.free());
+        this.current_parser_errors.length = 0;
+    }
+
+    public addGrammar(input_string: string, grammar_name: string) {
+
+
+        this.clearErrors();
 
         try {
             this.soup.add_grammar(input_string, grammar_name);
             this.signal(EventType.GrammarAdded);
         } catch (e) {
             if (e instanceof sherpa.PositionedErrors) {
-                console.log(e)
                 for (let i = 0; i < e.length; i++) {
                     let error = e.get_error_at(i);
                     if (error)
                         this.current_parse_errors.push(error);
                 }
                 e.free();
+                this.signal(EventType.MalformedGrammar);
+                this.signal(EventType.NewErrors);
             } else {
                 console.log(e)
             }
+            return;
         }
+
+        this.createDB("/");
     }
 
-    public createDB(grammar_name: string): boolean {
+
+    createDB(grammar_name: string): boolean {
         if (this.db_) {
+            try {
+                this.signal(EventType.DBDeleted, false);
+            } catch (e) {
+                console.error(e);
+            }
             this.db_.free();
             this.db_ = null;
-            this.signal(EventType.DBDeleted, false);
         }
-
-        this.current_db_errors.map(e => e.free());
-        this.current_db_errors.length = 0;
 
         try {
             this.db_ = sherpa.create_parse_db(grammar_name, this.soup_);
@@ -96,16 +136,30 @@ export class GrammarContext {
                         this.current_db_errors.push(error);
                 }
                 e.free();
+                this.signal(EventType.NewErrors);
             } else {
-                console.log(e)
+                console.error(e)
             }
         }
         return false;
     }
 
+    public setParserErrors(e: sherpa.JSSherpaSourceError[] | sherpa.JSSherpaSourceError) {
+        this.clearParserErrors();
+
+        this.current_parser_errors.length = 0;
+        if (Array.isArray(e)) {
+            this.current_parser_errors.push(...e)
+        } else {
+            this.current_parser_errors.push(e)
+        }
+        this.signal(EventType.NewErrors);
+    }
+
+
+
 
     public addListener(event: EventType, fn: { (ctx: GrammarContext): void }) {
-
         if (!this.listeners.has(event))
             this.listeners.set(event, new Set);
 

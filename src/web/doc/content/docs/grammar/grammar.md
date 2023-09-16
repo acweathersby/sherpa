@@ -324,6 +324,24 @@ IGNORE { c:sp  }
 
 ```
 
+
+```sherpa { lab=true }
+IGNORE { tk:space } 
+
+<> compound > "(" ( compound | atom )(*)  ")"
+
+<> sexpr > compound | tk:atom
+
+<> atom = c:id ( c:id | c:num )(+)
+
+<> space >  (c:sp | c:nl)(+)
+
+============
+
+:t t => g :t! t!
+
+```
+
 A parse produced by this grammar will now be able to take an input such as `"1+2+3"` and return a numeric literal `6`. 
 
 ## What Next

@@ -821,6 +821,7 @@ pub(crate) struct GraphBuilder<'db> {
   state_map: OrderedMap<u64, StateId>,
   oos_roots: OrderedMap<DBNonTermKey, StateId>,
   oos_closure_states: OrderedMap<Item<'db>, StateId>,
+  classification: ParserClassification,
   pub db: &'db ParserDatabase,
   pub config: ParserConfig,
 }
@@ -842,6 +843,7 @@ impl<'db> GraphBuilder<'db> {
       oos_closure_states: Default::default(),
       state_queue: VecDeque::default(),
       state_map: Default::default(),
+      classification: Default::default(),
       db,
       config,
     };
@@ -913,8 +915,8 @@ impl<'db> GraphBuilder<'db> {
     }
   }
 
-  pub fn into_inner(self) -> (GraphHost<'db>, Vec<SherpaError>) {
-    (self.graph, self.errors)
+  pub fn into_inner(self) -> (ParserClassification, GraphHost<'db>, Vec<SherpaError>) {
+    (self.classification, self.graph, self.errors)
   }
 
   pub fn run(&mut self) {
@@ -954,6 +956,10 @@ impl<'db> GraphBuilder<'db> {
     lookahead.hash(hasher);
 
     hasher.finish()
+  }
+
+  pub fn set_classification(&mut self, classification: ParserClassification) {
+    self.classification |= classification;
   }
 
   fn get_state_symbols<'a>(&mut self, state: StateId) -> Option<OrderedSet<DBTermKey>> {

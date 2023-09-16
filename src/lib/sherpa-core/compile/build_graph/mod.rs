@@ -15,7 +15,7 @@ pub(crate) fn build<'follow, 'db: 'follow>(
   kernel_items: ItemSet<'db>,
   db: &'db ParserDatabase,
   config: ParserConfig,
-) -> SherpaResult<GraphHost<'db>> {
+) -> SherpaResult<(ParserClassification, GraphHost<'db>)> {
   let mut gb = GraphBuilder::new(db, name, graph_type, config, kernel_items);
 
   gb.run();
@@ -27,11 +27,11 @@ pub(crate) fn build<'follow, 'db: 'follow>(
     crate::test::utils::write_debug_file(db, "scanner_graph.tmp", gb.graph()._debug_string_(), true)?;
   }
 
-  let (graph, errors) = gb.into_inner();
+  let (class, graph, errors) = gb.into_inner();
 
   for error in errors {
     j.report_mut().add_error(error)
   }
 
-  j.report_mut().wrap_ok_or_return_errors(graph)
+  j.report_mut().wrap_ok_or_return_errors((class, graph))
 }

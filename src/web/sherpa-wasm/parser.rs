@@ -1,4 +1,7 @@
-use crate::grammar::{JSBytecodePackage, JSParserDB};
+use crate::{
+  grammar::{JSBytecodePackage, JSParserDB},
+  JSParserMetrics,
+};
 use serde::{Deserialize, Serialize};
 use sherpa_core::parser;
 use sherpa_rust_runtime::{

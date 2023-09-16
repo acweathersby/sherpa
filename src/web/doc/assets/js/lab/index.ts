@@ -5,7 +5,7 @@ import docs_handler from './docs_handler';
 import { sherpaLang } from './sherpa_lang';
 import { GrammarContext } from './grammar_context';
 import { get_grammar, get_input, init, set_grammar_update_handler, set_parser_update_handler } from "../common/session_storage";
-import { DebuggerButton, DebuggerCheckbox } from "./debugger/debugger_buttons";
+import { DebuggerButton, DebuggerCheckbox, DebuggerField } from "./debugger/debugger_io";
 import { initDebugger } from "./debugger/debugger";
 import { log } from "js/common/logger";
 
@@ -37,11 +37,13 @@ export default async function (
 
     DebuggerButton.gatherButtons();
     DebuggerCheckbox.gatherCheckBoxes();
+    DebuggerField.gatherFields();
 
     init(window);
 
 
     const ctx = new GrammarContext();
+    initDebugger(ctx, codemirror_parser_host, debugger_entry_selection);
 
     const grammar_editor = new EditorView({
         doc: get_grammar(),
@@ -55,7 +57,6 @@ export default async function (
 
     set_grammar_update_handler(grammar_str => grammar_editor.dispatch({ changes: { from: 0, to: grammar_editor.state.doc.length, insert: grammar_str } }));
 
-    let sherpa_debugger = initDebugger(ctx, codemirror_parser_host, debugger_entry_selection);
 
 }
 

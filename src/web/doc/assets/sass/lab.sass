@@ -194,6 +194,44 @@ pre
     .tabs-header
         border-color: #ED5E3F
 
+    #error-bar
+        position: absolute
+        width: 100%
+        top: 24px
+        height: 0px
+        background-color: #e94520
+        color: #e94520
+        z-index: 1000
+        box-shadow: none
+        box-sizing: border-box
+        padding: 0px
+        font-size: 1.1em
+        font-weight: 600
+        transition: all 200ms, color 100ms
+        overflow: hidden
+
+    #error-bar.show
+        padding: 15px
+        height: 50px
+        color: white
+        box-shadow: 0px -4px -4px #0000002b
+
+    #error-blackout
+        position: absolute
+        top: 24px
+        bottom: 0px
+        right: 0
+        left: 0
+        background-color: black
+        transition: all 100ms
+        pointer-events: none
+        opacity: 0
+        z-index: 200
+
+    #error-blackout.show
+        opacity: 0.2
+        pointer-events: visible
+
     #panel-ast
         overflow: hidden
 
@@ -320,12 +358,27 @@ pre
         position: relative
         height: 17px
         display: inline-flex
-        /* line-height: 20px; */
-        /* vertical-align: middle; */
-        /* font-size: 12px; */
+        margin: 0 4px
 
     input:active
         background-color: red
+
+    .debugger-field
+        background-color: #EEE
+        font-size: .9em
+        height: 14px
+        width: 60px
+        border: 1px solid #EEF
+        padding: 1px
+        outline: none
+        margin: 0 4px
+        border-radius: 3px
+
+        &:read-only
+            user-select: none
+            pointer-events: none
+            opacity: 0.7
+            font-weight: 800
 
     .debugger-button
         position: relative

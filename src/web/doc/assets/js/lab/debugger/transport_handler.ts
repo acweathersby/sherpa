@@ -1,4 +1,4 @@
-import { DebuggerButton } from "./debugger_buttons";
+import { DebuggerButton } from "./debugger_io";
 import { FlowNode } from "../../common/flow";
 import * as sherpa from "js/sherpa/sherpa_wasm.js";
 import { CSTNode } from "./cst";
@@ -274,18 +274,17 @@ export class TransportHandler extends FlowNode<DebuggerData> {
                     this.printInstruction(data);
                 } break outer;;
                 case "Complete": {
-                    console.log("COMPLETE");
                     this.printInstruction(data);
                     this.emit("TransportHandler_disableTransportButtons");
                     this.PARSING = false;
                 } break outer;;
                 case "Error": {
-                    console.log("FAILURE");
                     this.printInstruction(data);
                     this.emit("TransportHandler_disableTransportButtons");
                     this.PARSING = false;
                 } break outer;;
                 case "EndOfFile": {
+                    this.emit("TransportHandler_disableTransportButtons");
                     this.PARSING = false;
                 } break outer;;
                 case "Undefined": {
@@ -345,7 +344,8 @@ export class TransportHandler extends FlowNode<DebuggerData> {
                 this.step_to_next_action = false;
             }
             case "TransportHandler_togglePlay": {
-                this.allow_play = !this.allow_play; if (this.allow_play) {
+                this.allow_play = !this.allow_play;
+                if (this.allow_play) {
                     this.emit("TransportHandler_play");
                 }
             }

@@ -90,6 +90,9 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
             .to_enqueued();
         } else if ____allow_ra____ || len == 1 {
           let items = in_scope.to_next().try_increment();
+
+          gb.set_classification(ParserClassification { bottom_up: true, ..Default::default() });
+
           gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_pending();
         } else {
           if len > 1 {
@@ -148,9 +151,13 @@ pub(crate) fn handle_regular_complete_groups<'db>(
 
         match resolve_reduce_reduce_conflict(gb, prec_sym, follow_pairs)? {
           ReduceReduceConflictResolution::Nothing => {}
-          ReduceReduceConflictResolution::Fork(_) => {}
+          ReduceReduceConflictResolution::Fork(_) => {
+            gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
+          }
           ReduceReduceConflictResolution::Reduce(item) => todo!("Handle reduce result from reduce-reduce conflict resolution"),
-          ReduceReduceConflictResolution::Peek(follow_pairs) => {
+          ReduceReduceConflictResolution::Peek(max_k, follow_pairs) => {
+            gb.set_classification(ParserClassification { peeks_present: true, max_k, ..Default::default() });
+
             let state = create_peek(gb, prec_sym, [].iter(), Some(follow_pairs.iter()), true, StateType::Peek)?;
             gb.add_pending(state);
           }
@@ -174,12 +181,16 @@ pub(crate) fn handle_regular_complete_groups<'db>(
           ShiftReduceConflictResolution::Reduce => {
             handle_completed_groups(gb, &mut Default::default(), sym, follow_pairs, &cmpl.to_set())?;
           }
-          ShiftReduceConflictResolution::Peek => {
+          ShiftReduceConflictResolution::Peek(max_k) => {
+            gb.set_classification(ParserClassification { peeks_present: true, max_k, ..Default::default() });
+
             let state = create_peek(gb, prec_sym, group.iter(), Some(follow_pairs.iter()), true, StateType::Peek)?;
             gb.add_pending(state);
           }
           ShiftReduceConflictResolution::Fork => {
-            return Err(SherpaError::Text("todo(anthony): Not ready for forking yet".into()))
+            gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
+
+            return Err(SherpaError::Text("todo(anthony): Not ready for forking yet".into()));
           }
         }
       }

@@ -15,7 +15,11 @@ type Scanners = OrderedSet<(IString, OrderedSet<PrecedentDBTerm>)>;
 type Errors = Array<SherpaError>;
 use rayon::prelude::*;
 
-pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserConfig) -> SherpaResult<ParseStatesMap> {
+pub fn compile_parse_states(
+  mut j: Journal,
+  db: &ParserDatabase,
+  config: ParserConfig,
+) -> SherpaResult<(ParserClassification, ParseStatesMap)> {
   j.set_active_report("State Compile", ReportType::NonTerminalCompile(Default::default()));
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
@@ -49,24 +53,27 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
       let mut states = States::new();
       let mut scanners = Scanners::new();
       let mut errors = Errors::new();
+      let mut classification = Default::default();
 
       for (nterm, nterm_sym) in chunks {
         match create_parse_states_from_prod(&mut local_j, db, *nterm, *nterm_sym, &mut states, &mut scanners, config) {
-          SherpaResult::Ok(_) => {}
+          SherpaResult::Ok(class) => {
+            classification |= class;
+          }
           SherpaResult::Err(err) => errors.push(err),
         }
       }
-      (states, scanners, errors)
+      (classification, states, scanners, errors)
     })
     .collect::<Vec<_>>();
 
-  let (mut states, scanners, mut errors) = results.into_iter().fold(
-    (States::new(), Scanners::new(), Errors::new()),
-    |(mut st_to, mut sc_to, mut er_to), (mut st_from, mut sc_from, mut er_from)| {
+  let (classification, mut states, scanners, mut errors) = results.into_iter().fold(
+    (ParserClassification::default(), States::new(), Scanners::new(), Errors::new()),
+    |(c_to, mut st_to, mut sc_to, mut er_to), (c_from, mut st_from, mut sc_from, mut er_from)| {
       st_to.append(&mut st_from);
       sc_to.append(&mut sc_from);
       er_to.append(&mut er_from);
-      (st_to, sc_to, er_to)
+      (c_to | c_from, st_to, sc_to, er_to)
     },
   );
 
@@ -96,7 +103,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
       })
       .collect::<ItemSet>();
 
-    let graph = build(&mut j, scanner, GraphType::Scanner, start_items, db, config)?;
+    let (_, graph) = build(&mut j, scanner, GraphType::Scanner, start_items, db, config)?;
 
     let ir = build_ir(&mut j, GraphIterator::new(&graph), scanner)?;
 
@@ -115,7 +122,7 @@ pub fn compile_parse_states(mut j: Journal, db: &ParserDatabase, config: ParserC
     }
   }
 
-  SherpaResult::Ok(states)
+  SherpaResult::Ok((classification, states))
 }
 
 fn create_parse_states_from_prod<'db>(
@@ -126,8 +133,10 @@ fn create_parse_states_from_prod<'db>(
   states: &mut States,
   scanners: &mut Scanners,
   config: ParserConfig,
-) -> SherpaResult<()> {
+) -> SherpaResult<ParserClassification> {
   j.set_active_report("Non-terminal Compile", ReportType::NonTerminalCompile(nterm_sym.to_nterm()));
+
+  let mut classification = Default::default();
 
   if let Some(custom_state) = db.custom_state(nterm_key) {
     let name = db.nonterm_guid_name(nterm_key);
@@ -149,7 +158,9 @@ fn create_parse_states_from_prod<'db>(
 
     match nterm_sym {
       SymbolId::NonTerminal { .. } => {
-        let graph = build(j, db.nonterm_guid_name(nterm_key), GraphType::Parser, start_items, db, config)?;
+        let (class, graph) = build(j, db.nonterm_guid_name(nterm_key), GraphType::Parser, start_items, db, config)?;
+
+        classification |= class;
 
         let ir = build_ir(j, GraphIterator::new(&graph), db.nonterm_guid_name(nterm_key))?;
 
@@ -161,7 +172,7 @@ fn create_parse_states_from_prod<'db>(
         }
       }
       SymbolId::NonTerminalToken { .. } => {
-        let graph = build(j, db.nonterm_guid_name(nterm_key), GraphType::Scanner, start_items, db, config)?;
+        let (_, graph) = build(j, db.nonterm_guid_name(nterm_key), GraphType::Scanner, start_items, db, config)?;
 
         let ir = build_ir(j, GraphIterator::new(&graph), db.nonterm_guid_name(nterm_key))?;
 
@@ -174,7 +185,7 @@ fn create_parse_states_from_prod<'db>(
     }
   }
 
-  SherpaResult::Ok(())
+  SherpaResult::Ok(classification)
 }
 
 fn build_entry_ir<'db>(

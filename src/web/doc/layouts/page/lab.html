@@ -48,6 +48,8 @@
         </div>
 
         <div id="right-column">
+            <div id="error-bar">test</div>
+            <div id="error-blackout"></div>
             <div class="controls">
                 <div class="debugger-button" id="profile" title="profile parser ( alt+p )">
                     <i class="fa-solid fa-chart-line active hover inactive"></i>
@@ -97,6 +99,16 @@
                 <label title="enable a look ahead greater than k=1"> 
                     <input class="debugger-checkbox" type="checkbox" id="pk-enable"></input>
                     PK
+                </label>
+
+                <label title=""> 
+                    Type
+                    <input class="debugger-field" type="text" id="parser-type" placeholder="N/A" readonly></input>
+                </label>
+
+                <label title=""> 
+                    States
+                    <input class="debugger-field" type="number" id="num-of-states" placeholder="N/A" readonly></input>
                 </label>
 
             </div>

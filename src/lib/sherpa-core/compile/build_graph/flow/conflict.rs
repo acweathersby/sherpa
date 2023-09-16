@@ -26,7 +26,7 @@ use crate::{
 pub(super) enum ShiftReduceConflictResolution {
   Shift,
   Reduce,
-  Peek,
+  Peek(u16),
   Fork,
 }
 
@@ -34,7 +34,7 @@ const MAX_EVAL_K: usize = 8;
 pub(super) enum ReduceReduceConflictResolution<'db> {
   Reduce(Item<'db>),
   Fork(Follows<'db>),
-  Peek(Follows<'db>),
+  Peek(u16, Follows<'db>),
   Nothing,
 }
 
@@ -67,7 +67,8 @@ pub(super) fn resolve_reduce_reduce_conflict<'db>(
             ),
           );
         }
-        Ok(ReduceReduceConflictResolution::Peek(follow_pairs))
+
+        Ok(ReduceReduceConflictResolution::Peek(k as u16, follow_pairs))
       }
       _ => todo!("Resolve lookahead conflicts"),
     }
@@ -115,7 +116,10 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
       } else if k > gb.config.max_k {
         peek_not_allowed_error(gb, &[shifts.cloned().collect(), reduces.cloned().collect()], "")?;
       }
-      Ok(ShiftReduceConflictResolution::Peek)
+
+      gb.set_classification(ParserClassification { peeks_present: true, max_k: k as u16, ..Default::default() });
+
+      Ok(ShiftReduceConflictResolution::Peek(k as u16))
     }
     KCalcResults::RecursiveAt(k) => {
       // Test for classic shift reduce problem.
@@ -150,7 +154,10 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
           ),
         )?;
       }
-      Ok(ShiftReduceConflictResolution::Peek)
+
+      gb.set_classification(ParserClassification { peeks_present: true, max_k: k as u16, ..Default::default() });
+
+      Ok(ShiftReduceConflictResolution::Peek(k as u16))
     }
   }
 }

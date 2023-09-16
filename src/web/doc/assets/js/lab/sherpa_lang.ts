@@ -7,8 +7,10 @@ import { Input, NodeSet, Parser, PartialParse, Tree, TreeFragment, NodeType } fr
 import * as sherpa from "js/sherpa/sherpa_wasm.js";
 import { tags, Tag, styleTags, tagHighlighter } from '@lezer/highlight';
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language';
-import { linter, Diagnostic } from "@codemirror/lint";
-import { GrammarContext } from "./grammar_context";
+import { Diagnostic, setDiagnostics } from "@codemirror/lint";
+import { Facet } from "@codemirror/state";
+import { ViewPlugin, EditorView, ViewUpdate } from "@codemirror/view";
+import { EventType, GrammarContext } from "./grammar_context";
 import { set_grammar } from "../common/session_storage";
 
 class SherpaParser extends Parser {
@@ -20,6 +22,10 @@ class SherpaParser extends Parser {
     nodeSet: NodeSet;
 
     ctx: GrammarContext;
+
+    input: string = ""
+
+    stack: any
 
     constructor(ctx: GrammarContext) {
         super();
@@ -45,23 +51,21 @@ class SherpaParser extends Parser {
 
         let input_string = input.read(ranges[0].from, ranges[0].to);
 
-        let parser = sherpa.JSGrammarParser.new(input_string);
+        if (input_string != this.input) {
+            this.input = input_string;
+            this.stack = sherpa.get_codemirror_parse_tree(input_string);
+            this.stack[this.stack.length - 4] = 4;
+            this.ctx.addGrammar(input_string, "/");
+        }
 
-        let stack = sherpa.get_codemirror_parse_tree(input_string);
-
-        this.ctx.addGrammar(input_string, "/");
-
-        stack[stack.length - 4] = 4;
-
-        let nodeSet = this.nodeSet;
-        let len = input_string.length;
+        let len = this.input.length;
 
         return {
-            advance() {
+            advance: () => {
                 return Tree.build({
                     topID: 0,
-                    buffer: stack,
-                    nodeSet
+                    buffer: this.stack,
+                    nodeSet: this.nodeSet
 
                 });
             },
@@ -77,54 +81,100 @@ class SherpaParser extends Parser {
 
 /// Responsible for building the ParserDB for a given grammar or producing semantic errors. 
 /// Used in conjunction with the SherpaParser to produce a viable ParserBase.
-function SherpaLinter(ctx: GrammarContext) {
-    return linter((view) => {
-        console.log("Linting!")
+function SherpaLinter(ctx: GrammarContext): any[] {
 
-        set_grammar(view.state.doc.toString());
+    let linter = ViewPlugin.fromClass(class {
 
-        let messages: Diagnostic[] = [];
+        view: EditorView
 
-        let parser_errors = ctx.parse_errors;
+        ctx: GrammarContext
 
-        if (parser_errors.length > 0) {
-            convertPosErrorsToDiagnostics(parser_errors, "parser", messages);
+        timeout: number
+
+        timeout_handle: number = -1
+
+        force_refresh: boolean = false;
+
+        need_linting: boolean = true
+
+        _lint: any
+
+        constructor(view: EditorView) {
+            this.view = view;
+            this.ctx = ctx;
+            this.timeout = 200;
+            this._lint = this.lint.bind(this);
+            this.ctx.addListener(EventType.NewErrors, () => {
+                this.need_linting = true;
+                this.lint();
+            });
+            this.ctx.addListener(EventType.DBCreated, () => {
+                this.need_linting = true;
+                this.lint();
+            });
         }
 
-        if (!ctx.createDB("/")) {
+        lint() {
+            if (!this.need_linting)
+                return;
+
+            this.timeout_handle = -1;
+            this.need_linting = false;
+
+            let { view } = this;
+
+            set_grammar(view.state.doc.toString());
+
+            let messages: Diagnostic[] = [];
+
+            convertPosErrorsToDiagnostics(ctx.parse_errors, "grammar", messages);
+
+            convertPosErrorsToDiagnostics(ctx.parser_errors, "parser", messages);
+
             convertPosErrorsToDiagnostics(ctx.db_errors, "semantic-evaluator", messages);
-        } else {
 
-            let db = ctx.db;
+            this.view.dispatch(setDiagnostics(this.view.state, messages))
 
-            if (!db)
-                return messages;
+        }
 
-            // Now that we have a db we can kick off jobs to further process
-            // the data on to 
-            console.log("DB Created")
+        update(update: ViewUpdate) {
+            let config = update.state.facet(linterFacet);
+            let start = update.startState.facet(linterFacet);
 
-            try {
-                // Build the soup.
-                let output = document.getElementById("ast-source");
-                if (output) {
-                    output.innerText = sherpa.create_rust_ast_output(db);
+            if (update.docChanged || config != start || this.need_linting) {
+                this.need_linting = true;
+                if (this.timeout_handle) {
+                    clearTimeout(this.timeout_handle);
                 }
-            } catch (e) {
-                if (e instanceof sherpa.PositionedErrors) {
-                    convertPosErrorsToDiagnostics(e, "ast-compiler", messages);
-                    e.free();
+                if (this.force_refresh) {
+                    this.lint()
+                    this.force_refresh = false;
+                    this.timeout_handle = -1;
                 } else {
-                    console.log(e)
+                    this.timeout_handle = setTimeout(this._lint, this.timeout)
                 }
             }
         }
 
-        return messages;
-    }, {
-        delay: 130,
+        destroy() {
+            console.log("destroy");
+        }
+    });
+
+    let linterFacet = Facet.define({
+        combine() {
+            return {
+                sources: [() => { }],
+                needsRefresh: true,
+            }
+        },
+        enables: linter
     })
+
+    return [linterFacet.of({})]
 }
+
+
 
 function convertPosErrorsToDiagnostics(e: sherpa.PositionedErrors | sherpa.JSSherpaSourceError[], source: string, messages: Diagnostic[] = []): Diagnostic[] {
     for (let i = 0; i < e.length; i++) {

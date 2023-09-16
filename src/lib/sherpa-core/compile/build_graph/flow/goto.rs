@@ -162,6 +162,8 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
 
   increment_gotos(gb);
 
+  gb.set_classification(ParserClassification { gotos_present: true, ..Default::default() });
+
   SherpaResult::Ok(true)
 }
 

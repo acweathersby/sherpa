@@ -29,7 +29,6 @@ export class DebuggerButton {
 
     static gatherButtons() {
         for (const ele of Array.from(document.getElementsByClassName("debugger-button"))) {
-            console.log(ele)
             DebuggerButton.buttons.set(ele.id, new DebuggerButton(<HTMLElement>ele));
         }
     }
@@ -74,12 +73,55 @@ export class DebuggerCheckbox {
 
     static gatherCheckBoxes() {
         for (const ele of Array.from(document.getElementsByClassName("debugger-checkbox"))) {
-            console.log(ele)
             DebuggerCheckbox.buttons.set(ele.id, new DebuggerCheckbox(<HTMLInputElement>ele));
         }
     }
 
     static get(check_box_name: string): DebuggerCheckbox {
         return <any>DebuggerCheckbox.buttons.get(check_box_name);
+    }
+}
+
+
+export class DebuggerField {
+    static fields: Map<string, DebuggerField> = new Map();
+
+    public _ele: HTMLInputElement
+
+    removeEventListener: HTMLElement["removeEventListener"];
+    addEventListener: HTMLElement["addEventListener"];
+
+    constructor(ele: HTMLInputElement) {
+        this._ele = ele;
+        this.addEventListener = ele.addEventListener.bind(ele);
+        this.removeEventListener = ele.removeEventListener.bind(ele);
+    }
+
+    set active(active: boolean) {
+        if (active)
+            this._ele.classList.add("active")
+        else
+            this._ele.classList.remove("active")
+    }
+
+    set disable(active: boolean) {
+        if (active)
+            this._ele.classList.add("disable")
+        else
+            this._ele.classList.remove("disable")
+    }
+
+    get ele(): HTMLInputElement {
+        return this._ele;
+    }
+
+    static gatherFields() {
+        for (const ele of Array.from(document.getElementsByClassName("debugger-field"))) {
+            DebuggerField.fields.set(ele.id, new DebuggerField(<HTMLInputElement>ele));
+        }
+    }
+
+    static get(check_box_name: string): DebuggerField {
+        return <any>DebuggerField.fields.get(check_box_name);
     }
 }

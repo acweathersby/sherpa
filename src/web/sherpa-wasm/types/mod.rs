@@ -1,3 +1,3 @@
-mod debugger;
+mod parser_config;
 
-pub use debugger::*;
+pub use parser_config::*;

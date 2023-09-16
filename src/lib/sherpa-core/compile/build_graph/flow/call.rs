@@ -48,6 +48,9 @@ pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone
         _ => {
           // Create call on the kernel items.
           let items = group.to_kernel().to_vec();
+
+          gb.set_classification(ParserClassification { calls_present: true, ..Default::default() });
+
           return Some(CreateCallResult {
             is_kernel:         true,
             state_id:          gb
@@ -67,6 +70,8 @@ pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone
   };
 
   if let Some((nonterm, items)) = climb_nonterms(gb, group) {
+    gb.set_classification(ParserClassification { calls_present: true, ..Default::default() });
+
     return Some(CreateCallResult {
       is_kernel:         false,
       state_id:          gb

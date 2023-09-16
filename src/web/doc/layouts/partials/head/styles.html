@@ -8,3 +8,4 @@
 {{ $home := resources.Get "sass/home.sass" | resources.ToCSS -}}
 <link rel="stylesheet" type="text/css" href="{{ $home.Permalink }}">
 {{- end }}
+<link rel="stylesheet" type="text/css" href="/css/all.min.css">

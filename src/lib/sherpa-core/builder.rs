@@ -8,7 +8,9 @@ use crate::{
   GrammarSoup,
   Journal,
   ParseStatesVec,
+  ParserClassification,
   ParserDatabase,
+  ParserMetrics,
   SherpaError,
   SherpaResult,
 };
@@ -28,6 +30,16 @@ pub trait JournalReporter {
 pub trait ParserStore: JournalReporter {
   fn get_states(&self) -> &ParseStatesVec;
   fn get_db(&self) -> &ParserDatabase;
+  fn get_classification(&self) -> ParserClassification;
+  fn get_is_optimized(&self) -> bool;
+
+  fn get_meterics(&self) -> ParserMetrics {
+    ParserMetrics {
+      classification: self.get_classification(),
+      num_of_states:  self.get_states().len(),
+      optimized:      self.get_is_optimized(),
+    }
+  }
 
   /// Writes the parser IR states to a file in the temp directory
   #[cfg(all(debug_assertions))]
@@ -259,10 +271,11 @@ impl SherpaDatabaseBuilder {
     let SherpaDatabaseBuilder { j, db } = self;
 
     match compile_parse_states(j.transfer(), db, config) {
-      Ok(states) => {
+      Ok((classification, states)) => {
         j.transfer().flush_reports();
 
         Ok(SherpaParserBuilder {
+          classification,
           j: j.transfer(),
           db: db.clone(),
           states: states.into_iter().collect(),
@@ -293,6 +306,7 @@ pub struct SherpaParserBuilder {
   j: Journal,
   db: ParserDatabase,
   states: ParseStatesVec,
+  classification: ParserClassification,
   optimized_states: Option<ParseStatesVec>,
 }
 
@@ -310,6 +324,14 @@ impl ParserStore for SherpaParserBuilder {
   fn get_states(&self) -> &ParseStatesVec {
     self.get_states()
   }
+
+  fn get_classification(&self) -> ParserClassification {
+    self.classification
+  }
+
+  fn get_is_optimized(&self) -> bool {
+    self.optimized_states.is_some()
+  }
 }
 
 impl SherpaParserBuilder {
@@ -318,9 +340,10 @@ impl SherpaParserBuilder {
   }
 
   pub fn optimize(self, for_debugging: bool) -> SherpaResult<Self> {
-    let SherpaParserBuilder { db, j, states, optimized_states } = self;
+    let SherpaParserBuilder { db, j, states, optimized_states, classification } = self;
 
     Ok(Self {
+      classification,
       optimized_states: match optimized_states {
         None => Some(optimize(&db, states.iter().cloned().collect(), for_debugging)?),
         states => states,
@@ -374,6 +397,14 @@ impl ParserStore for TestPackage {
 
   fn get_states(&self) -> &ParseStatesVec {
     &self.states
+  }
+
+  fn get_is_optimized(&self) -> bool {
+    false
+  }
+
+  fn get_classification(&self) -> ParserClassification {
+    Default::default()
   }
 }
 

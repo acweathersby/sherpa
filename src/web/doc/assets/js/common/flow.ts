@@ -115,7 +115,6 @@ export class RootFlowNode<T extends object> extends FlowNode<T> {
                 // Do nothing
             } else {
                 this._update(transition[0], this.current_state);
-                console.log(this.subnodes)
             }
         }
 

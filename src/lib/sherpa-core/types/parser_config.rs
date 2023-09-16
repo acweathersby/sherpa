@@ -127,3 +127,101 @@ impl ParserConfig {
     self
   }
 }
+
+/// Used to track the type of parser that has been created by sherpa.
+#[derive(Default, Clone, Copy)]
+pub struct ParserClassification {
+  /// Maximum peek level used to disambiguate conflicting phrases. If this is
+  /// equal to `u16::MAX`, then peeking failed or a fork was used in its place.
+  pub max_k:         u16,
+  ///
+  pub bottom_up:     bool,
+  /// If set to true then the parser has at least one state that transitions on
+  /// non-terminals as well terminals.
+  pub gotos_present: bool,
+  /// If set to true, then the parser has at least one state that jumps to the
+  /// head state of a specific non-terminal
+  pub calls_present: bool,
+  /// If set to true, the parser has at least one state that performs k>1
+  /// lookaheads before selecting an appropriate alternative action.
+  pub peeks_present: bool,
+  /// If set to true, the parser has at least one state that forks the parse
+  /// tree, and performs parsing on separate alternatives in parallel
+  pub forks_present: bool,
+}
+
+impl std::ops::BitOr for ParserClassification {
+  type Output = Self;
+
+  fn bitor(self, rhs: Self) -> Self::Output {
+    Self {
+      max_k:         self.max_k.max(rhs.max_k),
+      bottom_up:     self.bottom_up | rhs.bottom_up,
+      gotos_present: self.gotos_present | rhs.gotos_present,
+      calls_present: self.calls_present | rhs.calls_present,
+      peeks_present: self.peeks_present | rhs.peeks_present,
+      forks_present: self.forks_present | rhs.forks_present,
+    }
+  }
+}
+
+impl std::ops::BitOr for &ParserClassification {
+  type Output = ParserClassification;
+
+  fn bitor(self, rhs: Self) -> Self::Output {
+    *self | *rhs
+  }
+}
+
+impl std::ops::BitOrAssign for ParserClassification {
+  fn bitor_assign(&mut self, rhs: Self) {
+    *self = *self | rhs
+  }
+}
+
+impl std::ops::Add for ParserClassification {
+  type Output = ParserClassification;
+
+  fn add(self, rhs: Self) -> Self::Output {
+    self | rhs
+  }
+}
+
+impl std::ops::Add for &ParserClassification {
+  type Output = ParserClassification;
+
+  fn add(self, rhs: Self) -> Self::Output {
+    *self | *rhs
+  }
+}
+
+impl ParserClassification {
+  pub fn get_type(&self) -> String {
+    let base = if self.calls_present {
+      if self.bottom_up {
+        "RAD"
+      } else {
+        "RD"
+      }
+    } else {
+      if self.gotos_present {
+        "LR"
+      } else {
+        "LL"
+      }
+    };
+
+    let g = if self.forks_present { "G" } else { "" };
+
+    let k = if self.peeks_present { "(".to_string() + &self.max_k.to_string() + ")" } else { "(1)".into() };
+
+    g.to_string() + base + &k
+  }
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct ParserMetrics {
+  pub classification: ParserClassification,
+  pub num_of_states:  usize,
+  pub optimized:      bool,
+}

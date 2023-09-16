@@ -12,7 +12,7 @@ use sherpa_rust_runtime::{
 use std::{path::PathBuf, rc::Rc};
 use wasm_bindgen::prelude::*;
 
-use crate::{error::PositionedErrors, JSParserConfig};
+use crate::{error::PositionedErrors, JSParserConfig, JSParserMetrics};
 
 /// A Grammar Identity
 #[wasm_bindgen]
@@ -25,8 +25,8 @@ pub struct JSParserDB(pub(crate) Box<SherpaDatabaseBuilder>);
 /// Parser states generated from the compilation of parser db
 #[wasm_bindgen]
 pub struct JSParseStates {
-  pub(crate) states: Box<SherpaParserBuilder>,
-  pub num_of_states: u32,
+  pub(crate) states:  Box<SherpaParserBuilder>,
+  pub parser_metrics: JSParserMetrics,
 }
 
 /// An arbitrary collection of grammars
@@ -115,7 +115,7 @@ pub fn create_rust_ast_output(js_db: &JSParserDB) -> Result<String, PositionedEr
 pub fn create_parser_states(
   js_db: &JSParserDB,
   optimize_states: bool,
-  config: JSParserConfig,
+  config: &JSParserConfig,
 ) -> Result<JSParseStates, PositionedErrors> {
   let mut j = Journal::new();
 
@@ -128,8 +128,8 @@ pub fn create_parser_states(
   let parser = if optimize_states { parser.optimize(true).map_err(to_err)? } else { parser };
 
   Ok(JSParseStates {
-    num_of_states: parser.get_states().len() as u32,
-    states:        Box::new(parser),
+    parser_metrics: parser.get_meterics().into(),
+    states:         Box::new(parser),
   })
 }
 
