@@ -55,7 +55,11 @@ export class FlowNode<T extends object> {
         });
 
         if (this.subnodes.some(n => n.parent != this)) {
-            this._update_init(transition, state);
+            try {
+                this._update_init(transition, state);
+            } catch (e) {
+                console.error(e)
+            }
         }
 
         return this.update(transition, state);

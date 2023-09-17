@@ -2,7 +2,7 @@
 
 use super::super::graph::*;
 use crate::{
-  compile::build_graph::items::{get_follow, get_goal_items_from_completed},
+  compile::build_graph::items::{get_follow, get_follow_internal, get_goal_items_from_completed, FollowType},
   types::*,
 };
 
@@ -35,10 +35,10 @@ fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuil
   let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
   let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false; // Forking is disabled
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
-
-  if !gb.graph().item_is_goal(&root_item) && !root_item.from_goto_origin {
+  /*
+  if false && !gb.graph().item_is_goal(&root_item) && !root_item.from_goto_origin {
     let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-      completed.iter().into_iter().map(|i| get_follow(gb, i.kernel, true)).unzip();
+      completed.iter().into_iter().map(|i| get_follow_internal(gb, i.kernel, FollowType::FirstReduction)).unzip();
 
     let follow = follow.into_iter().flatten();
     let completed_items = completed_items.into_iter().flatten();
@@ -60,16 +60,16 @@ fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuil
       state.set_reduce_item(root_item);
       state.to_pending();
     }
-  } else {
-    let mut state = gb.create_state(
-      Normal,
-      sym,
-      StateType::Reduce(root_item.rule_id, root_item.goto_distance as usize),
-      Some([root_item].into_iter()),
-    );
-    state.set_reduce_item(root_item);
-    state.to_leaf();
-  }
+  } else { */
+  let mut state = gb.create_state(
+    Normal,
+    sym,
+    StateType::Reduce(root_item.rule_id, root_item.goto_distance as usize),
+    Some([root_item].into_iter()),
+  );
+  state.set_reduce_item(root_item);
+  state.to_leaf();
+  //  }
 }
 
 fn complete_scan<'db>(
@@ -79,7 +79,7 @@ fn complete_scan<'db>(
   first: TransitionPair<'db>,
 ) {
   let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-    completed.iter().into_iter().map(|i| get_follow(gb, i.kernel, false)).unzip();
+    completed.iter().into_iter().map(|i| get_follow_internal(gb, i.kernel, FollowType::ScannerCompleted)).unzip();
 
   let follow = follow.into_iter().flatten().collect::<Items>();
   let completed_items = completed_items.into_iter().flatten().collect::<Items>();
@@ -109,6 +109,15 @@ fn complete_scan<'db>(
       state.to_enqueued()
     }
   } else {
+    if !completes_goal {
+      follow._debug_print_("FOLLW");
+      completed_items._debug_print_("COMPLETED");
+      state.state_ref()._debug_print_();
+      state.to_leaf();
+      gb._print_graph_();
+      panic!("AAA");
+      return;
+    }
     debug_assert!(completes_goal);
     Some(state.to_leaf())
   };

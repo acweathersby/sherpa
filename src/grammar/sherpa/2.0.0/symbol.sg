@@ -69,7 +69,7 @@ IMPORT ./token as tok
 
 <> class >
 
-    "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'htab' )
+    "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'vtab' )
 
         :ast { t_ClassSymbol, val:str($2),  tok }
 

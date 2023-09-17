@@ -358,7 +358,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
             }
             case "TransportHandler_play": {
                 if (this.allow_play && this.PARSING) {
-                    for (let i = 0; i < 5 && this.PARSING; i++) { this.step(data, true); }
+                    for (let i = 0; i < 10 && this.PARSING; i++) { this.step(data, true); }
                     if (this.PARSING) { this.emit("TransportHandler_play"); }
                 } else {
                     this.allow_play = false;

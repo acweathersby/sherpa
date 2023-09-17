@@ -40,7 +40,7 @@ fn get_firsts<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<GroupedFirsts<'db
   let iter = state.get_kernel_items().iter().flat_map(|k_i| {
     let basis = k_i.to_origin_state(gb.current_state_id()).to_lane(k_i.lane.to_curr());
     k_i
-      .closure_iter_align(basis)
+      .closure_iter_align_with_lane_split(basis)
       .term_items_iter(gb.is_scanner())
       .map(|t_item| -> TransitionPair { (*k_i, t_item, gb.get_mode()).into() })
   });

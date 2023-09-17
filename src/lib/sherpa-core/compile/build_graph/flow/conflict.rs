@@ -180,7 +180,7 @@ fn get_follow_artifacts<'db>(
   let mut out = OrderedSet::default();
   let mut syms = OrderedSet::default();
   for item in i_reduce {
-    let (follow, default) = get_follow(gb, *item, false);
+    let (follow, default) = get_follow(gb, *item);
 
     let items = follow.iter().flat_map(|i| i.closure_iter_align(*i));
 

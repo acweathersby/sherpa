@@ -29,6 +29,12 @@ pub struct ParserConfig {
   /// Creates a single scanner instead of multiple contextual scanners. More
   /// likely to report terminal conflicts.
   pub CONTEXT_FREE: bool,
+  /// Creates states that directly handle transitions on terminals, allowing the
+  /// creation of parsers that can patch existing CST structures.
+  pub AllOW_CST_MERGING: bool,
+  /// Creates states that handle erroneous inputs, allowing a parser to recover
+  /// from unexpected or missing tokens and continune parsing an input.
+  pub AllOW_ERROR_RECOVERY: bool,
 }
 
 impl Default for ParserConfig {
@@ -39,6 +45,8 @@ impl Default for ParserConfig {
       ALLOW_LOOKAHEAD_MERGE: true,
       ALLOW_PEEKING: true,
       ALLOW_FORKING: false,
+      AllOW_CST_MERGING: false,
+      AllOW_ERROR_RECOVERY: false,
       CONTEXT_FREE: false,
       max_k: usize::MAX,
     }

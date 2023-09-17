@@ -421,14 +421,24 @@ impl<'graph, 'db: 'graph> GraphStateMutRef<'graph, 'db> {
   }
 
   pub(crate) fn set_kernel_items<T: Iterator<Item = Item<'db>>>(&mut self, kernel_items: T) {
-    self
-      .graph
-      .kernel_items
-      .insert(self.id, kernel_items.map(|i| if i.origin_state.is_invalid() { i.to_origin_state(self.id) } else { i }).collect());
+    self.graph.kernel_items.insert(
+      self.id,
+      kernel_items
+        .map(|i| {
+          debug_assert_eq!(i.lane.get_curr(), i.index().into());
+          if i.origin_state.is_invalid() {
+            i.to_origin_state(self.id)
+          } else {
+            i
+          }
+        })
+        .collect(),
+    );
   }
 
   pub(crate) fn add_kernel_items<T: ItemContainerIter<'db>>(&mut self, kernel_items: T) {
     self.graph.kernel_items.entry(self.id).or_default().extend(kernel_items.map(|i| {
+      debug_assert_eq!(i.lane.get_curr(), i.index().into());
       if i.origin_state.is_invalid() {
         i.to_origin_state(self.id)
       } else {
@@ -1009,7 +1019,7 @@ impl<'db> GraphBuilder<'db> {
           }
         }
       } else {
-        let (follow, _) = get_follow(self, item, false);
+        let (follow, _) = get_follow(self, item);
         for item in follow {
           if let Some(term) = item.term_index_at_sym(mode) {
             symbols.insert(term);

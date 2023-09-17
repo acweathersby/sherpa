@@ -13,25 +13,21 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
   let db = gb.db;
   let kernel_base: ItemSet = gb.current_state().get_kernel_items().iter().inscope_items();
 
-  let conanical: ItemSet =
+  let canonical: ItemSet =
     if gb.current_state_id().is_root() { kernel_base.iter().map(|i| i.to_canonical()).collect() } else { Default::default() };
-  let conanical = &conanical; // Make a reference to allow its use within closures.
+  let canonical = &canonical; // Make a reference to allow its use within closures.
 
   let state_id = gb.current_state_id();
   let origin = Origin::Goto(state_id);
-
-  let mut offset = kernel_base.iter().map(|i| i.lane.get_curr()).max().unwrap_or_default();
-  let offset = &mut offset;
 
   let mut nterm_items = kernel_base.iter().nonterm_items::<ItemSet>(mode);
   nterm_items.extend(kernel_base.iter().filter(|i| !i.is_complete()).flat_map(|i| {
     let basis = i.to_origin(origin).to_origin_state(state_id);
     let closure = i
       .closure_iter_align_with_lane_split(basis)
-      .filter(move |i| i.is_nonterm(mode) && !conanical.contains(&i.to_canonical()))
+      .filter(move |i| i.is_nonterm(mode) && !canonical.contains(&i.to_canonical()))
       .enumerate()
       .map(|(index, i)| (index > 0).then_some(i.to_goto_origin()).unwrap_or(i));
-    *offset = closure.clone().map(|i| i.lane.get_curr()).max().unwrap_or_default();
     closure
   }));
 
@@ -46,8 +42,7 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
     out_items.into_iter().filter(|i| i.origin_state == parent_id && (!kernel_base.contains(i) || i.is_start())).collect()
   };
 
-  if out_items.is_empty()
-  {
+  if out_items.is_empty() {
     return Ok(false);
   }
 

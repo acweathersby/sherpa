@@ -73,7 +73,11 @@ pub struct ItemLane {
 
 impl ItemLane {
   pub fn is_from_lane(&self, other: Self) -> bool {
-    self.curr == other.curr || self.prev == other.curr
+    /* self.curr == other.curr || */
+    // This item follows the other item
+    self.prev == other.curr || 
+    // This item comes from the same closure as the other item
+    self.prev == other.prev
   }
 
   pub fn new(lane: ItemIndex) -> Self {
@@ -342,6 +346,16 @@ impl<'db> Item<'db> {
     }
   }
 
+  pub fn increment_with_lane_remap(&self) -> Option<Self> {
+    if !self.is_complete() {
+      let mut s = Self { len: self.len, sym_index: self.sym_index + 1, ..self.clone() };
+      s.lane = ItemLane { curr: s.index().into(), prev: self.lane.prev };
+      Some(s)
+    } else {
+      None
+    }
+  }
+
   /// Increments the Item if it is not in the completed position,
   /// otherwise returns the Item as is.
   pub fn try_increment(&self) -> Self {
@@ -581,6 +595,8 @@ impl<'db> Item<'db> {
         .unwrap_or_else(|| format!("<[{}-{:?}]  {:?} ", self.origin.debug_string(self.db), self.origin_state, self.lane));
       #[cfg(not(debug_assertions))]
       let mut string = String::new();
+
+      string += &format!("{:?} ", self.index());
 
       if !self.is_canonical() {
         if self.from_goto_origin {
