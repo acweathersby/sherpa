@@ -56,7 +56,6 @@ pub struct SymbolData<'a> {
   pub sym_atom: Option<&'a ASTNode>,
 }
 
-
 /// Get a flattened view of a symbol's immediate AST
 pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
   let mut data = SymbolData::default();
@@ -64,11 +63,11 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
   loop {
     match sym {
       ASTNode::AnnotatedSymbol(annotated) => {
-        
+
         data.is_optional |= annotated.is_optional;
 
         let (sym_prec, tok_prec) = annotated.precedence.as_ref().and_then(|p| Some((p.sym_prec, p.kot_prec)) ).unwrap_or_default();
-        
+
         data.symbol_precedence = sym_prec as u16;
 
         if tok_prec > 0 {
@@ -85,7 +84,7 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
 
           data.annotation = annotated.reference[1..].to_string();
         }
-        
+
         sym = &annotated.symbol;
       }
       ASTNode::Grouped_Rules(_) => {

@@ -147,7 +147,7 @@ Stack:\n{}\n
       )
     }
     DebugEvent::ActionReduce { rule_id } => {
-      let item = Item::from_rule((*rule_id).into(), &db);
+      let item = Item::from((DBRuleKey::from(*rule_id), db));
       let nterm_name = item.nonterm_name().to_string(db.string_store());
       let nterm_name = nterm_name.split("____").last().unwrap();
 
@@ -159,7 +159,7 @@ Stack:\n{}\n
           stack.push(first);
         } */
         t @ _ | t @ ReductionType::SemanticAction | t @ ReductionType::Mixed | t @ ReductionType::SingleTerminal => {
-          let items = stack.drain((stack.len() - item.len as usize)..);
+          let items = stack.drain((stack.len() - item.sym_len() as usize)..);
           let symbols = items.collect::<Vec<_>>();
 
           stack.push(Node {

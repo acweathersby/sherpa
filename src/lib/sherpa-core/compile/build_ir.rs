@@ -1,6 +1,6 @@
 //! Functions for translating parse graphs into Sherpa IR code.
 use crate::{
-  compile::build_graph::graph::{GraphIterator, GraphStateReference, StateId, StateType},
+  compile::build_graph::graph::{GraphIterator, GraphStateReference, PeekGroup, StateId, StateType},
   journal::Journal,
   types::*,
   utils::{hash_group_btree_iter, hash_group_btreemap},
@@ -108,7 +108,6 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
   let state_id = state.get_id();
   let db: &ParserDatabase = state.graph.get_db();
   let s_store = db.string_store();
-  let graph = state.graph;
 
   let mut gotos = successors
     .iter()
@@ -151,11 +150,7 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
 
   if matches!(
     state.get_type(),
-    StateType::CompleteToken
-      | StateType::AssignAndFollow(..)
-      | StateType::AssignToken(..)
-      | StateType::Reduce(..)
-      //| StateType::ReduceComplete(..)
+    StateType::CompleteToken | StateType::AssignAndFollow(..) | StateType::AssignToken(..) | StateType::Reduce(..)
   ) {
     let mut w = CodeWriter::new(vec![]);
     w.increase_indent();
@@ -167,8 +162,8 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
       }
       StateType::CompleteToken => w.write("pass")?,
 
-      StateType::ReduceComplete(rule_id, completes) | StateType::Reduce(rule_id, completes) => {
-        debug_assert!(!state.get_kernel_items().iter().any(|i| i.is_out_of_scope()));
+      StateType::Reduce(rule_id, completes) => {
+        debug_assert!(!state.get_kernel_items().iter().any(|i| i.origin_is_oos()));
 
         w.write(&create_rule_reduction(rule_id, db))?;
 
@@ -304,7 +299,7 @@ fn add_match_expr<'graph, 'db: 'graph>(
         debug_assert!(!syms.is_empty());
 
         let skipped = if let Some(test) = state.get_peek_resolve_items() {
-          test.map(|(_, i)| i).flatten().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
+          test.map(|(_, PeekGroup { items, .. })| items).flatten().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
         } else {
           state.get_kernel_items().iter().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
         }
@@ -421,8 +416,8 @@ fn build_body<'graph, 'db: 'graph>(
         body_string.push("pass".into());
         HALT
       }
-      StateType::ReduceComplete(rule_id, completes) | StateType::Reduce(rule_id, completes) => {
-        debug_assert!(!successor.get_kernel_items().iter().any(|i| i.is_out_of_scope()));
+      StateType::Reduce(rule_id, completes) => {
+        debug_assert!(!successor.get_kernel_items().iter().any(|i| i.origin_is_oos()));
 
         body_string.push(create_rule_reduction(rule_id, db));
 
@@ -430,11 +425,7 @@ fn build_body<'graph, 'db: 'graph>(
           body_string.push("pop ".to_string() + &completes.to_string());
         }
 
-        if matches!(s_type, StateType::ReduceComplete(_, _)) {
-          CONTINUE
-        } else {
-          HALT
-        }
+        HALT
       }
       StateType::Follow => CONTINUE,
       StateType::AssignToken(..) | StateType::CompleteToken => {

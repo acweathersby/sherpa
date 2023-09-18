@@ -39,7 +39,7 @@ pub(super) fn lr_disabled_error<'db>(gb: &GraphBuilder, lr_items: Items) -> Sher
 
   if nonterms.len() == 1 {
     let first = nonterms.first().unwrap();
-    if first.is_left_recursive(gb.get_mode()) {
+    if first.rule_is_left_recursive(gb.get_mode()) {
       return Err(SherpaError::SourceError {
         loc:        first.rule().tok.clone(),
         path:       first.rule().g_id.path.to_path(s_store),
@@ -55,7 +55,7 @@ pub(super) fn lr_disabled_error<'db>(gb: &GraphBuilder, lr_items: Items) -> Sher
   return Err(SherpaError::SourcesError {
     sources:  nonterms
       .iter()
-      .map(|i| i.rule_id)
+      .map(|i| i.rule_id())
       .collect::<OrderedSet<_>>()
       .into_iter()
       .map(|r| db.rule(r))
@@ -119,7 +119,7 @@ fn peek_not_allowed_error_internal<'db>(
       .map(|p| {
         let i = p.kernel;
         (
-          if !i.is_complete() { i.rule().symbols[i.sym_index as usize].loc.clone() } else { i.rule().tok.clone() },
+          if !i.is_complete() { i.rule().symbols[i.sym_index() as usize].loc.clone() } else { i.rule().tok.clone() },
           i.rule().g_id.path.to_path(db.string_store()),
           if i.is_complete() {
             "Reduce to [".to_string()

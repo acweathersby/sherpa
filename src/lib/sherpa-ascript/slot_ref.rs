@@ -1,6 +1,6 @@
 use crate::{
   output_base::{AscriptWriterUtils, TokenCreationType},
-  types::{AScriptTypeVal},
+  types::AScriptTypeVal,
 };
 
 use std::collections::BTreeSet;
@@ -43,12 +43,7 @@ pub struct SlotRef {
 }
 
 impl SlotRef {
-  pub fn ast_obj(
-    slot_index: SlotIndex,
-    type_slot: usize,
-    init_expression: String,
-    ast_type: AScriptTypeVal,
-  ) -> Self {
+  pub fn ast_obj(slot_index: SlotIndex, type_slot: usize, init_expression: String, ast_type: AScriptTypeVal) -> Self {
     SlotRef {
       slot_type: RefIndex::Obj(slot_index),
       type_slot,
@@ -64,10 +59,7 @@ impl SlotRef {
     SlotRef {
       slot_type: RefIndex::Tok(slot_index),
       type_slot,
-      init_expression: (utils.create_token)(
-        (utils.get_token_name)(slot_index),
-        TokenCreationType::Token,
-      ),
+      init_expression: (utils.create_token)((utils.get_token_name)(slot_index), TokenCreationType::Token),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,
@@ -91,10 +83,7 @@ impl SlotRef {
     SlotRef {
       slot_type: RefIndex::Tok(SlotIndex::Rule),
       type_slot,
-      init_expression: (utils.create_token)(
-        (utils.get_token_name)(SlotIndex::Rule),
-        TokenCreationType::Token,
-      ),
+      init_expression: (utils.create_token)((utils.get_token_name)(SlotIndex::Rule), TokenCreationType::Token),
       ast_type: AScriptTypeVal::Token,
       predecessors: None,
       post_init_statements: None,

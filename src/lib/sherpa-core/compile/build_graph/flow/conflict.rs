@@ -215,7 +215,7 @@ fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: Transi
       return KCalcResults::K(k);
     }
 
-    if shift_items.iter().filter(|i| i.is_recursive()).any(|i| reduce_items.contains(i)) {
+    if shift_items.iter().filter(|i| i.rule_is_recursive()).any(|i| reduce_items.contains(i)) {
       return KCalcResults::RecursiveAt(k);
     }
   }
@@ -247,7 +247,7 @@ fn calculate_k_multi<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
     let recursive = queue
       .iter()
       .flat_map(|((items, _))| items.iter())
-      .filter_map(|i| -> Option<usize> { i.is_recursive().then_some(i.rule_id.into()) })
+      .filter_map(|i| -> Option<usize> { i.rule_is_recursive().then_some(i.rule_id().into()) })
       .fold(OrderedMap::<usize, u32>::new(), |mut map, sym| {
         (*map.entry(sym).or_default()) += 1;
         map

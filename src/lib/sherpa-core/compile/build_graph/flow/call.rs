@@ -48,7 +48,6 @@ pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone
         _ => {
           // Create call on the kernel items.
           let items = group.to_kernel().to_vec();
-
           gb.set_classification(ParserClassification { calls_present: true, ..Default::default() });
 
           return Some(CreateCallResult {
@@ -124,5 +123,5 @@ fn climb_nonterms<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
 pub(super) fn all_items_come_from_same_nonterminal_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
   group: T,
 ) -> bool {
-  group.clone().all(|i| i.next.is_at_initial()) && group.map(|i| i.next.nonterm_index()).collect::<Set<_>>().len() == 1
+  group.clone().all(|i| i.next.is_initial()) && group.map(|i| i.next.nonterm_index()).collect::<Set<_>>().len() == 1
 }

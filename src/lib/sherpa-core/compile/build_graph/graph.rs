@@ -1,6 +1,7 @@
 use crate::{hash_id_value_u64, types::*};
 use std::{
   collections::{hash_map::DefaultHasher, BTreeSet, VecDeque},
+  fmt::Debug,
   hash::Hash,
   ops::{Index, IndexMut},
 };
@@ -17,7 +18,7 @@ pub enum Origin {
   /// The goal symbol id that this item or its predecessors will recognize
   TerminalGoal(DBTermKey, u16),
   /// The hash and state of the goal items set the peek item will resolve to
-  Peek(u64, StateId),
+  Peek(u32),
   /// The item
   BreadCrumb(DBRuleKey),
   Fork(DBRuleKey),
@@ -38,7 +39,7 @@ pub enum Origin {
 impl Hash for Origin {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     match self {
-      Origin::Peek(resolve_id, _) => resolve_id.hash(state),
+      Origin::Peek(resolve_id) => resolve_id.hash(state),
       Origin::TerminalGoal(resolve_id, prec) => {
         resolve_id.hash(state);
         prec.hash(state);
@@ -70,15 +71,11 @@ impl Origin {
         format!("TerminalGoal[ {:?} {prec} ]", sym_id)
       }
       Origin::BreadCrumb(rule_id) => {
-        let item = Item::from_rule(*rule_id, db);
+        let item = Item::from((*rule_id, db));
         format!("BreadCrumb[ {:?} ]", item._debug_string_())
       }
       _ => format!("{:?}", self),
     }
-  }
-
-  pub fn is_oos_closure(&self) -> bool {
-    matches!(self, Origin::__OOS_CLOSURE__ | Origin::__OOS_ROOT__)
   }
 
   pub fn is_none(&self) -> bool {
@@ -124,12 +121,11 @@ pub enum StateType {
   Peek,
   /// A peek path has been resolved to a single peek group located in the peek
   /// origin state.
-  PeekEndComplete(u64),
+  PeekEndComplete(u32),
   CompleteToken,
   Follow,
   AssignAndFollow(DBTermKey),
   Reduce(DBRuleKey, usize),
-  ReduceComplete(DBRuleKey, usize),
   AssignToken(DBTermKey),
   /// Calls made on items within a state's closure but
   /// are not kernel items.
@@ -159,11 +155,6 @@ impl Default for StateType {
 }
 
 impl StateType {
-  pub fn is_goto(&self) -> bool {
-    use StateType::*;
-    matches!(self, NonTerminalShiftLoop | NonTerminalComplete)
-  }
-
   #[cfg(debug_assertions)]
   fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
@@ -195,6 +186,7 @@ impl StateType {
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct GraphState {
   id: StateId,
+  build_state: GraphBuildState,
   parent: StateId,
   t_type: StateType,
   canonical_hash: u64,
@@ -238,6 +230,10 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     self.internal().parent
   }
 
+  fn build_state(&'graph self) -> GraphBuildState {
+    self.internal().build_state
+  }
+
   fn get_goto_state(&self) -> Option<GotoGraphStateRef<'graph, 'db>> {
     if let Some(nonterm_items) = self.graph().nonterm_items.get(&self._id_()) {
       Some(GotoGraphStateRef {
@@ -256,11 +252,11 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     self.graph()[self._id_()]
   }
 
-  fn get_resolve_item_set<'a>(&'a self, peek_origin_key: u64) -> &'graph ItemSet<'db> {
+  fn get_resolve_item_set<'a>(&'a self, peek_origin_key: u32) -> &'graph PeekGroup<'db> {
     self.graph().peek_resolve_items.get(&peek_origin_key).as_ref().unwrap()
   }
 
-  fn get_peek_resolve_items<'a: 'graph>(&'a self) -> Option<impl Iterator<Item = (u64, &'graph ItemSet<'db>)>> {
+  fn get_peek_resolve_items<'a: 'graph>(&'a self) -> Option<impl Iterator<Item = (u32, &'graph PeekGroup<'db>)>> {
     if let Some(resolve_ids) = self.graph().peek_resolve_ids.get(&self._id_()) {
       Some(resolve_ids.iter().map(|i| (*i, self.get_resolve_item_set(*i))))
     } else {
@@ -323,10 +319,10 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     );
 
     if let Some(peek_items_sets) = self.get_peek_resolve_items() {
-      for (index, state) in peek_items_sets {
+      for (index, PeekGroup { items, .. }) in peek_items_sets {
         string += &format!("\n  Peek Resolve: {}", index);
 
-        string += &format!("\n   - {}", state.to_debug_string("\n     "));
+        string += &format!("\n   - {}", items.to_debug_string("\n     "));
       }
     }
 
@@ -425,8 +421,8 @@ impl<'graph, 'db: 'graph> GraphStateMutRef<'graph, 'db> {
       self.id,
       kernel_items
         .map(|i| {
-          debug_assert_eq!(i.lane.get_curr(), i.index().into());
           if i.origin_state.is_invalid() {
+            debug_assert!(!self.id.is_invalid());
             i.to_origin_state(self.id)
           } else {
             i
@@ -438,7 +434,6 @@ impl<'graph, 'db: 'graph> GraphStateMutRef<'graph, 'db> {
 
   pub(crate) fn add_kernel_items<T: ItemContainerIter<'db>>(&mut self, kernel_items: T) {
     self.graph.kernel_items.entry(self.id).or_default().extend(kernel_items.map(|i| {
-      debug_assert_eq!(i.lane.get_curr(), i.index().into());
       if i.origin_state.is_invalid() {
         i.to_origin_state(self.id)
       } else {
@@ -457,11 +452,7 @@ pub enum GraphBuildState {
   Normal,
   NormalGoto,
   Peek(u16),
-  PEG,
-  BreadCrumb(u16),
   Leaf,
-  Oos,
-  OosRoot,
   _LongestMatch,
   _ShortestMatch,
   _FirstMatch,
@@ -481,13 +472,6 @@ use GraphBuildState::*;
 
 use super::{build::handle_kernel_items, items::get_follow};
 impl GraphBuildState {
-  pub fn peek_level(&self) -> usize {
-    match self {
-      Peek(level) => *level as usize,
-      _ => 0,
-    }
-  }
-
   pub fn currently_peeking(&self) -> bool {
     match self {
       Peek(_) => true,
@@ -496,11 +480,17 @@ impl GraphBuildState {
   }
 }
 
+#[derive(Hash)]
+pub struct PeekGroup<'db> {
+  pub items:  ItemSet<'db>,
+  pub is_oos: bool,
+}
+
 pub struct GraphHost<'db> {
   pub leaf_states: OrderedSet<StateId>,
   pub states: Array<GraphState>,
-  pub peek_resolve_items: OrderedMap<u64, ItemSet<'db>>,
-  pub peek_resolve_ids: OrderedMap<StateId, Vec<u64>>,
+  pub peek_resolve_items: OrderedMap<u32, PeekGroup<'db>>,
+  pub peek_resolve_ids: OrderedMap<StateId, Vec<u32>>,
   pub state_predecessors: OrderedMap<StateId, OrderedSet<StateId>>,
   pub term_symbol: OrderedMap<StateId, PrecedentSymbol>,
   pub reduce_item: OrderedMap<StateId, Item<'db>>,
@@ -557,10 +547,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
       return false;
     }
 
-    self
-      .kernel_items
-      .get(&StateId::root())
-      .is_some_and(|i| i.iter().any(|i| i.rule_id == item.rule_id /* && i.goal == item.goal */))
+    self.kernel_items.get(&StateId::root()).is_some_and(|i| i.iter().any(|i| i.rule_id() == item.rule_id()))
   }
 
   #[allow(unused)]
@@ -570,11 +557,11 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
 
   pub fn get_state_name(&self, state: StateId) -> String {
     if state.is_goto() {
-      format!("{}__S{:0>4}_gt", self.name.to_string(self.get_db().string_store()), state.core().0)
+      format!("{}__S{:0>4}_gt", self.name.to_string(self.get_db().string_store()), state.index())
     } else if state.is_post_reduce() {
-      format!("{}__S{:0>4}_pr", self.name.to_string(self.get_db().string_store()), state.core().0)
+      format!("{}__S{:0>4}_pr", self.name.to_string(self.get_db().string_store()), state.index())
     } else {
-      format!("{}__S{:0>4}", self.name.to_string(self.get_db().string_store()), state.0)
+      format!("{}__S{:0>4}", self.name.to_string(self.get_db().string_store()), state.index())
     }
   }
 
@@ -636,97 +623,124 @@ impl<'db> Index<usize> for GraphHost<'db> {
   }
 }
 
+// STATE ID -------------------------------------------------------------
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub enum GraphIdSubType {
+  Root    = 0,
+  Regular,
+  Goto,
+  PostReduce,
+  ExtendedClosure,
+  ExtendSled,
+  Invalid = 0xF,
+}
+
 impl<'db> Index<StateId> for GraphHost<'db> {
   type Output = GraphState;
 
   fn index(&self, index: StateId) -> &Self::Output {
-    &self.states[index.0 as usize]
+    &self.states[index.index()]
   }
 }
 
 impl<'db> IndexMut<StateId> for GraphHost<'db> {
   fn index_mut(&mut self, index: StateId) -> &mut Self::Output {
-    &mut self.states[index.0 as usize]
+    &mut self.states[index.index()]
   }
 }
 
-// STATE ID -------------------------------------------------------------
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub struct StateId(pub u32, pub GraphBuildState);
+pub struct StateId(pub u32);
+
+#[cfg(debug_assertions)]
+impl Debug for StateId {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut t = f.debug_tuple("StateId");
+    t.field(&self.index());
+    t.field(&self.subtype());
+    t.finish()
+  }
+}
 
 impl Hash for StateId {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    self.0.hash(state)
+    self.index().hash(state)
   }
 }
 
 impl Default for StateId {
   fn default() -> Self {
-    Self(u32::MAX, Normal)
+    Self(u32::MAX)
   }
 }
 
 impl StateId {
-  pub fn state(&self) -> GraphBuildState {
-    self.1
+  pub fn new(index: usize, sub_type: GraphIdSubType) -> Self {
+    Self((index as u32) | ((sub_type as u32) << 28))
   }
 
-  pub fn oos_root() -> Self {
-    Self(u32::MAX, OosRoot)
+  pub fn index(&self) -> usize {
+    (self.0 & 0x0F_FF_FF_FF) as usize
+  }
+
+  pub fn subtype(&self) -> GraphIdSubType {
+    match (self.0 >> 28) as u8 {
+      0 => GraphIdSubType::Root,
+      1 => GraphIdSubType::Regular,
+      2 => GraphIdSubType::Goto,
+      3 => GraphIdSubType::PostReduce,
+      4 => GraphIdSubType::ExtendedClosure,
+      5 => GraphIdSubType::ExtendSled,
+      _ => GraphIdSubType::Invalid,
+    }
+  }
+
+  pub fn is_extended(&self) -> bool {
+    match self.subtype() {
+      GraphIdSubType::ExtendSled | GraphIdSubType::ExtendedClosure => true,
+      _ => false,
+    }
+  }
+
+  pub fn is_extended_entry_base(&self) -> bool {
+    self.subtype() == GraphIdSubType::ExtendSled
+  }
+
+  pub fn is_extend_closure(&self) -> bool {
+    self.subtype() == GraphIdSubType::ExtendedClosure
+  }
+
+  pub fn extended_entry_base() -> Self {
+    Self::new(0, GraphIdSubType::ExtendSled)
   }
 
   pub fn root() -> Self {
-    Self(0, Normal)
-  }
-
-  pub fn is_oos(&self) -> bool {
-    self.1 == GraphBuildState::Oos || self.1 == GraphBuildState::OosRoot
-  }
-
-  pub fn is_oos_root(&self) -> bool {
-    self.1 == GraphBuildState::OosRoot
+    Self::new(0, GraphIdSubType::Root)
   }
 
   pub fn is_invalid(&self) -> bool {
-    self.0 == u32::MAX
+    self.subtype() == GraphIdSubType::Invalid
   }
 
   pub fn is_root(&self) -> bool {
-    self.0 == 0
+    self.subtype() == GraphIdSubType::Root && self.index() == 0
   }
 
   pub fn is_post_reduce(&self) -> bool {
-    self.0 >= (u32::MAX >> 2) && !self.is_goto()
+    self.subtype() == GraphIdSubType::PostReduce
   }
 
   pub fn is_goto(&self) -> bool {
-    self.0 >= (u32::MAX >> 1)
+    self.subtype() == GraphIdSubType::Goto
   }
 
   pub fn to_post_reduce(&self) -> Self {
-    if self.0 < u32::MAX >> 2 {
-      Self(self.0 + (u32::MAX >> 2), self.1)
-    } else {
-      *self
-    }
+    Self::new(self.index(), GraphIdSubType::PostReduce)
   }
 
   pub fn to_goto(&self) -> Self {
-    if self.0 < u32::MAX >> 1 {
-      Self(self.0 + (u32::MAX >> 1), self.1)
-    } else {
-      *self
-    }
-  }
-
-  pub fn core(&self) -> StateId {
-    if self.is_goto() {
-      StateId(self.0 - (u32::MAX >> 1), self.1)
-    } else {
-      StateId(self.0 - (u32::MAX >> 2), self.1)
-    }
+    Self::new(self.index(), GraphIdSubType::Goto)
   }
 }
 
@@ -762,14 +776,17 @@ impl<'graph_iter, 'db: 'graph_iter> StateBuilder<'graph_iter, 'db> {
     predecessors.insert(parent);
   }
 
-  pub fn set_peek_resolve_state<T: ItemContainer<'db> + Hash>(&mut self, items: &T) -> Origin {
-    let index = hash_id_value_u64(&items);
+  pub fn set_peek_resolve_state<T: Iterator<Item = Item<'db>>>(&mut self, items: T, is_oos: bool) -> Origin {
+    let peek_group = PeekGroup { items: items.collect(), is_oos };
+
+    let index = hash_id_value_u64(&peek_group) as u32;
+
     let StateBuilder { state_id, builder, .. } = self;
 
     builder.graph.peek_resolve_ids.entry(*state_id).or_insert(Default::default()).push(index);
-    builder.graph.peek_resolve_items.entry(index).or_insert(items.clone().to_set());
+    builder.graph.peek_resolve_items.entry(index).or_insert(peek_group);
 
-    Origin::Peek(index, self.state_id)
+    Origin::Peek(index)
   }
 
   pub fn add_kernel_items<T: ItemContainerIter<'db>>(&mut self, items: T) {
@@ -891,30 +908,27 @@ impl<'db> GraphBuilder<'db> {
     if let Some(state_id) = self.oos_roots.get(&nterm) {
       *state_id
     } else {
-      let id = StateId(self.graph.states.len() as u32, GraphBuildState::OosRoot);
+      let id = StateId::new(self.graph.states.len(), GraphIdSubType::ExtendedClosure);
 
       let closure = self
         .db
         .nonterm_follow_items(nterm)
         //.filter(|i| i.nonterm_index_at_sym(self.get_mode()) == Some(nterm))
-        .map(|i| i.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(id).to_oos_lane())
+        .map(|i| i.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(id))
         .filter_map(|i| i.increment());
 
       let state = GraphState {
         id,
         canonical_hash: hash_id_value_u64(nterm),
         t_type: StateType::_OosClosure_,
+        build_state: GraphBuildState::Normal,
         ..Default::default()
       };
 
       self.graph.kernel_items.insert(id, closure.collect());
-
       self.graph.term_symbol.insert(id, Default::default());
-
       self.graph.states.push(state);
-
       self.oos_roots.insert(nterm, id);
-
       self.get_oos_root_state(nterm)
     }
   }
@@ -925,7 +939,7 @@ impl<'db> GraphBuilder<'db> {
     if let Some(state_id) = self.oos_closure_states.get(&item) {
       *state_id
     } else {
-      let id = StateId(self.graph.states.len() as u32, GraphBuildState::Oos);
+      let id = StateId::new(self.graph.states.len(), GraphIdSubType::ExtendedClosure);
 
       let closure = item.closure_iter_align(item.to_origin_state(id).to_origin(Origin::__OOS_CLOSURE__));
 
@@ -934,17 +948,14 @@ impl<'db> GraphBuilder<'db> {
         t_type: StateType::_OosClosure_,
         parent: item.origin_state,
         canonical_hash: hash_id_value_u64(item),
+        build_state: GraphBuildState::Normal,
         ..Default::default()
       };
 
       self.graph.kernel_items.insert(id, closure.collect());
-
       self.graph.term_symbol.insert(id, Default::default());
-
       self.graph.states.push(state);
-
       self.oos_closure_states.insert(item, id);
-
       self.get_oos_closure_state(item)
     }
   }
@@ -980,10 +991,9 @@ impl<'db> GraphBuilder<'db> {
     state.get_symbol().hash(hasher);
 
     for item in state.get_kernel_items() {
-      item.rule_id.hash(hasher);
-      item.sym_index.hash(hasher);
+      item.index().hash(hasher);
       item.origin.hash(hasher);
-      item.lane.hash(hasher);
+      item.from.hash(hasher);
       // item.goto_distance.hash(hasher);
     }
 
@@ -992,6 +1002,7 @@ impl<'db> GraphBuilder<'db> {
     hasher.finish()
   }
 
+  #[allow(unused)]
   pub fn get_classification(&mut self) -> ParserClassification {
     self.classification
   }
@@ -1001,7 +1012,7 @@ impl<'db> GraphBuilder<'db> {
   }
 
   fn get_state_symbols<'a>(&mut self, state: StateId) -> Option<OrderedSet<DBTermKey>> {
-    if self.graph.is_scanner() {
+    if self.graph.is_scanner() || state.is_invalid() {
       return None;
     };
 
@@ -1048,11 +1059,11 @@ impl<'db> GraphBuilder<'db> {
       .pending
       .iter()
       .filter_map(|s| {
-        if let GraphBuildState::Peek(_) = s.state() {
+        if let GraphBuildState::Peek(_) = self.graph[*s].build_state {
           self.graph[*s]
             .as_ref(&self.graph)
             .get_peek_resolve_items()
-            .map(|i| i.flat_map(|(_, i)| i).cloned().collect::<ItemSet<'db>>())
+            .map(|i| i.flat_map(|(_, PeekGroup { items, .. })| items).cloned().collect::<ItemSet<'db>>())
         } else {
           Some(self.get_state(*s).get_kernel_items().iter().to_set())
         }
@@ -1063,14 +1074,7 @@ impl<'db> GraphBuilder<'db> {
   }
 
   fn create_root_state(&mut self, kernel_items: BTreeSet<Item<'db>>) {
-    self
-      .create_state(
-        Normal,
-        (SymbolId::Default, 0).into(),
-        StateType::Start,
-        Some(kernel_items.iter().map(|item| item.to_lane(ItemLane::new(item.index())))),
-      )
-      .to_enqueued();
+    self.create_state(Normal, (SymbolId::Default, 0).into(), StateType::Start, Some(kernel_items.into_iter())).to_enqueued();
   }
 
   fn prepare_state(&mut self, state_id: StateId) {
@@ -1178,9 +1182,16 @@ impl<'db> GraphBuilder<'db> {
     t_type: StateType,
     kernel_items: Option<T>,
   ) -> StateBuilder<'a, 'db> {
-    let id = StateId(self.graph.states.len() as u32, state);
+    let index = self.graph.states.len();
+    let id = StateId::new(index, if index > 0 { GraphIdSubType::Regular } else { GraphIdSubType::Root });
 
-    let state = GraphState { id, t_type, parent: self.state_id, ..Default::default() };
+    let state = GraphState {
+      id,
+      t_type,
+      parent: self.state_id,
+      build_state: state,
+      ..Default::default()
+    };
 
     self.graph.term_symbol.insert(id, symbol);
 

@@ -114,7 +114,7 @@ fn build_parser(
   let mut grammar = SherpaGrammarBuilder::new();
 
   for path in grammar_sources {
-    grammar = grammar.add_source(path)?;
+    grammar.add_source(path)?;
   }
 
   if grammar.dump_errors() {

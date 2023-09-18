@@ -41,10 +41,10 @@ pub struct ParserDatabase {
   /// items
 
   /// All items that follow a non-terminal
-  follow_items: Array<Array<StaticItem>>,
+  follow_items: Array<Array<ItemIndex>>,
   /// Item closures, stores the closure of all items, excluding the closure's of
   /// items that are complete.
-  item_closures: Array<Array<Array<StaticItem>>>,
+  item_closures: Array<Array<Array<ItemIndex>>>,
   ///NonTerminal Recursion Type
   recursion_types: Array<u8>,
   /// Reduction types
@@ -85,8 +85,8 @@ impl ParserDatabase {
 
   fn process_data(mut self) -> Self {
     let mut recursion_types: Array<u8> = vec![Default::default(); self.nonterms_len()];
-    let mut follow_items_base: Array<Array<StaticItem>> = vec![Default::default(); self.nonterms_len()];
-    let mut follow_items_final: Array<Array<StaticItem>> = vec![Default::default(); self.nonterms_len()];
+    let mut follow_items_base: Array<Array<ItemIndex>> = vec![Default::default(); self.nonterms_len()];
+    let mut follow_items_final: Array<Array<ItemIndex>> = vec![Default::default(); self.nonterms_len()];
     let mut reduce_types: Array<ReductionType> = vec![Default::default(); self.rules.len()];
     let mut closure_map = Array::with_capacity(self.rules.len());
 
@@ -98,8 +98,8 @@ impl ParserDatabase {
       closure_map.insert(index, Vec::with_capacity(rule.rule.symbols.len()))
     }
 
-    for item in self.rules().iter().enumerate().map(|(id, _)| Item::from_rule(DBRuleKey(id as u32), db)).flat_map(|mut i| {
-      let mut out = Vec::with_capacity(i.len as usize);
+    for item in self.rules().iter().enumerate().map(|(id, _)| Item::from((DBRuleKey(id as u32), db))).flat_map(|mut i| {
+      let mut out = Vec::with_capacity(i.sym_len() as usize);
       out.push(i);
       while let Some(inc) = i.increment() {
         out.push(inc);
@@ -111,22 +111,20 @@ impl ParserDatabase {
       let mode = if is_scanner { GraphType::Scanner } else { GraphType::Parser };
 
       match item.get_type() {
-        ItemType::TokenNonTerminal(nonterm, _) if is_scanner => {
-          follow_items_base[nonterm.0 as usize].push((item.rule_id, item.sym_index))
-        }
-        ItemType::NonTerminal(nonterm) => follow_items_base[nonterm.0 as usize].push((item.rule_id, item.sym_index)),
+        ItemType::TokenNonTerminal(nonterm, _) if is_scanner => follow_items_base[nonterm.0 as usize].push(item.index),
+        ItemType::NonTerminal(nonterm) => follow_items_base[nonterm.0 as usize].push(item.index),
         _ => {}
       }
 
       //-------------------------------------------------------------------------------------------
       // Use completed items to file out the reduce types table.
       if item.is_complete() {
-        reduce_types[item.rule_id.0 as usize] = if item.is_left_recursive(mode) {
+        reduce_types[item.rule_id().0 as usize] = if item.rule_is_left_recursive(mode) {
           ReductionType::LeftRecursive
         } else if item.rule().ast.as_ref().is_some_and(|a| matches!(a, ASTToken::Defined(..))) {
           ReductionType::SemanticAction
-        } else if item.len == 1 {
-          match item.to_start().is_term(mode) {
+        } else if item.sym_len() == 1 {
+          match item.to_initial().is_term(mode) {
             true => ReductionType::SingleTerminal,
             false => ReductionType::SingleNonTerminal,
           }
@@ -141,7 +139,7 @@ impl ParserDatabase {
       fn create_closure<'db>(value: Item, db: &'db ParserDatabase, mode: GraphType) -> Items<'db> {
         if let Some(nterm) = value.nonterm_index_at_sym(mode) {
           if let Ok(rules) = db.nonterm_rules(nterm) {
-            rules.iter().map(|r| Item::from_rule(*r, db)).collect()
+            rules.iter().map(|r| Item::from((*r, db))).collect()
           } else {
             Default::default()
           }
@@ -181,14 +179,14 @@ impl ParserDatabase {
       closure.remove(&item);
 
       closure_map
-        .get_mut(item.rule_id.0 as usize)
+        .get_mut(item.rule_id().0 as usize)
         .unwrap()
-        .insert(item.sym_index as usize, closure.into_iter().map(|i| (i.rule_id, i.sym_index)).collect::<Array<_>>());
+        .insert(item.sym_index() as usize, closure.into_iter().map(|i| i.index).collect::<Array<_>>());
 
       //-------------------------------------------------------------------------------------------
       // Update recursion type
       if recursion_encountered {
-        if item.is_at_initial() {
+        if item.is_initial() {
           recursion_types[root_nonterm.0 as usize] |= RecursionType::LeftRecursive as u8;
         } else {
           recursion_types[root_nonterm.0 as usize] |= RecursionType::RightRecursive as u8;
@@ -206,7 +204,7 @@ impl ParserDatabase {
         if seen.insert(id) {
           for static_item in &follow_items_base[id] {
             follow_items_final[base_id].push(*static_item);
-            let item = Item::from_static(*static_item, db);
+            let item = Item::from((*static_item, db));
             if item.is_penultimate() {
               nonterm_ids.push_back(item.nonterm_index().0 as usize)
             }
@@ -376,13 +374,31 @@ impl ParserDatabase {
   /// Given a [DBRuleKey] returns an [Rule], or `None` if
   /// the id is invalid.
   pub fn rule(&self, key: DBRuleKey) -> &Rule {
-    self.rules.get(key.0 as usize).map(|e| &e.rule).unwrap()
+    if cfg!(debug_assertions) {
+      self.rules.get(key.0 as usize).map(|e| &e.rule).unwrap()
+    } else {
+      unsafe { self.rules.get(key.0 as usize).map(|e| &e.rule).unwrap_unchecked() }
+    }
+  }
+
+  /// Given a [DBRuleKey] returns an [Rule], or `None` if
+  /// the id is invalid.
+  pub fn db_rule(&self, key: DBRuleKey) -> &DBRule {
+    if cfg!(debug_assertions) {
+      self.rules.get(key.0 as usize).unwrap()
+    } else {
+      unsafe { self.rules.get(key.0 as usize).unwrap_unchecked() }
+    }
   }
 
   /// Given a [DBRuleKey] returns an [Rule], or `None` if
   /// the id is invalid.
   pub fn custom_state(&self, key: DBNonTermKey) -> Option<&parser::State> {
-    self.custom_states.get(key.0 as usize).unwrap().as_deref()
+    if cfg!(debug_assertions) {
+      self.custom_states.get(key.0 as usize).unwrap().as_deref()
+    } else {
+      unsafe { self.custom_states.get(key.0 as usize).unwrap_unchecked().as_deref() }
+    }
   }
 
   /// Given a [DBRuleKey] returns the [DBNonTermKey] the rule reduces to.
@@ -391,7 +407,7 @@ impl ParserDatabase {
   }
 
   /// Returns a reference to the [IStringStore]
-  pub fn string_store(&self) -> &IStringStore {
+  pub fn string_store<'db>(&'db self) -> &'db IStringStore {
     &self.string_store
   }
 
@@ -413,7 +429,12 @@ impl ParserDatabase {
   /// > note: The closure does not include the item used as the seed for the
   /// > closure.
   pub fn get_closure<'db>(&'db self, item: &Item<'db>) -> impl ItemContainerIter {
-    self.item_closures[item.rule_id.0 as usize][item.sym_index as usize].iter().map(|s| Item::from_static(*s, self))
+    let item = *item;
+    self.item_closures[item.rule_id().0 as usize][item.sym_index() as usize].iter().map(move |s| {
+      let item = Item::from((*s, self)).as_from(item);
+
+      item
+    })
   }
 
   /// Returns all regular (non token) nonterminals.
@@ -434,7 +455,7 @@ impl ParserDatabase {
   /// would shift over the [DBNonTermKey] `A`. If an item is `B = ...•A`, then
   /// this also returns items that are `_ = ...•Ba`
   pub fn nonterm_follow_items<'db>(&'db self, nonterm: DBNonTermKey) -> impl Iterator<Item = Item<'db>> + Clone {
-    self.follow_items[nonterm.0 as usize].iter().map(|i| Item::from_static(*i, self))
+    self.follow_items[nonterm.0 as usize].iter().map(move |i| Item::from((*i, self)))
   }
 }
 

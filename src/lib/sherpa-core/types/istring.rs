@@ -56,14 +56,16 @@ impl IStringStore {
 ///
 /// This should never be assigned to any object that outlives its current
 /// function context. Should be dropped as soon as possible.
-pub struct GuardedStr<'a>(IString, Option<&'a str>, Option<RwLockReadGuard<'a, InnerStringStore>>);
+pub struct GuardedStr<'a>(IString, Option<IString>, Option<RwLockReadGuard<'a, InnerStringStore>>);
 
 impl<'a> GuardedStr<'a> {
   pub fn as_str(&'a self) -> &'a str {
-    if self.1.is_none() {
+    if let Some(istring) = self.1.as_ref() {
+      unsafe { istring.small_to_str() }
+    } else if cfg!(debug_assertions) {
       self.2.as_ref().unwrap().get(&self.0).unwrap().as_str()
     } else {
-      self.1.unwrap()
+      unsafe { self.2.as_ref().unwrap_unchecked().get(&self.0).unwrap_unchecked().as_str() }
     }
   }
 }
@@ -128,11 +130,11 @@ impl IString {
 
   /// Returns a [GuardedStr] that can be used to access the `&str` the [IString]
   /// token represents.
-  pub fn to_str<'a>(&'a self, store: &'a IStringStore) -> GuardedStr<'a> {
+  pub fn to_str<'a>(self, store: &'a IStringStore) -> GuardedStr<'a> {
     if self.is_large() {
-      store.get_str(*self).unwrap()
+      store.get_str(self).unwrap()
     } else {
-      GuardedStr(*self, Some(unsafe { self.small_to_str() }), None)
+      GuardedStr(self, Some(self), None)
     }
   }
 

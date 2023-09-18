@@ -93,7 +93,7 @@ pub fn bread_crumb_parsing() -> SherpaResult<()> {
 
       <> I > "id"
   "#],
-    &[("default", "id=>() A-test", true)],
+    &[("default", "id=>() B-test", true), ("default", "id=>() A-test", true)],
     Default::default(),
   )
 }

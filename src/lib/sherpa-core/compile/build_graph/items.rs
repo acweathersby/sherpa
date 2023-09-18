@@ -55,30 +55,21 @@ pub(crate) fn get_follow_internal<'db>(
   let mode = gb.graph().graph_type;
   let root_nterm = item.nonterm_index();
 
-  if FollowType::ScannerCompleted == caller_type {
-    //println!("\n\n\
-    // n===========================================================")
-  }
-
   while let Some(c_item) = queue.pop_front() {
     if completed.insert(c_item) {
       let nterm: DBNonTermKey = c_item.nonterm_index();
-
-      if FollowType::ScannerCompleted == caller_type {
-        // c_item._debug_print_("------------ C_ITEM\n    ")
-      }
 
       if caller_type == FollowType::FirstReduction && nterm != root_nterm {
         continue;
       }
 
-      let result = if c_item.origin_state.is_oos() {
-        if c_item.origin_state.is_oos_root() {
+      let result = if c_item.origin_state.is_extended() {
+        if c_item.origin_state.is_extended_entry_base() {
           // Create or retrieve a new OOS state for this set of items.
           let state_id = gb.get_oos_root_state(nterm);
           let state = gb.get_state(state_id);
           let closure = state.get_kernel_items().iter().cloned();
-          process_closure(gb, closure, &mut queue, &mut follow, caller_type)
+          process_closure(closure, &mut queue, &mut follow)
         } else {
           let state = gb.get_state(c_item.origin_state);
           let closure = state
@@ -87,41 +78,22 @@ pub(crate) fn get_follow_internal<'db>(
             .filter(|i| i.nonterm_index_at_sym(mode) == Some(nterm))
             .cloned()
             .filter_map(|i| i.increment());
-          process_closure(gb, closure, &mut queue, &mut follow, caller_type)
+          process_closure(closure, &mut queue, &mut follow)
         }
       } else {
         let closure_state_id = c_item.origin_state;
         let origin = c_item.origin;
-        let lane = c_item.lane;
         let state = gb.get_state(c_item.origin_state);
-
-        if FollowType::ScannerCompleted == caller_type {
-          // println!("CLOSURE FROM -- {closure_state_id:?}")
-        }
-
-        for item in state.get_kernel_items().iter() {
-          debug_assert_eq!(item.lane.get_curr(), item.index().into(), "{:?} {:?}", item.lane, item.index());
-        }
 
         let closure = state
           .get_kernel_items()
           .iter()
-          .filter(|k_i| lane.is_from_lane(k_i.lane))
+          .filter(|k_i| c_item.is_successor_of(k_i))
           .flat_map(|k_i| k_i.closure_iter_align(k_i.to_origin(origin).to_origin_state(closure_state_id)))
           .filter(|i| i.nonterm_index_at_sym(mode) == Some(nterm))
-          .filter_map(|i| i.increment_with_lane_remap());
+          .filter_map(|i| i.increment());
 
-        if FollowType::ScannerCompleted == caller_type {
-          //state
-          //  .get_kernel_items()
-          //  .iter()
-          //  .flat_map(|k_i|
-          // k_i.closure_iter_align(k_i.to_origin(origin).
-          // to_origin_state(closure_state_id)))  ._debug_print_("
-          // CLOSURE");
-        }
-
-        process_closure(gb, closure, &mut queue, &mut follow, caller_type)
+        process_closure(closure, &mut queue, &mut follow)
       };
 
       if let Some(oos_queue) = result {
@@ -130,48 +102,35 @@ pub(crate) fn get_follow_internal<'db>(
           follow.insert(next_item);
         }
       } else {
-        if !c_item.origin_state.is_root() && !c_item.origin_state.is_oos_root() {
+        if !c_item.origin_state.is_root() && !c_item.origin_state.is_extended_entry_base() {
           let parent_state = gb.get_state(c_item.origin_state).get_parent();
-          queue.push_back(c_item.to_origin_state(parent_state));
-        } else if !____is_scan____ && !c_item.origin_state.is_oos_root() {
-          queue.push_back(c_item.to_origin_state(StateId::oos_root()));
+          if !parent_state.is_invalid() {
+            queue.push_back(c_item.to_origin_state(parent_state));
+          }
+        } else if !____is_scan____ && !c_item.origin_state.is_extended_entry_base() {
+          queue.push_back(c_item.to_origin_state(StateId::extended_entry_base()));
         }
       }
     }
-  }
-
-  if FollowType::ScannerCompleted == caller_type {
-    // println!("\n===========================================================\
-    // n\n\n")
   }
 
   (follow.to_vec(), completed.to_vec())
 }
 
 fn process_closure<'db>(
-  gb: &GraphBuilder<'db>,
   closure: impl Iterator<Item = Item<'db>>,
   queue: &mut VecDeque<Item<'db>>,
   follow: &mut OrderedSet<Item<'db>>,
-  caller_type: FollowType,
 ) -> Option<VecDeque<Item<'db>>> {
   let mut oos_queue = VecDeque::new();
   let mut closure_yielded_items = false;
 
   for item in closure {
-    if FollowType::ScannerCompleted == caller_type {
-      //item._debug_print_("  FOLLOW ITEM\n    ")
-    }
     closure_yielded_items |= true;
     match item.get_type() {
-      ItemType::Completed(_) => {
-        if item.lane.has_split() {
-          //queue.push_back(item.to_lane(item.lane.to_prev()))
-        }
-        queue.push_back(item)
-      }
+      ItemType::Completed(_) => queue.push_back(item),
       _ => {
-        if item.origin_state.is_oos() {
+        if item.origin_state.is_extend_closure() {
           oos_queue.push_front(item);
         } else {
           follow.insert(item);
@@ -191,7 +150,12 @@ pub(crate) fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefConta
   let mut default_only_items = ItemSet::new();
 
   fn create_pair<'db>(k_i: Item<'db>, i: Item<'db>) -> TransitionPair<'db> {
-    TransitionPair { kernel: k_i, next: i, prec: i.token_precedence(), sym: i.sym() }
+    TransitionPair {
+      kernel: k_i,
+      next:   i,
+      prec:   i.token_precedence(),
+      sym:    i.sym_id(),
+    }
   }
 
   for k_i in completed {

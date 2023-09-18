@@ -263,6 +263,11 @@ impl JournalReporter for SherpaDatabaseBuilder {
 }
 
 impl SherpaDatabaseBuilder {
+  /// Consumes self and returns the [ParserDatabase] stored within.
+  pub fn into_inner(self) -> ParserDatabase {
+    self.db
+  }
+
   pub fn get_db(&self) -> &ParserDatabase {
     &self.db
   }

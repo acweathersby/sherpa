@@ -99,3 +99,44 @@ pub fn write_debug_file<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
 
   Ok(())
 }
+
+#[cfg(debug_assertions)]
+impl ParserDatabase {
+  /// Creates a test database that can be used to statically
+  /// test components that rely on the database without actually
+  /// having to define a grammar. The objects stored in this database are
+  /// equivalent to those that would be derived from the following grammar
+  /// ```sherpa
+  /// 
+  /// IGNORE { c:sp c:nl }
+  ///
+  /// <> A > "{" B(+) "}"
+  ///
+  /// <> B > c:id tk:C?
+  ///
+  /// <> C > c:num c:num(+)
+  /// ```
+  pub fn test_lr() -> SherpaResult<ParserDatabase> {
+    let mut grammar = SherpaGrammarBuilder::new();
+
+    let path = PathBuf::from("/test/grammar.sg");
+
+    grammar.add_source_from_string(
+      r##"     
+     IGNORE { c:sp c:nl }
+    
+     <> A > "{" B(+) "}"
+    
+     <> B > c:id tk:C?
+    
+     <> C > c:num c:num(+)
+    "##,
+      &path,
+      false,
+    )?;
+
+    let db = grammar.build_db(&path)?;
+
+    Ok(db.into_inner())
+  }
+}

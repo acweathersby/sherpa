@@ -1,10 +1,8 @@
 use super::{
   flow::{
-    handle_bread_crumb_complete_groups,
     handle_nonterminal_shift,
     handle_peek_complete_groups,
     handle_peek_incomplete_items,
-    handle_peg_complete_groups,
     handle_regular_complete_groups,
     handle_regular_incomplete_items,
   },
@@ -38,7 +36,7 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
 fn get_firsts<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<GroupedFirsts<'db>> {
   let state = gb.current_state();
   let iter = state.get_kernel_items().iter().flat_map(|k_i| {
-    let basis = k_i.to_origin_state(gb.current_state_id()).to_lane(k_i.lane.to_curr());
+    let basis = k_i.to_origin_state(gb.current_state_id());
     k_i
       .closure_iter_align_with_lane_split(basis)
       .term_items_iter(gb.is_scanner())
@@ -89,13 +87,7 @@ fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(gb: &mut GraphBuilder<'db>, gr
     let ____is_scan____ = gb.is_scanner();
     let prec_sym: PrecedentSymbol = (sym, group.0).into();
 
-    match gb.current_state_id().state() {
-      BreadCrumb(_level) => {
-        todo!("Complete breadcrumb parsing");
-      }
-      PEG => {
-        todo!("Complete peg parsing");
-      }
+    match gb.current_state().build_state() {
       Peek(level) => handle_peek_incomplete_items(gb, prec_sym, group, level),
       _REGULAR_ => handle_regular_incomplete_items(gb, prec_sym, group),
     }?;
@@ -163,9 +155,7 @@ pub(crate) fn handle_completed_groups<'db>(
   let ____is_scan____ = gb.is_scanner();
   let prec_sym: PrecedentSymbol = (sym, follow_pairs.iter().max_precedence()).into();
 
-  match gb.current_state_id().state() {
-    GraphBuildState::PEG => handle_bread_crumb_complete_groups(gb, groups, prec_sym, follow_pairs),
-    GraphBuildState::BreadCrumb(_) => handle_peg_complete_groups(gb, groups, prec_sym, follow_pairs),
+  match gb.current_state().build_state() {
     GraphBuildState::Peek(_) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs),
     _REGULAR_ => handle_regular_complete_groups(gb, groups, prec_sym, follow_pairs),
   }

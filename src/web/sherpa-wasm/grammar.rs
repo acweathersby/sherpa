@@ -259,7 +259,7 @@ pub fn get_nonterminal_name_from_id(id: u32, db: &JSParserDB) -> String {
 pub fn get_rule_expression_string(id: u32, db: &JSParserDB) -> String {
   let db = db.0.get_db();
   if (id as usize) < db.rules().len() {
-    let item = Item::from_rule(DBRuleKey::from(id), db);
+    let item = Item::from((DBRuleKey::from(id), db));
     item.to_canonical().to_complete()._debug_string_()
   } else {
     Default::default()

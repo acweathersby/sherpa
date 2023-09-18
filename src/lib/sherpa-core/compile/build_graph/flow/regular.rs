@@ -67,7 +67,7 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
       if !____allow_peek____ {
         peek_not_allowed_error(gb, &[out_of_scope.cloned().collect(), in_scope.cloned().collect()], "")?;
       } else {
-        let pending_state = create_peek(gb, prec_sym, group.iter(), None, true, StateType::Peek)?;
+        let pending_state = create_peek(gb, prec_sym, group.iter(), None)?;
         gb.add_pending(pending_state);
       }
     }
@@ -101,7 +101,7 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
                 let state = gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_enqueued().unwrap();
                 let mut nterm_shift_state = gb.create_state(
                   Normal,
-                  (kernel_item.sym(), 0).into(),
+                  (kernel_item.sym_id(), 0).into(),
                   StateType::ShiftFrom(state),
                   Some([kernel_item.try_increment()].into_iter()),
                 );
@@ -184,7 +184,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
         } else {
           todo!("(anthony) Handle default completed item conflicts (e.i. kernel goal items)")
         }
-      } else if lookahead_pairs.iter().to_kernel().to_absolute::<ItemSet>().len() == 1 {
+      } else if lookahead_pairs.iter().to_kernel().indices().len() == 1 {
         // The same non-terminal is generated from this completed item, regardless
         // of the origins. This is a valid outcome.
         handle_completed_item(gb, lookahead_pairs, prec_sym)?;
@@ -200,7 +200,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
           ReduceReduceConflictResolution::Reduce(item) => todo!("Handle reduce result from reduce-reduce conflict resolution"),
           ReduceReduceConflictResolution::Peek(max_k, follow_pairs) => {
             gb.set_classification(ParserClassification { peeks_present: true, max_k, ..Default::default() });
-            let state = create_peek(gb, prec_sym, [].iter(), Some(follow_pairs.iter()), true, StateType::Peek)?;
+            let state = create_peek(gb, prec_sym, [].iter(), Some(follow_pairs.iter()))?;
             gb.add_pending(state);
           }
         }
@@ -227,7 +227,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
           ShiftReduceConflictResolution::Peek(max_k) => {
             gb.set_classification(ParserClassification { peeks_present: true, max_k, ..Default::default() });
 
-            let state = create_peek(gb, prec_sym, group.iter(), Some(lookahead_pairs.iter()), true, StateType::Peek)?;
+            let state = create_peek(gb, prec_sym, group.iter(), Some(lookahead_pairs.iter()))?;
             gb.add_pending(state);
           }
           ShiftReduceConflictResolution::Fork => {
@@ -242,7 +242,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
       #[cfg(debug_assertions)]
       unimplemented!(
         "\nNot Implemented: {:?} len:{_len} collide:{_collide:?} sym:{} \n[ {} ]\n\n{}",
-        gb.current_state_id().state(),
+        gb.current_state().build_state(),
         sym.debug_string(gb.db),
         cmpl.to_debug_string("\n"),
         gb.graph()._debug_string_()

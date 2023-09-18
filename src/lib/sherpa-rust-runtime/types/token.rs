@@ -408,22 +408,9 @@ impl Token {
   /// - `Option<String>` - A `String` of the blame diagram or `None` if source
   ///   is
   /// not defined.
-  pub fn blame(
-    &self,
-    max_pre: usize,
-    max_post: usize,
-    inline_comment: &str,
-    colors: Option<BlameColor>,
-  ) -> String {
-    fn create_line(
-      source: &Arc<Vec<u8>>,
-      prev_line: i64,
-      next_line: i64,
-      line_number: usize,
-    ) -> String {
-      if let Ok(utf_string) =
-        String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize]))
-      {
+  pub fn blame(&self, max_pre: usize, max_post: usize, inline_comment: &str, colors: Option<BlameColor>) -> String {
+    fn create_line(source: &Arc<Vec<u8>>, prev_line: i64, next_line: i64, line_number: usize) -> String {
+      if let Ok(utf_string) = String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize])) {
         format!("{: >4}: {}\n", line_number, utf_string,)
       } else {
         String::from("")
@@ -435,8 +422,7 @@ impl Token {
       let mut prev_line = Self::find_prev_line(&source, self.inner.off as i64) as i64;
       let mut line_num = (self.inner.line_num + 1) as usize;
       let mut next_line;
-      let mut col_diff =
-        (self.inner.off as i64 - prev_line - (prev_line != 0) as i64).max(0) as usize;
+      let mut col_diff = (self.inner.off as i64 - prev_line - (prev_line != 0) as i64).max(0) as usize;
 
       if source[0] as char == '\n' {
         line_num -= 1;
@@ -464,9 +450,9 @@ impl Token {
           break;
         }
 
-        if let Ok(utf_string) = String::from_utf8(Vec::from(
-          &source[(prev_line + 1).min(max_size) as usize..next_line.min(max_size) as usize],
-        )) {
+        if let Ok(utf_string) =
+          String::from_utf8(Vec::from(&source[(prev_line + 1).min(max_size) as usize..next_line.min(max_size) as usize]))
+        {
           let leading_spaces = utf_string.len() - utf_string.trim_start().len();
           let diff = usize::max(leading_spaces, col_diff);
           let highlight_len = ((utf_string.len() as i64)
@@ -481,10 +467,7 @@ impl Token {
             utf_string,
             String::from(" ").repeat(4 + 1 + diff)
               + &if let Some(BlameColor { highlight, .. }) = colors {
-                " ".to_string()
-                  + highlight
-                  + &String::from("^").repeat(highlight_len as usize)
-                  + " "
+                " ".to_string() + highlight + &String::from("^").repeat(highlight_len as usize) + " "
               } else {
                 " ".to_string() + &String::from("^").repeat(highlight_len as usize) + " "
               },

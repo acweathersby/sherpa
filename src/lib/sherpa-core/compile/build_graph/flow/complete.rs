@@ -64,7 +64,7 @@ fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuil
   let mut state = gb.create_state(
     Normal,
     sym,
-    StateType::Reduce(root_item.rule_id, root_item.goto_distance as usize),
+    StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize),
     Some([root_item].into_iter()),
   );
   state.set_reduce_item(root_item);
@@ -109,15 +109,6 @@ fn complete_scan<'db>(
       state.to_enqueued()
     }
   } else {
-    if !completes_goal {
-      follow._debug_print_("FOLLW");
-      completed_items._debug_print_("COMPLETED");
-      state.state_ref()._debug_print_();
-      state.to_leaf();
-      gb._print_graph_();
-      panic!("AAA");
-      return;
-    }
     debug_assert!(completes_goal);
     Some(state.to_leaf())
   };

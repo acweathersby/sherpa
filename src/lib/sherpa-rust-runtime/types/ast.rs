@@ -9,9 +9,8 @@ pub type ReduceFunctionOld<T> = fn(args: &mut Vec<HCObj<T>>, tok: Token);
 
 /// Names of default AST types
 pub static DEFAULT_AST_TYPE_NAMES: [&str; 27] = [
-  "NODES", "STRING", "STRINGS", "F64", "F32", "I64", "I32", "I16", "I8", "U64", "U32", "U16", "U8",
-  "F32Vec", "F64Vec", "I64Vec", "I32Vec", "I16Vec", "I8Vec", "U64Vec", "U32Vec", "U16Vec", "U8Vec",
-  "TOKEN", "TOKENS", "BOOL", "NONE",
+  "NODES", "STRING", "STRINGS", "F64", "F32", "I64", "I32", "I16", "I8", "U64", "U32", "U16", "U8", "F32Vec", "F64Vec", "I64Vec",
+  "I32Vec", "I16Vec", "I8Vec", "U64Vec", "U32Vec", "U16Vec", "U8Vec", "TOKEN", "TOKENS", "BOOL", "NONE",
 ];
 
 #[derive(Clone)]
@@ -294,10 +293,7 @@ impl<T: AstObject, const STACK_GROWS_UPWARD: bool> AstStackSlice<T, STACK_GROWS_
   fn get_pointer(&self, position: usize) -> *mut T {
     #[cfg(debug_assertions)]
     if position >= (self.stack_size as usize) {
-      panic!(
-        "Could not get AST node at slot ${} from stack with a length of {}",
-        position, self.stack_size
-      );
+      panic!("Could not get AST node at slot ${} from stack with a length of {}", position, self.stack_size);
     }
     let slot_size: usize = std::mem::size_of::<T>();
 
@@ -373,9 +369,7 @@ impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Debug for AstStackSlice<T, ST
   }
 }
 
-impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Index<usize>
-  for AstStackSlice<T, STACK_GROWS_UPWARD>
-{
+impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Index<usize> for AstStackSlice<T, STACK_GROWS_UPWARD> {
   type Output = T;
 
   #[inline(always)]
