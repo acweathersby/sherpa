@@ -35,36 +35,14 @@ fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuil
   let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
   let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false; // Forking is disabled
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
-  /*
-  if false && !gb.graph().item_is_goal(&root_item) && !root_item.from_goto_origin {
-    let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-      completed.iter().into_iter().map(|i| get_follow_internal(gb, i.kernel, FollowType::FirstReduction)).unzip();
 
-    let follow = follow.into_iter().flatten();
-    let completed_items = completed_items.into_iter().flatten();
+  #[cfg(debug_assertions)]
+  debug_assert!(!root_item.from_goto_origin || root_item.goto_distance > 0, "{:?}", root_item);
 
-    if follow.clone().next().is_none() && completed_items.clone().next().is_none() {
-      panic!("TODO")
-    } else {
-      let mut state = gb.create_state(
-        Normal,
-        sym,
-        StateType::ReduceComplete(root_item.rule_id, root_item.goto_distance as usize),
-        Some(
-          follow
-            .into_iter()
-            .chain(completed_items.into_iter().filter(|i| !i.is_out_of_scope() && !i.is_canonically_equal(&root_item)))
-            .into_iter(),
-        ),
-      );
-      state.set_reduce_item(root_item);
-      state.to_pending();
-    }
-  } else { */
   let mut state = gb.create_state(
     Normal,
     sym,
-    StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize),
+    StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize - (root_item.from_goto_origin as usize)),
     Some([root_item].into_iter()),
   );
   state.set_reduce_item(root_item);

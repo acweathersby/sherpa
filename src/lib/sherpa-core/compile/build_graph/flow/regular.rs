@@ -199,7 +199,6 @@ pub(crate) fn handle_regular_complete_groups<'db>(
           }
           ReduceReduceConflictResolution::Reduce(item) => todo!("Handle reduce result from reduce-reduce conflict resolution"),
           ReduceReduceConflictResolution::Peek(max_k, follow_pairs) => {
-            gb.set_classification(ParserClassification { peeks_present: true, max_k, ..Default::default() });
             let state = create_peek(gb, prec_sym, [].iter(), Some(follow_pairs.iter()))?;
             gb.add_pending(state);
           }
@@ -225,8 +224,6 @@ pub(crate) fn handle_regular_complete_groups<'db>(
             handle_completed_groups(gb, &mut Default::default(), sym, lookahead_pairs)?;
           }
           ShiftReduceConflictResolution::Peek(max_k) => {
-            gb.set_classification(ParserClassification { peeks_present: true, max_k, ..Default::default() });
-
             let state = create_peek(gb, prec_sym, group.iter(), Some(lookahead_pairs.iter()))?;
             gb.add_pending(state);
           }

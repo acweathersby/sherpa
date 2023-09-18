@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, VecDeque};
 use GraphBuildState::*;
 
 pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db>) -> SherpaResult<bool> {
-  if gb.is_scanner() || !gb.config.ALLOW_LR || gb.current_state().build_state().currently_peeking() {
+  if gb.is_scanner() || !gb.config.ALLOW_LR || gb.current_state().get_type().currently_peeking() {
     return Ok(false);
   };
 
@@ -13,8 +13,8 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
   let db = gb.db;
   let kernel_base: ItemSet = gb.current_state().get_kernel_items().iter().inscope_items();
 
-  let canonical = if gb.current_state_id().is_root() { kernel_base.iter().indices() } else { Default::default() };
-  let canonical = &canonical; // Make a reference to allow its use within closures.
+  let indices = if gb.current_state_id().is_root() { kernel_base.iter().indices() } else { Default::default() };
+  let indices = &indices; // Make a reference to allow its use within closures.
 
   let state_id = gb.current_state_id();
   let origin = Origin::Goto(state_id);
@@ -24,9 +24,9 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
     let basis = i.to_origin(origin).to_origin_state(state_id);
     let closure = i
       .closure_iter_align_with_lane_split(basis)
-      .filter(move |i| i.is_nonterm(mode) && !canonical.contains(&i.index()))
+      .filter(move |i| i.is_nonterm(mode) && !indices.contains(&i.index()))
       .enumerate()
-      .map(|(index, i)| (index > 0).then_some(i.with_goto_origin()).unwrap_or(i));
+      .map(|(index, i)| (index > 0).then_some(i.as_goto_origin()).unwrap_or(i));
     closure
   }));
 
@@ -93,7 +93,7 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
 
       // We only need OOS items if there are no completed items after the non-terminal
       // transition. This will handle the cases of left-recursion.
-      let canonical_incremented_items = incremented_items.iter().to_canonical::<ItemSet>();
+      let incremented_indices = incremented_items.iter().indices();
       let oos_items = ItemSet::from_iter(
         db.nonterm_follow_items(*target_nonterm)
           .filter_map(|i| i.increment())
@@ -101,7 +101,7 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
             i.nonterm_index_at_sym(mode) == Some(*target_nonterm)
               && i.nonterm_index() != *target_nonterm
               && !local_nonterms.contains(&i.nonterm_index())
-              && !canonical_incremented_items.contains(&i.to_canonical())
+              && !incremented_indices.contains(&i.index)
           })
           .map(|i| i.to_origin(Origin::GoalCompleteOOS).to_origin_state(parent_id)),
       );
@@ -186,7 +186,7 @@ fn increment_gotos(gb: &mut GraphBuilder) {
       for (v, is_oos, items) in peek_resolve_items {
         let old_origin = Origin::Peek(v);
         let new_items =
-          items.iter().map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { i.with_goto_origin() });
+          items.iter().map(|i| if i.origin_state.0 == current_id.0 { i.as_goto_origin() } else { i.increment_goto() });
 
         let origin = sb.set_peek_resolve_state(new_items, is_oos);
 
@@ -199,7 +199,7 @@ fn increment_gotos(gb: &mut GraphBuilder) {
         .state_ref()
         .get_kernel_items()
         .iter()
-        .map(|i| if i.origin_state.0 != current_id.0 { i.increment_goto() } else { i.with_goto_origin() })
+        .map(|i| if i.origin_state.0 == current_id.0 { i.as_goto_origin() } else { i.increment_goto() })
         .collect::<Items>();
 
       sb.set_kernel_items(items.into_iter());

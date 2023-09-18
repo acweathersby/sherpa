@@ -32,7 +32,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
 
   let existing_items = incomplete_items.clone().to_next().heritage();
 
-  let mut state = gb.create_state::<DefaultIter>(GraphBuildState::Peek(0), sym, StateType::Peek, None);
+  let mut state = gb.create_state::<DefaultIter>(Normal, sym, StateType::Peek(2), None);
 
   if let Some(completed_pairs) = completed_pairs {
     let pairs: BTreeSet<TransitionPair<'_>> = completed_pairs.into_iter().cloned().collect::<BTreeSet<_>>();
@@ -85,6 +85,9 @@ fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>>>(
   mut resolved: T,
   sym: PrecedentSymbol,
 ) -> SherpaResult<()> {
+  let max_k = gb.current_state().get_type().peek_level() as u16;
+  gb.set_classification(ParserClassification { max_k, ..Default::default() });
+
   let (index, PeekGroup { items, .. }) = get_kernel_items_from_peek_origin(gb, resolved.next().unwrap().kernel.origin);
   let staged = items.clone();
   gb.create_state(NormalGoto, sym, StateType::PeekEndComplete(index), Some(staged.into_iter())).to_enqueued();
@@ -218,12 +221,12 @@ pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
   gb: &mut GraphBuilder<'db>,
   prec_sym: PrecedentSymbol,
   (prec, group): TransitionGroup<'db>,
-  level: u16,
+  level: u32,
 ) -> SherpaResult<()> {
   if peek_items_are_from_same_origin(gb, &group) {
     resolve_peek(gb, group.iter(), prec_sym)?;
   } else {
-    gb.create_state(Peek(level + 1), prec_sym, StateType::Peek, Some(group.iter().to_next().try_increment().iter().cloned()))
+    gb.create_state(Normal, prec_sym, StateType::Peek(level + 1), Some(group.iter().to_next().try_increment().iter().cloned()))
       .to_enqueued();
   }
   SherpaResult::Ok(())

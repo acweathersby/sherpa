@@ -198,12 +198,6 @@ impl<'db> Item<'db> {
     self.from == other.index ||
     // This item comes from the same closure as the other item
     self.from == other.from
-
-    // Item Lane version (for reference )
-    // // This item follows the other item
-    // self.prev == other.curr ||
-    // // This item comes from the same closure as the other item
-    // self.prev == other.prev
   }
 
   /// True if this item is the successor of another item, that is
@@ -479,8 +473,8 @@ impl<'db> Item<'db> {
   }
 
   #[inline]
-  pub fn with_goto_origin(&self) -> Self {
-    Self { from_goto_origin: true, ..self.clone() }
+  pub fn as_goto_origin(&self) -> Self {
+    Self { from_goto_origin: true, goto_distance: 1, ..self.clone() }
   }
 
   #[inline]

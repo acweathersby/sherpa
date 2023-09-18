@@ -118,7 +118,7 @@ pub enum StateType {
   /// items.
   NonTerminalShiftLoop,
   NonTerminalComplete,
-  Peek,
+  Peek(u32),
   /// A peek path has been resolved to a single peek group located in the peek
   /// origin state.
   PeekEndComplete(u32),
@@ -155,6 +155,20 @@ impl Default for StateType {
 }
 
 impl StateType {
+  pub fn currently_peeking(&self) -> bool {
+    match self {
+      StateType::Peek(_) => true,
+      _ => false,
+    }
+  }
+
+  pub fn peek_level(&self) -> u32 {
+    match self {
+      StateType::Peek(level) => *level,
+      _ => 0,
+    }
+  }
+
   #[cfg(debug_assertions)]
   fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
@@ -301,13 +315,17 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     let state = self.internal();
     let mut string = String::new();
     string += &format!(
-      "STATE -- [{: >8}][c:{: <24} h:{: <24}] [sym:{: <24}] --",
-      state.id.0, state.canonical_hash, state.lookahead_hash, state.symbol_set_id
+      "STATE -- [{: >8}-{:?}][c:{: <24} h:p_{:}] [sym:{: <24}] --",
+      state.id.index(),
+      state.id.subtype(),
+      state.canonical_hash,
+      state.lookahead_hash,
+      state.symbol_set_id
     );
 
     if let Some(predecessors) = self.get_predecessors() {
       if predecessors.len() > 0 {
-        string += &format!(r##" preds [{}]"##, predecessors.iter().map(|p| p.0.to_string()).collect::<Vec<_>>().join(" "));
+        string += &format!(r##" preds [{}]"##, predecessors.iter().map(|p| p.index().to_string()).collect::<Vec<_>>().join(" "));
       }
     }
 
@@ -337,8 +355,8 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     }
 
     if let Some(non_term_items) = self.get_nonterm_items() {
-      if let Some(goto_hash) = self.get_goto_state().and_then(|s| Some(s.canonical_hash)) {
-        string += &format!("\n\nGOTO -- [{:}][{:}] --", self._id_().0, goto_hash);
+      if let Some(goto_hash) = self.get_goto_state().and_then(|s| Some(s.get_hash())) {
+        string += &format!("\n\nGOTO -- [{:}][g_{:}] --", self._id_().index(), goto_hash);
       }
       string += "\n-- non-terms:";
       for item in non_term_items {
@@ -451,7 +469,6 @@ pub enum GraphBuildState {
   #[default]
   Normal,
   NormalGoto,
-  Peek(u16),
   Leaf,
   _LongestMatch,
   _ShortestMatch,
@@ -471,14 +488,7 @@ pub enum GraphType {
 use GraphBuildState::*;
 
 use super::{build::handle_kernel_items, items::get_follow};
-impl GraphBuildState {
-  pub fn currently_peeking(&self) -> bool {
-    match self {
-      Peek(_) => true,
-      _ => false,
-    }
-  }
-}
+impl GraphBuildState {}
 
 #[derive(Hash)]
 pub struct PeekGroup<'db> {
@@ -994,7 +1004,8 @@ impl<'db> GraphBuilder<'db> {
       item.index().hash(hasher);
       item.origin.hash(hasher);
       item.from.hash(hasher);
-      // item.goto_distance.hash(hasher);
+      item.from_goto_origin.hash(hasher);
+      item.goto_distance.hash(hasher);
     }
 
     lookahead.hash(hasher);
@@ -1059,7 +1070,7 @@ impl<'db> GraphBuilder<'db> {
       .pending
       .iter()
       .filter_map(|s| {
-        if let GraphBuildState::Peek(_) = self.graph[*s].build_state {
+        if let StateType::Peek(_) = self.graph[*s].t_type {
           self.graph[*s]
             .as_ref(&self.graph)
             .get_peek_resolve_items()

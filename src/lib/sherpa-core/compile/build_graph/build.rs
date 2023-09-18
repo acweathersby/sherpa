@@ -87,8 +87,8 @@ fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(gb: &mut GraphBuilder<'db>, gr
     let ____is_scan____ = gb.is_scanner();
     let prec_sym: PrecedentSymbol = (sym, group.0).into();
 
-    match gb.current_state().build_state() {
-      Peek(level) => handle_peek_incomplete_items(gb, prec_sym, group, level),
+    match gb.current_state().get_type() {
+      StateType::Peek(level) => handle_peek_incomplete_items(gb, prec_sym, group, level),
       _REGULAR_ => handle_regular_incomplete_items(gb, prec_sym, group),
     }?;
   }
@@ -155,8 +155,8 @@ pub(crate) fn handle_completed_groups<'db>(
   let ____is_scan____ = gb.is_scanner();
   let prec_sym: PrecedentSymbol = (sym, follow_pairs.iter().max_precedence()).into();
 
-  match gb.current_state().build_state() {
-    GraphBuildState::Peek(_) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs),
+  match gb.current_state().get_type() {
+    StateType::Peek(_) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs),
     _REGULAR_ => handle_regular_complete_groups(gb, groups, prec_sym, follow_pairs),
   }
 }

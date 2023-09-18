@@ -337,7 +337,7 @@ fn add_match_expr<'graph, 'db: 'graph>(
       w = (w + " {").indent();
 
       // Sort successors
-      let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEndComplete(_) | StateType::Peek));
+      let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEndComplete(_) | StateType::Peek(_)));
 
       for (state_val, s) in successors.iter().map(|s| (s.get_symbol().sym().to_state_val(db), s)).collect::<OrderedMap<_, _>>() {
         w = w + "\n\n( " + state_val.to_string() + " ){ ";
@@ -401,7 +401,7 @@ fn build_body<'graph, 'db: 'graph>(
         body_string.push("reset".into());
         CONTINUE
       }
-      StateType::Peek => {
+      StateType::Peek(_) => {
         debug_assert!(!is_scanner, "Peek states should not be present in graph");
         body_string.push("peek".into());
         CONTINUE

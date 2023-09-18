@@ -116,7 +116,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
       } else if k > gb.config.max_k {
         peek_not_allowed_error(gb, &[shifts.cloned().collect(), reduces.cloned().collect()], "")?;
       }
-
+      println!("{k}");
       gb.set_classification(ParserClassification { peeks_present: true, max_k: k as u16, ..Default::default() });
 
       Ok(ShiftReduceConflictResolution::Peek(k as u16))
@@ -155,7 +155,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
         )?;
       }
 
-      gb.set_classification(ParserClassification { peeks_present: true, max_k: k as u16, ..Default::default() });
+      gb.set_classification(ParserClassification { peeks_present: true, ..Default::default() });
 
       Ok(ShiftReduceConflictResolution::Peek(k as u16))
     }
@@ -254,6 +254,7 @@ fn calculate_k_multi<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
       });
 
     if recursive.iter().any(|i| *i.1 > 1) {
+      println!("{k}");
       return KCalcResults::RecursiveAt(k);
     }
 
