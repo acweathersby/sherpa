@@ -43,7 +43,7 @@ pub trait ParserStore: JournalReporter {
 
   /// Writes the parser IR states to a file in the temp directory
   #[cfg(all(debug_assertions))]
-  fn write_states_to_temp_file(&self) -> SherpaResult<()> {
+  fn _write_states_to_temp_file_(&self) -> SherpaResult<()> {
     let db = self.get_db();
 
     for (i, state) in self.get_states().iter().enumerate() {
@@ -55,7 +55,7 @@ pub trait ParserStore: JournalReporter {
 
   /// Prints the ir code of the parser states to `stdout`
   #[inline(always)]
-  fn print_states(&self) {
+  fn _print_states_(&self) {
     #[cfg(debug_assertions)]
     {
       let states = self.get_states();
@@ -281,6 +281,7 @@ impl SherpaDatabaseBuilder {
 
         Ok(SherpaParserBuilder {
           classification,
+          config,
           j: j.transfer(),
           db: db.clone(),
           states: states.into_iter().collect(),
@@ -310,6 +311,7 @@ impl SherpaDatabaseBuilder {
 pub struct SherpaParserBuilder {
   j: Journal,
   db: ParserDatabase,
+  config: ParserConfig,
   states: ParseStatesVec,
   classification: ParserClassification,
   optimized_states: Option<ParseStatesVec>,
@@ -345,12 +347,13 @@ impl SherpaParserBuilder {
   }
 
   pub fn optimize(self, for_debugging: bool) -> SherpaResult<Self> {
-    let SherpaParserBuilder { db, j, states, optimized_states, classification } = self;
+    let SherpaParserBuilder { db, config, j, states, optimized_states, classification } = self;
 
     Ok(Self {
       classification,
+      config,
       optimized_states: match optimized_states {
-        None => Some(optimize(&db, states.iter().cloned().collect(), for_debugging)?),
+        None => Some(optimize(&db, &config, states.iter().cloned().collect(), for_debugging)?),
         states => states,
       },
       j,

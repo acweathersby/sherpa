@@ -9,19 +9,9 @@ use inkwell::{
 };
 use sherpa_core::{proxy::OrderedMap, test::utils::build_parse_states_from_source_str, *};
 use sherpa_rust_runtime::{
+  deprecate::*,
   llvm_parser::{sherpa_allocate_stack, sherpa_free_stack, sherpa_get_token_class_from_codepoint, LLVMByteReader},
-  types::{
-    ast::{AstObject, AstSlot, AstStackSlice},
-    BlameColor,
-    ByteReader,
-    Goto,
-    MutByteReader,
-    ParseActionType,
-    ParseContext,
-    ParseResult,
-    TokenRange,
-    UTF8StringReader,
-  },
+  types::{BlameColor, ParseActionType, TokenRange},
 };
 
 // Sorts reduce functions according to their respective

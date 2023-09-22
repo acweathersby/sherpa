@@ -31,7 +31,7 @@ fn basic_optimize_unknown() -> R<()> {
       //  println!("A: store{:#}\n", state.1.source_string(db.string_store()))
       // }
 
-      let states = optimize::optimize::<ParseStatesVec>(&db, states.into_iter().collect(), false)?;
+      let states = optimize::optimize::<ParseStatesVec>(&db, &Default::default(), states.into_iter().collect(), false)?;
 
       println!("AFTER -------------------");
 

@@ -1,8 +1,8 @@
 use super::types::ParserDatabase;
 use crate::types::*;
 use sherpa_rust_runtime::{
-  bytecode::{DebugFn, *},
-  types::{bytecode::Opcode, ByteReader, ParseContext, UTF8Reader},
+  bytecode::{disassemble_parse_block, DebugEventNew},
+  types::{bytecode::Opcode, ParserInput},
 };
 #[derive(Debug, Clone, Copy)]
 pub struct PrintConfig {
@@ -58,11 +58,11 @@ impl Node {
 
 #[cfg(all(debug_assertions))]
 #[allow(unused)]
-pub fn file_debugger<R: ByteReader + UTF8Reader, M>(
+pub fn file_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,
   state_lu: Map<u32, IString>,
-) -> Option<Box<DebugFn<R, M>>> {
+) -> Option<Box<sherpa_rust_runtime::bytecode::DebugFnNew>> {
   let mut stack = vec![];
   crate::test::utils::write_debug_file(&db, "parser_output.tmp", "    ", false);
   Some(Box::new(move |event, ctx| {
@@ -76,11 +76,11 @@ pub fn file_debugger<R: ByteReader + UTF8Reader, M>(
 
 #[cfg(debug_assertions)]
 #[allow(unused)]
-pub fn console_debugger<R: ByteReader + UTF8Reader, M>(
+pub fn console_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,
   state_lu: Map<u32, IString>,
-) -> Option<Box<DebugFn<R, M>>> {
+) -> Option<Box<sherpa_rust_runtime::bytecode::DebugFnNew>> {
   let mut stack = vec![];
   Some(Box::new(move |event, ctx| {
     let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
@@ -93,9 +93,9 @@ pub fn console_debugger<R: ByteReader + UTF8Reader, M>(
 
 #[cfg(debug_assertions)]
 #[allow(unused)]
-fn diagram_constructor<R: ByteReader + UTF8Reader, M>(
-  event: &DebugEvent<'_>,
-  ctx: &ParseContext<R, M>,
+fn diagram_constructor(
+  event: &DebugEventNew<'_>,
+  input: &dyn ParserInput,
   stack: &mut Vec<Node>,
   db: &ParserDatabase,
   pc: &PrintConfig,
@@ -109,7 +109,7 @@ fn diagram_constructor<R: ByteReader + UTF8Reader, M>(
     display_state,
   } = *pc;
   match event {
-    DebugEvent::ExecuteState { base_instruction } => {
+    DebugEventNew::ExecuteState { base_instruction } => {
       let i = base_instruction.address() as u32;
       if let Some(state_name) = state_lu.get(&i) {
         let name = state_name.to_str(db.string_store());
@@ -126,8 +126,9 @@ fn diagram_constructor<R: ByteReader + UTF8Reader, M>(
         Default::default()
       }
     }
-    DebugEvent::ActionShift { offset_end, offset_start, token_id } => {
-      let string = ctx.get_str()[*offset_start..(*offset_end).min(ctx.get_str().len())].replace("\n", "\\n");
+    DebugEventNew::ActionShift { offset_end, offset_start, token_id } => {
+      let string = input.string_range(*offset_start..(*offset_end).min(input.len())).replace("\n", "\\n");
+
       stack.push(Node { string: " ".to_string() + &string, offset: 0, ..Default::default() });
       format!(
         "
@@ -146,7 +147,7 @@ Stack:\n{}\n
           .join("\n")
       )
     }
-    DebugEvent::ActionReduce { rule_id } => {
+    DebugEventNew::ActionReduce { rule_id } => {
       let item = Item::from((DBRuleKey::from(*rule_id), db));
       let nterm_name = item.nonterm_name().to_string(db.string_store());
       let nterm_name = nterm_name.split("____").last().unwrap();
@@ -190,7 +191,7 @@ Stack:\n{}\n
       )
     }
 
-    DebugEvent::Complete { nonterminal_id, .. } => {
+    DebugEventNew::Complete { nonterminal_id, .. } => {
       format!(
         "
   [Complete] --------------------------------------------------------------------
@@ -209,7 +210,7 @@ Stack:\n{}\n
       )
     }
 
-    DebugEvent::ExecuteState { base_instruction, .. } if display_state => {
+    DebugEventNew::ExecuteState { base_instruction, .. } if display_state => {
       format!(
         "
 [State]------------------------------------------------------------------
@@ -220,35 +221,25 @@ Stack:\n{}\n
         disassemble_parse_block(base_instruction.next(), true).0
       )
     }
-    DebugEvent::ExecuteInstruction { instruction } if display_instruction => {
-      let active_ptr = if ctx.is_scanner() { ctx.tok_ptr } else { ctx.sym_ptr };
-      if ctx.is_scanner() || display_scanner_output {
+    DebugEventNew::ExecuteInstruction { instruction, cursor, is_scanner } if display_instruction => {
+      let active_ptr = *cursor;
+      if !is_scanner || display_scanner_output {
         if !matches!(instruction.get_opcode(), Opcode::VectorBranch | Opcode::HashBranch) {
           Default::default()
+        } else {
+          format!(
+            "
+            [Instruction]------------------------------------------------------------------
+            
+            address:{:0>6X}; 
+            ║{: <74}║
+            {}
+            -------------------------------------------------------------------------------",
+            instruction.address(),
+            input.string_range((active_ptr)..(active_ptr + input_window_size).min(input.len())).replace("\n", "\\n"),
+            disassemble_parse_block(Some(*instruction), true).0
+          )
         }
-        format!(
-          "
-[Instruction]------------------------------------------------------------------
-
-  address:{:0>6X}; tok_len: {} sym_len: {}; tok_id: {};  
-  anchor: {}; base: {}; head: {}; tail: {};  end: {}; 
-
-  ║{: <74}║
-
-{}
--------------------------------------------------------------------------------",
-          instruction.address(),
-          ctx.tok_len,
-          ctx.sym_len,
-          ctx.tok_id,
-          ctx.anchor_ptr,
-          ctx.base_ptr,
-          ctx.sym_ptr,
-          ctx.tok_ptr,
-          ctx.end_ptr,
-          &ctx.get_str()[(active_ptr)..(active_ptr + input_window_size).min(ctx.get_str().len())].replace("\n", "\\n"),
-          disassemble_parse_block(Some(*instruction), true).0
-        )
       } else {
         Default::default()
       }

@@ -274,13 +274,19 @@ impl ParserDatabase {
       .and_then(|e| hash_map.get(&e.nonterm_entry_name).map(|v| (*v) as usize))
   }
 
-  pub fn get_entry_data(&self, entry_name: &str, hash_map: &HashMap<IString, u32>) -> Option<(usize, &EntryPoint)> {
+  /// Returns the bytecode offset and Entry data for a given entrypoint name.
+  ///
+  /// Note if the grammar does not contain any `EXPORT` preambles, then the
+  /// single entry point for that grammar will be named `default`. Otherwise,
+  /// the available entry point names will be those that match the
+  /// export preambles in the root grammar.
+  pub fn get_entry_data<T: AsRef<HashMap<IString, u32>>>(&self, entry_name: &str, hash_map: T) -> Option<(u32, &EntryPoint)> {
     let string = entry_name.to_token();
     self
       .entry_points
       .iter()
       .find(|e| e.entry_name == string)
-      .and_then(|e| Some((hash_map.get(&e.nonterm_entry_name).map(|v| (*v) as usize).unwrap_or_default(), e)))
+      .and_then(|e| Some((hash_map.as_ref().get(&e.nonterm_entry_name).map(|v| *v).unwrap_or_default(), e)))
   }
 
   /// Returns the name of the database as a string.
@@ -627,4 +633,5 @@ pub struct EntryPoint {
   pub entry_name:         IString,
   ///
   pub export_id:          usize,
+  pub is_export:          bool,
 }

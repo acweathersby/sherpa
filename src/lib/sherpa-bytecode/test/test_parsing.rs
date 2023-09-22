@@ -3,8 +3,8 @@ use crate::{
   *,
 };
 use sherpa_core::{test::utils::build_parse_states_from_source_str as build_states, *};
-use sherpa_rust_runtime::types::{ast::AstSlot, bytecode::FIRST_PARSE_BLOCK_ADDRESS, SherpaParser};
-use std::path::PathBuf;
+use sherpa_rust_runtime::types::{ASTConstructor, AstSlotNew, ParserInitializer, StringInput};
+use std::{path::PathBuf, rc::Rc};
 
 use super::utils::compile_and_run_grammars;
 
@@ -710,36 +710,42 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     "".into(),
     true,
     &|tp| {
+      tp._write_states_to_temp_file_()?;
+
       let pkg = compile_bytecode(&tp, true)?;
+
+      pkg._write_disassembly_to_temp_file_(&tp.db)?;
 
       let TestPackage { db, .. } = tp;
 
-      let mut parser = TestParser::new(&mut ("hello\nworld\n\ngoodby\nmango".into()), &pkg);
-      parser.init_parser(FIRST_PARSE_BLOCK_ADDRESS);
+      let mut parser = TestParser::new(Rc::new(pkg.bytecode), pkg.nonterm_id_to_address);
+
+      parser.init(0)?;
+
       let result = parser.parse_ast(
-        &map_reduce_function(&db, vec![
-          ("test", 0, |ctx, slots| {
-            assert_eq!(slots[0].1.to_slice(unsafe { &*ctx }.get_str()), "hello");
+        &mut StringInput::from("hello\nworld\n\ngoodby\nmango"),
+        &map_reduce_function::<StringInput, u32>(&db, vec![
+          ("test", 0, |input, slots| {
+            assert_eq!(slots[0].1.to_string_from_input(input), "hello");
             assert_eq!(slots[0].1.line_num, 0, "Line number of `hello` should be 0");
             assert_eq!(slots[0].1.line_off, 0, "Line offset of `hello` should be 0");
 
-            slots.assign(0, AstSlot(1010101, Default::default(), Default::default()))
+            slots.assign(0, AstSlotNew(1010101, Default::default(), Default::default()))
           }),
-          ("B", 0, |ctx, slots| {
-            assert_eq!(slots[0].1.to_slice(unsafe { &*ctx }.get_str()), "mango");
+          ("B", 0, |input, slots| {
+            assert_eq!(slots[0].1.to_string_from_input(input), "mango");
             assert_eq!(slots[0].1.line_num, 4, "Line number of `mango` should be 4");
             assert_eq!(slots[0].1.line_off, 19, "Line offset of `mango` should be 19");
           }),
-          ("P", 0, |ctx, slots| {
-            assert_eq!(slots[0].1.to_slice(unsafe { &*ctx }.get_str()), "world");
+          ("P", 0, |input, slots| {
+            assert_eq!(slots[0].1.to_string_from_input(input), "world");
             assert_eq!(slots[0].1.line_num, 1, "Line number of `world` should be 1");
             assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 5");
           }),
         ]),
-        &mut None,
       );
 
-      assert!(matches!(result, Result::Ok(AstSlot(1010101, ..))), "{:?}", result);
+      assert!(matches!(result, Result::Ok(AstSlotNew(1010101, ..))), "{:?}", result);
 
       SherpaResult::Ok(())
     },

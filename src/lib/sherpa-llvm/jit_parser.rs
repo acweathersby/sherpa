@@ -5,6 +5,7 @@ use inkwell::{
 };
 use sherpa_core::{parser::ASTNode, *};
 use sherpa_rust_runtime::{
+  deprecate::*,
   llvm_parser::{
     llvm_map_result_action,
     llvm_map_shift_action,
@@ -13,17 +14,7 @@ use sherpa_rust_runtime::{
     sherpa_get_token_class_from_codepoint,
     LLVMByteReader,
   },
-  types::{
-    ast::{AstObject, AstSlot, AstStackSlice},
-    ByteReader,
-    MutByteReader,
-    ParseAction,
-    ParseActionType,
-    ParseContext,
-    ParseResult,
-    SherpaParser,
-    TokenRange,
-  },
+  types::{ParseAction, ParseActionType, TokenRange},
 };
 use std::{
   path::{Path, PathBuf},
@@ -275,10 +266,7 @@ impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M
     self.prime(entry_point);
   }
 
-  fn get_next_action<'debug>(
-    &mut self,
-    debug: &mut Option<&'debug mut sherpa_rust_runtime::bytecode::DebugFn<R, M>>,
-  ) -> ParseAction {
+  fn get_next_action<'debug>(&mut self, debug: &mut Option<&'debug mut DebugFn<R, M>>) -> ParseAction {
     match self.next() {
       ParseActionType::Shift => ParseAction::Shift {
         token_byte_offset: self.get_token_offset(),
@@ -299,7 +287,7 @@ impl<'llvm, R: ByteReader + LLVMByteReader + MutByteReader, M> SherpaParser<R, M
         rule_id:        self.ctx.rule_id,
         symbol_count:   self.ctx.sym_len,
       },
-      ParseActionType::Accept => ParseAction::Accept { nonterminal_id: self.ctx.nterm },
+      ParseActionType::Accept => ParseAction::Accept { nonterminal_id: self.ctx.nterm, final_offset: 0 },
       ParseActionType::Error => ParseAction::Error {
         last_nonterminal: self.ctx.nterm,
         last_input:       TokenRange {

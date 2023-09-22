@@ -1,3 +1,5 @@
+use crate::types::SharedSymbolBuffer;
+
 use super::*;
 
 #[derive(Clone)]

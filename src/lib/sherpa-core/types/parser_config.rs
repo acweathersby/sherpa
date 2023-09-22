@@ -35,6 +35,11 @@ pub struct ParserConfig {
   /// Creates states that handle erroneous inputs, allowing a parser to recover
   /// from unexpected or missing tokens and continune parsing an input.
   pub AllOW_ERROR_RECOVERY: bool,
+  /// Export all non-terminals as entry points in to the parser. This implies
+  /// an RD or RAD parser.
+  pub EXPORT_ALL_NONTERMS: bool,
+  /// Allow the parser to shift on CST non-term nodes.
+  pub ALLOW_CST_NONTERM_SHIFT: bool,
 }
 
 impl Default for ParserConfig {
@@ -48,6 +53,8 @@ impl Default for ParserConfig {
       AllOW_CST_MERGING: false,
       AllOW_ERROR_RECOVERY: false,
       CONTEXT_FREE: false,
+      EXPORT_ALL_NONTERMS: false,
+      ALLOW_CST_NONTERM_SHIFT: false,
       max_k: usize::MAX,
     }
   }
@@ -75,6 +82,13 @@ impl ParserConfig {
 
   pub fn g_hybrid(self) -> Self {
     self.hybrid().set_k(8).enable_fork(true)
+  }
+
+  pub fn cst_editor(mut self) -> Self {
+    self = self.hybrid();
+    self.EXPORT_ALL_NONTERMS = true;
+    self.ALLOW_CST_NONTERM_SHIFT = true;
+    self
   }
 
   pub fn g_recursive_descent_k(self) -> Self {
@@ -134,6 +148,11 @@ impl ParserConfig {
 
   pub fn enable_lookahead_merge(mut self, enable: bool) -> Self {
     self.ALLOW_LOOKAHEAD_MERGE = enable;
+    self
+  }
+
+  pub fn enable_calls(mut self, enable: bool) -> Self {
+    self.ALLOW_RECURSIVE_DESCENT = enable;
     self
   }
 

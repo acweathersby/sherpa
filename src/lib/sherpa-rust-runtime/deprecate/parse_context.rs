@@ -1,15 +1,23 @@
-use super::{
-  ast::{AstObject, AstSlot, AstStackSlice, Reducer},
-  bytecode::{FAIL_STATE_FLAG, NORMAL_STATE_FLAG},
-  cst,
-  *,
-};
-#[cfg(debug_assertions)]
-use crate::bytecode::DebugEvent;
-use crate::bytecode::DebugFn;
 #[cfg(debug_assertions)]
 use std::fmt::Debug;
 use std::{rc::*, sync::Arc};
+
+use crate::types::{
+  bytecode::{FAIL_STATE_FLAG, NORMAL_STATE_FLAG},
+  ParseAction,
+  Token,
+  TokenRange,
+};
+
+use super::{
+  ast::{AstObject, AstSlot, AstStackSlice, Reducer},
+  ByteReader,
+  DebugEvent,
+  DebugFn,
+  MutByteReader,
+  SherpaParseError,
+  UTF8Reader,
+};
 
 #[derive(Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -519,7 +527,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
     self.init_parser(entry_point);
     loop {
       match self.get_next_action(debug) {
-        ParseAction::Accept { nonterminal_id } => {
+        ParseAction::Accept { nonterminal_id, .. } => {
           break if !self.head_at_end() {
             Err(SherpaParseError {
               inline_message: format!("Failed to read entire input {} {}", self.get_ctx().end_ptr, self.get_ctx().sym_ptr),
@@ -583,7 +591,7 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
 
     loop {
       match self.get_next_action(debug) {
-        ParseAction::Accept { nonterminal_id } => {
+        ParseAction::Accept { nonterminal_id, .. } => {
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
             debug(&DebugEvent::ActionAccept {}, self.get_ctx());
@@ -642,110 +650,6 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
             debug(&DebugEvent::ActionReduce { rule_id: _rule_id }, self.get_ctx());
-          }
-        }
-        _ => panic!("Unexpected Action!"),
-      }
-    }
-  }
-
-  fn create_cst<'debug>(
-    &mut self,
-    entry_point: u32,
-    target_nonterminal_id: u32,
-    debug: &mut Option<&'debug mut DebugFn<R, M>>,
-  ) -> Option<Rc<cst::CST>> {
-    self.init_parser(entry_point);
-
-    let mut cst: Vec<(u32, Rc<cst::CST>)> = vec![];
-    let mut skipped = vec![];
-    let mut len = 0;
-
-    loop {
-      match self.get_next_action(debug) {
-        ParseAction::Accept { nonterminal_id } => {
-          #[cfg(debug_assertions)]
-          if let Some(debug) = debug {
-            debug(&DebugEvent::ActionAccept {}, self.get_ctx());
-          }
-
-          break if cst.len() > 1 {
-            eprint!(
-              "Parser did not resolve CST. This is probably to to the 
-originating grammar not supporting error recovery. Unable to provide a viable
-Concrete Syntax Tree structure."
-            );
-            None
-          } else if nonterminal_id != target_nonterminal_id {
-            None
-          } else {
-            cst.pop().map(|c| c.1)
-          };
-        }
-        ParseAction::Error { last_input, .. } => {
-          #[cfg(debug_assertions)]
-          if let Some(debug) = debug {
-            debug(&DebugEvent::ActionError {}, self.get_ctx());
-          }
-          let mut token: Token = last_input.to_token(self.get_reader_mut());
-          token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
-          break None;
-        }
-        ParseAction::Fork { .. } => {
-          panic!("No implementation of fork resolution is available")
-        }
-        ParseAction::Skip { token_byte_length, token_id, .. } => {
-          let skip = cst::Skipped { byte_len: token_byte_length, token_id };
-          len += token_byte_length;
-          skipped.push(skip);
-        }
-        ParseAction::Shift { token_byte_length, token_byte_offset: _token_byte_offset, token_id, .. } => {
-          let token = Rc::new(cst::CST::Terminal {
-            byte_len: token_byte_length,
-            token_id,
-            leading_skipped: skipped.clone(),
-          });
-
-          skipped.clear();
-          cst.push((len + token_byte_length, token));
-          len = 0;
-
-          #[cfg(debug_assertions)]
-          if let Some(debug) = debug {
-            let offset_start = _token_byte_offset as usize;
-            let offset_end = (_token_byte_offset + token_byte_length) as usize;
-            debug(&DebugEvent::ActionShift { offset_start, offset_end, token_id }, self.get_ctx());
-          }
-        }
-        ParseAction::Reduce { rule_id, nonterminal_id, symbol_count } => {
-          let mut children = vec![];
-          let mut len = 0;
-          for child in cst.drain((cst.len() - symbol_count as usize)..) {
-            len += child.0;
-            children.push(child);
-          }
-
-          if children.len() == 1 {
-            match children.pop() {
-              Some((len, mut child)) => match Rc::get_mut(&mut child) {
-                Some(cst::CST::NonTerm { nterm, .. }) => {
-                  nterm.push((nonterminal_id as u16, rule_id as u16));
-                  cst.push((len, child));
-                  continue;
-                }
-
-                _ => children.push((len, child)),
-              },
-              _ => unreachable!(),
-            }
-          }
-
-          let nonterm = cst::CST::NonTerm { nterm: vec![(nonterminal_id as u16, rule_id as u16)], children };
-          cst.push((len, Rc::new(nonterm)));
-
-          #[cfg(debug_assertions)]
-          if let Some(debug) = debug {
-            debug(&DebugEvent::ActionReduce { rule_id: rule_id }, self.get_ctx());
           }
         }
         _ => panic!("Unexpected Action!"),

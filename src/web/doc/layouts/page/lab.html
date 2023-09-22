@@ -7,12 +7,12 @@
     {{ partial "scripts/soft_load.html" . }}
     {{ .Scratch.Set "headerSubtext" "lab" }}
     {{ partial "header/header.html" . }}
-    <main id="lab">
+    <main id="lab" >
         <div id="shadow-backer"></div>
-        <div id="documents-host" class="loading">
+        <div id="documents-host" class="loading adjustable">
             <iframe id="documents-frame" class="frame"></iframe>
         </div>
-        <div id="left-column">
+        <div id="left-column" class="adjustable">
             <div class="panel-host">
                 <div class="tabs-header">
                     <div id="tab-grammar" class="tab active"> Grammar </div>
@@ -47,7 +47,7 @@
             </div>
         </div>
 
-        <div id="right-column">
+        <div id="right-column" class="adjustable">
             <div id="error-bar">test</div>
             <div id="error-blackout"></div>
             <div class="controls">
@@ -135,11 +135,12 @@
     </main>
 
     <script type="module">
-        import engine, { docs_handler, ScrollHandler } from "{{ $labScript.Permalink }}";
+        import engine, { docs_handler, ScrollHandler,DividerHandler } from "{{ $labScript.Permalink }}";
         // Connect docs handler to iframe manage interaction between
         // docs and lab.
         docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));
         new ScrollHandler(document.getElementById("parser-scoller"), document.getElementById("parser-code"));
+        new DividerHandler(document.getElementById("lab"));
 
         engine({
             codemirror_grammar_host: document.getElementById("panel-grammar"),

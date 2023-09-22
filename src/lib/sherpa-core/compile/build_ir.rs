@@ -253,18 +253,22 @@ fn classify_successors<'graph, 'db: 'graph>(
 ) -> Queue<((u32, MatchInputType), OrderedSet<GraphStateRef<'graph, 'db>>)> {
   Queue::from_iter(
     hash_group_btree_iter(successors.iter().filter(|i| !matches!(i.get_type(), StateType::ShiftFrom(_))), |_, s| {
-      match s.get_symbol().sym() {
-        SymbolId::EndOfFile { .. } => (0, MatchInputType::EndOfFile),
-        SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (4, MatchInputType::Token),
-        SymbolId::Char { .. } => (1, MatchInputType::Byte),
-        SymbolId::Codepoint { .. } => (2, MatchInputType::Codepoint),
-        SymbolId::Default => (5, MatchInputType::Default),
-        sym if sym.is_class() => (3, MatchInputType::Class),
-        _sym => {
-          #[cfg(debug_assertions)]
-          unreachable!("{_sym:?} {}", s._debug_string_());
-          #[cfg(not(debug_assertions))]
-          unreachable!()
+      if matches!(s.get_type(), StateType::CSTNodeAccept(_)) {
+        (0, MatchInputType::CSTNode)
+      } else {
+        match s.get_symbol().sym() {
+          SymbolId::EndOfFile { .. } => (1, MatchInputType::EndOfFile),
+          SymbolId::Char { .. } => (2, MatchInputType::Byte),
+          SymbolId::Codepoint { .. } => (3, MatchInputType::Codepoint),
+          sym if sym.is_class() => (4, MatchInputType::Class),
+          SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (5, MatchInputType::Token),
+          SymbolId::Default => (6, MatchInputType::Default),
+          _sym => {
+            #[cfg(debug_assertions)]
+            unreachable!("{_sym:?} {}", s._debug_string_());
+            #[cfg(not(debug_assertions))]
+            unreachable!()
+          }
         }
       }
     })

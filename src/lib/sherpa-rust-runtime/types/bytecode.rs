@@ -132,11 +132,7 @@ pub enum Opcode {
   ///
   /// This also causes a `Reduce` event to be emitted, pausing the parser until
   /// it is resumed through a call to `next`.
-  ///
-  /// # Operands
-  /// - u32: Non-terminalId - The value that will be assigned to `nterm`.
-  /// - u32: RuleId -The value that will be assigned to `rule_id`.
-  /// - u16: Num of Symbols - The value that will be assigned to `sym_len`
+
   ///
   /// This is an 11 byte instruction.
   Reduce,
@@ -204,13 +200,23 @@ pub enum Opcode {
   /// The table data starts at offset 18. Table data starts at byte offset (18
   /// + `Lookup Table Size` * 4)
   HashBranch,
+  /// Matches a sequence of bytes with the input and sets the tok_len to the
+  /// number of bytes matched.
+  /// # Operands
+  /// - 1 - [u16]: Number of bytes that need to be match.
+  /// - 2 - [u32]: Offset from the base of the instruction to the default branch
+  ///   if matching fails.
+  /// - 3 - var_len[[u8]]: Bytes to match against the input
+  ///
+  /// This is variable length instruction. Its base length is 7
+  ByteSequence,
 }
 
 impl From<u8> for Opcode {
   fn from(value: u8) -> Self {
     use Opcode::*;
 
-    const LU_TABLE: [Opcode; 22] = [
+    const LU_TABLE: [Opcode; 23] = [
       NoOp,
       Pass,
       Fail,
@@ -233,6 +239,7 @@ impl From<u8> for Opcode {
       Reduce,
       VectorBranch,
       HashBranch,
+      ByteSequence,
     ];
 
     if (value as usize) < LU_TABLE.len() {
@@ -253,6 +260,9 @@ impl Opcode {
   #[track_caller]
   pub fn len(self) -> usize {
     match self {
+      Opcode::ByteSequence => {
+        unimplemented!("ByteSequences do not have fixed lengths")
+      }
       Opcode::HashBranch => {
         unimplemented!("HashBranches do not have fixed lengths")
       }
@@ -305,8 +315,12 @@ impl<'a> Instruction<'a> {
   /// Returns true if the offset of the instruction plus its size is within
   /// the bounds of the bytecode buffer
   pub fn is_valid(&self) -> bool {
-    let len = self.len();
-    len > 0 && (self.address + len <= self.bc.len())
+    if self.get_opcode() == Opcode::ByteSequence {
+      self.next().is_some_and(|i| i.address() <= self.bc.len())
+    } else {
+      let len = self.len();
+      len > 0 && (self.address + len <= self.bc.len())
+    }
   }
 
   /// Returns the opcode found at the head position of this instruction.
@@ -346,6 +360,11 @@ impl<'a> Instruction<'a> {
   pub fn next(self) -> Option<Instruction<'a>> {
     let Instruction { address: opcode_start, bc } = self;
     match self.get_opcode() {
+      Opcode::ByteSequence => {
+        let mut iter = self.iter();
+        let length = iter.next_u16_le()? as usize;
+        Some((bc, opcode_start + 7 + length).into())
+      }
       Opcode::VectorBranch | Opcode::HashBranch => {
         // Extract the address of the default branch
         let mut iter = self.iter();
@@ -509,17 +528,30 @@ pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(u32)]
 pub enum MatchInputType {
+  /// Matches the last reduced nonterminal id
   NonTerminal = 0,
+  /// Matches the token id set from a scanner call
   Token,
+  /// Matches the class of a character in the input
   Class,
+  /// Matches a utf8 codepoint byte sequence in the input
   Codepoint,
+  /// Matches a byte in the input
   Byte,
+  /// Matches the virtual $eof token in the input stream
   EndOfFile,
+  /// Matches anything
   Default,
+  /// Matches a byte in the input
   ByteScanless,
+  /// Matches a utf8 codepoint byte sequence in the input
   CodepointScanless,
+  /// Matches the class of a character in the input
   ClassScanless,
+  /// Matches a distinct sequence of bytes.
   ByteSequence,
+  /// Matches the top node on the output stack.
+  CSTNode,
 }
 
 impl MatchInputType {
@@ -530,6 +562,7 @@ impl MatchInputType {
   pub const CLASS_STR: &'static str = "_CLASS_";
   pub const CODEPOINT_SCANLESS_STR: &'static str = "_CODEPOINT_SCANLESS_";
   pub const CODEPOINT_STR: &'static str = "_CODEPOINT_";
+  pub const CST_NODE: &'static str = "_CST_NODE_";
   pub const END_OF_FILE_STR: &'static str = "_EOF_";
   pub const NONTERMINAL_STR: &'static str = "_PRODUCTION_";
   pub const TOKEN_STR: &'static str = "_TOKEN_";
@@ -546,6 +579,7 @@ impl MatchInputType {
       Self::ByteScanless => MatchInputType::BYTE_SCANLESS_STR,
       Self::EndOfFile => MatchInputType::END_OF_FILE_STR,
       Self::ByteSequence => MatchInputType::BYTE_SEQUENCE_STR,
+      Self::CSTNode => MatchInputType::CST_NODE,
       Self::Default => "",
     }
   }
@@ -579,6 +613,7 @@ impl From<u32> for MatchInputType {
       8 => Self::CodepointScanless,
       9 => Self::ClassScanless,
       10 => Self::ByteSequence,
+      11 => Self::CSTNode,
       _ => unreachable!(),
     }
   }
@@ -597,6 +632,7 @@ impl From<&str> for MatchInputType {
       Self::NONTERMINAL_STR => Self::NonTerminal,
       Self::TOKEN_STR => Self::Token,
       Self::BYTE_SEQUENCE_STR => Self::ByteSequence,
+      Self::CST_NODE => Self::CSTNode,
       "PRODUCTION" => Self::NonTerminal,
       "TOKEN" => Self::Token,
       "CLASS" => Self::Class,

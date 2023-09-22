@@ -406,13 +406,37 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
           nonterm_entry_name: (nterm_name.to_string(s_store) + "_entry").intern(s_store),
           nonterm_exit_name:  (nterm_name.to_string(s_store) + "_exit").intern(s_store),
           export_id:          id,
+          is_export:          true,
         }
       } else {
         todo!("Handle missing entry point")
       }
     })
+    .chain(
+      p_map
+        .iter()
+        .filter_map(|n| match n.0 {
+          SymbolId::NonTerminal { id } => Some(id),
+          _ => None,
+        })
+        .filter_map(|nterm_id| {
+          if let Some(nterm) = nonterminals.get(nterm_id) {
+            let nterm_name = nterm.guid_name;
+            Some(EntryPoint {
+              nonterm_key:        DBNonTermKey::from(*p_map.get(&nterm_id.as_sym()).unwrap()),
+              entry_name:         nterm_name,
+              nonterm_name:       nterm_name,
+              nonterm_entry_name: (nterm_name.to_string(s_store) + "_entry").intern(s_store),
+              nonterm_exit_name:  (nterm_name.to_string(s_store) + "_exit").intern(s_store),
+              export_id:          Default::default(),
+              is_export:          false,
+            })
+          } else {
+            None
+          }
+        }),
+    )
     .collect::<Array<_>>();
-
   let nterm_lu = convert_index_map_to_vec(nterm_map_owned);
 
   let db = ParserDatabase::new(

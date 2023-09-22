@@ -1,5 +1,8 @@
 use crate::proxy::Array;
-use sherpa_rust_runtime::types::{BlameColor, SherpaParseError, Token};
+use sherpa_rust_runtime::{
+  deprecate::SherpaParseError,
+  types::{BlameColor, ParseError, Token},
+};
 use std::{
   hash::Hash,
   path::PathBuf,
@@ -269,6 +272,25 @@ impl From<FromUtf16Error> for SherpaError {
 impl From<SherpaParseError> for SherpaError {
   fn from(err: SherpaParseError) -> Self {
     Self::from_parse_error(err, Default::default())
+  }
+}
+
+impl From<ParseError> for SherpaError {
+  #[track_caller]
+  fn from(err: ParseError) -> Self {
+    match err {
+      ParseError::InputError { message, inline_message, loc, last_nonterminal } => Self::SourceError {
+        loc:        loc,
+        path:       Default::default(),
+        id:         (ErrorClass::Parsing, 99, "parse-error").into(),
+        msg:        message,
+        inline_msg: inline_message,
+        ps_msg:     Default::default(),
+        severity:   SherpaErrorSeverity::Critical,
+      },
+      ParseError::InvalidNonTerminal => Self::Text("Invalid non-terminal".into()),
+      ParseError::Unexpected | _ => Self::Text("Unexpected error".into()),
+    }
   }
 }
 

@@ -41,7 +41,7 @@ use sherpa_core::{
   Rule,
   *,
 };
-use sherpa_rust_runtime::types::ast::DEFAULT_AST_TYPE_NAMES;
+use sherpa_rust_runtime::deprecate::*;
 use std::{
   collections::{BTreeMap, BTreeSet, VecDeque},
   io::Write,

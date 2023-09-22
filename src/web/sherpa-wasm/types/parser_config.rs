@@ -4,6 +4,7 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 #[allow(non_snake_case)]
+#[derive(Clone, Copy)]
 pub struct JSParserConfig {
   /// When enable, recursive descent style `Call` states will be generated
   pub ALLOW_RECURSIVE_DESCENT: bool,
@@ -38,6 +39,9 @@ pub struct JSParserConfig {
   /// Creates states that handle erroneous inputs, allowing a parser to recover
   /// from unexpected or missing tokens and continune parsing an input.
   pub AllOW_ERROR_RECOVERY: bool,
+  /// Allow the parser to shift on CST non-term nodes.
+  pub ALLOW_CST_NOTERM_SHIFT: bool,
+  pub EXPORT_ALL_NONTERMS: bool,
 }
 
 #[wasm_bindgen]
@@ -60,6 +64,8 @@ impl Default for JSParserConfig {
       CONTEXT_FREE: false,
       AllOW_CST_MERGING: false,
       AllOW_ERROR_RECOVERY: false,
+      ALLOW_CST_NOTERM_SHIFT: false,
+      EXPORT_ALL_NONTERMS: false,
     }
   }
 }
@@ -76,23 +82,15 @@ impl Into<ParserConfig> for JSParserConfig {
       CONTEXT_FREE: self.CONTEXT_FREE,
       AllOW_CST_MERGING: self.AllOW_CST_MERGING,
       AllOW_ERROR_RECOVERY: self.AllOW_ERROR_RECOVERY,
+      ALLOW_CST_NONTERM_SHIFT: self.ALLOW_CST_NOTERM_SHIFT,
+      EXPORT_ALL_NONTERMS: self.EXPORT_ALL_NONTERMS,
     }
   }
 }
 
 impl Into<ParserConfig> for &JSParserConfig {
   fn into(self) -> ParserConfig {
-    ParserConfig {
-      ALLOW_RECURSIVE_DESCENT: self.ALLOW_RECURSIVE_DESCENT,
-      ALLOW_LR: self.ALLOW_LR,
-      ALLOW_PEEKING: self.ALLOW_PEEKING,
-      max_k: self.max_k,
-      ALLOW_LOOKAHEAD_MERGE: self.ALLOW_LOOKAHEAD_MERGE,
-      ALLOW_FORKING: self.ALLOW_FORKING,
-      CONTEXT_FREE: self.CONTEXT_FREE,
-      AllOW_CST_MERGING: self.AllOW_CST_MERGING,
-      AllOW_ERROR_RECOVERY: self.AllOW_ERROR_RECOVERY,
-    }
+    (*self).into()
   }
 }
 

@@ -8,10 +8,11 @@ import { get_grammar, get_input, init, set_grammar_update_handler, set_parser_up
 import { DebuggerButton, DebuggerCheckbox, DebuggerField } from "./debugger/debugger_io";
 import { initDebugger } from "./debugger/debugger";
 import { log } from "js/common/logger";
+import { DividerHandler } from "js/controls/divider";
 
 
 
-export { docs_handler, ScrollHandler };
+export { docs_handler, ScrollHandler, DividerHandler };
 
 export default async function (
     {

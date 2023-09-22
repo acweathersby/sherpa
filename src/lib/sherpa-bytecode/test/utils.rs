@@ -1,18 +1,11 @@
 use crate::*;
 use sherpa_core::{proxy::OrderedMap, test::utils::build_parse_states_from_multi_sources, *};
 use sherpa_rust_runtime::{
-  bytecode::ByteCodeParser,
-  types::{
-    ast::{AstObject, AstSlot, AstStackSlice, Reducer},
-    ByteReader,
-    MutByteReader,
-    ParseContext,
-    SherpaParser,
-    UTF8StringReader,
-  },
+  bytecode::ByteCodeParserNew,
+  types::{AstObjectNew, ParserInput, ParserProducer, ReducerNew, RuntimeDatabase, StringInput},
 };
 
-pub type TestParser<'a, Bytecode> = ByteCodeParser<UTF8StringReader<'a>, u32, Bytecode>;
+pub type TestParser = ByteCodeParserNew;
 
 pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], config: ParserConfig) -> SherpaResult<()> {
   build_parse_states_from_multi_sources(
@@ -21,35 +14,40 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
     true,
     &|tp| {
       #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
-      tp.write_states_to_temp_file()?;
+      tp._write_states_to_temp_file_()?;
 
       let pkg = compile_bytecode(&tp, true)?;
       let TestPackage { db, .. } = tp;
 
+      pkg._write_disassembly_to_temp_file_(&db)?;
+
+      let mut parser = pkg.get_parser().unwrap();
+
       for (entry_name, input, should_pass) in inputs {
-        let (bc_offset, e): (usize, &EntryPoint) = db.get_entry_data(entry_name, &pkg.state_name_to_address).expect(&format!(
+        let (bc_offset, e): (u32, &EntryPoint) = db.get_entry_data(entry_name, &pkg).expect(&format!(
           "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
           db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
         ));
 
         assert!(bc_offset != 0);
 
-        let result = TestParser::new(&mut ((*input).into()), &pkg).completes(
-          bc_offset as u32,
-          e.nonterm_key.to_val(),
-          &mut sherpa_core::file_debugger(
-            db.to_owned(),
-            PrintConfig {
-              display_scanner_output: false,
-              display_instruction: false,
-              display_input_data: true,
-              display_state: true,
-              ..Default::default()
-            },
-            pkg.address_to_state_name.clone(),
-          )
-          .as_deref_mut(),
-        );
+        let entry = pkg.get_entry_data_from_name(entry_name);
+
+        parser.set_debugger(sherpa_core::file_debugger(
+          db.to_owned(),
+          PrintConfig {
+            display_scanner_output: false,
+            display_instruction: false,
+            display_input_data: true,
+            display_state: true,
+            ..Default::default()
+          },
+          pkg.address_to_state_name.clone(),
+        ));
+
+        parser.init(entry.unwrap().nonterm_id)?;
+
+        let result = parser.as_mut().completes(&mut StringInput::from(*input), e.nonterm_key.to_val());
 
         if result.is_ok() != *should_pass {
           if result.is_err() {
@@ -71,13 +69,12 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
 // Sorts reduce functions according to their respective
 // rules. This assumes the number of rules in the array
 // matches the number of rules in the parser.
-pub fn map_reduce_function<'a, R, ExtCTX, ASTNode>(
+pub fn map_reduce_function<I: ParserInput, ASTNode>(
   db: &ParserDatabase,
-  fns: Vec<(&str, usize, fn(*mut ParseContext<R, ExtCTX>, &AstStackSlice<AstSlot<ASTNode>, true>))>,
-) -> Vec<Reducer<R, ExtCTX, ASTNode, true>>
+  fns: Vec<(&str, usize, ReducerNew<I, ASTNode>)>,
+) -> Vec<ReducerNew<I, ASTNode>>
 where
-  R: ByteReader + MutByteReader,
-  ASTNode: AstObject,
+  ASTNode: AstObjectNew,
 {
   fns
     .into_iter()

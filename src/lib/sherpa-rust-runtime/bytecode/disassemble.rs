@@ -24,6 +24,32 @@ pub fn disassemble_parse_block<'a>(i: Option<Instruction<'a>>, recursive: bool) 
     use Opcode::*;
     match i.get_opcode() {
       VectorBranch | HashBranch => generate_table_string(i, r),
+      ByteSequence => {
+        let mut iter = i.iter();
+        let len = iter.next_u16_le().unwrap();
+        let offset = iter.next_u32_le().unwrap() as usize;
+
+        let bytes = (0..len).into_iter().map(|_| iter.next_u8().unwrap()).collect::<Vec<_>>();
+
+        let default = if offset > 0 {
+          format!("default [ goto {} ]", address_string(i.address() + offset))
+        } else {
+          "default [ FAIL ]".into()
+        };
+
+        if let Ok(string) = String::from_utf8(bytes.clone()) {
+          (format!("\n{}BYTE_SEQUENCE {default} str: \"{}\"", dh(i.address()), string), i.next())
+        } else {
+          (
+            format!(
+              "\n{}BYTE_SEQUENCE {default} bytes: [{}]",
+              dh(i.address()),
+              bytes.into_iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+            ),
+            i.next(),
+          )
+        }
+      }
       Goto => {
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();
@@ -72,12 +98,13 @@ pub fn disassemble_parse_block<'a>(i: Option<Instruction<'a>>, recursive: bool) 
       }
       NoOp => {
         let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
+        let byte = i.bytecode()[i.address()];
         (
           format!(
             "\n{}NOOP [ASCII: {} 0x{:X}]{string}",
             dh(i.address()),
-            char::from_u32((i.bytecode()[i.address()] & 127) as u32).unwrap(),
-            i.bytecode()[i.address()]
+            if (byte & 127) > 10 { char::from_u32((byte & 127) as u32).unwrap().to_string() } else { Default::default() },
+            byte
           ),
           i_last,
         )

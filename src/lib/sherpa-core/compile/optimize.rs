@@ -29,6 +29,7 @@ type Set<A> = BTreeSet<A>;
 /// reduce the number of parse states overall.
 pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
+  config: &ParserConfig,
   parse_states: ParseStatesMap,
   optimize_for_debugging: bool,
 ) -> SherpaResult<R> {
@@ -36,27 +37,27 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   //return garbage_collect(db, parse_states, "initial purge");
 
-  let parse_states = garbage_collect(db, parse_states, "initial purge")?;
+  let parse_states = garbage_collect(db, config, parse_states, "initial purge")?;
 
-  let parse_states = canonicalize_states(db, parse_states, None)?;
+  let parse_states = canonicalize_states(db, config, parse_states, None)?;
 
   let parse_states = merge_branches(db, parse_states)?;
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
-  let parse_states = canonicalize_states(db, parse_states, Some("state combine"))?;
+  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?;
 
-  //let parse_states = _inline_states(db, parse_states)?;
+  //let parse_states = _inline_states(db, config, parse_states)?;
 
-  let parse_states = inline_scanners(db, parse_states)?;
+  let parse_states = inline_scanners(db, config, parse_states)?;
 
-  //let parse_states = _create_byte_sequences(db, parse_states)?;
+  let parse_states = create_byte_sequences(db, config, parse_states)?;
 
   let parse_states = merge_branches(db, parse_states)?;
 
-  let parse_states = remove_redundant_defaults(db, parse_states)?;
+  let parse_states = remove_redundant_defaults(db, config, parse_states)?;
 
-  let parse_states = canonicalize_states(db, parse_states, Some("state combine"))?;
+  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?;
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
@@ -78,9 +79,9 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
       (name, Box::new(state))
     });
 
-    garbage_collect(db, parse_states.collect(), "debug-cleanup")
+    garbage_collect(db, config, parse_states.collect(), "debug-cleanup")
   } else {
-    garbage_collect(db, parse_states, "cleanup")
+    garbage_collect(db, config, parse_states, "cleanup")
   }
 }
 
@@ -131,13 +132,21 @@ fn get_match_statement(node: &ASTNode) -> Option<&parser::Statement> {
 }
 
 /// Inline trivial scanners.
-fn _inline_matches<'db>(db: &'db ParserDatabase, parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
-  garbage_collect(db, parse_states, "byte-chains")
+fn _inline_matches<'db>(
+  db: &'db ParserDatabase,
+  config: &ParserConfig,
+  parse_states: ParseStatesMap,
+) -> SherpaResult<ParseStatesMap> {
+  garbage_collect(db, config, parse_states, "byte-chains")
 }
 
 /// Remove default branches that transition to match states that are identical
 /// to the root branches.
-fn remove_redundant_defaults<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn remove_redundant_defaults<'db>(
+  db: &'db ParserDatabase,
+  config: &ParserConfig,
+  mut parse_states: ParseStatesMap,
+) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
   let mut state_branch_lookup: Map<IString, Set<(u64, String, u64)>> = Map::new();
@@ -226,12 +235,16 @@ fn remove_redundant_defaults<'db>(db: &'db ParserDatabase, mut parse_states: Par
     }
   }
 
-  garbage_collect(db, parse_states, "redundant-defaults")
+  garbage_collect(db, config, parse_states, "redundant-defaults")
 }
 
 /// Create chained matching scanners that can scan sequences of
 /// characters simultaneously.
-fn _create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn create_byte_sequences<'db>(
+  db: &'db ParserDatabase,
+  config: &ParserConfig,
+  mut parse_states: ParseStatesMap,
+) -> SherpaResult<ParseStatesMap> {
   let mut single_byte_state = HashMap::new();
 
   for (name, state) in &parse_states {
@@ -308,11 +321,15 @@ fn _create_byte_sequences<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
     }
   }
 
-  garbage_collect(db, parse_states, "byte-sequences")
+  garbage_collect(db, config, parse_states, "byte-sequences")
 }
 
 /// Inline trivial scanners.
-fn inline_scanners<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn inline_scanners<'db>(
+  db: &'db ParserDatabase,
+  config: &ParserConfig,
+  mut parse_states: ParseStatesMap,
+) -> SherpaResult<ParseStatesMap> {
   fn inline_scanners(db: &ParserDatabase, statement: &mut parser::Statement) -> SherpaResult<()> {
     let parser::Statement { branch, .. } = statement;
 
@@ -400,11 +417,15 @@ fn inline_scanners<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMa
     }
   }
 
-  garbage_collect(db, parse_states, "inline-scanners")
+  garbage_collect(db, config, parse_states, "inline-scanners")
 }
 
 /// Inline statements of states that don't have transitive actions or matches.
-fn _inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
+fn _inline_states<'db>(
+  db: &'db ParserDatabase,
+  config: &ParserConfig,
+  mut parse_states: ParseStatesMap,
+) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
   let mut naked_state_lookup = Map::new();
@@ -503,7 +524,7 @@ fn _inline_states<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap
     }
   }
 
-  garbage_collect(db, parse_states, "inline")
+  garbage_collect(db, config, parse_states, "inline")
 }
 
 /// Merges matching branches of states that only consist of goto/push
@@ -690,6 +711,7 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
 /// hash, e.i: states that differ in name only.
 fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
+  config: &ParserConfig,
   mut parse_states: ParseStatesMap,
   gc_label: Option<&str>,
 ) -> SherpaResult<R> {
@@ -760,22 +782,28 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     }
   }
 
-  garbage_collect(db, parse_states, gc_label.unwrap_or("conanicalize"))
+  garbage_collect(db, config, parse_states, gc_label.unwrap_or("conanicalize"))
 }
 
 /// Removes any states that are not referenced, directly or indirectly, by
 /// at least one of the entry states.
 pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
+  config: &ParserConfig,
   mut parse_states: ParseStatesMap,
   _reason: &str,
 ) -> SherpaResult<R> {
   // let start_complexity = ComplexityMarker::new(db, parse_states.iter());
 
   let mut out = Array::new();
-  let mut queue = VecDeque::from_iter(
-    db.entry_points().iter().map(|p| (p.nonterm_entry_name, parse_states.remove(&p.nonterm_entry_name).unwrap())),
-  );
+  let mut queue =
+    VecDeque::from_iter(db.entry_points().iter().filter(|e| config.EXPORT_ALL_NONTERMS || e.is_export).filter_map(|p| {
+      if let Some(state) = parse_states.remove(&p.nonterm_entry_name) {
+        Some((p.nonterm_entry_name, state))
+      } else {
+        None
+      }
+    }));
 
   while let Some((name, state)) = queue.pop_front() {
     // traverse the state to find all goto and push references, convert
@@ -787,9 +815,6 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
     out.push((name, state));
   }
-
-  //start_complexity.print_comparison(&ComplexityMarker::new(db,
-  // out.iter().map(|(i, b)| (i, b))), reason);
 
   SherpaResult::Ok(R::from_iter(out))
 }

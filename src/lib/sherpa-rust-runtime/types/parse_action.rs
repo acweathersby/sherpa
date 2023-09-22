@@ -53,6 +53,13 @@ pub enum ParseAction {
     token_line_count:  u32,
     token_id:          u32,
   },
+  RecoveredError {
+    token_byte_offset: u32,
+    token_byte_length: u32,
+    token_line_offset: u32,
+    token_line_count:  u32,
+    nonterminal_id:    u32,
+  },
   Reduce {
     nonterminal_id: u32,
     rule_id:        u32,
@@ -60,7 +67,7 @@ pub enum ParseAction {
   },
   Accept {
     nonterminal_id: u32,
-    // reached_EOF:   bool,
+    final_offset:   usize,
   },
   Error {
     last_nonterminal: u32,

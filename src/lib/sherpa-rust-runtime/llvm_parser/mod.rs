@@ -1,18 +1,4 @@
-use crate::{
-  types::{
-    ast::{AstObject, AstSlot, AstStackSlice},
-    ByteReader,
-    Goto,
-    MutByteReader,
-    ParseAction,
-    ParseActionType,
-    ParseContext,
-    ParseResult,
-    TokenRange,
-    UTF8StringReader,
-  },
-  utf8::get_token_class_from_codepoint,
-};
+use crate::{deprecate::*, types::*, utf8::get_token_class_from_codepoint};
 use std::{
   alloc::{alloc, dealloc, Layout},
   fmt::Debug,

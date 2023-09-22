@@ -86,7 +86,7 @@ pub fn compile_parse_states(
   }
 
   // Build entry states
-  for entry in db.entry_points() {
+  for entry in db.entry_points().iter().filter(|i| config.EXPORT_ALL_NONTERMS || i.is_export) {
     let ir = build_entry_ir(entry, db)?;
 
     for state in ir {

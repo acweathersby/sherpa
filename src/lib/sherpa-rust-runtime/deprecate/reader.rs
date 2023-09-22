@@ -1,10 +1,4 @@
-use crate::utf8::*;
-use std::sync::Arc;
-
-/// A multi-reader, multi-writer view of the underlying parser input
-/// data, used to distribute access to the input string over multiple
-/// Tokens and SymbolReaders.
-pub type SharedSymbolBuffer = Arc<Vec<u8>>;
+use crate::{types::SharedSymbolBuffer, utf8::*};
 
 /// A reader maintains a read cursor which can be moved bidirectionally
 /// over an array of bytes and yields information on the following:

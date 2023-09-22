@@ -1,5 +1,5 @@
 mod disassemble;
-mod parser;
+mod parser_new;
 
 pub use disassemble::*;
-pub use parser::*;
+pub use parser_new::*;

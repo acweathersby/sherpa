@@ -1,11 +1,7 @@
+use crate::types::{BlameColor, Token};
 #[cfg(debug_assertions)]
 use std::fmt::Debug;
-
 use std::fmt::Display;
-
-use crate::types::BlameColor;
-
-use super::Token;
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct SherpaParseError {

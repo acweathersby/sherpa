@@ -3,6 +3,8 @@ use crate::types::{
   *,
 };
 
+use super::{ByteReader, MutByteReader, ParseContext, SherpaParser, UTF8Reader};
+
 pub enum DebugEvent<'ctx> {
   ExecuteState { base_instruction: Instruction<'ctx> },
   ExecuteInstruction { instruction: Instruction<'ctx> },
@@ -77,8 +79,9 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       HashBranch => hash_branch(i, ctx, debug),
       Fail => (FailState, Option::None, false, true),
       Pass => (CompleteState, Option::None, false, true),
-      Accept => (ParseAction::Accept { nonterminal_id: ctx.nterm }, Option::None, false, true),
+      Accept => (ParseAction::Accept { nonterminal_id: ctx.nterm, final_offset: 0 }, Option::None, false, true),
       NoOp => (None, i.next(), false, true),
+      instr => unreachable!("Unrecognized instruction: {}", instr as u32),
     } {
       (None, Option::None, ..) => {
         unreachable!("Expected next instruction!")

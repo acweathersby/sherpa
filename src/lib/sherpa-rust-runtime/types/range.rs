@@ -1,6 +1,8 @@
 use std::{ops::Add, str::FromStr, sync::Arc};
 
-use super::{ByteReader, Token};
+use crate::deprecate::ByteReader;
+
+use super::{ParserInput, SharedSymbolBuffer, Token};
 
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -165,9 +167,24 @@ impl TokenRange {
     self.to_slice(source).parse::<T>().unwrap_or_default()
   }
 
+  #[deprecated]
   pub fn to_token(&self, reader: &mut dyn ByteReader) -> Token {
     let mut tok: Token = (*self).into();
     tok.set_source(reader.get_source());
+    tok
+  }
+
+  pub fn to_string_from_input<T: ParserInput>(&self, input: &T) -> String {
+    if (self.off + self.len) as usize > input.len() {
+      Default::default()
+    } else {
+      input.string_range(self.off as usize..(self.off + self.len) as usize)
+    }
+  }
+
+  pub fn to_token_from_ref(&self, source: SharedSymbolBuffer) -> Token {
+    let mut tok: Token = (*self).into();
+    tok.set_source(source);
     tok
   }
 

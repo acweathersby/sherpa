@@ -106,7 +106,7 @@ impl JSByteCodeParser {
       }));
 
       match self.bytecode_parser.get_next_action(&mut debugger.as_deref_mut()) {
-        ParseAction::Accept { nonterminal_id } => {
+        ParseAction::Accept { nonterminal_id, .. } => {
           self.running = false;
           if let LockResult::Ok(mut values) = values.write() {
             values.push(JSDebugEvent::Complete { nonterminal_id, ctx: self.bytecode_parser.get_ctx().into() });

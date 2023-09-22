@@ -7,7 +7,7 @@ use inkwell::{
   OptimizationLevel,
 };
 use sherpa_core::{ParserStore, SherpaError, SherpaResult};
-use sherpa_rust_runtime::types::{ast::AstObject, Token};
+use sherpa_rust_runtime::{deprecate::*, types::Token};
 use std::{io::Write, path::PathBuf, process::Command};
 /// Constructs a task that outputs a Rust parse context interface
 /// for the llvm parser.

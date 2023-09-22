@@ -127,6 +127,8 @@ pub enum StateType {
   AssignAndFollow(DBTermKey),
   Reduce(DBRuleKey, usize),
   AssignToken(DBTermKey),
+  /// Accept the current Nonterminal within the CST
+  CSTNodeAccept(DBNonTermKey),
   /// Calls made on items within a state's closure but
   /// are not kernel items.
   InternalCall(DBNonTermKey),

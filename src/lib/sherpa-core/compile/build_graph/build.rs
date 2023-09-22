@@ -19,6 +19,8 @@ pub(crate) type GroupedFirsts<'db> = OrderedMap<SymbolId, TransitionGroup<'db>>;
 pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
   let mut groups = get_firsts(gb)?;
 
+  handle_cst_actions(gb);
+
   let max_precedence = handle_completed_items(gb, &mut groups)?;
 
   let groups = handle_scanner_items(max_precedence, gb, groups)?;
@@ -28,6 +30,23 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
   handle_nonterminal_shift(gb)?;
 
   Ok(())
+}
+
+fn handle_cst_actions(gb: &mut GraphBuilder<'_>) {
+  if gb.config.ALLOW_CST_NONTERM_SHIFT && gb.current_state().build_state() == GraphBuildState::Normal {
+    let state = gb.current_state();
+    let items = state.get_kernel_items().clone();
+    let mode = gb.get_mode();
+    for nonterm in items.iter().filter(|i| i.is_nonterm(mode)) {
+      gb.create_state(
+        Normal,
+        (nonterm.sym_id(), 0).into(),
+        StateType::CSTNodeAccept(nonterm.nonterm_index_at_sym(gb.get_mode()).unwrap()),
+        Some([nonterm.try_increment()].into_iter()),
+      )
+      .to_enqueued();
+    }
+  }
 }
 
 // Iterate over each item's closure and collect the terminal transition symbols

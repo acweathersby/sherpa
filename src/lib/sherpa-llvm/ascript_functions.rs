@@ -5,11 +5,7 @@ use inkwell::{
   values::{CallableValue, IntValue, PointerValue},
 };
 use sherpa_core::*;
-use sherpa_rust_runtime::types::{
-  ast::{AstObject, AstSlot},
-  ParseActionType,
-  ParseResult,
-};
+use sherpa_rust_runtime::{deprecate::*, types::ParseActionType};
 
 pub(crate) unsafe fn construct_ast_builder<ASTNode: AstObject>(module: &LLVMParserModule) -> SherpaResult<()> {
   let slot_size = std::mem::size_of::<AstSlot<ASTNode>>() as u32;
