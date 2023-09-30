@@ -20,8 +20,7 @@ pub fn construct_trivial_patcher() -> SherpaResult<()> {
   let root_path = PathBuf::from("test.sg");
   let mut grammar = SherpaGrammarBuilder::new();
   grammar.add_source_from_string(source, &root_path, false)?;
-  let parser_data =
-    grammar.build_db(&root_path)?.build_parser(ParserConfig::default().cst_editor().enable_calls(false))?.optimize(false)?;
+  let parser_data = grammar.build_db(&root_path)?.build_parser(ParserConfig::default().cst_editor())?.optimize(false)?;
 
   parser_data._write_states_to_temp_file_()?;
 

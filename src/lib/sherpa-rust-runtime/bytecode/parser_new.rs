@@ -632,7 +632,7 @@ pub struct ParseCTX {
   /// The number of line character recognized that proceed the tail
   pub end_line_num:   u32,
   // Parser State ----------
-  /// When reducing, stores the the number of of symbols to reduce.
+  /// When reducing, stores the number of symbols to reduce.
   pub sym_len:        u32,
   /// Tracks whether the context is a fail mode or not.
   pub state:          u32,

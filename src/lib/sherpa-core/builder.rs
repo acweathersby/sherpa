@@ -32,6 +32,7 @@ pub trait ParserStore: JournalReporter {
   fn get_db(&self) -> &ParserDatabase;
   fn get_classification(&self) -> ParserClassification;
   fn get_is_optimized(&self) -> bool;
+  fn get_config(&self) -> &ParserConfig;
 
   fn get_meterics(&self) -> ParserMetrics {
     ParserMetrics {
@@ -324,6 +325,10 @@ impl JournalReporter for SherpaParserBuilder {
 }
 
 impl ParserStore for SherpaParserBuilder {
+  fn get_config(&self) -> &ParserConfig {
+    &self.config
+  }
+
   fn get_db(&self) -> &ParserDatabase {
     &self.db
   }
@@ -390,6 +395,7 @@ pub struct TestPackage {
   pub journal: Journal,
   pub states:  ParseStatesVec,
   pub db:      ParserDatabase,
+  pub config:  ParserConfig,
 }
 
 impl JournalReporter for TestPackage {
@@ -399,6 +405,10 @@ impl JournalReporter for TestPackage {
 }
 
 impl ParserStore for TestPackage {
+  fn get_config(&self) -> &ParserConfig {
+    &self.config
+  }
+
   fn get_db(&self) -> &ParserDatabase {
     &self.db
   }
@@ -419,6 +429,7 @@ impl ParserStore for TestPackage {
 impl From<SherpaParserBuilder> for TestPackage {
   fn from(value: SherpaParserBuilder) -> Self {
     TestPackage {
+      config:  value.config,
       journal: value.j.transfer(),
       states:  match value.optimized_states {
         Some(states) => states.into_iter().collect(),

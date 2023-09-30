@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use super::{ParseAction, ParseError, ParserInput, ParserIterator, ParserProducer};
+use super::{ParseAction, ParseError, ParserInput, ParserProducer};
 
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]

@@ -1,10 +1,7 @@
 use crate::grammar::{JSBytecodePackage, JSParserDB};
 use serde::{Deserialize, Serialize};
 use sherpa_core::parser;
-use sherpa_rust_runtime::{
-  bytecode::{ByteCodeParser, DebugEvent, DebugFn},
-  types::{ByteReader, ParseAction, ParseContext, SherpaParser, UTF8Reader},
-};
+use sherpa_rust_runtime::{deprecate::*, types::*};
 
 use std::{
   borrow::BorrowMut,
@@ -293,7 +290,7 @@ impl<'a, R: ByteReader + UTF8Reader, M> From<(&DebugEvent<'a>, &ParseContext<R, 
 }
 
 mod string_reader {
-  use sherpa_rust_runtime::types::{ByteReader, MutByteReader, SharedSymbolBuffer, UTF8Reader};
+  use sherpa_rust_runtime::{deprecate::*, types::*};
 
   #[derive(Debug, Clone)]
   pub struct StringReader {

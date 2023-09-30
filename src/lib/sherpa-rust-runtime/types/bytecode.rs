@@ -208,7 +208,7 @@ pub enum Opcode {
   ///   if matching fails.
   /// - 3 - var_len[[u8]]: Bytes to match against the input
   ///
-  /// This is variable length instruction. Its base length is 7
+  /// This is variable length instruction. Its base length is 7 bytes
   ByteSequence,
 }
 

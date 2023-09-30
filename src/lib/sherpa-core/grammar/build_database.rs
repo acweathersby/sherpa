@@ -389,6 +389,8 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
   // Convert convert GUID symbol ids to local indices. ------------------------
   convert_rule_symbol_ids(r_table, p_map, symbols);
 
+  let nterm_lu = convert_index_map_to_vec(p_map.clone());
+
   let entry_points = root_grammar
     .pub_nterms
     .iter()
@@ -413,19 +415,20 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
       }
     })
     .chain(
-      p_map
+      nterm_lu
         .iter()
-        .filter_map(|n| match n.0 {
-          SymbolId::NonTerminal { id } => Some(id),
+        .enumerate()
+        .filter_map(|(index, n)| match n {
+          SymbolId::NonTerminal { id } => Some(index),
           _ => None,
         })
         .filter_map(|nterm_id| {
-          if let Some(nterm) = nonterminals.get(nterm_id) {
-            let nterm_name = nterm.guid_name;
+          if let Some((guid_name, _)) = nterm_name_lu_owned.get(nterm_id) {
+            let nterm_name = guid_name;
             Some(EntryPoint {
-              nonterm_key:        DBNonTermKey::from(*p_map.get(&nterm_id.as_sym()).unwrap()),
-              entry_name:         nterm_name,
-              nonterm_name:       nterm_name,
+              nonterm_key:        DBNonTermKey::from(nterm_id),
+              entry_name:         *guid_name,
+              nonterm_name:       *guid_name,
               nonterm_entry_name: (nterm_name.to_string(s_store) + "_entry").intern(s_store),
               nonterm_exit_name:  (nterm_name.to_string(s_store) + "_exit").intern(s_store),
               export_id:          Default::default(),
@@ -437,7 +440,6 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         }),
     )
     .collect::<Array<_>>();
-  let nterm_lu = convert_index_map_to_vec(nterm_map_owned);
 
   let db = ParserDatabase::new(
     root_grammar.identity.guid_name,

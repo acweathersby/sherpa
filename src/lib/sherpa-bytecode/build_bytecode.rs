@@ -125,7 +125,7 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> S
 
   remap_goto_addresses(&mut pkg.bytecode, &proxy_to_address);
 
-  for ep in db.entry_points() {
+  for ep in db.entry_points().iter().filter(|i| store.get_config().EXPORT_ALL_NONTERMS || i.is_export) {
     pkg.nonterm_name_to_id.insert(ep.entry_name, ep.nonterm_key.to_val());
     if let Some(address) = pkg.state_name_to_address.get(&ep.nonterm_entry_name).cloned() {
       pkg.nonterm_id_to_address.insert(ep.nonterm_key.to_val(), address);
