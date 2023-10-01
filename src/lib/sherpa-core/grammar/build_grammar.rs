@@ -525,7 +525,7 @@ fn process_rule_symbols(
       }
       ASTNode::Grouped_Rules(group) => {
         // All bodies are plain without annotations or functions
-        if annotation.is_empty() && !some_rules_have_ast_definitions(&group.rules) {
+        if annotation.is_empty() && !some_rules_have_ast_definitions(&group.rules) && false {
           // For each rule in the group clone the existing rule lists and
           // process each list independently, inserting the new symbols
           // into the existing bodies. We must make sure the indices are

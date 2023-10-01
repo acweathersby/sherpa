@@ -5,6 +5,7 @@
 
 pub mod bytecode;
 pub mod deprecate;
+pub mod derived;
 pub mod llvm_parser;
 pub mod types;
 pub mod utf8;

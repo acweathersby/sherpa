@@ -12,7 +12,7 @@ use sherpa_rust_runtime::{
     Token,
   },
 };
-use std::{collections::VecDeque, default, rc::Rc};
+use std::{collections::VecDeque, rc::Rc};
 
 #[derive(Clone, Default)]
 pub struct BytecodePackage {
@@ -22,6 +22,8 @@ pub struct BytecodePackage {
   pub state_name_to_address: Map<IString, u32>,
   pub address_to_state_name: Map<u32, IString>,
   pub nonterm_id_to_address: Map<u32, u32>,
+  pub state_to_token_ids_map: Map<u32, Vec<u32>>,
+  pub token_id_to_str: Map<u32, String>,
 }
 
 impl AsRef<[u8]> for BytecodePackage {
@@ -43,12 +45,20 @@ impl AsRef<Map<u32, IString>> for BytecodePackage {
 }
 
 impl RuntimeDatabase for BytecodePackage {
-  fn get_entry_data_from_name(&self, entry_name: &str) -> Option<sherpa_rust_runtime::types::EntryPoint> {
+  fn get_entry_data_from_name(&self, entry_name: &str) -> Result<sherpa_rust_runtime::types::EntryPoint, ParseError> {
     if let Some(id) = self.nonterm_name_to_id.get(&entry_name.to_token()) {
-      Some(sherpa_rust_runtime::types::EntryPoint { nonterm_id: *id })
+      Ok(sherpa_rust_runtime::types::EntryPoint { nonterm_id: *id })
     } else {
-      None
+      Err(ParseError::InvalidEntryName)
     }
+  }
+
+  fn get_expected_tok_ids_at_state(&self, state_id: u32) -> Option<&[u32]> {
+    self.state_to_token_ids_map.get(&state_id).map(|s| s.as_slice())
+  }
+
+  fn token_id_to_str(&self, tok_id: u32) -> Option<&str> {
+    self.token_id_to_str.get(&tok_id).map(|s| s.as_str())
   }
 }
 
@@ -106,13 +116,21 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> S
     state_name_to_address: Default::default(),
     address_to_state_name: Default::default(),
     nonterm_id_to_address: Default::default(),
+    state_to_token_ids_map: Default::default(),
+    token_id_to_str: db.tokens().iter().map(|tok| (tok.tok_id.to_val(), tok.name.to_string(db.string_store()))).collect(),
   };
 
   for (name, state) in states {
-    pkg.state_name_to_address.insert(*name, pkg.bytecode.len() as u32);
-    if add_debug_symbols {
-      pkg.address_to_state_name.insert(pkg.bytecode.len() as u32, *name);
+    let state_address = pkg.bytecode.len() as u32;
+
+    if let Some((_, symbols)) = state.get_scanner() {
+      pkg
+        .state_to_token_ids_map
+        .insert(state_address, symbols.iter().filter(|s| !s.is_skipped()).map(|s| s.tok().to_val()).collect());
     }
+
+    pkg.state_name_to_address.insert(*name, state_address);
+
     build_state(db, state.as_ref(), &mut pkg, &mut state_name_to_proxy, add_debug_symbols)?;
   }
 

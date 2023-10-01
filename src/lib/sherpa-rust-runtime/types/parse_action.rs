@@ -40,15 +40,19 @@ pub enum ParseAction {
     target_nonterminal:  u32,
   },
   Shift {
-    token_byte_offset: u32,
-    token_byte_length: u32,
+    byte_offset: u32,
+    byte_length: u32,
     token_line_offset: u32,
-    token_line_count:  u32,
-    token_id:          u32,
+    token_line_count: u32,
+    token_id: u32,
+    /// The state that emitted this token.
+    emitting_state: ParserState,
+    /// The instruction that follows this
+    next_instruction_address: usize,
   },
   Skip {
-    token_byte_offset: u32,
-    token_byte_length: u32,
+    byte_offset:       u32,
+    byte_length:       u32,
     token_line_offset: u32,
     token_line_count:  u32,
     token_id:          u32,
@@ -70,8 +74,8 @@ pub enum ParseAction {
     final_offset:   usize,
   },
   Error {
+    last_state:       ParserState,
     last_nonterminal: u32,
-    last_input:       TokenRange,
   },
   EndOfInput {
     current_cursor_offset: u32,

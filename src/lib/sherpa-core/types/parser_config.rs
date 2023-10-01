@@ -87,7 +87,7 @@ impl ParserConfig {
   pub fn cst_editor(mut self) -> Self {
     self = self.hybrid();
     self.EXPORT_ALL_NONTERMS = true;
-    self.ALLOW_CST_NONTERM_SHIFT = true;
+    //self.ALLOW_CST_NONTERM_SHIFT = true;
     self
   }
 

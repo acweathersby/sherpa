@@ -4,6 +4,7 @@ pub enum ParseError {
   InputError { message: String, inline_message: String, loc: Token, last_nonterminal: u32 },
   Unexpected,
   InvalidNonTerminal,
+  InvalidEntryName,
   NoData,
 }
 
@@ -16,6 +17,7 @@ impl std::fmt::Debug for ParseError {
         loc.loc_stub(),
         loc.blame(1, 1, &inline_message.trim(), BlameColor::RED),
       )),
+      ParseError::InvalidEntryName => f.write_str("Invalid Entry Name"),
       _ => f.write_str("Unexpected error"),
     }
   }

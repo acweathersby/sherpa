@@ -302,6 +302,7 @@ fn add_match_expr<'graph, 'db: 'graph>(
 
         debug_assert!(!syms.is_empty());
 
+        // get a collection of skipped symbols.
         let skipped = if let Some(test) = state.get_peek_resolve_items() {
           test.map(|(_, PeekGroup { items, .. })| items).flatten().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
         } else {
@@ -318,11 +319,11 @@ fn add_match_expr<'graph, 'db: 'graph>(
         let mut symbols = OrderedSet::default();
 
         for state in &successors {
-          symbols.insert(PrecedentDBTerm::from(state.get_symbol(), db));
+          symbols.insert(PrecedentDBTerm::from(state.get_symbol(), db, false));
         }
 
         for sym in &skipped {
-          symbols.insert((*sym, 0).into());
+          symbols.insert((*sym, 0, true).into());
         }
 
         let skipped = if successors.iter().all(|s| matches!(s.get_type(), StateType::Reduce(..))) { None } else { Some(skipped) };
@@ -351,7 +352,7 @@ fn add_match_expr<'graph, 'db: 'graph>(
       // Add skips
       if let Some(skipped) = skipped {
         if !skipped.is_empty() {
-          let vals = skipped.iter().map(|v| v.to_val(db).to_string()).collect::<Array<_>>().join(" | ");
+          let vals = skipped.iter().map(|v| v.to_val().to_string()).collect::<Array<_>>().join(" | ");
           if vals.len() > 0 {
             w = w + "\n( " + vals + " ){ " + peeking.then_some("peek-skip").unwrap_or("skip") + " }";
           }

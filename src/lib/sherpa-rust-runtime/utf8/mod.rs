@@ -4,7 +4,9 @@ use lookup_table::CHAR_LU_TABLE;
 
 #[inline(always)]
 pub fn get_utf8_byte_length_from_code_point(codepoint: u32) -> u32 {
-  if (codepoint & 0x7F) == codepoint {
+  if codepoint == 0 {
+    0
+  } else if (codepoint & 0x7F) == codepoint {
     1
   } else if (codepoint & 0x7FF) == codepoint {
     2

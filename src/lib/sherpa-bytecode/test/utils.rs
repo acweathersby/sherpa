@@ -31,7 +31,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
 
         assert!(bc_offset != 0);
 
-        let entry = pkg.get_entry_data_from_name(entry_name);
+        let entry = pkg.get_entry_data_from_name(entry_name)?;
 
         parser.set_debugger(sherpa_core::file_debugger(
           db.to_owned(),
@@ -45,9 +45,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
           pkg.address_to_state_name.clone(),
         ));
 
-        parser.init(entry.unwrap().nonterm_id)?;
-
-        let result = parser.as_mut().completes(&mut StringInput::from(*input), e.nonterm_key.to_val());
+        let result = parser.as_mut().completes(&mut StringInput::from(*input), entry);
 
         if result.is_ok() != *should_pass {
           if result.is_err() {

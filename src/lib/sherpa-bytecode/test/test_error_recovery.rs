@@ -1,21 +1,30 @@
-use crate::*;
-use sherpa_core::*;
-use sherpa_rust_runtime::{derived::cst::CSTEditor, types::StringInput};
 use std::path::PathBuf;
 
+use crate::*;
+use sherpa_core::*;
+use sherpa_rust_runtime::{derived::error_recovery::ErrorRecoveringDatabase, types::*};
+
 #[test]
-pub fn construct_trivial_patcher() -> SherpaResult<()> {
+pub fn construct_error_recovering_parser() -> SherpaResult<()> {
   let source = r#"
 
   IGNORE { c:sp }
 
-    <> A > test(+",") "doggo"
+  <> test > fn "{}" $
 
-    <> test > "apple" | "tree"
+  <> fn > ("fn" | "funct" | "function") "(" field(*",") ")" "{" field(*",") "}" 
+
+  <> field > tk:id ":" val
+
+  <> val > c:num
+
+  <> id > c:id(+)
   
    "#;
 
-  let input = r#"apple, tree doggo"#;
+  let input = r#"( a:){ test:2, test:2  }"#;
+
+  println!("------------------");
 
   let root_path = PathBuf::from("test.sg");
   let mut grammar = SherpaGrammarBuilder::new();
@@ -28,16 +37,7 @@ pub fn construct_trivial_patcher() -> SherpaResult<()> {
 
   pkg._write_disassembly_to_temp_file_(parser_data.get_db())?;
 
-  let mut cst_editor = CSTEditor::new(Box::new(pkg));
-
-  let cst = cst_editor.create_cst("default", &mut StringInput::from(input), 0)?;
-
-  dbg!(&cst);
-
-  //let cst = cst_editor.patch_cst_array(&cst, &mut StringInput::from("hello let
-  // world"), 6, 8, 15)?;
-  //
-  //dbg!(cst);
+  pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?)?;
 
   Ok(())
 }

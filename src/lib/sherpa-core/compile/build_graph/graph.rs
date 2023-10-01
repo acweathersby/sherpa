@@ -181,10 +181,10 @@ impl StateType {
         format!("InternalCall({})", db.nonterm_friendly_name_string(*nterm))
       }
       Self::AssignAndFollow(sym_id) => {
-        format!("AssignAndFollow({}:{})", sym_id.to_val(db), db.token(*sym_id).name.to_str(db.string_store()).as_str())
+        format!("AssignAndFollow({}:{})", sym_id.to_val(), db.token(*sym_id).name.to_str(db.string_store()).as_str())
       }
       Self::AssignToken(sym_id) => {
-        format!("AssignToken({}:{})", sym_id.to_val(db), db.token(*sym_id).name.to_str(db.string_store()).as_str())
+        format!("AssignToken({}:{})", sym_id.to_val(), db.token(*sym_id).name.to_str(db.string_store()).as_str())
       }
       Self::Reduce(nterm, _) => {
         format!("Reduce({nterm:?})",)

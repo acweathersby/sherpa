@@ -1,6 +1,7 @@
 mod ast;
 pub mod bytecode;
-pub mod cst;
+mod cst;
+pub mod entrypoint;
 mod parse_action;
 mod parse_table_data;
 mod parser;
@@ -11,6 +12,7 @@ mod token;
 
 pub use ast::*;
 pub use cst::*;
+pub use entrypoint::*;
 pub use parse_action::*;
 pub use parse_table_data::*;
 pub use parser::*;

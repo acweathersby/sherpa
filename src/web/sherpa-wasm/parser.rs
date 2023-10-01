@@ -39,10 +39,10 @@ impl JSGrammarParser {
     match self.bytecode_parser.get_next_action(&mut None) {
       ParseAction::Accept { .. } => serde_wasm_bindgen::to_value(&JsonParseAction::Accept).unwrap(),
       ParseAction::EndOfInput { .. } => serde_wasm_bindgen::to_value(&JsonParseAction::EndOfInput).unwrap(),
-      ParseAction::Shift { token_byte_length, .. } => {
+      ParseAction::Shift { byte_length: token_byte_length, .. } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Shift { len: token_byte_length }).unwrap()
       }
-      ParseAction::Skip { token_byte_length, .. } => {
+      ParseAction::Skip { byte_length: token_byte_length, .. } => {
         serde_wasm_bindgen::to_value(&JsonParseAction::Skip { len: token_byte_length }).unwrap()
       }
       ParseAction::Reduce { nonterminal_id, symbol_count, .. } => {
@@ -114,7 +114,7 @@ impl JSByteCodeParser {
             values.push(JSDebugEvent::EndOfFile {});
           }
         }
-        ParseAction::Shift { token_byte_offset, token_byte_length, .. } => {
+        ParseAction::Shift { byte_offset: token_byte_offset, byte_length: token_byte_length, .. } => {
           if let LockResult::Ok(mut values) = values.write() {
             values.push(JSDebugEvent::Shift {
               offset_end:   (token_byte_offset + token_byte_length) as usize,
@@ -122,7 +122,7 @@ impl JSByteCodeParser {
             });
           }
         }
-        ParseAction::Skip { token_byte_length, token_byte_offset, .. } => {
+        ParseAction::Skip { byte_length: token_byte_length, byte_offset: token_byte_offset, .. } => {
           if let LockResult::Ok(mut values) = values.write() {
             values.push(JSDebugEvent::Skip {
               offset_end:   (token_byte_offset + token_byte_length) as usize,
@@ -175,7 +175,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
       ParseAction::Error { .. } => {
         break;
       }
-      ParseAction::Shift { token_byte_offset, token_byte_length, .. } => {
+      ParseAction::Shift { byte_offset: token_byte_offset, byte_length: token_byte_length, .. } => {
         output.push(LAST_TOKEN_INDEX as u32);
         output.push(token_byte_offset);
         output.push(token_byte_offset + token_byte_length);

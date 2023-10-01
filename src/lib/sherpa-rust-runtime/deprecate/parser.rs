@@ -126,11 +126,13 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   );
 
   let action = ParseAction::Shift {
-    token_byte_offset: ctx.sym_ptr as u32,
-    token_byte_length: ctx.tok_len as u32,
-    token_line_count:  ctx.start_line_num,
+    byte_offset: ctx.sym_ptr as u32,
+    byte_length: ctx.tok_len as u32,
+    token_line_count: ctx.start_line_num,
     token_line_offset: ctx.start_line_off,
-    token_id:          ctx.tok_id,
+    token_id: ctx.tok_id,
+    emitting_state: Default::default(),
+    next_instruction_address: Default::default(),
   };
 
   ctx.start_line_num = ctx.chkp_line_num;
@@ -219,8 +221,8 @@ fn __skip_token_core__<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Read
 
   (
     ParseAction::Skip {
-      token_byte_offset: original_offset as u32,
-      token_byte_length: tok_len as u32,
+      byte_offset:       original_offset as u32,
+      byte_length:       tok_len as u32,
       token_line_count:  ctx.start_line_num,
       token_line_offset: ctx.start_line_off,
       token_id:          token_id as u32,
@@ -604,15 +606,7 @@ pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M
   loop {
     if state < 1 {
       //Accept never encountered.
-      break ParseAction::Error {
-        last_nonterminal: ctx.nterm,
-        last_input:       TokenRange {
-          len:      ctx.tok_len as u32,
-          off:      ctx.sym_ptr as u32,
-          line_num: 0,
-          line_off: 0,
-        },
-      };
+      break ParseAction::Error { last_nonterminal: ctx.nterm, last_state: Default::default() };
     } else {
       let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
       if (state & mask_gate) != 0 {

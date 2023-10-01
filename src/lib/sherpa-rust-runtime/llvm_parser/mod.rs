@@ -177,8 +177,8 @@ pub unsafe fn llvm_map_shift_action<'a, R: LLVMByteReader + ByteReader + MutByte
   slots: &mut AstStackSlice<AstSlot<ASTNode>>,
 ) {
   let ParseAction::Shift {
-    token_byte_offset,
-    token_byte_length,
+    byte_offset: token_byte_offset,
+    byte_length: token_byte_length,
     token_line_offset,
     token_line_count,
     ..

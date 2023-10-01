@@ -3,7 +3,7 @@ use crate::{
   *,
 };
 use sherpa_core::{test::utils::build_parse_states_from_source_str as build_states, *};
-use sherpa_rust_runtime::types::{ASTConstructor, AstSlotNew, ParserInitializer, StringInput};
+use sherpa_rust_runtime::types::{ASTConstructor, AstSlotNew, EntryPoint, ParserInitializer, StringInput};
 use std::{path::PathBuf, rc::Rc};
 
 use super::utils::compile_and_run_grammars;
@@ -590,7 +590,7 @@ pub fn recursive_skipped_comments() -> SherpaResult<()> {
     <> A > "hello" "world"
 
     <> comment > '/' "*"{:9999} comment_body '*'{:9999} "/"{:9999}
-
+s
     <> comment_body >  ( c:nl | c:sym | c:num | c:sp | c:id | comment )(+)
     "##],
     &[
@@ -720,10 +720,11 @@ fn simple_newline_tracking() -> SherpaResult<()> {
 
       let mut parser = TestParser::new(Rc::new(pkg.bytecode), pkg.nonterm_id_to_address);
 
-      parser.init(0)?;
+      let mut ctx = parser.init(EntryPoint::default())?;
 
       let result = parser.parse_ast(
         &mut StringInput::from("hello\nworld\n\ngoodby\nmango"),
+        &mut ctx,
         &map_reduce_function::<StringInput, u32>(&db, vec![
           ("test", 0, |input, slots| {
             assert_eq!(slots[0].1.to_string_from_input(input), "hello");

@@ -189,8 +189,8 @@ impl SymbolId {
       Codepoint { val, .. } => val,
       Char { char, .. } => char as u32,
       DBNonTerminal { key } => (Into::<usize>::into(key)) as u32,
-      DBToken { key, .. } => key.to_val(db),
-      DBNonTerminalToken { sym_key, .. } => sym_key.map(|d| d.to_val(db)).unwrap_or(u32::MAX),
+      DBToken { key, .. } => key.to_val(),
+      DBNonTerminalToken { sym_key, .. } => sym_key.map(|d| d.to_val()).unwrap_or(u32::MAX),
       Token { val } => {
         let val: String = val.to_string(db.string_store());
         match val.chars().next() {
@@ -270,7 +270,7 @@ impl From<(SymbolId, u16)> for PrecedentSymbol {
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
-pub struct PrecedentDBTerm(DBTermKey, u16);
+pub struct PrecedentDBTerm(DBTermKey, u16, bool);
 
 impl PrecedentDBTerm {
   #[allow(unused)]
@@ -282,13 +282,17 @@ impl PrecedentDBTerm {
     self.0
   }
 
-  pub fn from(sym: PrecedentSymbol, db: &ParserDatabase) -> Self {
-    Self(sym.sym().to_state_val(db).into(), sym.precedence())
+  pub fn is_skipped(&self) -> bool {
+    self.2
+  }
+
+  pub fn from(sym: PrecedentSymbol, db: &ParserDatabase, skipped: bool) -> Self {
+    Self(sym.sym().to_state_val(db).into(), sym.precedence(), skipped)
   }
 }
 
-impl From<(DBTermKey, u16)> for PrecedentDBTerm {
-  fn from(value: (DBTermKey, u16)) -> Self {
-    PrecedentDBTerm(value.0, value.1)
+impl From<(DBTermKey, u16, bool)> for PrecedentDBTerm {
+  fn from(value: (DBTermKey, u16, bool)) -> Self {
+    PrecedentDBTerm(value.0, value.1, value.2)
   }
 }

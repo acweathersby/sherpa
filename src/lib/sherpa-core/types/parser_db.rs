@@ -543,8 +543,8 @@ impl DBTermKey {
   }
 
   /// Retrieves the binary / bytecode id of the symbol.
-  pub fn to_val(&self, db: &ParserDatabase) -> u32 {
-    db.tok_val(*self) as u32
+  pub fn to_val(&self) -> u32 {
+    self.0
   }
 
   pub fn to_index(&self) -> usize {

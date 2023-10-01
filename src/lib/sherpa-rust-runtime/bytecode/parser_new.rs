@@ -44,15 +44,16 @@ type OpReturnVal<'a> = (ParseAction, Option<Instruction<'a>>, bool, bool);
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
 fn dispatch<'a, 'debug>(
-  base_address: usize,
-  ctx: &mut ParseCTX,
+  base_state: ParserState,
+  ctx: &mut ParserContext,
   input: &impl ParserInput,
   bc: &'a [u8],
   debug: &mut Option<&'debug mut DebugFnNew>,
-) -> (ParseAction, Option<Instruction<'a>>) {
+  is_scanner: bool,
+) -> (ParseAction, Option<Instruction<'a>>, usize) {
   use ParseAction::*;
 
-  let mut block_base: Instruction = (bc, base_address).into();
+  let mut block_base: Instruction = (bc, base_state.address).into();
   let mut i: Instruction = block_base.clone();
 
   loop {
@@ -60,8 +61,8 @@ fn dispatch<'a, 'debug>(
 
     i = match match i.get_opcode() {
       ByteSequence => byte_sequence(i, ctx, input),
-      ShiftToken => shift_token(i, ctx),
-      ShiftTokenScanless => shift_token_scanless(i, ctx),
+      ShiftToken => shift_token(i, ctx, base_state),
+      ShiftTokenScanless => shift_token_scanless(i, ctx, base_state),
       ScanShift => scan_shift(i, ctx),
       SkipToken => skip_token(block_base, ctx),
       SkipTokenScanless => skip_token_scanless(block_base, ctx),
@@ -72,17 +73,17 @@ fn dispatch<'a, 'debug>(
       PeekReset => peek_reset(i, ctx),
       Reduce => reduce(i, ctx),
       Goto => goto(i),
-      PushGoto => push_goto(i, &mut ctx.stack),
-      PushExceptionHandler => push_exception_handler(i, &mut ctx.stack),
-      PopGoto => pop_goto(i, &mut ctx.stack),
+      PushGoto => push_goto(i, ctx),
+      PushExceptionHandler => push_exception_handler(i, ctx),
+      PopGoto => pop_goto(i, ctx),
       AssignToken => assign_token(i, ctx),
-      VectorBranch => vector_branch(i, ctx, input, debug),
-      HashBranch => hash_branch(i, ctx, input, debug),
+      VectorBranch => vector_branch(i, ctx, input, debug, is_scanner),
+      HashBranch => hash_branch(i, ctx, input, debug, is_scanner),
       Fail => (FailState, Option::None, false, true),
       Pass => (CompleteState, Option::None, false, true),
       Accept => {
         ctx.is_finished = true;
-        (ParseAction::Accept { nonterminal_id: ctx.non_terminal, final_offset: ctx.sym_ptr }, Option::None, false, true)
+        (ParseAction::Accept { nonterminal_id: ctx.nonterm, final_offset: ctx.sym_ptr }, Option::None, false, true)
       }
       NoOp => (None, i.next(), false, true),
     } {
@@ -92,7 +93,7 @@ fn dispatch<'a, 'debug>(
       (None, Some(next_instruction), is_goto, instruction_debug) => {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if instruction_debug {
-          emit_instruction_debug(debug, i, input, ctx.sym_ptr, ctx.is_scanner);
+          emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
         }
         if is_goto {
           block_base = next_instruction;
@@ -104,9 +105,9 @@ fn dispatch<'a, 'debug>(
       (any, out, _, instruction_debug) => {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if instruction_debug {
-          emit_instruction_debug(debug, i, input, ctx.sym_ptr, ctx.is_scanner);
+          emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
         }
-        break (any, out);
+        break (any, out, block_base.address());
       }
     }
   }
@@ -114,13 +115,13 @@ fn dispatch<'a, 'debug>(
 
 fn byte_sequence<'a>(
   i: Instruction<'a>,
-  ctx: &mut ParseCTX,
+  ctx: &mut ParserContext,
   input: &impl ParserInput,
 ) -> (ParseAction, Option<Instruction<'a>>, bool, bool) {
   let mut iter = i.iter();
   let length = iter.next_u16_le().unwrap() as usize;
   let default_offset = iter.next_u32_le().unwrap() as usize;
-  let offset = ctx.tok_ptr;
+  let offset = ctx.input_ptr;
   let mut line_incr = 0;
   let mut line_offset = ctx.end_line_off;
   for b in 0..length {
@@ -141,12 +142,12 @@ fn byte_sequence<'a>(
   ctx.end_line_off = line_offset;
   ctx.end_line_num += line_incr;
 
-  ctx.sym_len = length as u32;
+  ctx.byte_len = length as u32;
   (ParseAction::None, i.next(), false, true)
 }
 
 /// Performs the [Opcode::TokenShift] operation
-fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: ParserState) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::ShiftToken;
 
   debug_assert!(
@@ -159,11 +160,13 @@ fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
   );
 
   let action = ParseAction::Shift {
-    token_byte_offset: ctx.sym_ptr as u32,
-    token_byte_length: ctx.tok_len as u32,
-    token_line_count:  ctx.start_line_num,
+    byte_offset: ctx.sym_ptr as u32,
+    byte_length: ctx.tok_byte_len as u32,
+    token_line_count: ctx.start_line_num,
     token_line_offset: ctx.start_line_off,
-    token_id:          ctx.tok_id,
+    token_id: ctx.tok_id,
+    emitting_state,
+    next_instruction_address: i.next().unwrap().address(),
   };
 
   ctx.start_line_num = ctx.chkp_line_num;
@@ -171,66 +174,70 @@ fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
   ctx.end_line_num = ctx.start_line_num;
   ctx.end_line_off = ctx.end_line_off;
 
-  let new_offset = ctx.sym_ptr + ctx.tok_len;
+  let new_offset = ctx.sym_ptr + ctx.tok_byte_len as usize;
 
-  ctx.base_ptr = new_offset;
+  ctx.anchor_ptr = new_offset;
   ctx.sym_ptr = new_offset;
-  ctx.tok_ptr = new_offset;
+  ctx.input_ptr = new_offset;
   ctx.tok_id = 0;
-  ctx.tok_len = 0;
+  ctx.recovery_tok_id = 0;
+  ctx.tok_byte_len = 0;
 
   (action, i.next(), false, true)
 }
 
 /// Performs the [Opcode::ShiftTokenScanless] operation
-fn shift_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn shift_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: ParserState) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::ShiftTokenScanless;
-  ctx.tok_len = ctx.sym_len as usize;
-  shift_token(i, ctx)
+  ctx.tok_byte_len = ctx.byte_len;
+  shift_token(i, ctx, emitting_state)
 }
 
 /// Performs the [Opcode::ScanShift] operation
-fn scan_shift<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn scan_shift<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::ScanShift;
 
-  ctx.tok_ptr = ctx.tok_ptr + ctx.sym_len as usize;
-  ctx.sym_len = 0;
+  ctx.input_ptr = ctx.input_ptr + ctx.byte_len as usize;
+  ctx.byte_len = 0;
   (ParseAction::None, i.next(), false, true)
 }
 
 /// Performs the [Opcode::PeekToken] operation
-fn peek_token<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn peek_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PeekToken;
 
-  let offset = ctx.sym_ptr + ctx.tok_len;
+  let offset = ctx.sym_ptr + ctx.tok_byte_len as usize;
+
   ctx.sym_ptr = offset;
-  ctx.tok_ptr = offset;
+  ctx.input_ptr = offset;
   ctx.tok_id = 0;
-  ctx.tok_len = 0;
+  ctx.recovery_tok_id = 0;
+  ctx.tok_byte_len = 0;
 
   (ParseAction::None, i.next(), false, true)
 }
 
 /// Performs the [Opcode::PeekTokenScanless] operation
-fn peek_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn peek_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PeekTokenScanless;
-  ctx.tok_len = ctx.sym_len as usize;
+  ctx.tok_byte_len = ctx.byte_len;
   peek_token(i, ctx)
 }
 
-fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   let original_offset = ctx.sym_ptr;
-  let offset = ctx.sym_ptr + ctx.tok_len as usize;
-  let tok_len = ctx.tok_len;
+  let offset = ctx.sym_ptr + ctx.tok_byte_len as usize;
+  let tok_len = ctx.tok_byte_len;
   let token_id = ctx.tok_id;
-  ctx.tok_ptr = offset;
+  ctx.input_ptr = offset;
   ctx.sym_ptr = offset;
   ctx.tok_id = 0;
+  ctx.recovery_tok_id = 0;
 
   (
     ParseAction::Skip {
-      token_byte_offset: original_offset as u32,
-      token_byte_length: tok_len as u32,
+      byte_offset:       original_offset as u32,
+      byte_length:       tok_len as u32,
       token_line_count:  ctx.start_line_num,
       token_line_offset: ctx.start_line_off,
       token_id:          token_id as u32,
@@ -241,7 +248,7 @@ fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParseCTX
   )
 }
 /// Performs the [Opcode::SkipToken] operation
-fn skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::SkipToken;
   let result = __skip_token_core__(base_instruction, ctx);
   ctx.start_line_num = ctx.chkp_line_num;
@@ -253,62 +260,59 @@ fn skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParseCTX) -> OpRe
 }
 
 /// Performs the [Opcode::SkipTokenScanless] operation
-fn skip_token_scanless<'a>(base_instruction: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn skip_token_scanless<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::SkipTokenScanless;
-  ctx.tok_len = ctx.sym_len as usize;
+  ctx.tok_byte_len = ctx.byte_len;
   skip_token(base_instruction, ctx)
 }
 
 /// Performs the [Opcode::PeekSkipToken] operation
-fn peek_skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn peek_skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PeekSkipToken;
   __skip_token_core__(base_instruction, ctx);
   (ParseAction::None, Some(base_instruction), false, true)
 }
 
 /// Performs the [Opcode::PeekSkipTokenScanless] operation
-fn peek_skip_token_scanless<'a>(base_instruction: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn peek_skip_token_scanless<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PeekSkipTokenScanless;
-  ctx.tok_len = ctx.sym_len as usize;
+  ctx.tok_byte_len = ctx.byte_len;
   peek_skip_token(base_instruction, ctx)
 }
 
 /// Performs the [Opcode::Reduce] operation
-fn reduce<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn reduce<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::Reduce;
   let mut iter = i.iter();
   let nonterminal_id = iter.next_u32_le().unwrap();
   let rule_id = iter.next_u32_le().unwrap();
   let symbol_count = iter.next_u16_le().unwrap() as u32;
 
-  ctx.sym_len = symbol_count;
-  ctx.non_terminal = nonterminal_id;
+  ctx.nonterm = nonterminal_id;
 
   (ParseAction::Reduce { nonterminal_id, rule_id, symbol_count }, i.next(), false, true)
 }
 
 /// Performs the [Opcode::PushGoto] operation
-fn push_goto<'a, 'debug>(i: Instruction<'a>, stack: &mut Vec<u32>) -> OpReturnVal<'a> {
+fn push_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PushGoto;
   let mut iter = i.iter();
   let state_mode = iter.next_u8().unwrap();
-  let address = iter.next_u32_le().unwrap();
+  let address = iter.next_u32_le().unwrap() as usize;
 
-  stack.push(state_mode as u32 | STATE_HEADER);
-  stack.push(address);
+  ctx.push_state(ParserState::state_entry(address));
 
   (ParseAction::None, i.next(), false, true)
 }
 
 /// Performs the [Opcode::PushExceptionHandler] operation
-fn push_exception_handler<'a, 'debug>(i: Instruction<'a>, stack: &mut Vec<u32>) -> OpReturnVal<'a> {
+fn push_exception_handler<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PushExceptionHandler;
   let mut iter = i.iter();
   let state_mode = iter.next_u8().unwrap();
-  let address = iter.next_u32_le().unwrap();
+  let address = iter.next_u32_le().unwrap() as usize;
 
-  stack.push(state_mode as u32);
-  stack.push(address);
+  ctx.push_state(ParserState::state_entry(address));
 
   (ParseAction::None, i.next(), false, true)
 }
@@ -324,35 +328,35 @@ fn goto<'a, 'debug>(i: Instruction<'a>) -> OpReturnVal<'a> {
 }
 
 /// Performs the [Opcode::PopGoto] operation
-fn pop_goto<'a, 'debug>(i: Instruction<'a>, stack: &mut Vec<u32>) -> OpReturnVal<'a> {
+fn pop_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PopGoto;
 
-  stack.pop();
-  stack.pop();
+  ctx.pop_state();
 
   (ParseAction::None, i.next(), false, true)
 }
 
 /// Performs the [Opcode::AssignToken] operation
-fn assign_token<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn assign_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::AssignToken;
   let mut iter = i.iter();
   ctx.tok_id = iter.next_u32_le().unwrap();
-  ctx.tok_len = ctx.tok_ptr - ctx.sym_ptr;
+  ctx.tok_byte_len = (ctx.input_ptr - ctx.sym_ptr) as u32;
   ctx.chkp_line_num = ctx.end_line_num;
   ctx.chkp_line_off = ctx.end_line_off;
   (ParseAction::None, i.next(), false, true)
 }
 
 /// Performs the [Opcode::PeekReset] operation
-fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
+fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::PeekReset;
-  let offset = ctx.base_ptr;
+  let offset = ctx.anchor_ptr;
   ctx.sym_ptr = offset;
-  ctx.tok_ptr = offset;
+  ctx.input_ptr = offset;
   ctx.tok_id = 0;
-  ctx.tok_len = 0;
-  ctx.sym_len = 0;
+  ctx.recovery_tok_id = 0;
+  ctx.tok_byte_len = 0;
+  ctx.byte_len = 0;
   ctx.end_line_off = ctx.start_line_off;
   ctx.end_line_num = ctx.end_line_num;
   (ParseAction::None, i.next(), false, true)
@@ -361,13 +365,14 @@ fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParseCTX) -> OpReturnVal<'a> {
 /// Performs the [Opcode::HashBranch] operation
 fn hash_branch<'a, 'debug>(
   i: Instruction<'a>,
-  ctx: &mut ParseCTX,
+  ctx: &mut ParserContext,
   input: &impl ParserInput,
   debug: &mut Option<&mut DebugFnNew>,
+  is_scanner: bool,
 ) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::HashBranch;
 
-  emit_instruction_debug(debug, i, input, ctx.sym_ptr, ctx.is_scanner);
+  emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
 
   // Decode data
   let TableHeaderData {
@@ -381,11 +386,9 @@ fn hash_branch<'a, 'debug>(
 
   let hash_mask = (1 << modulo_base) - 1;
 
+  let input_value = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
   loop {
-    let input_value = get_input_value(input_type, scan_block_instruction, ctx, input, debug);
-
     let mut hash_index = (input_value & hash_mask) as usize;
-
     loop {
       let mut iter: ByteCodeIterator = (i.bytecode(), table_start + hash_index * 4).into();
       let cell = iter.next_u32_le().unwrap();
@@ -406,9 +409,10 @@ fn hash_branch<'a, 'debug>(
 
 fn vector_branch<'a, 'debug>(
   i: Instruction<'a>,
-  ctx: &mut ParseCTX,
+  ctx: &mut ParserContext,
   input: &impl ParserInput,
   debug: &mut Option<&'debug mut DebugFnNew>,
+  is_scanner: bool,
 ) -> OpReturnVal<'a> {
   // Decode data
 
@@ -422,32 +426,40 @@ fn vector_branch<'a, 'debug>(
     ..
   } = i.into();
 
-  let input_value = get_input_value(input_type, scan_block_instruction, ctx, input, debug);
+  let input_value = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
 
-  let value_index = (input_value as i32 - value_offset as i32) as usize;
-
-  if value_index < table_length as usize {
-    let mut iter: ByteCodeIterator = (i.bytecode(), table_start + value_index * 4).into();
-    let address_offset = iter.next_u32_le().unwrap();
-    (ParseAction::None, Some((i.bytecode(), i.address() + address_offset as usize).into()), false, false)
-  } else {
-    (ParseAction::None, Some(default_block), false, false)
+  loop {
+    let value_index = (input_value as i32 - value_offset as i32) as usize;
+    if value_index < table_length as usize {
+      let mut iter: ByteCodeIterator = (i.bytecode(), table_start + value_index * 4).into();
+      let address_offset = iter.next_u32_le().unwrap();
+      return (ParseAction::None, Some((i.bytecode(), i.address() + address_offset as usize).into()), false, false);
+    } else {
+      return (ParseAction::None, Some(default_block), false, false);
+    }
   }
 }
 
 fn get_input_value<'a, 'debug>(
   input_type: MatchInputType,
   scan_index: Instruction<'a>,
-  ctx: &mut ParseCTX,
+  ctx: &mut ParserContext,
   input: &impl ParserInput,
   debug: &mut Option<&'debug mut DebugFnNew>,
+  is_scanner: bool,
 ) -> u32 {
   match input_type {
-    MatchInputType::NonTerminal => ctx.non_terminal as u32,
-    MatchInputType::EndOfFile => (ctx.tok_ptr >= input.len()) as u32,
+    MatchInputType::NonTerminal => ctx.nonterm as u32,
+    MatchInputType::EndOfFile => (ctx.input_ptr >= input.len()) as u32,
     MatchInputType::Token => {
-      debug_assert!(!ctx.is_scanner);
-      token_scan(scan_index, ctx, input, debug);
+      if ctx.recovery_tok_id > 0 {
+        ctx.tok_id = ctx.recovery_tok_id;
+        ctx.tok_byte_len = 0;
+        ctx.byte_len = 0;
+      } else {
+        debug_assert!(!is_scanner);
+        token_scan(scan_index, ctx, input, debug);
+      }
       ctx.tok_id as u32
     }
     MatchInputType::CSTNode => {
@@ -455,48 +467,48 @@ fn get_input_value<'a, 'debug>(
       u32::MAX
     }
     MatchInputType::Byte => {
-      let byte = input.byte(ctx.tok_ptr);
+      let byte = input.byte(ctx.input_ptr);
 
       if byte == 10 {
         ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.tok_ptr as u32;
+        ctx.end_line_off = ctx.input_ptr as u32;
       }
 
       if byte > 0 {
-        ctx.sym_len = 1;
+        ctx.byte_len = 1;
       } else {
-        ctx.sym_len = 0;
+        ctx.byte_len = 0;
       }
       byte as u32
     }
     MatchInputType::ByteScanless => {
-      let byte = input.byte(ctx.tok_ptr);
+      let byte = input.byte(ctx.input_ptr);
 
       if byte == 10 {
         ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.tok_ptr as u32;
+        ctx.end_line_off = ctx.input_ptr as u32;
       }
 
       if byte > 0 {
-        ctx.tok_len = 1;
+        ctx.tok_byte_len = 1;
       } else {
-        ctx.tok_len = 0;
+        ctx.tok_byte_len = 0;
       }
       byte as u32
     }
     input_type => {
-      let cp: u32 = input.codepoint(ctx.tok_ptr);
+      let cp: u32 = input.codepoint(ctx.input_ptr);
 
       let len = get_utf8_byte_length_from_code_point(cp);
 
       if cp == 10 {
         ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.tok_ptr as u32;
+        ctx.end_line_off = ctx.input_ptr as u32;
       }
 
       match input_type {
         MatchInputType::ClassScanless => {
-          ctx.tok_len = len as usize;
+          ctx.tok_byte_len = len;
           if cp > 0 {
             get_token_class_from_codepoint(cp)
           } else {
@@ -504,7 +516,7 @@ fn get_input_value<'a, 'debug>(
           }
         }
         MatchInputType::Class => {
-          ctx.sym_len = len;
+          ctx.byte_len = len;
           if cp > 0 {
             get_token_class_from_codepoint(cp)
           } else {
@@ -512,11 +524,11 @@ fn get_input_value<'a, 'debug>(
           }
         }
         MatchInputType::CodepointScanless => {
-          ctx.tok_len = len as usize;
+          ctx.tok_byte_len = len;
           cp
         }
         MatchInputType::Codepoint => {
-          ctx.sym_len = len as u32;
+          ctx.byte_len = len as u32;
           cp
         }
         i_type => unreachable!("{}", i_type),
@@ -527,12 +539,12 @@ fn get_input_value<'a, 'debug>(
 
 fn token_scan<'a, 'debug>(
   scan_index: Instruction<'a>,
-  ctx: &mut ParseCTX,
+  ctx: &mut ParserContext,
   input: &impl ParserInput,
   debug: &mut Option<&'debug mut DebugFnNew>,
 ) {
   ctx.tok_id = 0;
-  ctx.tok_ptr = ctx.sym_ptr;
+  ctx.input_ptr = ctx.sym_ptr;
 
   // Initialize Scanner
 
@@ -543,123 +555,44 @@ fn token_scan<'a, 'debug>(
   let mut stack = vec![0, 0, NORMAL_STATE_FLAG | STATE_HEADER, scan_index.address() as u32];
   let bc = scan_index.bytecode();
 
-  ctx.is_scanner = true;
-
   match {
     let mut address = stack.pop().unwrap() as usize;
     let mut state = stack.pop().unwrap();
-    let ctx_fail_mode = ctx.fail_mode;
 
     loop {
       if state < 1 {
-        ctx.fail_mode = ctx_fail_mode;
         break Some(());
       } else {
-        let mask_gate = NORMAL_STATE_FLAG << (ctx.fail_mode as u32);
-        if (state & mask_gate) != 0 {
-          #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-          if state & STATE_HEADER == STATE_HEADER {
-            emit_state_debug(debug, bc, address, input);
-          }
-          let fail_mode = loop {
-            match dispatch(address, ctx, input, bc, debug) {
-              (ParseAction::CompleteState, _) => {
-                break false;
-              }
-
-              (ParseAction::FailState, _) => {
-                break true;
-              }
-              (_, next_block) => {
-                if let Some(next_block) = next_block {
-                  stack.push(NORMAL_STATE_FLAG);
-                  stack.push(next_block.address() as u32);
-                }
-              }
-            }
-          };
-          ctx.fail_mode = fail_mode;
+        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
+        if state & STATE_HEADER == STATE_HEADER {
+          emit_state_debug(debug, bc, address, input);
         }
-        address = stack.pop().unwrap() as usize;
-        state = stack.pop().unwrap();
+
+        match dispatch(ParserState { address: address as usize, info: Default::default() }, ctx, input, bc, debug, true) {
+          (ParseAction::CompleteState, ..) => {}
+          (ParseAction::FailState, ..) => {
+            break Some(());
+          }
+          (_, next_block, ..) => {
+            if let Some(next_block) = next_block {
+              stack.push(NORMAL_STATE_FLAG);
+              stack.push(next_block.address() as u32);
+            }
+          }
+        };
       }
+      address = stack.pop().unwrap() as usize;
+      state = stack.pop().unwrap();
     }
   } {
     Some(()) => {
-      ctx.tok_ptr = ctx.sym_ptr;
-      ctx.is_scanner = false;
+      ctx.input_ptr = ctx.sym_ptr;
     }
     _ => panic!("Unusable State"),
   }
 }
 
-#[repr(C)]
-#[derive(Clone, Default)]
-pub struct ParseCTX {
-  // Input data ----------
-  /// The head of the input window.
-  pub begin_ptr:      usize,
-  /// The
-  pub anchor_ptr:     usize,
-  /// The the end of the last shifted token
-  pub base_ptr:       usize,
-  /// The the start of the token currently being evaluated.
-  pub sym_ptr:        usize,
-  /// The the start of the token currently being evaluated.
-  pub sym_pk_ptr:     usize,
-  /// The start of all unevaluated characters
-  pub tok_ptr:        usize,
-  /// The start of all unevaluated characters
-  pub tok_pk_ptr:     usize,
-  /// The end of the input window. This is a fixed reference that should
-  /// not change during parsing unless the end of the input window has been
-  /// reached and a larger window is requested.
-  pub end_ptr:        usize,
-  /// The number of characters that comprize the current
-  /// token. This should be 0 if the tok_id is also 0
-  pub tok_len:        usize,
-  // Line info ------------
-  /// The offset of the last line character recognized that proceeds the anchor
-  pub start_line_off: u32,
-  /// The offset of the last line character recognized that proceeds the chkp
-  pub chkp_line_off:  u32,
-  /// The offset of the last line character recognized that proceeds the tail
-  pub end_line_off:   u32,
-  /// The number of line character recognized that proceed the anchor
-  pub start_line_num: u32,
-  /// The number of line character recognized that proceed the chkp
-  pub chkp_line_num:  u32,
-  /// The number of line character recognized that proceed the tail
-  pub end_line_num:   u32,
-  // Parser State ----------
-  /// When reducing, stores the number of symbols to reduce.
-  pub sym_len:        u32,
-  /// Tracks whether the context is a fail mode or not.
-  pub state:          u32,
-  /// Set to the value of a non-terminal when a rule is reduced, or
-  pub non_terminal:   u32,
-  /// Set to the value of a token when one is recognized. Also stores the
-  /// number of symbols that are to be reduced.
-  pub tok_id:         u32,
-  /// When reducing, stores the rule id that is being reduced.
-  pub rule_id:        u32,
-  pub line_incr:      u8,
-  pub is_active:      bool,
-  // Miscellaneous ---------
-  pub in_peek_mode:   bool,
-  /// True if the last block requested input window represent data up to
-  /// and including the end of input.
-  pub block_is_eoi:   bool,
-  // Goto stack data -----
-  pub stack:          Vec<u32>,
-  pub fail_mode:      bool,
-  pub is_scanner:     bool,
-  pub is_finished:    bool,
-  // Symbol Stack
-}
-
 pub struct ByteCodeParserNew {
-  stacks: Vec<ParseCTX>,
   bc: Rc<dyn AsRef<[u8]>>,
   non_terminal_lookup: HashMap<u32, u32>,
   debugger: Option<Box<DebugFnNew>>,
@@ -668,7 +601,7 @@ pub struct ByteCodeParserNew {
 impl ByteCodeParserNew {
   pub fn new(bc: Rc<dyn AsRef<[u8]>>, non_terminal_lookup: HashMap<u32, u32>) -> Self {
     debug_assert!(bc.as_ref().as_ref().len() > 0, "Bytecode is empty!");
-    ByteCodeParserNew { stacks: vec![], bc, non_terminal_lookup, debugger: None }
+    ByteCodeParserNew { bc, non_terminal_lookup, debugger: None }
   }
 }
 
@@ -681,34 +614,32 @@ impl ParserInitializer for ByteCodeParserNew {
     &mut self.debugger
   }
 
-  fn init_range(&mut self, nonterminal_goal_id: u32, start: usize, end: usize) -> Result<(), ParseError> {
+  fn init_range(&mut self, nonterminal_goal_id: u32, start: usize, end: usize) -> Result<ParserContext, ParseError> {
     if let Some(address) = self.non_terminal_lookup.get(&nonterminal_goal_id) {
       if *address == 0 {
         Err(ParseError::InvalidNonTerminal)
       } else {
-        let mut root = ParseCTX::default();
-        root.base_ptr = start;
+        let mut root = ParserContext::default();
         root.anchor_ptr = start;
         root.sym_ptr = start;
         root.end_ptr = end;
-        root.stack = vec![0, 0, NORMAL_STATE_FLAG | STATE_HEADER, *address];
-        self.stacks = vec![root];
-        Ok(())
+        root.stack = vec![ParserState::default(), ParserState::state_entry(*address as usize)];
+        //self.stacks = vec![root];
+        Ok(root)
       }
     } else {
       Err(ParseError::InvalidNonTerminal)
     }
   }
 
-  fn init(&mut self, nonterminal_goal_id: u32) -> Result<(), ParseError> {
-    if let Some(address) = self.non_terminal_lookup.get(&nonterminal_goal_id) {
+  fn init(&mut self, entry: EntryPoint) -> Result<ParserContext, ParseError> {
+    if let Some(address) = self.non_terminal_lookup.get(&entry.nonterm_id) {
       if *address == 0 {
         Err(ParseError::InvalidNonTerminal)
       } else {
-        let mut root = ParseCTX::default();
-        root.stack = vec![0, 0, NORMAL_STATE_FLAG | STATE_HEADER, *address];
-        self.stacks = vec![root];
-        Ok(())
+        let mut root = ParserContext::default();
+        root.stack = vec![ParserState::default(), ParserState::state_entry(*address as usize)];
+        Ok(root)
       }
     } else {
       Err(ParseError::InvalidNonTerminal)
@@ -717,10 +648,8 @@ impl ParserInitializer for ByteCodeParserNew {
 }
 
 impl<T: ParserInput> ParserIterator<T> for ByteCodeParserNew {
-  fn next(&mut self, input: &mut T) -> Option<ParseAction> {
-    let Self { stacks, bc, debugger, .. } = self;
-
-    let ctx = &mut stacks[0];
+  fn next(&mut self, input: &mut T, ctx: &mut ParserContext) -> Option<ParseAction> {
+    let Self { bc, debugger, .. } = self;
 
     if ctx.is_finished {
       return None;
@@ -730,51 +659,35 @@ impl<T: ParserInput> ParserIterator<T> for ByteCodeParserNew {
 
     let bc = bc.as_ref().as_ref();
 
-    let mut address = unsafe { ctx.stack.pop().unwrap_unchecked() };
-    let mut state = unsafe { ctx.stack.pop().unwrap_unchecked() };
+    let mut state = ctx.pop_state();
 
     loop {
-      if state < 1 {
+      if state.address < 1 {
         //Accept never encountered.
         ctx.is_finished = true;
-        break Some(ParseAction::Error {
-          last_nonterminal: ctx.non_terminal,
-          last_input:       TokenRange {
-            len:      ctx.tok_len as u32,
-            off:      ctx.sym_ptr as u32,
-            line_num: 0,
-            line_off: 0,
-          },
-        });
+        break Some(ParseAction::Error { last_nonterminal: ctx.nonterm, last_state: state });
       } else {
-        let mask_gate = NORMAL_STATE_FLAG << (ctx.fail_mode as u32);
-        if (state & mask_gate) != 0 {
-          #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-          if state & STATE_HEADER == STATE_HEADER {
-            //emit_state_debug(debug, bc, address as usize, stack);
+        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
+        if state.info.is_header {
+          emit_state_debug(&mut debugger, bc, state.address as usize, input);
+        }
+        match dispatch(state, ctx, input, bc, &mut debugger, false) {
+          (ParseAction::CompleteState, ..) => {
+            state = ctx.pop_state();
           }
-          match dispatch(address as usize, ctx, input, bc, &mut debugger) {
-            (ParseAction::CompleteState, _) => {
-              ctx.fail_mode = false;
-              address = ctx.stack.pop().unwrap();
-              state = ctx.stack.pop().unwrap();
-            }
-            (ParseAction::FailState, _) => {
-              ctx.fail_mode = true;
-              address = ctx.stack.pop().unwrap();
-              state = ctx.stack.pop().unwrap();
-            }
-            (action, next_state) => {
-              if let Some(next_state) = next_state {
-                ctx.stack.push(NORMAL_STATE_FLAG);
-                ctx.stack.push(next_state.address() as u32);
-              }
-              break Some(action);
-            }
+          (ParseAction::FailState, _, fail_address) => {
+            ctx.is_finished = true;
+            break Some(ParseAction::Error {
+              last_nonterminal: ctx.nonterm,
+              last_state:       ParserState::goto_entry(fail_address),
+            });
           }
-        } else {
-          address = ctx.stack.pop().unwrap();
-          state = ctx.stack.pop().unwrap();
+          (action, next_state, ..) => {
+            if let Some(next_state) = next_state {
+              ctx.push_state(ParserState::goto_entry(next_state.address()));
+            }
+            break Some(action);
+          }
         }
       }
     }

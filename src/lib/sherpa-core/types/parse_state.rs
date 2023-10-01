@@ -32,7 +32,7 @@ pub struct ParseState {
 }
 
 impl<'db> ParseState {
-  pub(crate) fn get_scanner(&mut self) -> Option<&(IString, OrderedSet<PrecedentDBTerm>)> {
+  pub fn get_scanner(&self) -> Option<&(IString, OrderedSet<PrecedentDBTerm>)> {
     self.scanner.as_ref()
   }
 

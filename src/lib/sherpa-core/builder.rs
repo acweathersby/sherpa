@@ -304,7 +304,7 @@ impl SherpaDatabaseBuilder {
     let SherpaDatabaseBuilder { db, .. } = self;
 
     for tok in db.tokens() {
-      println!("{: >5}  {: <10}", tok.tok_id.to_val(db), tok.name.to_string(db.string_store()))
+      println!("{: >5}  {: <10}", tok.tok_id.to_val(), tok.name.to_string(db.string_store()))
     }
   }
 }

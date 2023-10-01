@@ -1,6 +1,6 @@
 #[cfg(debug_assertions)]
 use std::fmt::Debug;
-use std::{rc::*, sync::Arc};
+use std::sync::Arc;
 
 use crate::types::{
   bytecode::{FAIL_STATE_FLAG, NORMAL_STATE_FLAG},
@@ -272,11 +272,13 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   #[inline(always)]
   pub fn get_shift_data(&self) -> ParseAction {
     ParseAction::Shift {
-      token_byte_offset: self.get_token_offset(),
-      token_byte_length: self.get_token_length(),
+      byte_offset: self.get_token_offset(),
+      byte_length: self.get_token_length(),
       token_line_offset: self.get_curr_line_offset(),
-      token_line_count:  self.get_curr_line_num(),
-      token_id:          self.tok_id,
+      token_line_count: self.get_curr_line_num(),
+      token_id: self.tok_id,
+      emitting_state: Default::default(),
+      next_instruction_address: Default::default(),
     }
   }
 
@@ -284,8 +286,8 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   #[inline(always)]
   pub fn get_peek_data(&self) -> ParseAction {
     ParseAction::Skip {
-      token_byte_offset: self.get_token_offset(),
-      token_byte_length: self.get_token_length(),
+      byte_offset:       self.get_token_offset(),
+      byte_length:       self.get_token_length(),
       token_line_offset: self.get_curr_line_offset(),
       token_line_count:  self.get_curr_line_num(),
       token_id:          self.tok_id,
@@ -465,8 +467,8 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         }
         ParseAction::Skip { .. } => {}
         ParseAction::Shift {
-          token_byte_offset,
-          token_byte_length,
+          byte_offset: token_byte_offset,
+          byte_length: token_byte_length,
           token_line_offset,
           token_line_count,
           ..
@@ -479,7 +481,8 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
           };
           ast_stack.push(AstSlot(Node::default(), tok, Default::default()));
         }
-        ParseAction::Error { last_input, .. } => {
+        ParseAction::Error { .. } => {
+          let last_input = TokenRange::default();
           let string = self.get_reader().get_bytes();
 
           let mut start = last_input.off as usize;
@@ -546,7 +549,12 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
             Ok(())
           };
         }
-        ParseAction::Shift { token_byte_length, token_byte_offset, token_id, .. } => {
+        ParseAction::Shift {
+          byte_length: token_byte_length,
+          byte_offset: token_byte_offset,
+          token_id,
+          ..
+        } => {
           let offset_start = token_byte_offset as usize;
           let offset_end = (token_byte_offset + token_byte_length) as usize;
           #[cfg(debug_assertions)]
@@ -561,7 +569,8 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
             debug(&DebugEvent::ActionReduce { rule_id: _rule_id }, self.get_ctx());
           }
         }
-        ParseAction::Error { last_input, .. } => {
+        ParseAction::Error { .. } => {
+          let last_input = TokenRange::default();
           let mut token: Token = last_input.to_token(self.get_reader_mut());
           token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
           break Err(SherpaParseError {
@@ -614,7 +623,8 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
             ShiftsAndSkipsResult::Accepted { shifts, skips }
           };
         }
-        ParseAction::Error { last_input, .. } => {
+        ParseAction::Error { .. } => {
+          let last_input = TokenRange::default();
           #[cfg(debug_assertions)]
           if let Some(debug) = debug {
             debug(&DebugEvent::ActionError {}, self.get_ctx());
@@ -632,10 +642,15 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
         ParseAction::Fork { .. } => {
           panic!("No implementation of fork resolution is available")
         }
-        ParseAction::Skip { token_byte_offset, token_byte_length, .. } => {
+        ParseAction::Skip { byte_offset: token_byte_offset, byte_length: token_byte_length, .. } => {
           skips.push(self.get_input()[token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize].to_string());
         }
-        ParseAction::Shift { token_byte_length, token_byte_offset, token_id, .. } => {
+        ParseAction::Shift {
+          byte_length: token_byte_length,
+          byte_offset: token_byte_offset,
+          token_id,
+          ..
+        } => {
           let offset_start = token_byte_offset as usize;
           let offset_end = (token_byte_offset + token_byte_length) as usize;
 

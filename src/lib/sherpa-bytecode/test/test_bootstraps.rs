@@ -52,16 +52,14 @@ fn test_full_grammar() -> SherpaResult<()> {
     pkg.address_to_state_name.clone(),
   ));
 
-  let id = pkg.get_entry_data_from_name("grammar").expect("Grammar export should be enterable").nonterm_id;
+  let entry = pkg.get_entry_data_from_name("grammar").expect("Grammar export should be enterable");
 
   for file_path in validation_files.chain(grammar_files.into_iter()) {
     println!("{}", file_path.file_name().and_then(|f| f.to_str()).expect("Could not read file name"));
 
     let input = std::fs::read_to_string(file_path)?;
 
-    parser.init(id)?;
-
-    match parser.collect_shifts_and_skips(&mut StringInput::from(input), id) {
+    match parser.collect_shifts_and_skips(&mut StringInput::from(input), entry) {
       Ok(_) => {}
       Err(_) => {
         return Err(sherpa_core::SherpaError::Text("Failed to pars input".into()));

@@ -363,7 +363,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
             ClassIdentifier { .. } => "c:id".intern(s_store),
             ClassNumber { .. } => "c:num".intern(s_store),
             ClassSymbol { .. } => "c:sym".intern(s_store),
-            Token { val, .. } => ("\"".to_string() + &val.to_string(&s_store) + "\"").intern(s_store),
+            Token { val, .. } => val.to_string(&s_store).intern(s_store),
             NonTerminalState { id } | NonTerminal { id, .. } | NonTerminalToken { id, .. } => {
               let name = nonterminals.get(&id.as_parse_prod()).unwrap().friendly_name.to_string(s_store);
 
