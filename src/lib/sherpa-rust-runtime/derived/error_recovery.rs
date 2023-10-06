@@ -4,12 +4,13 @@ use std::{
   collections::{hash_map::DefaultHasher, HashMap, VecDeque},
   fmt::{format, Debug},
   hash::Hasher,
+  ops::{Range, RangeInclusive},
 };
 
 const TOKEN_SYNTHESIS_PENALTY: isize = 1;
 
 /// Maximum number of subsequent synthetic tokens
-const SYNTH_LIMIT: usize = 8;
+const SYNTH_LIMIT: usize = 5;
 
 #[derive(Debug, Clone, Copy)]
 enum RecoveryMode {
@@ -20,7 +21,8 @@ enum RecoveryMode {
   Unrecoverable(usize),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct RecoverableContext {
   entropy: isize,
   ctx: ParserContext,
@@ -102,7 +104,10 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   loop {
     let mut least_advanced_reduction = u32::MAX;
     let mut min_advance = u32::MAX;
-    println!("{:?}", active.iter().map(|d| format!("{}-{}", d.ctx.sym_ptr, d.last_tok_end)).collect::<Vec<_>>());
+    println!(
+      "{:?}",
+      active.iter().map(|d| format!("{}-{}: {}", d.ctx.sym_ptr, d.last_tok_end, d.ctx.nonterm)).collect::<Vec<_>>()
+    );
     while let Some(mut rec_ctx) = active.pop_front() {
       if !rec_ctx.ctx.is_finished {
         if rec_ctx.last_tok_end > min_advance {
@@ -157,6 +162,7 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
                       ));
                       break;
                     }
+
                     ParseAction::Error { last_state, .. } => {
                       rec_ctx.last_failed_state = last_state;
                       failed_contexts.push_back(rec_ctx);
@@ -216,7 +222,7 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
 
     if reduction_stage.len() > 0 {
       for rec_ctx in
-        attempt_merge(create_merge_groups(reduction_stage.drain(..).chain(completed.drain(..).map(|n| (0, n, None)))))
+        attempt_merge(create_merge_groups(reduction_stage.drain(..).chain(completed.drain(..).map(|n| (0, n, None)))), "reduced")
       {
         if rec_ctx.ctx.is_finished {
           completed.push(rec_ctx);
@@ -235,6 +241,7 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
 
   completed.sort();
 
+  #[cfg(debug_assertions)]
   dbg!(&completed);
 
   if let Some(best) = completed.first() {
@@ -261,9 +268,11 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
   if failed_contexts.len() > 0 {
     let mut to_process = VecDeque::new();
 
-    for mut rec_ctx in
-      attempt_merge(create_merge_groups(failed_contexts.drain(..).map(|s| (s.last_failed_state.address as u32, s, None))))
-        .collect::<Vec<_>>()
+    for mut rec_ctx in attempt_merge(
+      create_merge_groups(failed_contexts.drain(..).map(|s| (s.last_failed_state.address as u32, s, None))),
+      "pre-error",
+    )
+    .collect::<Vec<_>>()
     {
       // Need to halt forward progression until we have resolved all
       // contexts that have errors.
@@ -320,9 +329,11 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
     // we can join contexts that differ only in symbols.
     let resolved = resolve_errored_contexts(input, db, parser, &mut to_process);
 
-    let continued =
-      attempt_merge(create_merge_groups(resolved.into_iter().map(|s| (s.last_failed_state.address as u32, s, None))))
-        .collect::<Vec<_>>();
+    let continued = attempt_merge(
+      create_merge_groups(resolved.into_iter().map(|s| (s.last_failed_state.address as u32, s, None))),
+      "post-error",
+    )
+    .collect::<Vec<_>>();
 
     let mut all: Vec<_> = pending.drain(..).chain(continued).collect();
 
@@ -442,17 +453,92 @@ fn insert_node(rec_ctx: &mut Box<RecoverableContext>, node: CSTNode) {
   rec_ctx.symbols.push(node);
 }
 
-type MergeGroups = HashMap<u64, Vec<(u32, usize, Option<CSTNode>, Box<RecoverableContext>)>>;
+type MergeGroups = HashMap<u64, Vec<MergeCandidate>>;
 
-fn attempt_merge(groups: MergeGroups) -> impl Iterator<Item = Box<RecoverableContext>> {
-  groups.into_iter().map(|(_, mut group)| {
+struct MergeCandidate {
+  ctx:          Box<RecoverableContext>,
+  sym_range:    Range<usize>,
+  start_offset: u32,
+  follow:       Option<CSTNode>,
+}
+
+fn create_merge_groups<I: Iterator<Item = (u32, Box<RecoverableContext>, Option<CSTNode>)>>(
+  follow_contexts: I,
+) -> HashMap<u64, Vec<MergeCandidate>> {
+  let mut groups = HashMap::new();
+  for (distinguisher, ctx, following) in follow_contexts {
+    sort_candidate(distinguisher, following, ctx, &mut groups);
+  }
+  groups
+}
+
+fn sort_candidate(distinguisher: u32, follow: Option<CSTNode>, ctx: Box<RecoverableContext>, groups: &mut MergeGroups) {
+  use std::hash::Hash;
+  let (hash, entry) = if ctx.symbols.len() > 0 {
+    let last = ctx.symbols.last().expect("");
+    let mut end_index = ctx.symbols.len() - 1;
+    let mut start_offset = last.offset();
+
+    for index in (0..=end_index).rev() {
+      let node = &ctx.symbols[index];
+      end_index = index;
+      if matches!(node, CSTNode::Token(..) | CSTNode::MissingToken(..) | CSTNode::Multi(..) | CSTNode::NonTerm(..)) {
+        break;
+      }
+    }
+
+    let mut start_index = end_index;
+
+    for index in (0..end_index).rev() {
+      let node = &ctx.symbols[index];
+      if matches!(
+        node,
+        CSTNode::Token(..) | CSTNode::Skipped(..) | CSTNode::MissingToken(..) | CSTNode::Multi(..) | CSTNode::NonTerm(..)
+      ) {
+        break;
+      } else {
+        start_offset = node.offset();
+        start_index = index;
+      }
+    }
+
+    let mut hasher = DefaultHasher::new();
+    ctx.symbols[0..start_index].iter().for_each(|a| a.canonical_hash(&mut hasher));
+    ctx.symbols[end_index + 1..].iter().for_each(|a| a.dedup_hash(&mut hasher));
+    follow.hash(&mut hasher);
+    distinguisher.hash(&mut hasher);
+    ctx.last_tok_end.hash(&mut hasher);
+    ctx.ctx.stack.iter().for_each(|i| i.address.hash(&mut hasher));
+
+    (hasher.finish(), MergeCandidate { ctx, follow, start_offset, sym_range: start_index..(end_index + 1) })
+  } else {
+    let mut hasher = DefaultHasher::new();
+    ctx.last_tok_end.hash(&mut hasher);
+    ctx.ctx.stack.iter().for_each(|i| i.address.hash(&mut hasher));
+
+    (hasher.finish(), MergeCandidate { ctx, follow, start_offset: 0, sym_range: 0..0 })
+  };
+
+  match groups.entry(hash) {
+    std::collections::hash_map::Entry::Vacant(e) => {
+      e.insert(vec![entry]);
+    }
+    std::collections::hash_map::Entry::Occupied(mut e) => {
+      e.get_mut().push(entry);
+    }
+  }
+}
+
+fn attempt_merge(groups: MergeGroups, merge_type: &'static str) -> impl Iterator<Item = Box<RecoverableContext>> {
+  groups.into_iter().map(move |(_, mut group)| {
     let mut lowest_entropy = isize::MAX;
 
     let (mut first, following) = if group.len() > 1 {
-      group.sort_by(|a, b| a.3.entropy.cmp(&b.3.entropy));
+      group.sort_by(|a, b| a.ctx.entropy.cmp(&b.ctx.entropy));
 
-      let mut iter = group.into_iter().map(|(start_offset, start_index, following, mut ctx)| {
-        let mut syms = ctx.symbols.drain(start_index..);
+      let mut iter = group.into_iter().map(|MergeCandidate { start_offset, mut ctx, sym_range, follow }| {
+        let insert_point = sym_range.start;
+        let mut syms = ctx.symbols.drain(sym_range);
 
         let alt = match (syms.next(), syms) {
           (Some(CSTNode::Multi(multi)), _) => multi.alternatives.clone(),
@@ -472,23 +558,23 @@ fn attempt_merge(groups: MergeGroups) -> impl Iterator<Item = Box<RecoverableCon
 
         lowest_entropy = lowest_entropy.min(ctx.entropy);
 
-        (ctx, alt, following)
+        (insert_point, alt, ctx, follow)
       });
 
-      let (mut first, merge, following) = iter.next().expect("should be at least one");
+      let (insert_point, merge, mut first, follow) = iter.next().expect("should be at least one");
 
-      let mut alternates: Vec<_> = vec![merge].into_iter().chain(iter.map(|(_, alt, _)| alt)).flatten().collect();
+      let mut alternates: Vec<_> = vec![merge].into_iter().chain(iter.map(|(_, alt, ..)| alt)).flatten().collect();
 
       alternates.sort_by(|a, b| a.entropy.cmp(&b.entropy));
 
-      first.symbols.push(Multi::typed(alternates));
+      first.symbols.insert(insert_point, Multi::typed(alternates, merge_type.clone()));
 
       first.entropy = lowest_entropy;
 
-      (first, following)
+      (first, follow)
     } else {
-      let (.., following, first) = group.pop().expect("should be 1");
-      (first, following)
+      let MergeCandidate { ctx, follow, .. } = group.pop().expect("should be 1");
+      (ctx, follow)
     };
 
     if let Some(following) = following {
@@ -497,67 +583,6 @@ fn attempt_merge(groups: MergeGroups) -> impl Iterator<Item = Box<RecoverableCon
 
     first
   })
-}
-
-fn create_merge_groups<I: Iterator<Item = (u32, Box<RecoverableContext>, Option<CSTNode>)>>(
-  follow_contexts: I,
-) -> HashMap<u64, Vec<(u32, usize, Option<CSTNode>, Box<RecoverableContext>)>> {
-  let mut groups = HashMap::new();
-  for (distinguisher, ctx, following) in follow_contexts {
-    sort_candidate(distinguisher, following, ctx, &mut groups);
-  }
-  groups
-}
-
-fn sort_candidate(
-  distinguisher: u32,
-  following: Option<CSTNode>,
-  ctx: Box<RecoverableContext>,
-  groups: &mut HashMap<u64, Vec<(u32, usize, Option<CSTNode>, Box<RecoverableContext>)>>,
-) {
-  use std::hash::Hash;
-  let (hash, entry) = if ctx.symbols.len() > 0 {
-    let last = ctx.symbols.last().expect("");
-    let end_index = ctx.symbols.len() - 1;
-    let mut start_index = end_index;
-    let mut start_offset = last.offset();
-
-    for index in (0..end_index).rev() {
-      let node = &ctx.symbols[index];
-      if matches!(
-        node,
-        CSTNode::Token(..) | CSTNode::Skipped(..) | CSTNode::MissingToken(..) | CSTNode::Multi(..) | CSTNode::NonTerm(..)
-      ) {
-        break;
-      } else {
-        start_offset = node.offset();
-        start_index = index;
-      }
-    }
-
-    let mut hasher = DefaultHasher::new();
-    ctx.symbols[0..start_index].iter().for_each(|a| a.canonical_hash(&mut hasher));
-    ctx.symbols[end_index + 1..].iter().for_each(|a| a.canonical_hash(&mut hasher));
-    following.hash(&mut hasher);
-    distinguisher.hash(&mut hasher);
-    ctx.last_tok_end.hash(&mut hasher);
-    ctx.ctx.stack.iter().for_each(|i| i.address.hash(&mut hasher));
-    (hasher.finish(), (start_offset, start_index, following, ctx))
-  } else {
-    let mut hasher = DefaultHasher::new();
-    ctx.last_tok_end.hash(&mut hasher);
-    ctx.ctx.stack.iter().for_each(|i| i.address.hash(&mut hasher));
-    (hasher.finish(), (0, 0, following, ctx))
-  };
-
-  match groups.entry(hash) {
-    std::collections::hash_map::Entry::Vacant(e) => {
-      e.insert(vec![entry]);
-    }
-    std::collections::hash_map::Entry::Occupied(mut e) => {
-      e.get_mut().push(entry);
-    }
-  }
 }
 
 fn sort_and_enque(pending: &mut VecDeque<Box<RecoverableContext>>, rec_ctx: Box<RecoverableContext>) {
@@ -612,10 +637,7 @@ fn reduce_symbols(mut symbol_count: u32, rec_ctx: &mut Box<RecoverableContext>, 
   let or_syms = rec_ctx.symbols.clone();
 
   while symbol_count > 0 {
-    let sym = rec_ctx
-      .symbols
-      .pop()
-      .expect(&format!("Should have enough symbols to complete this Non-Terminal \n  {rec_ctx:#?} {or_syms:#?}"));
+    let sym = rec_ctx.symbols.pop().expect(&format!("Should have enough symbols to complete this Non-Terminal"));
     match sym {
       CSTNode::Errata { .. } | CSTNode::Skipped { .. } => {}
       _ => {
@@ -751,7 +773,9 @@ fn drop_symbols<I: ParserInput, DB: ParserProducer<I>>(
 
           break;
         }
-        CSTNode::NonTerm(node) => rec_ctx.symbols.extend(node.symbols.clone()),
+        CSTNode::NonTerm(node) => {
+          //rec_ctx.symbols.extend(node.symbols.clone())
+        }
         CSTNode::Multi(node) => {
           if let Some(node) = node.alternatives.first() {
             rec_ctx.symbols.extend(node.symbols.clone())

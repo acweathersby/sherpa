@@ -1,4 +1,5 @@
 #![deprecated]
+#![allow(warnings)]
 mod ast;
 mod error;
 mod parse_context;

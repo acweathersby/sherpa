@@ -66,11 +66,8 @@ pub use builder::*;
 pub use utils::{create_u64_hash as hash_id_value_u64, hash_group_btreemap};
 pub use writer::code_writer::CodeWriter;
 
-#[cfg(debug_assertions)]
 pub mod test;
 
-#[cfg(debug_assertions)]
 pub use debug::{console_debugger, PrintConfig};
 
-#[cfg(debug_assertions)]
 pub use debug::file_debugger;

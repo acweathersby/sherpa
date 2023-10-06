@@ -1,3 +1,4 @@
+#![allow(warnings)]
 #![allow(unused, improper_ctypes)]
 #![allow(bad_style)]
 #![allow(non_snake_case)]

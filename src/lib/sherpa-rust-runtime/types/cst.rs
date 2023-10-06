@@ -12,7 +12,8 @@ pub trait CSTHashes: Hash {
   fn dedup_hash<H: std::hash::Hasher>(&self, state: &mut H);
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub enum CSTErrorNodeType {
   MissingToken(u16),
   ErroneousInput,
@@ -199,17 +200,25 @@ pub struct Multi {
   pub length:       u32,
   pub offset:       u32,
   pub alternatives: Vec<Alternative>,
+  #[cfg(debug_assertions)]
+  pub meta_label:   &'static str,
 }
 
 impl Multi {
-  pub fn new(alternatives: Vec<Alternative>) -> Rc<Self> {
+  pub fn new(alternatives: Vec<Alternative>, meta_label: &'static str) -> Rc<Self> {
     let length = alternatives[0].length;
     let offset = alternatives[0].offset;
+
+    #[cfg(debug_assertions)]
+    {
+      Rc::new(Self { alternatives, length, offset, meta_label })
+    }
+    #[cfg(not(debug_assertions))]
     Rc::new(Self { alternatives, length, offset })
   }
 
-  pub fn typed(alternatives: Vec<Alternative>) -> CSTNode {
-    CSTNode::Multi(Self::new(alternatives))
+  pub fn typed(alternatives: Vec<Alternative>, meta_label: &'static str) -> CSTNode {
+    CSTNode::Multi(Self::new(alternatives, meta_label))
   }
 }
 
@@ -225,6 +234,9 @@ impl CSTHashes for Multi {
 
 impl Debug for Multi {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    #[cfg(debug_assertions)]
+    f.write_fmt(format_args!("[multi: {}]", self.meta_label))?;
+    #[cfg(not(debug_assertions))]
     f.write_fmt(format_args!("[multi]"))?;
     let mut list = f.debug_list();
     for obj in &self.alternatives {

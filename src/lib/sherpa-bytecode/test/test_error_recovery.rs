@@ -10,7 +10,11 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
 
   IGNORE { c:sp }
 
-  <> test > fn "{}" $
+  <> apple > topic ";" $
+
+  <> topic > test "green"
+
+  <> test > fn "{}" 
 
   <> fn > ("fn" | "funct" | "function") "(" field(*",") ")" "{" field(*",") "}" 
 
@@ -22,7 +26,7 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
   
    "#;
 
-  let input = r#"( a:){ test:2, test:2  }"#;
+  let input = r#"( d::2){ test: test:2  } {} gren ;"#;
 
   println!("------------------");
 
