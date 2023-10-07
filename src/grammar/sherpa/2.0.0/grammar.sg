@@ -4,8 +4,8 @@ IMPORT ./ir as ir
 IMPORT ./symbol as sym
 IMPORT ./token as tok
 IMPORT ./ascript as ast
+IMPORT ./defined_type_eval as dt
 IMPORT ../1.0.0/comment as cmt
-IMPORT ../1.0.0/defined_type_eval as dt
 
 IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 

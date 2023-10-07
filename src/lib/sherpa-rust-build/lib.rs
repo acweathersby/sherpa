@@ -83,8 +83,9 @@ pub fn compile_rust_bytecode_parser<T: ParserStore>(store: &T, pkg: &BytecodePar
 use std::hash::Hash;
 use sherpa_rust_runtime::{
   llvm_parser::*,
-  types::{ast::*, *},
+  types::{ast::*, Token, TokenRange}, deprecate::*,
 };
+
 "###
       .to_string(),
   )?;

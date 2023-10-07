@@ -47,11 +47,11 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?;
 
-  // let parse_states = _inline_states(db, config, parse_states)?;
+  //let parse_states = _inline_states(db, config, parse_states)?;
 
-  // let parse_states = inline_scanners(db, config, parse_states)?;
+  let parse_states = inline_scanners(db, config, parse_states)?;
 
-  let parse_states = create_byte_sequences(db, config, parse_states)?;
+  // let parse_states = create_byte_sequences(db, config, parse_states)?;
 
   let parse_states = merge_branches(db, parse_states)?;
 

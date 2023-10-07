@@ -93,7 +93,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
   let compl_nterm_set: OrderedSet<DBNonTermKey> = reduces.clone().map(|i| i.kernel.nonterm_index()).collect();
 
   if incom_nterm_set.len() == 1 && incom_nterm_set.is_superset(&compl_nterm_set) {
-    return if incom_prec > compl_prec {
+    return if incom_prec >= compl_prec {
       Ok(ShiftReduceConflictResolution::Shift)
     } else {
       Ok(ShiftReduceConflictResolution::Reduce)

@@ -1,4 +1,4 @@
-mod ast;
+pub mod ast;
 pub mod bytecode;
 mod bytecode_db;
 mod context;

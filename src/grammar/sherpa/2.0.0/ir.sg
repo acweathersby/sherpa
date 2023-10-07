@@ -41,11 +41,11 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> transitive_statement >
 
-    "shift" ":skip"? ( ":tok" | ":sym" )     :ast { t_Shift, type:str($3), skip:bool($2), tok }
+     "shift" "-skip"? ( "tok" | "char" )    :ast { t_Shift, ptr_type:str($3), skip:bool($2), tok }
 
-    | "peek" ":skip"? ( ":tok" | ":sym" )    :ast { t_Peek, type:str($3), skip:bool($2), tok }
+    | "peek" "-skip"? ( "tok" | "char" )    :ast { t_Peek,  ptr_type:str($3), skip:bool($2), tok }
 
-    | "reset" ( ":tok" | ":sym" )            :ast { t_Reset, cursor:str($2), tok }
+    | "reset" ( "tok" | "char" )            :ast { t_Reset, ptr_type:str($2), tok }
 
 
 <> terminal_statement >
@@ -96,9 +96,9 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
             :ast { t_Gotos, fork }
 
-<> fork > "fork" "{" ( sym::nonterminal :ast { t_ForkInit, state: $1 } )(+) "}"                 
+<> fork > "fork" "{" ( sym::nonterminal :ast { t_Goto, nonterminal: $1, name:str($1), tok } )(+) "}"                 
                                             
-            :ast { t_Fork, paths:str($2), tok }
+            :ast { t_Fork, paths: $3, tok }
 
 <> goto_push > "push" sym::nonterminal
 

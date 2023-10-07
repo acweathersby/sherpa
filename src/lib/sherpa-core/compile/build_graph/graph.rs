@@ -1234,15 +1234,16 @@ impl<'db> GraphBuilder<'db> {
   }
 
   #[cfg(debug_assertions)]
-  pub fn _is_terminal_state_(&self, nterm_id: u32, state_id: u32) -> bool {
+  pub fn _is_terminal_state_(&self, nterm_id: u32, state_id: usize) -> bool {
     self.graph.goal_items().iter().any(|i| i.origin.get_symbol_key() == DBTermKey::from(nterm_id))
-      && self.current_state_id().0 == state_id
-      || self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.current_state_id().0 == state_id
+      && self.current_state_id().index() == state_id as usize
+      || self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id)
+        && self.current_state_id().index() == state_id
   }
 
   #[cfg(debug_assertions)]
-  pub fn _is_nonterminal_state_(&self, nterm_id: u32, state_id: u32) -> bool {
-    self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.current_state_id().0 == state_id
+  pub fn _is_nonterminal_state_(&self, nterm_id: u32, state_id: usize) -> bool {
+    self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id) && self.current_state_id().index() == state_id
   }
 }
 
