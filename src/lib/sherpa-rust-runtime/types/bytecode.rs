@@ -30,7 +30,7 @@ pub enum Opcode {
   /// `sym_len` to 0.
   ///
   /// This is a single byte instruction.
-  ScanShift,
+  ShiftChar,
   /// Shifts the current token value, moving  the `anchor_ptr`, `base_ptr`,
   /// `scan_ptr`, and `head_ptr` to the position of `head_ptr + tok_len`.
   /// Also set `tok_id` to 0.
@@ -228,7 +228,7 @@ impl From<u8> for Opcode {
       NoOp,
       Pass,
       Fail,
-      ScanShift,
+      ShiftChar,
       ShiftToken,
       ShiftTokenScanless,
       PeekToken,

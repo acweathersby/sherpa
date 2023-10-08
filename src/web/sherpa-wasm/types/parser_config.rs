@@ -41,6 +41,7 @@ pub struct JSParserConfig {
   pub AllOW_ERROR_RECOVERY: bool,
   /// Allow the parser to shift on CST non-term nodes.
   pub ALLOW_CST_NOTERM_SHIFT: bool,
+  /// Makes entry points for all non-terminals defined in the grammar.
   pub EXPORT_ALL_NONTERMS: bool,
 }
 

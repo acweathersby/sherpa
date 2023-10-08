@@ -80,6 +80,8 @@ impl<'db> ParseState {
     if self.ast.is_none() {
       let code = String::from_utf8(self.source(db))?;
 
+      // println!("{code}");
+
       match parser::ast::ir_from((&code).into()) {
         Ok(ast) => self.ast = Some(ast),
         Err(err) => self.compile_error = Some(err.into()),
@@ -260,15 +262,24 @@ fn render_IR<T: Write>(
 
       _ = w + " }";
     }
-    ASTNode::PeekSkip(..) => w.write(" peek-skip")?,
-    ASTNode::Peek(..) => w.write(" peek")?,
-    ASTNode::Shift(..) => w.write(" shift")?,
-    ASTNode::Skip(..) => w.write(" skip")?,
+    ASTNode::Shift(shift) => {
+      if shift.skip {
+        _ = w + " shift-skip " + &shift.ptr_type;
+      } else {
+        _ = w + " shift " + &shift.ptr_type;
+      }
+    }
+    ASTNode::Peek(peek) => {
+      if peek.skip {
+        _ = w + " peek-skip " + &peek.ptr_type;
+      } else {
+        _ = w + " peek " + &peek.ptr_type;
+      }
+    }
+    ASTNode::Reset(reset) => w.w(" reset")?.write(&reset.ptr_type)?,
     ASTNode::Pop(pop) => {
       w.w(" pop ")?.w(&(pop.popped_state.max(1)).to_string())?;
     }
-    ASTNode::Scan(..) => w.write(" scan")?,
-    ASTNode::Reset(..) => w.write(" reset")?,
     ASTNode::Fail(..) => w.write(" fail")?,
     ASTNode::Pass(..) => w.write(" pass")?,
     ASTNode::Accept(..) => w.write(" accept")?,
@@ -280,19 +291,45 @@ fn render_IR<T: Write>(
       _ = w + " set-tok " + id.to_string();
     }
 
-    ASTNode::Gotos(box parser::Gotos { goto, pushes }) => {
+    ASTNode::Gotos(box parser::Gotos { goto, pushes, fork }) => {
       if pushes.len() > 1 {
         w.indent().newline()?;
         for push in pushes {
           w = (w + " push " + &push.name + " then").newline()?;
         }
-        w = w + " goto " + &goto.name;
+
+        if let Some(goto) = goto {
+          w = w + " goto " + &goto.name;
+        }
+
+        if let Some(fork) = fork {
+          w = w + " fork {";
+          w.indent().newline();
+          for init in &fork.paths {
+            w = (w + &init.name).newline()?;
+          }
+          w.dedent().newline()?;
+          w = w + "}";
+        }
         w.dedent().newline()?;
       } else {
         for push in pushes {
           w = w + " push " + &push.name + " then";
         }
-        _ = w + " goto " + &goto.name;
+
+        if let Some(goto) = goto {
+          w = w + " goto " + &goto.name;
+        }
+
+        if let Some(fork) = fork {
+          w = w + " fork {";
+          w.indent().newline();
+          for init in &fork.paths {
+            w = (w + &init.name).newline()?;
+          }
+          w.dedent().newline()?;
+          w = w + "}";
+        }
       }
     }
     _ => {}

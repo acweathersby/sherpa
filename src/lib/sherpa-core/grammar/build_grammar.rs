@@ -186,8 +186,7 @@ pub fn extract_nonterminals<'a>(
           nterm_refs: Default::default(),
         }))
       }
-      ASTNode::PrattRules(box parser::PrattRules { name_sym, rules: _, tok })
-      | ASTNode::CFRules(box parser::CFRules { name_sym, rules: _, tok })
+      ASTNode::CFRules(box parser::CFRules { name_sym, rules: _, tok })
       | ASTNode::PegRules(box parser::PegRules { name_sym, rules: _, tok }) => {
         let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), &g_data.id, s_store);
         nterms.push((
@@ -325,8 +324,17 @@ pub fn process_parse_state<'a>(
           push.name = name;
         }
 
-        let name = process_state_nonterm(&gotos.goto.nonterminal, g, s, sr)?.to_string(s);
-        gotos.goto.name = name;
+        if let Some(goto) = gotos.goto.as_mut() {
+          let name = process_state_nonterm(&goto.nonterminal, g, s, sr)?.to_string(s);
+          goto.name = name;
+        }
+
+        if let Some(fork) = gotos.fork.as_mut() {
+          for init in &mut fork.paths {
+            let name = process_state_nonterm(&init.nonterminal, g, s, sr)?.to_string(s);
+            init.name = name;
+          }
+        }
       }
       ASTNode::IntMatch(int_match) => {
         process_statement(&mut int_match.statement, g, s, sr)?;
@@ -350,7 +358,7 @@ pub fn process_parse_state<'a>(
 
         let internal_mode = match ast_match.mode.as_str() {
           "BYTE" => MatchInputType::BYTE_SCANLESS_STR,
-          mode => return Err(SherpaError::Text("todo(anthony) : Invalide match mode error: ".to_string() + mode)),
+          mode => return Err(SherpaError::Text("todo(anthony) : Invalid match mode error: ".to_string() + mode)),
         };
 
         ast_match.mode = internal_mode.into();
@@ -385,7 +393,6 @@ pub fn process_nonterminals<'a>(
   let (type_, rules) = match nterm_ast {
     ASTNode::CFRules(nterm) => (NonTermType::ContextFree, &nterm.rules),
     ASTNode::AppendRules(nterm) => (NonTermType::ContextFree, &nterm.rules),
-    ASTNode::PrattRules(nterm) => (NonTermType::Pratt, &nterm.rules),
     ASTNode::PegRules(nterm) => (NonTermType::Peg, &nterm.rules),
     _ast => {
       #[cfg(debug_assertions)]
@@ -796,7 +803,6 @@ fn get_nonterminal_symbol<'a>(
     ASTNode::NonTerminal_Symbol(prod_sym) => (Some(prod_sym.as_ref()), None),
     ASTNode::NonTerminal_Terminal_Symbol(prod_tok) => get_nonterminal_symbol(g_data, &prod_tok.nonterminal),
     ASTNode::State(box parser::State { id, .. })
-    | ASTNode::PrattRules(box parser::PrattRules { name_sym: id, .. })
     | ASTNode::PegRules(box parser::PegRules { name_sym: id, .. })
     | ASTNode::CFRules(box parser::CFRules { name_sym: id, .. }) => (Some(id.as_ref()), None),
     ASTNode::AppendRules(box parser::AppendRules { name_sym, .. }) => get_nonterminal_symbol(g_data, name_sym),

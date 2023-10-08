@@ -44,8 +44,8 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
         parser.set_debugger(file_debugger(
           db.to_owned(),
           PrintConfig {
-            display_scanner_output: false,
-            display_instruction: false,
+            display_scanner_output: true,
+            display_instruction: true,
             display_input_data: true,
             display_state: true,
             ..Default::default()

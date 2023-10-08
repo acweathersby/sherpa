@@ -99,6 +99,7 @@ pub struct ParseContext<T: ByteReader, M = u32> {
   // Input data ----------
   /// The head of the input window
   pub begin_ptr:      usize,
+  /// 
   pub anchor_ptr:     usize,
   /// The the end of the last shifted token
   pub base_ptr:       usize,

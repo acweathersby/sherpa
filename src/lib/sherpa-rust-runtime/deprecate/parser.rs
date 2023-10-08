@@ -61,7 +61,7 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
     i = match match i.get_opcode() {
       ShiftToken => shift_token(i, ctx),
       ShiftTokenScanless => shift_token_scanless(i, ctx),
-      ScanShift => scan_shift(i, ctx),
+      ShiftChar => scan_shift(i, ctx),
       SkipToken => skip_token(block_base, ctx),
       SkipTokenScanless => skip_token_scanless(block_base, ctx),
       PeekSkipToken => peek_skip_token(block_base, ctx),
@@ -164,12 +164,12 @@ fn shift_token_scanless<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Rea
   shift_token(i, ctx)
 }
 
-/// Performs the [Opcode::ScanShift] operation
+/// Performs the [Opcode::ShiftChar] operation
 fn scan_shift<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   i: Instruction<'a>,
   ctx: &mut ParseContext<R, M>,
 ) -> OpReturnVal<'a> {
-  const __HINT__: Opcode = Opcode::ScanShift;
+  const __HINT__: Opcode = Opcode::ShiftChar;
 
   ctx.tok_ptr = ctx.tok_ptr + ctx.sym_len as usize;
   ctx.sym_len = 0;

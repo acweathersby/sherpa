@@ -354,7 +354,7 @@ fn add_match_expr<'graph, 'db: 'graph>(
         if !skipped.is_empty() {
           let vals = skipped.iter().map(|v| v.to_val().to_string()).collect::<Array<_>>().join(" | ");
           if vals.len() > 0 {
-            w = w + "\n( " + vals + " ){ " + peeking.then_some("peek-skip").unwrap_or("skip") + " }";
+            w = w + "\n( " + vals + " ){ " + peeking.then_some("peek-skip tok").unwrap_or("shift-skip tok") + " }";
           }
         }
       }
@@ -397,18 +397,18 @@ fn build_body<'graph, 'db: 'graph>(
   if CONTINUE
     == match s_type {
       StateType::Shift | StateType::KernelShift => {
-        let scan_expr = successor.get_symbol().sym().is_linefeed().then_some("scan then set-line").unwrap_or("scan");
-        body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift").into());
+        let scan_expr = successor.get_symbol().sym().is_linefeed().then_some("shift char then set-line").unwrap_or("shift char");
+        body_string.push(is_scanner.then_some(scan_expr).unwrap_or("shift tok").into());
         CONTINUE
       }
       StateType::PeekEndComplete(_) => {
         debug_assert!(!is_scanner, "Peek states should not be present in graph");
-        body_string.push("reset".into());
+        body_string.push("reset tok".into());
         CONTINUE
       }
       StateType::Peek(_) => {
         debug_assert!(!is_scanner, "Peek states should not be present in graph");
-        body_string.push("peek".into());
+        body_string.push("peek tok".into());
         CONTINUE
       }
       StateType::NonTermCompleteOOS => {

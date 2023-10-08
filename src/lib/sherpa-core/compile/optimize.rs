@@ -51,7 +51,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = inline_scanners(db, config, parse_states)?;
 
-  // let parse_states = create_byte_sequences(db, config, parse_states)?;
+  let parse_states = create_byte_sequences(db, config, parse_states)?;
 
   let parse_states = merge_branches(db, parse_states)?;
 
@@ -60,6 +60,8 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?;
 
   let parse_states = combine_state_branches(db, parse_states)?;
+
+  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?;
 
   //
   // let parse_states = inline_matches(db, parse_states)?;
@@ -207,25 +209,30 @@ fn remove_redundant_defaults<'db>(
       return false;
     };
 
-    let Some(parser::Gotos { goto, pushes }) = statement.branch.as_mut().and_then(|s| s.as_Gotos_mut()) else {
+    let Some(gt) = statement.branch.as_mut().and_then(|s| s.as_Gotos_mut()) else {
       return false;
     };
 
-    if pushes.len() > 0 {
-      return false;
+    let parser::Gotos { goto, pushes, .. } = gt;
+
+    if let Some(goto) = goto {
+      if pushes.len() > 0 {
+        return false;
+      }
+
+      let goto = goto.name.to_token();
+
+      let Some(own) = state_branch_lookup.get(&state) else {
+        return false;
+      };
+
+      let Some(theirs) = state_branch_lookup.get(&goto) else {
+        return false;
+      };
+      return theirs.is_subset(own);
+    } else {
+      false
     }
-
-    let goto = goto.name.to_token();
-
-    let Some(own) = state_branch_lookup.get(&state) else {
-      return false;
-    };
-
-    let Some(theirs) = state_branch_lookup.get(&goto) else {
-      return false;
-    };
-
-    return theirs.is_subset(own);
   }
 
   for (state_id, state) in &mut parse_states {
@@ -284,28 +291,31 @@ fn create_byte_sequences<'db>(
     let transitive_type = statement.transitive.as_ref().map(|t| t.get_type());
 
     loop {
-      let Some(ASTNode::Gotos(box parser::Gotos { goto, pushes })) = &active_statement.branch else { break };
+      let Some(ASTNode::Gotos(gt)) = &active_statement.branch else { break };
+      let parser::Gotos { goto, pushes, fork } = gt.as_ref();
 
-      if pushes.len() > 0 {
-        break;
-      };
+      if let Some(goto) = goto {
+        if pushes.len() > 0 {
+          break;
+        };
 
-      let id = goto.name.to_token();
+        let id = goto.name.to_token();
 
-      let Some(IntMatch { statement, vals }) = single_byte_state.get(&id) else { break };
+        let Some(IntMatch { statement, vals }) = single_byte_state.get(&id) else { break };
 
-      if statement.transitive.as_ref().map(|t| t.get_type()) != transitive_type {
-        break;
-      };
+        if statement.transitive.as_ref().map(|t| t.get_type()) != transitive_type {
+          break;
+        };
 
-      new_vals.append(&mut vals.clone());
+        new_vals.append(&mut vals.clone());
 
-      iter += 1;
+        iter += 1;
 
-      active_statement = statement.as_ref();
+        active_statement = statement.as_ref();
 
-      if statement.non_branch.len() > 0 {
-        break;
+        if statement.non_branch.len() > 0 {
+          break;
+        }
       }
     }
 
@@ -453,65 +463,67 @@ fn _inline_states<'db>(
         let parser::Statement { branch, non_branch, transitive, .. } = statement;
         loop {
           if let Some(own_gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
-            let name = own_gotos.goto.name.to_token();
+            if let Some(goto) = &mut own_gotos.goto {
+              let name = goto.name.to_token();
 
-            if let Some(parser::Statement { branch: b, non_branch: nb, transitive: t, .. }) = stmt_lu.get(&name) {
-              let mut t = t.clone();
+              if let Some(parser::Statement { branch: b, non_branch: nb, transitive: t, .. }) = stmt_lu.get(&name) {
+                let mut t = t.clone();
 
-              // Pop the last goto (if present) if the incoming transitive action is `POP`
-              if own_gotos.pushes.len() > 0 && t.as_ref().is_some_and(|t| t.as_Pop().is_some()) {
-                t = None;
-                own_gotos.pushes.pop();
-              }
-
-              let replace_branch = match b {
-                // We do not want to replace GOTOS if we have a Fail or Accept branch, so we make sure
-                // our push list is empty, allowing the only goto instruction to be replaced by the incoming
-                // statement's branch.
-                Some(ASTNode::Pass(..)) | Some(ASTNode::Fail(..)) | Some(ASTNode::Accept(..) | ASTNode::Pop(..))
-                  if own_gotos.pushes.is_empty() =>
-                {
-                  true
-                }
-                Some(ASTNode::Gotos(..)) | None => false,
-                _ => break,
-              };
-
-              if match (&transitive, t.as_ref()) {
-                (Some(..), Some(..)) => false,
-                (None, None) | (Some(..), None) => true,
-                (None, Some(..)) => {
-                  *transitive = t;
-                  true
-                }
-              } {
-                non_branch.append(&mut nb.clone());
-
-                if replace_branch {
-                  *branch = b.clone();
-                } else if let Some(g) = b.as_ref().and_then(|b| b.as_Gotos()) {
-                  own_gotos.goto = g.goto.clone();
-                  own_gotos.pushes.append(&mut g.pushes.clone());
-                  // New gotos, we can continue the loop
-                  continue;
-                } else if own_gotos.pushes.len() > 0 {
-                  own_gotos.goto = Box::new(parser::Goto::new(
-                    own_gotos.pushes.last().expect("Should have at least one item").name.clone(),
-                    Default::default(),
-                    Default::default(),
-                  ));
+                // Pop the last goto (if present) if the incoming transitive action is `POP`
+                if own_gotos.pushes.len() > 0 && t.as_ref().is_some_and(|t| t.as_Pop().is_some()) {
+                  t = None;
                   own_gotos.pushes.pop();
-                  // Gotos changed, we can continue the loop
-                  continue;
-                } else {
-                  *branch = None;
+                }
+
+                let replace_branch = match b {
+                  // We do not want to replace GOTOS if we have a Fail or Accept branch, so we make sure
+                  // our push list is empty, allowing the only goto instruction to be replaced by the incoming
+                  // statement's branch.
+                  Some(ASTNode::Pass(..)) | Some(ASTNode::Fail(..)) | Some(ASTNode::Accept(..) | ASTNode::Pop(..))
+                    if own_gotos.pushes.is_empty() =>
+                  {
+                    true
+                  }
+                  Some(ASTNode::Gotos(..)) | None => false,
+                  _ => break,
+                };
+
+                if match (&transitive, t.as_ref()) {
+                  (Some(..), Some(..)) => false,
+                  (None, None) | (Some(..), None) => true,
+                  (None, Some(..)) => {
+                    *transitive = t;
+                    true
+                  }
+                } {
+                  non_branch.append(&mut nb.clone());
+
+                  if replace_branch {
+                    *branch = b.clone();
+                  } else if let Some(g) = b.as_ref().and_then(|b| b.as_Gotos()) {
+                    own_gotos.goto = g.goto.clone();
+                    own_gotos.pushes.append(&mut g.pushes.clone());
+                    // New gotos, we can continue the loop
+                    continue;
+                  } else if own_gotos.pushes.len() > 0 {
+                    own_gotos.goto = Some(Box::new(parser::Goto::new(
+                      own_gotos.pushes.last().expect("Should have at least one item").name.clone(),
+                      Default::default(),
+                      Default::default(),
+                    )));
+                    own_gotos.pushes.pop();
+                    // Gotos changed, we can continue the loop
+                    continue;
+                  } else {
+                    *branch = None;
+                  }
                 }
               }
+            } else if let Some(_) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
+              inline_statement(db, statement, stmt_lu)?;
             }
-          } else if let Some(_) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
-            inline_statement(db, statement, stmt_lu)?;
+            break;
           }
-          break;
         }
       }
     }
@@ -577,21 +589,23 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
               if vals.len() == 1 && transitive.is_none() && non_branch.is_empty() {
                 let val = vals[0];
                 if let Some(gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
-                  let name = gotos.goto.name.clone();
-                  let id = (name.to_token(), mode.to_token(), val);
+                  if let Some(goto) = &mut gotos.goto {
+                    let name = goto.name.clone();
+                    let id = (name.to_token(), mode.to_token(), val);
 
-                  if let Some(stmt) = state_branch_lookup.get(&id) {
-                    let parser::Statement { branch: b, non_branch: mut nb, transitive: t, .. } = stmt.clone();
+                    if let Some(stmt) = state_branch_lookup.get(&id) {
+                      let parser::Statement { branch: b, non_branch: mut nb, transitive: t, .. } = stmt.clone();
 
-                    match b {
-                      Some(ASTNode::Gotos(box Gotos { goto, mut pushes })) => {
-                        gotos.goto = goto;
-                        gotos.pushes.append(&mut pushes);
-                        non_branch.append(&mut nb);
-                        *transitive = t;
-                        continue;
+                      match b {
+                        Some(ASTNode::Gotos(mut b_gt)) => {
+                          gotos.goto = b_gt.goto;
+                          gotos.pushes.append(&mut b_gt.pushes);
+                          non_branch.append(&mut nb);
+                          *transitive = t;
+                          continue;
+                        }
+                        _ => {}
                       }
-                      _ => {}
                     }
                   }
                 }
@@ -752,12 +766,18 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     let parser::Statement { branch, .. } = statement;
     if let Some(branch) = branch.as_mut() {
       match branch {
-        ASTNode::Gotos(box parser::Gotos { goto, pushes }) => {
-          for push in pushes.iter_mut() {
+        ASTNode::Gotos(gt) => {
+          for push in gt.pushes.iter_mut() {
             push.name = canonicalize_goto_name(db, push.name.clone(), &name_lu)?;
           }
-
-          goto.name = canonicalize_goto_name(db, goto.name.clone(), &name_lu)?;
+          if let Some(goto) = gt.goto.as_mut() {
+            goto.name = canonicalize_goto_name(db, goto.name.clone(), &name_lu)?;
+          }
+          if let Some(fork) = gt.fork.as_mut() {
+            for init in fork.paths.iter_mut() {
+              init.name = canonicalize_goto_name(db, init.name.clone(), &name_lu)?;
+            }
+          }
         }
         ASTNode::Matches(box parser::Matches { matches, .. }) => {
           for m in matches {
@@ -851,8 +871,18 @@ fn traverse_statement<'db>(
           let name = push.name.to_token();
           enqueue_state(name, parse_states, queue, true);
         }
-        let name = gotos.goto.name.to_token();
-        enqueue_state(name, parse_states, queue, true);
+
+        if let Some(goto) = gotos.goto.as_ref() {
+          let name = goto.name.to_token();
+          enqueue_state(name, parse_states, queue, true);
+        }
+
+        if let Some(fork) = gotos.fork.as_ref() {
+          for goto in &fork.paths {
+            let name = goto.name.to_token();
+            enqueue_state(name, parse_states, queue, true);
+          }
+        }
       }
       _ => {}
     }

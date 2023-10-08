@@ -163,7 +163,7 @@ fn create_parse_states_from_prod<'db>(
 
         let ir = build_ir(j, GraphIterator::new(&graph), db.nonterm_guid_name(nterm_key))?;
 
-        for mut state in ir {
+        for state in ir {
           if let Some(scanner_data) = state.get_scanner() {
             scanners.insert(scanner_data.clone());
           }

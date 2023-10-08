@@ -152,12 +152,41 @@ fn build_statement<'db>(
     insert_tok_debug(pkg, transitive.to_token(), add_debug_symbols);
 
     match transitive {
-      parser::ASTNode::Skip(..) => insert_op(&mut pkg.bytecode, Op::SkipToken),
-      parser::ASTNode::Scan(..) => insert_op(&mut pkg.bytecode, Op::ScanShift),
+      parser::ASTNode::Shift(shift) => match shift.ptr_type.as_str() {
+        "char" => {
+          if shift.skip {
+            unimplemented!("shift-skip char not implemented")
+          } else {
+            insert_op(&mut pkg.bytecode, Op::ShiftChar)
+          }
+        }
+        "tok" => {
+          if shift.skip {
+            insert_op(&mut pkg.bytecode, Op::SkipToken)
+          } else {
+            insert_op(&mut pkg.bytecode, Op::ShiftToken)
+          }
+        }
+        _ => unreachable!(),
+      },
+      parser::ASTNode::Peek(peek) => match peek.ptr_type.as_str() {
+        "char" => {
+          if peek.skip {
+            unimplemented!("peek-skip char not implemented")
+          } else {
+            unimplemented!("peek char not implemented")
+          }
+        }
+        "tok" => {
+          if peek.skip {
+            insert_op(&mut pkg.bytecode, Op::PeekSkipToken)
+          } else {
+            insert_op(&mut pkg.bytecode, Op::PeekToken)
+          }
+        }
+        _ => unreachable!(),
+      },
       parser::ASTNode::Reset(..) => insert_op(&mut pkg.bytecode, Op::PeekReset),
-      parser::ASTNode::Shift(..) => insert_op(&mut pkg.bytecode, Op::ShiftToken),
-      parser::ASTNode::Peek(..) => insert_op(&mut pkg.bytecode, Op::PeekToken),
-      parser::ASTNode::PeekSkip(..) => insert_op(&mut pkg.bytecode, Op::PeekSkipToken),
       _ => {
         unreachable!();
       }
@@ -208,12 +237,26 @@ fn build_statement<'db>(
           insert_u8(&mut pkg.bytecode, NORMAL_STATE_FLAG as u8);
           insert_u32_le(&mut pkg.bytecode, proxy_address);
         }
-        insert_tok_debug(pkg, gotos.goto.tok.clone(), add_debug_symbols);
-        let proxy_address = get_proxy_address(gotos.goto.name.to_token(), state_name_to_proxy);
 
-        insert_op(&mut pkg.bytecode, Op::Goto);
-        insert_u8(&mut pkg.bytecode, NORMAL_STATE_FLAG as u8);
-        insert_u32_le(&mut pkg.bytecode, proxy_address);
+        if let Some(goto) = &gotos.goto {
+          insert_tok_debug(pkg, goto.tok.clone(), add_debug_symbols);
+          let proxy_address = get_proxy_address(goto.name.to_token(), state_name_to_proxy);
+
+          insert_op(&mut pkg.bytecode, Op::Goto);
+          insert_u8(&mut pkg.bytecode, NORMAL_STATE_FLAG as u8);
+          insert_u32_le(&mut pkg.bytecode, proxy_address);
+        }
+
+        if let Some(fork) = &gotos.fork {
+          insert_op(&mut pkg.bytecode, Op::Fork);
+          insert_u16_le(&mut pkg.bytecode, fork.paths.len() as u16);
+
+          for init in &fork.paths {
+            insert_tok_debug(pkg, init.tok.clone(), add_debug_symbols);
+            let proxy_address = get_proxy_address(init.name.to_token(), state_name_to_proxy);
+            insert_u32_le(&mut pkg.bytecode, proxy_address);
+          }
+        }
       }
       matches => {
         build_match(db, matches, pkg, state_name_to_proxy, add_debug_symbols)?;

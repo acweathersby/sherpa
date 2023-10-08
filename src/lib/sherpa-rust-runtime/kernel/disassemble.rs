@@ -121,7 +121,7 @@ pub fn disassemble_parse_block<'a>(i: Option<Instruction<'a>>, recursive: bool) 
           i_last,
         )
       }
-      ScanShift => {
+      ShiftChar => {
         let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         (format!("\n{}SCAN-SHFT{string}", dh(i.address())), i_last)
       }

@@ -36,7 +36,7 @@ fn dispatch<'a, 'debug>(
       ByteSequence => byte_sequence(i, ctx, input),
       ShiftToken => shift_token(i, ctx, base_state),
       ShiftTokenScanless => shift_token_scanless(i, ctx, base_state),
-      ScanShift => scan_shift(i, ctx),
+      ShiftChar => scan_shift(i, ctx),
       SkipToken => skip_token(block_base, ctx),
       SkipTokenScanless => skip_token_scanless(block_base, ctx),
       PeekSkipToken => peek_skip_token(block_base, ctx),
@@ -200,9 +200,9 @@ fn shift_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emittin
   shift_token(i, ctx, emitting_state)
 }
 
-/// Performs the [Opcode::ScanShift] operation
+/// Performs the [Opcode::ShiftChar] operation
 fn scan_shift<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
-  const __HINT__: Opcode = Opcode::ScanShift;
+  const __HINT__: Opcode = Opcode::ShiftChar;
 
   ctx.input_ptr = ctx.input_ptr + ctx.byte_len as usize;
   ctx.byte_len = 0;

@@ -75,7 +75,7 @@ pub fn basic_left_recursion() -> SherpaResult<()> {
 }
 
 #[test]
-pub fn bread_crumb_parsing() -> SherpaResult<()> {
+pub fn fork_parsing() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
       IGNORE { c:sp } 
@@ -422,7 +422,7 @@ fn parsing_using_trivial_custom_state() -> SherpaResult<()> {
     &[r##"
   A => match : BYTE (65 /* A */ | 66 /* B */) { goto B }
 
-  B => shift then pass
+  B => shift tok then pass
   
   "##],
     &[("default", "A", true), ("default", "B", true), ("default", "C", false)],

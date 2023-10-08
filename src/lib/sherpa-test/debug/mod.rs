@@ -62,12 +62,12 @@ pub fn file_debugger(
   use sherpa_core::{proxy::Map, ParserDatabase};
 
   let mut stack = vec![];
-  write_debug_file(&db, "parser_output.tmp", "    ", false);
+  write_debug_file(&db, "parser_output.tmp", "    ", false).unwrap();
   Some(Box::new(move |event, ctx| {
     let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
-      write_debug_file(&db, "parser_output.tmp", string, true);
+      write_debug_file(&db, "parser_output.tmp", string, true).unwrap();
     }
   }))
 }

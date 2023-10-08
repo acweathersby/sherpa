@@ -437,7 +437,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         .iter()
         .enumerate()
         .filter_map(|(index, n)| match n {
-          SymbolId::NonTerminal { id } => Some(index),
+          SymbolId::NonTerminal { .. } => Some(index),
           _ => None,
         })
         .filter_map(|nterm_id| {
