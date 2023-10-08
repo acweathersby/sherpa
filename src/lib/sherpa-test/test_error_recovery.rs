@@ -1,8 +1,11 @@
-use std::path::PathBuf;
-
-use crate::*;
+use crate::{utils::_write_disassembly_to_temp_file_, *};
+use sherpa_bytecode::compile_bytecode;
 use sherpa_core::*;
-use sherpa_rust_runtime::{parsers::error_recovery::ErrorRecoveringDatabase, types::*};
+use sherpa_rust_runtime::{
+  parsers::{error_recovery::ErrorRecoveringDatabase, fork::ForkableParser},
+  types::*,
+};
+use std::path::PathBuf;
 
 #[test]
 pub fn construct_error_recovering_parser() -> SherpaResult<()> {
@@ -28,7 +31,7 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
   
    "#;
 
-  let input = r#"( d::2){ test: test:2  } {} gren toast ; ;"#;
+  let input = r#"( d:2){ test: test:2  } {} gren toast ; ;"#;
 
   println!("------------------");
 
@@ -41,7 +44,7 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
 
   let pkg = compile_bytecode(&parser_data, false)?;
 
-  pkg._write_disassembly_to_temp_file_(parser_data.get_db())?;
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
 
   pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?)?;
 

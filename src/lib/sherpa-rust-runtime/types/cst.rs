@@ -74,16 +74,16 @@ impl Debug for CSTNode {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       Self::Skipped(node) => {
-        f.write_str("[skipped] ")?;
-        node.fmt(f)
+        node.fmt(f)?;
+        f.write_str(" [skipped]")
       }
       Self::MissingToken(.., node) => {
-        f.write_str("[missing] ")?;
-        node.fmt(f)
+        node.fmt(f)?;
+        f.write_str(" [missing]")
       }
       Self::Errata(node) => {
-        f.write_str("[errata] ")?;
-        node.fmt(f)
+        node.fmt(f)?;
+        f.write_str(" [errata]")
       }
       Self::Token(_, node) => node.fmt(f),
       Self::Multi(multi) => multi.fmt(f),
@@ -191,7 +191,7 @@ impl CSTHashes for TokenNode {
 
 impl Debug for TokenNode {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("( {} )", self.val))
+    f.write_fmt(format_args!("┊{}┊", self.val))
   }
 }
 

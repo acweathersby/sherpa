@@ -2,7 +2,7 @@ use crate::{parsers::fork::fork_kernel, types::*};
 use std::collections::VecDeque;
 
 use super::{
-  fork::{attempt_merge, create_merge_groups, create_token, insert_node, reduce_symbols, sort_and_enque},
+  fork::{attempt_merge, create_merge_groups, create_token, insert_node, reduce_symbols},
   Parser,
 };
 
@@ -12,6 +12,16 @@ const TOKEN_SYNTHESIS_PENALTY: isize = 1;
 const SYNTH_LIMIT: usize = 5;
 
 pub trait ErrorRecoveringDatabase<I: ParserInput>: ParserProducer<I> + Sized {
+  /// Parse while attempting to recover from any errors encountered in the
+  /// input.
+  ///
+  /// This extends the fork parser by allowing recovery methods to be applied
+  /// when the base parser encounters input that prevent it from continuing. As
+  /// several error recovery strategies are employed, the resulting parse
+  /// forest may include several trees containing error corrections of varying
+  /// quality. In this case, the tree containing the least number of error
+  /// correction assumptions will be ordered in front of trees that employ more
+  /// guesswork to recover parsing.
   fn parse_with_recovery(&self, input: &mut I, entry: EntryPoint) -> Result<(), ParserError> {
     parse_with_recovery(input, entry, self)
   }
@@ -26,23 +36,25 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
 ) -> Result<(), ParserError> {
   let mut parser = db.get_parser()?;
 
-  let mut active = VecDeque::from_iter(vec![Box::new(RecoverableContext {
+  let mut pending = ContextQueue::new_with_capacity(64)?;
+  pending.push_back(Box::new(RecoverableContext {
+    offset: 0,
     entropy: input.len() as isize,
     symbols: vec![],
     ctx: parser.init(entry)?,
     mode: RecoveryMode::Normal,
-    last_tok_end: 0,
     last_failed_state: Default::default(),
-  })]);
+  }));
+  pending.swap_buffers();
 
-  let mut pending = VecDeque::<Box<RecoverableContext>>::new();
   let mut failed_contexts: Vec<(ParserState, Box<RecoverableContext>)> = Vec::new();
   let mut completed = Vec::new();
   let mut best_failure = None;
 
-  while pending.len() > 0 {
+  while !pending.pop_is_empty() {
     fork_kernel(input, parser.as_mut(), &mut pending, &mut completed, &mut failed_contexts)?;
     handle_failed_contexts(&mut failed_contexts, input, db, &mut best_failure, &mut parser, &mut pending);
+    pending.swap_buffers();
   }
 
   completed.sort();
@@ -69,7 +81,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
   db: &DB,
   best_failure: &mut Option<Box<RecoverableContext>>,
   parser: &mut Box<dyn Parser<I>>,
-  pending: &mut VecDeque<Box<RecoverableContext>>,
+  pending: &mut ContextQueue<Box<RecoverableContext>>,
 ) {
   if failed_contexts.len() > 0 {
     let mut to_process = VecDeque::new();
@@ -100,21 +112,20 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
 
           // We can do several actions to recover from this error.
           // ---------------------------------------------------------------
-          // 1. Create a zero length token whose id matches one of the expected terminal
-          //    at this point. The failing state address can be used as a key into a
-          //    lookup table that contains all possible token id's expected at this point.
-
+          // 1. Create a zero length token whose id matches one of the expected tokens at
+          //    this point. The failing state address can be used as a key into a lookup
+          //    table that contains all possible token id's expected at this point.
           inject_synthetics(&rec_ctx, db, last_state, &mut to_process);
 
           // ---------------------------------------------------------------
-          // 2. Drop bytes/codepoints until incoming is positioned at the start of an
+          // 2. Drop bytes/codepoints until the input is positioned at the start of an
           //    acceptable token.
           if ctx.sym_ptr < end {
             drop_codepoints(rec_ctx.split(), &mut to_process, best_failure, input, 0, sym_ptr, last_state);
           }
 
           // ---------------------------------------------------------------
-          // 3. Drop symbols until a state is reached where the input is accepted.
+          // 3. Drop symbols until a state is reached where the current input is accepted.
           if rec_ctx.symbols.len() > 0 {
             drop_symbols(rec_ctx.split(), &mut to_process, best_failure, 0, ctx.sym_ptr);
           }
@@ -144,12 +155,14 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
     )
     .collect::<Vec<_>>();
 
-    let mut all: Vec<_> = pending.drain(..).chain(continued).collect();
+    pending.swap_buffers();
+
+    let mut all: Vec<_> = pending.take_pop().chain(continued).collect();
 
     all.sort();
 
-    for rec_ctx in all.into_iter().take(4) {
-      sort_and_enque(pending, rec_ctx)
+    for rec_ctx in all.into_iter().take(32) {
+      pending.push_with_priority(rec_ctx)
     }
   }
 }
@@ -392,7 +405,7 @@ fn drop_symbols(
 
 fn pick_best_failure(best_failure: &mut Option<Box<RecoverableContext>>, rec_ctx: Box<RecoverableContext>) {
   if let Some(failed_ctx) = best_failure.as_deref() {
-    if failed_ctx.last_tok_end < rec_ctx.last_tok_end || failed_ctx.entropy > rec_ctx.entropy {
+    if failed_ctx.get_offset() < rec_ctx.get_offset() || failed_ctx.entropy > rec_ctx.entropy {
       *best_failure = Some(rec_ctx);
     }
   } else {

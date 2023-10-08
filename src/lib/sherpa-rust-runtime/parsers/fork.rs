@@ -7,18 +7,21 @@ use std::{
 
 pub trait ForkableParser<I: ParserInput>: ParserIterator<I> + ParserInitializer {
   fn fork_parse(&mut self, input: &mut I, entry: EntryPoint) -> Result<(), ParserError> {
-    let f_ctx = Box::new(ForkContext {
+    let mut pending = ContextQueue::new_with_capacity(64)?;
+    pending.push_back(Box::new(ForkContext {
+      offset:  0,
       entropy: (input.len() as isize),
       ctx:     self.init(entry)?,
       symbols: Vec::new(),
-    });
+    }));
+    pending.swap_buffers();
 
-    let mut pending = VecDeque::from_iter(vec![f_ctx]);
     let mut errored = Default::default();
     let mut completed = Default::default();
 
-    while pending.len() > 0 {
+    while !pending.pop_is_empty() {
       fork_kernel(input, self, &mut pending, &mut completed, &mut errored)?;
+      pending.swap_buffers();
     }
 
     #[cfg(debug_assertions)]
@@ -37,19 +40,18 @@ impl<T: ParserIterator<I> + ParserInitializer, I: ParserInput> ForkableParser<I>
 pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: ForkableContext>(
   input: &mut I,
   parser: &mut P,
-  pending: &mut VecDeque<CTX>,
+  pending: &mut ContextQueue<CTX>,
   completed: &mut Vec<CTX>,
   errored: &mut Vec<(ParserState, CTX)>,
 ) -> Result<(), ParserError> {
-  let mut pending_array = pending.drain(..).rev().collect::<Vec<_>>();
   let mut least_advanced_reduction = usize::MAX;
   let mut min_advance = usize::MAX;
   let mut reduction_stage = VecDeque::new();
 
-  while let Some(mut rec_ctx) = pending_array.pop() {
+  while let Some(mut rec_ctx) = pending.pop_front() {
     if !rec_ctx.ctx().is_finished {
       if rec_ctx.ctx().anchor_ptr > min_advance {
-        sort_and_enque(pending, rec_ctx);
+        pending.push_with_priority(rec_ctx);
         continue;
       }
 
@@ -59,12 +61,12 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
         match action {
           ParseAction::Skip { byte_offset, byte_length, token_id, .. } => {
             insert_node(&mut rec_ctx, create_skip(input, token_id, byte_length, byte_offset));
-            sort_and_enque(pending, rec_ctx);
+            pending.push_with_priority(rec_ctx);
           }
 
           ParseAction::Shift { byte_offset, byte_length, token_id, emitting_state, .. } => {
             insert_node(&mut rec_ctx, create_token(input, emitting_state, token_id, byte_length, byte_offset));
-            sort_and_enque(pending, rec_ctx);
+            pending.push_with_priority(rec_ctx);
           }
 
           ParseAction::Error { last_state, .. } => {
@@ -79,9 +81,9 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
 
           ParseAction::Fork(states) => {
             for state in states {
-              let mut new_state = rec_ctx.split();
-              new_state.ctx_mut().push_state(state);
-              sort_and_enque(pending, new_state)
+              let mut new_ctx = rec_ctx.split();
+              new_ctx.ctx_mut().push_state(state);
+              pending.push_with_priority(new_ctx);
             }
           }
 
@@ -134,9 +136,9 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
 
                   ParseAction::Fork(states) => {
                     for state in states {
-                      let mut new_state = rec_ctx.split();
-                      new_state.ctx_mut().push_state(state);
-                      sort_and_enque(pending, new_state)
+                      let mut new_ctx = rec_ctx.split();
+                      new_ctx.ctx_mut().push_state(state);
+                      pending.push_with_priority(new_ctx);
                     }
                     break;
                   }
@@ -163,7 +165,7 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
       if rec_ctx.ctx().is_finished {
         completed.push(rec_ctx);
       } else {
-        sort_and_enque(pending, rec_ctx);
+        pending.push_with_priority(rec_ctx);
       }
     }
   }
@@ -171,21 +173,14 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
   Ok(())
 }
 
-pub fn sort_and_enque<CTX: ForkableContext>(pending: &mut VecDeque<CTX>, rec_ctx: CTX) {
-  pending.push_back(rec_ctx);
-  let mut pends = pending.drain(..).collect::<Vec<_>>();
-  pends.sort_by(|a, b| a.ctx().sym_ptr.cmp(&b.ctx().sym_ptr));
-  pending.extend(pends)
-}
-
 pub fn insert_node<CTX: ForkableContext>(rec_ctx: &mut CTX, node: CSTNode) {
+  rec_ctx.set_offset((node.offset() + node.length()) as usize);
+
   match node {
     CSTNode::Errata(..) => {
-      //rec_ctx.last_tok_end = node.offset() + node.length();
       *rec_ctx.entropy_mut() += node.length() as isize;
     }
     _ => {
-      //rec_ctx.last_tok_end = node.offset() + node.length();
       *rec_ctx.entropy_mut() -= node.length() as isize;
     }
   }

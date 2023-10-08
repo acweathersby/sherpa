@@ -107,13 +107,21 @@ impl ParserContext {
   }
 }
 
-pub trait ForkableContext {
+pub trait ForkableContext: QueuedContext {
   fn symbols(&mut self) -> &mut Vec<CSTNode>;
   fn ctx(&self) -> &ParserContext;
   fn ctx_mut(&mut self) -> &mut ParserContext;
   fn entropy(&self) -> &isize;
   fn entropy_mut(&mut self) -> &mut isize;
   fn split(&self) -> Self;
+  fn set_offset(&mut self, offset: usize);
+  fn get_offset(&self) -> usize;
+}
+
+impl<T: ForkableContext> QueuedContext for T {
+  fn queued_priority(&self) -> usize {
+    usize::MAX - self.get_offset()
+  }
 }
 
 impl<CTX: ForkableContext> ForkableContext for Box<CTX> {
@@ -146,12 +154,23 @@ impl<CTX: ForkableContext> ForkableContext for Box<CTX> {
   fn split(&self) -> Self {
     Box::new(self.as_ref().split())
   }
+
+  #[inline]
+  fn get_offset(&self) -> usize {
+    self.as_ref().get_offset()
+  }
+
+  #[inline]
+  fn set_offset(&mut self, offset: usize) {
+    self.as_mut().set_offset(offset);
+  }
 }
 
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ForkContext {
   pub(crate) entropy: isize,
+  pub(crate) offset:  usize,
   pub(crate) ctx:     ParserContext,
   pub(crate) symbols: Vec<CSTNode>,
 }
@@ -185,10 +204,19 @@ impl ForkableContext for ForkContext {
   #[inline]
   fn split(&self) -> Self {
     Self {
+      offset:  self.offset,
       entropy: self.entropy,
       ctx:     self.ctx.clone(),
       symbols: self.symbols.clone(),
     }
+  }
+
+  fn get_offset(&self) -> usize {
+    self.offset
+  }
+
+  fn set_offset(&mut self, offset: usize) {
+    self.offset = offset
   }
 }
 
@@ -204,10 +232,10 @@ pub enum RecoveryMode {
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct RecoverableContext {
+  pub(crate) offset: usize,
   pub entropy: isize,
   pub ctx: ParserContext,
   pub symbols: Vec<CSTNode>,
-  pub last_tok_end: u32,
   pub mode: RecoveryMode,
   pub last_failed_state: ParserState,
 }
@@ -249,6 +277,14 @@ impl ForkableContext for RecoverableContext {
       ..*self
     }
   }
+
+  fn get_offset(&self) -> usize {
+    self.offset
+  }
+
+  fn set_offset(&mut self, offset: usize) {
+    self.offset = offset
+  }
 }
 
 impl PartialEq for RecoverableContext {
@@ -259,8 +295,8 @@ impl PartialEq for RecoverableContext {
 
 impl PartialOrd for RecoverableContext {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    let a = (self.entropy, u32::MAX - self.last_tok_end);
-    let b = (other.entropy, u32::MAX - other.last_tok_end);
+    let a = (self.entropy, usize::MAX - self.offset);
+    let b = (other.entropy, usize::MAX - other.offset);
 
     if a < b {
       Some(Ordering::Less)
