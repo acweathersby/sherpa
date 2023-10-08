@@ -4,7 +4,7 @@ use crate::parsers::Parser;
 pub trait ParserInitializer {
   /// Creates a new parse context configured to recognize and produce parse
   /// actions for the given non-terminal id
-  fn init(&mut self, entry: EntryPoint) -> Result<ParserContext, ParseError>;
+  fn init(&mut self, entry: EntryPoint) -> Result<ParserContext, ParserError>;
 
   /// Resets the parser and prepares it to accept in input that should yield the
   /// given non-terminal. A parser should be initialized before attempting to
@@ -12,7 +12,7 @@ pub trait ParserInitializer {
   ///
   /// An error is returned if `nonterminal_goal_id` is an invalid entry point
   /// of the parser.
-  fn init_range(&mut self, nonterminal_goal_id: u32, start: usize, end: usize) -> Result<ParserContext, ParseError>;
+  fn init_range(&mut self, nonterminal_goal_id: u32, start: usize, end: usize) -> Result<ParserContext, ParserError>;
 
   fn get_debugger(&mut self) -> &mut Option<Box<DebugFnNew>>;
 
@@ -29,7 +29,7 @@ pub trait ParserIterator<T: ParserInput> {
 
 /// Provides information on artifacts consumed and produced by a parser
 pub trait RuntimeDatabase {
-  fn get_entry_data_from_name(&self, entry_name: &str) -> Result<EntryPoint, ParseError>;
+  fn get_entry_data_from_name(&self, entry_name: &str) -> Result<EntryPoint, ParserError>;
 
   /// Return the normal token ids (those that are not skipped) expected at the
   /// given state.
@@ -43,8 +43,8 @@ pub trait RuntimeDatabase {
 /// An object capable of instantiating a parser
 pub trait ParserProducer<T: ParserInput>: RuntimeDatabase {
   /// Creates a new parser or `Err` if there is an issue creating the parser.
-  fn get_parser(&self) -> Result<Box<dyn Parser<T>>, ParseError> {
-    Err(ParseError::NoData)
+  fn get_parser(&self) -> Result<Box<dyn Parser<T>>, ParserError> {
+    Err(ParserError::NoData)
   }
 }
 

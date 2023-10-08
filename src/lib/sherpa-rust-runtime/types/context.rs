@@ -193,7 +193,7 @@ impl ForkableContext for ForkContext {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum RecoveryMode {
+pub enum RecoveryMode {
   Normal,
   CodepointDiscard { start_offset: usize, count: usize },
   SymbolDiscard { start_offset: usize, end_offset: usize, count: usize },
@@ -204,10 +204,10 @@ enum RecoveryMode {
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct RecoverableContext {
-  entropy: isize,
-  ctx: ParserContext,
-  symbols: Vec<CSTNode>,
-  last_tok_end: u32,
+  pub entropy: isize,
+  pub ctx: ParserContext,
+  pub symbols: Vec<CSTNode>,
+  pub last_tok_end: u32,
   pub mode: RecoveryMode,
   pub last_failed_state: ParserState,
 }

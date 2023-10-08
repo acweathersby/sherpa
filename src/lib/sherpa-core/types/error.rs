@@ -1,7 +1,7 @@
 use crate::proxy::Array;
 use sherpa_rust_runtime::{
   deprecate::SherpaParseError,
-  types::{BlameColor, ParseError, Token},
+  types::{BlameColor, ParserError, Token},
 };
 use std::{
   hash::Hash,
@@ -275,11 +275,11 @@ impl From<SherpaParseError> for SherpaError {
   }
 }
 
-impl From<ParseError> for SherpaError {
+impl From<ParserError> for SherpaError {
   #[track_caller]
-  fn from(err: ParseError) -> Self {
+  fn from(err: ParserError) -> Self {
     match err {
-      ParseError::InputError { message, inline_message, loc, last_nonterminal } => Self::SourceError {
+      ParserError::InputError { message, inline_message, loc, last_nonterminal } => Self::SourceError {
         loc:        loc,
         path:       Default::default(),
         id:         (ErrorClass::Parsing, 99, "parse-error").into(),
@@ -288,8 +288,8 @@ impl From<ParseError> for SherpaError {
         ps_msg:     Default::default(),
         severity:   SherpaErrorSeverity::Critical,
       },
-      ParseError::InvalidNonTerminal => Self::Text("Invalid non-terminal".into()),
-      ParseError::Unexpected | _ => Self::Text("Unexpected error".into()),
+      ParserError::InvalidNonTerminal => Self::Text("Invalid non-terminal".into()),
+      ParserError::Unexpected | _ => Self::Text("Unexpected error".into()),
     }
   }
 }

@@ -8,7 +8,7 @@ pub struct Tokens {
 }
 
 pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
-  fn collect_shifts_and_skips<'debug>(&mut self, input: &mut I, entry: EntryPoint) -> Result<Tokens, ParseError> {
+  fn collect_shifts_and_skips<'debug>(&mut self, input: &mut I, entry: EntryPoint) -> Result<Tokens, ParserError> {
     let mut shifts = vec![];
     let mut skips = vec![];
 
@@ -18,14 +18,14 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
       match action {
         ParseAction::Accept { nonterminal_id, final_offset } => {
           return if final_offset != input.len() {
-            Err(ParseError::InputError {
+            Err(ParserError::InputError {
               inline_message: format!("Failed to read entire input {} {}", input.len(), final_offset),
               last_nonterminal: nonterminal_id,
               loc: Default::default(),
               message: "Failed to read entire input".to_string(),
             })
           } else if nonterminal_id != entry.nonterm_id {
-            Err(ParseError::InputError {
+            Err(ParserError::InputError {
               inline_message: "Top symbol did not match the target nonterminal".to_string(),
               last_nonterminal: nonterminal_id,
               loc: Default::default(),
@@ -48,7 +48,7 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
           //}
           let mut token: Token = last_input.to_token_from_ref(input.get_owned_ref());
 
-          return Err(ParseError::InputError {
+          return Err(ParserError::InputError {
             message: "Could not recognize the following input:".to_string(),
             inline_message: "".to_string(),
             loc: token,
@@ -87,7 +87,7 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
         _ => panic!("Unexpected Action!"),
       }
     }
-    return Err(ParseError::Unexpected);
+    return Err(ParserError::Unexpected);
   }
 }
 

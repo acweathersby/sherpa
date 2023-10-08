@@ -713,10 +713,10 @@ impl ParserInitializer for ByteCodeParserNew {
     &mut self.debugger
   }
 
-  fn init_range(&mut self, nonterminal_goal_id: u32, start: usize, end: usize) -> Result<ParserContext, ParseError> {
+  fn init_range(&mut self, nonterminal_goal_id: u32, start: usize, end: usize) -> Result<ParserContext, ParserError> {
     if let Some(address) = self.non_terminal_lookup.get(&nonterminal_goal_id) {
       if *address == 0 {
-        Err(ParseError::InvalidNonTerminal)
+        Err(ParserError::InvalidNonTerminal)
       } else {
         let mut root = ParserContext::default();
         root.anchor_ptr = start;
@@ -727,21 +727,21 @@ impl ParserInitializer for ByteCodeParserNew {
         Ok(root)
       }
     } else {
-      Err(ParseError::InvalidNonTerminal)
+      Err(ParserError::InvalidNonTerminal)
     }
   }
 
-  fn init(&mut self, entry: EntryPoint) -> Result<ParserContext, ParseError> {
+  fn init(&mut self, entry: EntryPoint) -> Result<ParserContext, ParserError> {
     if let Some(address) = self.non_terminal_lookup.get(&entry.nonterm_id) {
       if *address == 0 {
-        Err(ParseError::InvalidNonTerminal)
+        Err(ParserError::InvalidNonTerminal)
       } else {
         let mut root = ParserContext::default();
         root.stack = vec![ParserState::default(), ParserState::state_entry(*address as usize)];
         Ok(root)
       }
     } else {
-      Err(ParseError::InvalidNonTerminal)
+      Err(ParserError::InvalidNonTerminal)
     }
   }
 }

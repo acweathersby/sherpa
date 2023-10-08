@@ -1,80 +1,18 @@
-use crate::types::*;
-use std::{
-  cmp::Ordering,
-  collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
-  fmt::Debug,
-  hash::Hasher,
-  ops::Range,
-};
+use crate::{parsers::fork::fork_kernel, types::*};
+use std::collections::VecDeque;
 
-use super::Parser;
+use super::{
+  fork::{attempt_merge, create_merge_groups, create_token, insert_node, reduce_symbols, sort_and_enque},
+  Parser,
+};
 
 const TOKEN_SYNTHESIS_PENALTY: isize = 1;
 
 /// Maximum number of subsequent synthetic tokens
 const SYNTH_LIMIT: usize = 5;
 
-#[derive(Debug, Clone, Copy)]
-enum RecoveryMode {
-  Normal,
-  CodepointDiscard { start_offset: usize, count: usize },
-  SymbolDiscard { start_offset: usize, end_offset: usize, count: usize },
-  SyntheticInput { tok_id: u32, count: usize },
-  Unrecoverable(usize),
-}
-
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub struct RecoverableContext {
-  entropy: isize,
-  ctx: ParserContext,
-  symbols: Vec<CSTNode>,
-  mode: RecoveryMode,
-  last_tok_end: u32,
-  last_failed_state: ParserState,
-}
-
-impl PartialEq for RecoverableContext {
-  fn eq(&self, other: &Self) -> bool {
-    false
-  }
-}
-
-impl PartialOrd for RecoverableContext {
-  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    let a = (self.entropy, u32::MAX - self.last_tok_end);
-    let b = (other.entropy, u32::MAX - other.last_tok_end);
-
-    if a < b {
-      Some(Ordering::Less)
-    } else {
-      Some(Ordering::Greater)
-    }
-  }
-}
-
-impl Eq for RecoverableContext {}
-impl Ord for RecoverableContext {
-  fn cmp(&self, other: &Self) -> Ordering {
-    self.partial_cmp(other).unwrap()
-  }
-}
-
-impl RecoverableContext {
-  pub fn split(&self) -> Box<Self> {
-    let mut ctx = self.ctx.clone();
-    ctx.is_finished = false;
-    Box::new(Self {
-      ctx,
-      mode: RecoveryMode::Unrecoverable(0),
-      symbols: self.symbols.clone(),
-      ..*self
-    })
-  }
-}
-
 pub trait ErrorRecoveringDatabase<I: ParserInput>: ParserProducer<I> + Sized {
-  fn parse_with_recovery(&self, input: &mut I, entry: EntryPoint) -> Result<(), ParseError> {
+  fn parse_with_recovery(&self, input: &mut I, entry: EntryPoint) -> Result<(), ParserError> {
     parse_with_recovery(input, entry, self)
   }
 }
@@ -85,7 +23,7 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   input: &mut I,
   entry: EntryPoint,
   db: &DB,
-) -> Result<(), ParseError> {
+) -> Result<(), ParserError> {
   let mut parser = db.get_parser()?;
 
   let mut active = VecDeque::from_iter(vec![Box::new(RecoverableContext {
@@ -98,147 +36,13 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   })]);
 
   let mut pending = VecDeque::<Box<RecoverableContext>>::new();
-  let mut reduction_stage = VecDeque::new();
-  let mut failed_contexts = VecDeque::new();
+  let mut failed_contexts: Vec<(ParserState, Box<RecoverableContext>)> = Vec::new();
   let mut completed = Vec::new();
   let mut best_failure = None;
 
-  loop {
-    let mut least_advanced_reduction = u32::MAX;
-    let mut min_advance = u32::MAX;
-    println!(
-      "{:?}",
-      active.iter().map(|d| format!("{}-{}: {}", d.ctx.sym_ptr, d.last_tok_end, d.ctx.nonterm)).collect::<Vec<_>>()
-    );
-    while let Some(mut rec_ctx) = active.pop_front() {
-      if !rec_ctx.ctx.is_finished {
-        if rec_ctx.last_tok_end > min_advance {
-          sort_and_enque(&mut pending, rec_ctx);
-          continue;
-        }
-
-        min_advance = min_advance.min(rec_ctx.last_tok_end);
-
-        if let Some(action) = parser.next(input, &mut rec_ctx.ctx) {
-          match action {
-            ParseAction::Skip { byte_offset, byte_length, token_id, .. } => {
-              insert_node(&mut rec_ctx, create_skip(input, token_id, byte_length, byte_offset));
-              sort_and_enque(&mut pending, rec_ctx);
-            }
-
-            ParseAction::Shift { byte_offset, byte_length, token_id, emitting_state, .. } => {
-              insert_node(&mut rec_ctx, create_token(input, emitting_state, token_id, byte_length, byte_offset));
-              sort_and_enque(&mut pending, rec_ctx);
-            }
-
-            ParseAction::Reduce { nonterminal_id, symbol_count, rule_id, .. } => {
-              // Collect all tokens that belong to this nonterminal
-              reduce_symbols(symbol_count, &mut rec_ctx, nonterminal_id, rule_id);
-
-              least_advanced_reduction = least_advanced_reduction.min(rec_ctx.last_tok_end);
-
-              // Continue reducing this non-terminal until we encounter a non-reducing action.
-              let mut non_terminal_id = nonterminal_id;
-              loop {
-                if let Some(action) = parser.next(input, &mut rec_ctx.ctx) {
-                  match action {
-                    ParseAction::Reduce { nonterminal_id, symbol_count, rule_id, .. } => {
-                      non_terminal_id = nonterminal_id;
-                      reduce_symbols(symbol_count, &mut rec_ctx, nonterminal_id, rule_id);
-                    }
-
-                    ParseAction::Skip { byte_offset, byte_length, token_id, .. } => {
-                      reduction_stage.push_back((
-                        non_terminal_id as u32,
-                        rec_ctx,
-                        Some(create_skip(input, token_id, byte_length, byte_offset)),
-                      ));
-                      break;
-                    }
-
-                    ParseAction::Shift { byte_offset, byte_length, token_id, emitting_state, .. } => {
-                      reduction_stage.push_back((
-                        non_terminal_id as u32,
-                        rec_ctx,
-                        Some(create_token(input, emitting_state, token_id, byte_length, byte_offset)),
-                      ));
-                      break;
-                    }
-
-                    ParseAction::Error { last_state, .. } => {
-                      rec_ctx.last_failed_state = last_state;
-                      failed_contexts.push_back(rec_ctx);
-                      break;
-                    }
-
-                    ParseAction::Accept { .. } => {
-                      let diff = input.len() as isize - rec_ctx.last_tok_end as isize;
-
-                      if diff > 0 && matches!(rec_ctx.mode, RecoveryMode::SyntheticInput { .. }) {
-                        // Drop contexts that synthesize trailing tokens. We're not
-                        // creating a fuzzer here.
-                        drop(rec_ctx);
-                      } else {
-                        rec_ctx.entropy += diff;
-                        reduction_stage.push_back((non_terminal_id as u32, rec_ctx, None));
-                      }
-                      break;
-                    }
-
-                    _ => unreachable!(),
-                  }
-                } else {
-                  drop(rec_ctx);
-                  break;
-                }
-              }
-            }
-
-            ParseAction::Error { last_state, .. } => {
-              rec_ctx.last_failed_state = last_state;
-              failed_contexts.push_back(rec_ctx);
-            }
-
-            ParseAction::Accept { .. } => {
-              let diff = input.len() as isize - rec_ctx.last_tok_end as isize;
-
-              if diff > 0 && matches!(rec_ctx.mode, RecoveryMode::SyntheticInput { .. }) {
-                // Drop contexts that synthesize trailing tokens. We're not
-                // creating a fuzzer here.
-                drop(rec_ctx);
-              } else {
-                rec_ctx.entropy += diff;
-                completed.push(rec_ctx);
-              }
-            }
-
-            _ => {
-              sort_and_enque(&mut pending, rec_ctx);
-            }
-          }
-        }
-      }
-    }
-
+  while pending.len() > 0 {
+    fork_kernel(input, parser.as_mut(), &mut pending, &mut completed, &mut failed_contexts)?;
     handle_failed_contexts(&mut failed_contexts, input, db, &mut best_failure, &mut parser, &mut pending);
-
-    if reduction_stage.len() > 0 {
-      for rec_ctx in
-        attempt_merge(create_merge_groups(reduction_stage.drain(..).chain(completed.drain(..).map(|n| (0, n, None)))), "reduced")
-      {
-        if rec_ctx.ctx.is_finished {
-          completed.push(rec_ctx);
-        } else {
-          sort_and_enque(&mut pending, rec_ctx);
-        }
-      }
-    }
-
-    if pending.len() == 0 {
-      break;
-    }
-
-    std::mem::swap(&mut active, &mut pending);
   }
 
   completed.sort();
@@ -260,7 +64,7 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
 }
 
 fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
-  failed_contexts: &mut VecDeque<(Box<RecoverableContext>)>,
+  failed_contexts: &mut Vec<(ParserState, Box<RecoverableContext>)>,
   input: &mut I,
   db: &DB,
   best_failure: &mut Option<Box<RecoverableContext>>,
@@ -271,7 +75,10 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
     let mut to_process = VecDeque::new();
 
     for mut rec_ctx in attempt_merge(
-      create_merge_groups(failed_contexts.drain(..).map(|s| (s.last_failed_state.address as u32, s, None))),
+      create_merge_groups(failed_contexts.drain(..).map(|(ps, mut s)| {
+        s.last_failed_state = ps;
+        (s.last_failed_state.address as u32, s, None)
+      })),
       "pre-error",
     )
     .collect::<Vec<_>>()
@@ -405,7 +212,7 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
         }
 
         ParseAction::Reduce { nonterminal_id, rule_id, symbol_count } => {
-          reduce_symbols(symbol_count, &mut rec_ctx, nonterminal_id, rule_id);
+          reduce_symbols(symbol_count, rec_ctx.as_mut(), nonterminal_id, rule_id);
           contexts.push_back(rec_ctx);
         }
 
@@ -439,212 +246,6 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
   to_continue
 }
 
-/// Inserts a node into the
-fn insert_node(rec_ctx: &mut Box<RecoverableContext>, node: CSTNode) {
-  match node {
-    CSTNode::Errata(..) => {
-      rec_ctx.last_tok_end = node.offset() + node.length();
-      rec_ctx.entropy += node.length() as isize;
-    }
-    _ => {
-      rec_ctx.last_tok_end = node.offset() + node.length();
-      rec_ctx.entropy -= node.length() as isize;
-    }
-  }
-
-  rec_ctx.symbols.push(node);
-}
-
-type MergeGroups = HashMap<u64, Vec<MergeCandidate>>;
-
-struct MergeCandidate {
-  ctx:          Box<RecoverableContext>,
-  sym_range:    Range<usize>,
-  start_offset: u32,
-  follow:       Option<CSTNode>,
-}
-
-fn create_merge_groups<I: Iterator<Item = (u32, Box<RecoverableContext>, Option<CSTNode>)>>(
-  follow_contexts: I,
-) -> HashMap<u64, Vec<MergeCandidate>> {
-  let mut groups = HashMap::new();
-  for (distinguisher, ctx, following) in follow_contexts {
-    sort_candidate(distinguisher, following, ctx, &mut groups);
-  }
-  groups
-}
-
-fn sort_candidate(distinguisher: u32, follow: Option<CSTNode>, ctx: Box<RecoverableContext>, groups: &mut MergeGroups) {
-  use std::hash::Hash;
-  let (hash, entry) = if ctx.symbols.len() > 0 {
-    let last = ctx.symbols.last().expect("");
-    let mut end_index = ctx.symbols.len() - 1;
-    let mut start_offset = last.offset();
-
-    for index in (0..=end_index).rev() {
-      let node = &ctx.symbols[index];
-      end_index = index;
-      if matches!(node, CSTNode::Token(..) | CSTNode::MissingToken(..) | CSTNode::Multi(..) | CSTNode::NonTerm(..)) {
-        break;
-      }
-    }
-
-    let mut start_index = end_index;
-
-    for index in (0..end_index).rev() {
-      let node = &ctx.symbols[index];
-      if matches!(
-        node,
-        CSTNode::Token(..) | CSTNode::Skipped(..) | CSTNode::MissingToken(..) | CSTNode::Multi(..) | CSTNode::NonTerm(..)
-      ) {
-        break;
-      } else {
-        start_offset = node.offset();
-        start_index = index;
-      }
-    }
-
-    let mut hasher = DefaultHasher::new();
-    ctx.symbols[0..start_index].iter().for_each(|a| a.canonical_hash(&mut hasher));
-    ctx.symbols[end_index + 1..].iter().for_each(|a| a.dedup_hash(&mut hasher));
-    follow.hash(&mut hasher);
-    distinguisher.hash(&mut hasher);
-    ctx.last_tok_end.hash(&mut hasher);
-    ctx.ctx.stack.iter().for_each(|i| i.address.hash(&mut hasher));
-
-    (hasher.finish(), MergeCandidate { ctx, follow, start_offset, sym_range: start_index..(end_index + 1) })
-  } else {
-    let mut hasher = DefaultHasher::new();
-    ctx.last_tok_end.hash(&mut hasher);
-    ctx.ctx.stack.iter().for_each(|i| i.address.hash(&mut hasher));
-
-    (hasher.finish(), MergeCandidate { ctx, follow, start_offset: 0, sym_range: 0..0 })
-  };
-
-  match groups.entry(hash) {
-    std::collections::hash_map::Entry::Vacant(e) => {
-      e.insert(vec![entry]);
-    }
-    std::collections::hash_map::Entry::Occupied(mut e) => {
-      e.get_mut().push(entry);
-    }
-  }
-}
-
-fn attempt_merge(groups: MergeGroups, merge_type: &'static str) -> impl Iterator<Item = Box<RecoverableContext>> {
-  groups.into_iter().map(move |(_, mut group)| {
-    let mut lowest_entropy = isize::MAX;
-
-    let (mut first, following) = if group.len() > 1 {
-      group.sort_by(|a, b| a.ctx.entropy.cmp(&b.ctx.entropy));
-      struct AltCandidate {
-        insert_point: usize,
-        alt:          Vec<Alternative>,
-        follow:       Option<CSTNode>,
-        ctx:          Box<RecoverableContext>,
-      }
-
-      let mut iter = group.into_iter().map(|MergeCandidate { start_offset, mut ctx, sym_range, follow }| {
-        let insert_point = sym_range.start;
-        let mut syms = ctx.symbols.drain(sym_range);
-
-        let alt = match (syms.next(), syms) {
-          (Some(CSTNode::Multi(multi)), _) => multi.alternatives.clone(),
-          (Some(sym), syms) => {
-            let mut syms_ = vec![sym];
-            syms_.extend(syms);
-            let alt: Alternative = Alternative {
-              length:  0, //ctx.last_tok_end - start_offset,
-              offset:  start_offset,
-              symbols: syms_,
-              entropy: ctx.entropy,
-            };
-            vec![alt]
-          }
-          _ => unreachable!(),
-        };
-
-        lowest_entropy = lowest_entropy.min(ctx.entropy);
-
-        AltCandidate { insert_point, alt, ctx, follow }
-      });
-
-      let AltCandidate { insert_point, alt, follow, mut ctx } = iter.next().expect("should be at least one");
-
-      let mut hash_cache = HashSet::new();
-
-      let mut alternates: Vec<_> = vec![alt]
-        .into_iter()
-        .chain(iter.map(|AltCandidate { alt, .. }| alt))
-        .flatten()
-        .filter_map(|alt| {
-          let mut hasher = DefaultHasher::default();
-          alt.symbols.iter().for_each(|s| s.dedup_hash(&mut hasher));
-          if hash_cache.insert(hasher.finish()) {
-            Some(alt)
-          } else {
-            None
-          }
-        })
-        .collect();
-
-      if alternates.len() == 1 {
-        for (offset, symbol) in alternates.pop().unwrap().symbols.into_iter().enumerate() {
-          ctx.symbols.insert(insert_point + offset, symbol);
-        }
-      } else {
-        alternates.sort_by(|a, b| a.entropy.cmp(&b.entropy));
-        ctx.symbols.insert(insert_point, Multi::typed(alternates, merge_type));
-      }
-
-      ctx.entropy = lowest_entropy;
-
-      (ctx, follow)
-    } else {
-      let MergeCandidate { ctx, follow, .. } = group.pop().expect("should be 1");
-      (ctx, follow)
-    };
-
-    if let Some(following) = following {
-      insert_node(&mut first, following);
-    }
-
-    first
-  })
-}
-
-fn sort_and_enque(pending: &mut VecDeque<Box<RecoverableContext>>, rec_ctx: Box<RecoverableContext>) {
-  pending.push_back(rec_ctx);
-  let mut pends = pending.drain(..).collect::<Vec<_>>();
-  pends.sort_by(|a, b| a.last_tok_end.cmp(&b.last_tok_end));
-  pending.extend(pends)
-}
-
-pub fn create_token<I: ParserInput>(
-  input: &mut I,
-  emitting_state: ParserState,
-  token_id: u32,
-  token_byte_length: u32,
-  token_byte_offset: u32,
-) -> CSTNode {
-  TokenNode::token_type(
-    emitting_state,
-    token_id,
-    token_byte_length,
-    token_byte_offset,
-    input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
-  )
-}
-
-fn create_skip<I: ParserInput>(input: &mut I, token_id: u32, token_byte_length: u32, token_byte_offset: u32) -> CSTNode {
-  TokenNode::skipped_type(
-    token_id,
-    token_byte_length,
-    token_byte_offset,
-    input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
-  )
-}
-
 fn create_errata<I: ParserInput>(
   input: &mut I,
   rec_ctx: &mut Box<RecoverableContext>,
@@ -657,31 +258,6 @@ fn create_errata<I: ParserInput>(
     input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
   ));
   rec_ctx.entropy += token_byte_length as isize;
-}
-
-fn reduce_symbols(mut symbol_count: u32, rec_ctx: &mut Box<RecoverableContext>, nonterminal_id: u32, rule_id: u32) {
-  let mut symbols = vec![];
-
-  while symbol_count > 0 {
-    let sym = rec_ctx.symbols.pop().expect(&format!("Should have enough symbols to complete this Non-Terminal"));
-    match sym {
-      CSTNode::Errata { .. } | CSTNode::Skipped { .. } => {}
-      _ => {
-        symbol_count -= 1;
-      }
-    }
-    symbols.push(sym);
-  }
-
-  symbols.reverse();
-
-  let start = symbols.first().expect("Should have at least one symbol");
-  let end = symbols.last().expect("Should have at least one symbol");
-
-  let offset = start.offset();
-  let length = end.offset() + end.length() - offset;
-
-  rec_ctx.symbols.push(NonTermNode::typed(nonterminal_id as u16, rule_id as u16, symbols, offset, length));
 }
 
 fn inject_synthetics<I: ParserInput, DB: ParserProducer<I>>(

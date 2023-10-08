@@ -1,5 +1,3 @@
-use crate::parsers::error_recovery::create_token;
-
 use super::*;
 
 use std::{
@@ -108,7 +106,7 @@ pub trait ASTConstructor<T: ParserInput>: ParserIterator<T> + ParserInitializer 
     input: &mut T,
     ctx: &mut ParserContext,
     reducers: &[ReducerNew<T, Node>],
-  ) -> Result<AstSlotNew<Node>, ParseError> {
+  ) -> Result<AstSlotNew<Node>, ParserError> {
     let mut ast_stack: Vec<AstSlotNew<Node>> = vec![];
 
     while let Some(action) = self.next(input, ctx) {
@@ -151,7 +149,7 @@ pub trait ASTConstructor<T: ParserInput>: ParserIterator<T> + ParserInitializer 
             end += 1;
           }
 
-          return Err(ParseError::InputError {
+          return Err(ParserError::InputError {
             inline_message: "Unrecognized Token".into(),
             last_nonterminal: 0,
             loc: TokenRange {
@@ -165,7 +163,7 @@ pub trait ASTConstructor<T: ParserInput>: ParserIterator<T> + ParserInitializer 
           });
         }
         _ => {
-          return Err(ParseError::InputError {
+          return Err(ParserError::InputError {
             inline_message: Default::default(),
             last_nonterminal: 0,
             loc: Default::default(),
@@ -174,7 +172,7 @@ pub trait ASTConstructor<T: ParserInput>: ParserIterator<T> + ParserInitializer 
         }
       }
     }
-    return Err(ParseError::Unexpected);
+    return Err(ParserError::Unexpected);
   }
 }
 
@@ -247,7 +245,7 @@ type AstReducer<ASTNode> = fn(symbols: &mut dyn Iterator<Item = ASTBaseNode<ASTN
 pub trait ASTProducer<I: ParserInput, ASTNode>: ParserProducer<I> {
   fn get_reduce_functions(&self) -> &[&AstReducer<ASTNode>];
 
-  fn parse_ast(&self, input: &mut I, entry: EntryPoint) -> Result<ASTBaseNode<ASTNode>, ParseError> {
+  fn parse_ast(&self, input: &mut I, entry: EntryPoint) -> Result<ASTBaseNode<ASTNode>, ParserError> {
     let reduce_functions = self.get_reduce_functions();
     let mut nodes: Vec<ASTBaseNode<ASTNode>> = Vec::with_capacity(128);
     let mut parser = self.get_parser()?;
@@ -281,7 +279,7 @@ pub trait ASTProducer<I: ParserInput, ASTNode>: ParserProducer<I> {
             line_off: 0,
           };
           let token: Token = last_input.to_token_from_ref(input.get_owned_ref());
-          return Err(ParseError::InputError {
+          return Err(ParserError::InputError {
             message: "Could not recognize the following input:".to_string(),
             inline_message: "".to_string(),
             loc: token,

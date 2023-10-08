@@ -5,14 +5,14 @@ use crate::types::*;
 /// string or not.
 pub trait Recognizer<T: ParserInput>: ParserIterator<T> + ParserInitializer {
   /// Attempts to recognize the given input in its entirerty
-  fn recognize(&mut self, input: &mut T, entry: EntryPoint) -> Result<(), ParseError> {
+  fn recognize(&mut self, input: &mut T, entry: EntryPoint) -> Result<(), ParserError> {
     let mut ctx = self.init(entry)?;
 
     while let Some(action) = self.next(input, &mut ctx) {
       match action {
         ParseAction::Accept { nonterminal_id, final_offset } => {
           return if final_offset != input.len() {
-            Err(ParseError::InputError {
+            Err(ParserError::InputError {
               inline_message: format!(
                 "\nFailed to read entire input \"{}\" \n     end pos: {} \n     expected end pos: {}",
                 input.string_range(0..input.len()),
@@ -24,7 +24,7 @@ pub trait Recognizer<T: ParserInput>: ParserIterator<T> + ParserInitializer {
               message: "Failed to read entire input".to_string(),
             })
           } else if nonterminal_id != entry.nonterm_id {
-            Err(ParseError::InputError {
+            Err(ParserError::InputError {
               inline_message: "Top symbol did not match the target nonterminal".to_string(),
               last_nonterminal: nonterminal_id,
               loc: Default::default(),
@@ -65,7 +65,7 @@ pub trait Recognizer<T: ParserInput>: ParserIterator<T> + ParserInitializer {
             line_off: 0,
           };
           let token: Token = last_input.to_token_from_ref(input.get_owned_ref());
-          return Err(ParseError::InputError {
+          return Err(ParserError::InputError {
             message: "Could not recognize the following input:".to_string(),
             inline_message: "".to_string(),
             loc: token,
@@ -76,7 +76,7 @@ pub trait Recognizer<T: ParserInput>: ParserIterator<T> + ParserInitializer {
       }
     }
 
-    Err(ParseError::Unexpected)
+    Err(ParserError::Unexpected)
   }
 }
 

@@ -36,11 +36,11 @@ impl AsRef<HashMap<u32, String>> for BytecodeParserDB {
 }
 
 impl RuntimeDatabase for BytecodeParserDB {
-  fn get_entry_data_from_name(&self, entry_name: &str) -> Result<EntryPoint, ParseError> {
+  fn get_entry_data_from_name(&self, entry_name: &str) -> Result<EntryPoint, ParserError> {
     if let Some(id) = self.nonterm_name_to_id.get(entry_name) {
       Ok(EntryPoint { nonterm_id: *id })
     } else {
-      Err(ParseError::InvalidEntryName)
+      Err(ParserError::InvalidEntryName)
     }
   }
 
@@ -54,7 +54,7 @@ impl RuntimeDatabase for BytecodeParserDB {
 }
 
 impl<T: ParserInput> ParserProducer<T> for BytecodeParserDB {
-  fn get_parser(&self) -> Result<Box<dyn Parser<T>>, ParseError> {
+  fn get_parser(&self) -> Result<Box<dyn Parser<T>>, ParserError> {
     Ok(Box::new(ByteCodeParserNew::new(Rc::new(self.bytecode.clone()), self.nonterm_id_to_address.clone())))
   }
 }

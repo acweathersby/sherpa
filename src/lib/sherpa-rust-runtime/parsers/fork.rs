@@ -6,7 +6,7 @@ use std::{
 };
 
 pub trait ForkableParser<I: ParserInput>: ParserIterator<I> + ParserInitializer {
-  fn fork_parse(&mut self, input: &mut I, entry: EntryPoint) -> Result<(), ParseError> {
+  fn fork_parse(&mut self, input: &mut I, entry: EntryPoint) -> Result<(), ParserError> {
     let f_ctx = Box::new(ForkContext {
       entropy: (input.len() as isize),
       ctx:     self.init(entry)?,
@@ -40,7 +40,7 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
   pending: &mut VecDeque<CTX>,
   completed: &mut Vec<CTX>,
   errored: &mut Vec<(ParserState, CTX)>,
-) -> Result<(), ParseError> {
+) -> Result<(), ParserError> {
   let mut pending_array = pending.drain(..).rev().collect::<Vec<_>>();
   let mut least_advanced_reduction = usize::MAX;
   let mut min_advance = usize::MAX;
@@ -171,14 +171,14 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
   Ok(())
 }
 
-fn sort_and_enque<CTX: ForkableContext>(pending: &mut VecDeque<CTX>, rec_ctx: CTX) {
+pub fn sort_and_enque<CTX: ForkableContext>(pending: &mut VecDeque<CTX>, rec_ctx: CTX) {
   pending.push_back(rec_ctx);
   let mut pends = pending.drain(..).collect::<Vec<_>>();
   pends.sort_by(|a, b| a.ctx().sym_ptr.cmp(&b.ctx().sym_ptr));
   pending.extend(pends)
 }
 
-fn insert_node<CTX: ForkableContext>(rec_ctx: &mut CTX, node: CSTNode) {
+pub fn insert_node<CTX: ForkableContext>(rec_ctx: &mut CTX, node: CSTNode) {
   match node {
     CSTNode::Errata(..) => {
       //rec_ctx.last_tok_end = node.offset() + node.length();
@@ -218,7 +218,7 @@ pub fn create_token<I: ParserInput>(
   )
 }
 
-fn reduce_symbols<CTX: ForkableContext>(mut symbol_count: u32, rec_ctx: &mut CTX, nonterminal_id: u32, rule_id: u32) {
+pub fn reduce_symbols<CTX: ForkableContext>(mut symbol_count: u32, rec_ctx: &mut CTX, nonterminal_id: u32, rule_id: u32) {
   let mut symbols = vec![];
 
   while symbol_count > 0 {
@@ -243,15 +243,15 @@ fn reduce_symbols<CTX: ForkableContext>(mut symbol_count: u32, rec_ctx: &mut CTX
   rec_ctx.symbols().push(NonTermNode::typed(nonterminal_id as u16, rule_id as u16, symbols, offset, length));
 }
 
-type MergeGroups<CTX> = HashMap<u64, Vec<MergeCandidate<CTX>>>;
-struct MergeCandidate<CTX: ForkableContext> {
+pub type MergeGroups<CTX> = HashMap<u64, Vec<MergeCandidate<CTX>>>;
+pub struct MergeCandidate<CTX: ForkableContext> {
   ctx:          CTX,
   sym_range:    Range<usize>,
   start_offset: u32,
   follow:       Option<CSTNode>,
 }
 
-fn create_merge_groups<CTX: ForkableContext, I: Iterator<Item = (u32, CTX, Option<CSTNode>)>>(
+pub fn create_merge_groups<CTX: ForkableContext, I: Iterator<Item = (u32, CTX, Option<CSTNode>)>>(
   follow_contexts: I,
 ) -> HashMap<u64, Vec<MergeCandidate<CTX>>> {
   let mut groups = MergeGroups::new();
@@ -261,7 +261,7 @@ fn create_merge_groups<CTX: ForkableContext, I: Iterator<Item = (u32, CTX, Optio
   groups
 }
 
-fn sort_candidate<CTX: ForkableContext>(
+pub fn sort_candidate<CTX: ForkableContext>(
   distinguisher: u32,
   follow: Option<CSTNode>,
   mut ctx: CTX,
@@ -324,7 +324,7 @@ fn sort_candidate<CTX: ForkableContext>(
   }
 }
 
-fn attempt_merge<CTX: ForkableContext>(groups: MergeGroups<CTX>, merge_type: &'static str) -> impl Iterator<Item = CTX> {
+pub fn attempt_merge<CTX: ForkableContext>(groups: MergeGroups<CTX>, merge_type: &'static str) -> impl Iterator<Item = CTX> {
   groups.into_iter().map(move |(_, mut group)| {
     let mut lowest_entropy = isize::MAX;
 
