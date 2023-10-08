@@ -1,6 +1,6 @@
 use crate::*;
 use sherpa_core::*;
-use sherpa_rust_runtime::{derived::cst::CSTEditor, types::StringInput};
+use sherpa_rust_runtime::{parsers::cst::CSTEditor, types::StringInput};
 use std::path::PathBuf;
 
 #[test]

@@ -50,6 +50,18 @@ pub fn disassemble_parse_block<'a>(i: Option<Instruction<'a>>, recursive: bool) 
           )
         }
       }
+      Fork => {
+        let mut iter = i.iter();
+        let len = iter.next_u16_le().unwrap();
+
+        let gotos = (0..len)
+          .into_iter()
+          .map(|_| iter.next_u32_le().unwrap())
+          .map(|address| address_string(address as usize))
+          .collect::<Vec<_>>();
+
+        (format!("\n{}FORK states [ {} ]", dh(i.address()), gotos.join(" | ")), i.next())
+      }
       Goto => {
         let mut iter = i.iter();
         let _state_mode = iter.next_u8().unwrap();

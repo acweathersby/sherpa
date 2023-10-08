@@ -38,6 +38,7 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> branch_statement > match | goto_sequence | terminal_statement
 
+
 <> transitive_statement >
 
     "shift" ":skip"? ( ":tok" | ":sym" )     :ast { t_Shift, type:str($3), skip:bool($2), tok }
@@ -45,10 +46,6 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
     | "peek" ":skip"? ( ":tok" | ":sym" )    :ast { t_Peek, type:str($3), skip:bool($2), tok }
 
     | "reset" ( ":tok" | ":sym" )            :ast { t_Reset, cursor:str($2), tok }
-
-    | "fork" "{" ( sym::nonterminal ":" tok::int^int :ast { t_ForkInit, state: $1, target_nonterm: u32($3) }  )(+) "}"                 
-                                            
-                                             :ast { t_Fork, paths:str($2), tok }
 
 
 <> terminal_statement >
@@ -82,6 +79,7 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 
     | "pop" tok::int?    :ast { t_Pop, popped_state: u32($2), tok }
+    
 
 
 <> goto_sequence >
@@ -89,9 +87,18 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
         goto_push(+"then") "then" goto
 
             :ast { t_Gotos, pushes: $1, goto }
-    |  goto
 
+    |   goto
+    
             :ast { t_Gotos, goto }
+
+    |   fork
+
+            :ast { t_Gotos, fork }
+
+<> fork > "fork" "{" ( sym::nonterminal :ast { t_ForkInit, state: $1 } )(+) "}"                 
+                                            
+            :ast { t_Fork, paths:str($2), tok }
 
 <> goto_push > "push" sym::nonterminal
 

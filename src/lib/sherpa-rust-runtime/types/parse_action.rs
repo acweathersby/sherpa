@@ -26,7 +26,7 @@ impl Into<u64> for ParseActionType {
   }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[repr(C, u32)]
 pub enum ParseAction {
@@ -34,11 +34,7 @@ pub enum ParseAction {
   CompleteState,
   FailState,
   ScannerToken(TokenRange),
-  Fork {
-    states_start_offset: u32,
-    num_of_states:       u32,
-    target_nonterminal:  u32,
-  },
+  Fork(Vec<ParserState>),
   Shift {
     byte_offset: u32,
     byte_length: u32,

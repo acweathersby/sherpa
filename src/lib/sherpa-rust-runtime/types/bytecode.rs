@@ -210,13 +210,21 @@ pub enum Opcode {
   ///
   /// This is variable length instruction. Its base length is 7 bytes
   ByteSequence,
+  /// Directs the parse runner to split parsing into 2 or more paths.
+  ///
+  /// # Operands
+  /// - 1 - [u16]: Number of states to initiate parsing paths.
+  /// - 2 - var_len[[u32]]: A list of parsing states
+  ///
+  /// This is variable length instruction. Its base length is 3 bytes
+  Fork,
 }
 
 impl From<u8> for Opcode {
   fn from(value: u8) -> Self {
     use Opcode::*;
 
-    const LU_TABLE: [Opcode; 23] = [
+    const LU_TABLE: [Opcode; 24] = [
       NoOp,
       Pass,
       Fail,
@@ -240,6 +248,7 @@ impl From<u8> for Opcode {
       VectorBranch,
       HashBranch,
       ByteSequence,
+      Fork,
     ];
 
     if (value as usize) < LU_TABLE.len() {
@@ -260,6 +269,9 @@ impl Opcode {
   #[track_caller]
   pub fn len(self) -> usize {
     match self {
+      Opcode::Fork => {
+        unimplemented!("Forks do not have fixed lengths")
+      }
       Opcode::ByteSequence => {
         unimplemented!("ByteSequences do not have fixed lengths")
       }
@@ -315,7 +327,9 @@ impl<'a> Instruction<'a> {
   /// Returns true if the offset of the instruction plus its size is within
   /// the bounds of the bytecode buffer
   pub fn is_valid(&self) -> bool {
-    if self.get_opcode() == Opcode::ByteSequence {
+    if self.get_opcode() == Opcode::Fork {
+      self.next().is_some_and(|i| i.address() <= self.bc.len())
+    } else if self.get_opcode() == Opcode::ByteSequence {
       self.next().is_some_and(|i| i.address() <= self.bc.len())
     } else {
       let len = self.len();
@@ -360,6 +374,11 @@ impl<'a> Instruction<'a> {
   pub fn next(self) -> Option<Instruction<'a>> {
     let Instruction { address: opcode_start, bc } = self;
     match self.get_opcode() {
+      Opcode::Fork => {
+        let mut iter = self.iter();
+        let length = iter.next_u16_le()? as usize;
+        Some((bc, opcode_start + 3 + (length << 2)).into())
+      }
       Opcode::ByteSequence => {
         let mut iter = self.iter();
         let length = iter.next_u16_le()? as usize;

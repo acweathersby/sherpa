@@ -266,7 +266,9 @@ impl CSTHashes for Alternative {
 
 impl Debug for Alternative {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("[alternative [{}]]", self.entropy))?;
+    let mut hasher = DefaultHasher::new();
+    self.symbols.iter().for_each(|s| s.dedup_hash(&mut hasher));
+    f.write_fmt(format_args!("[alternative [{}] : {}]", self.entropy, hasher.finish()))?;
     let mut list = f.debug_list();
     for obj in &self.symbols {
       list.entry(obj);

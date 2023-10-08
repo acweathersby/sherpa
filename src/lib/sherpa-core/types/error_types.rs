@@ -140,6 +140,8 @@ pub fn invalid_nonterminal_alias(loc: Token, path: IString, s_store: &IStringSto
   }
 }
 
+/// Emitted if the definition of a non-terminal (its production rules) could not
+/// be found.
 pub fn missing_nonterminal_rules(loc: Token, path: IString, s_store: &IStringStore) -> SherpaError {
   SherpaError::SourceError {
     loc,

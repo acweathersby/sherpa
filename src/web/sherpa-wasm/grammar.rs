@@ -3,7 +3,7 @@ use sherpa_bytecode::{compile_bytecode, BytecodePackage};
 use sherpa_core::*;
 use sherpa_rust_build::build_rust;
 use sherpa_rust_runtime::{
-  bytecode::{disassemble_bytecode, disassemble_parse_block},
+  kernel::{disassemble_bytecode, disassemble_parse_block},
   types::{
     bytecode::{ByteCodeIterator, Instruction, Opcode},
     TableHeaderData,

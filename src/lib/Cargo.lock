@@ -362,6 +362,16 @@ name = "sherpa_rust_runtime"
 version = "1.0.0-beta1"
 
 [[package]]
+name = "sherpa_test_suite"
+version = "1.0.0-beta1"
+dependencies = [
+ "sherpa_ascript",
+ "sherpa_bytecode",
+ "sherpa_core",
+ "sherpa_rust_runtime",
+]
+
+[[package]]
 name = "smallvec"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

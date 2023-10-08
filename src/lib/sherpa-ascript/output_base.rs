@@ -740,8 +740,9 @@ pub fn get_ascript_export_data(
   let db = utils.db;
   let export_node_data = db
     .entry_points()
-    .iter()
-    .map(|EntryPoint { entry_name, nonterm_name, nonterm_entry_name, nonterm_key, .. }| {
+    .into_iter()
+    .filter(|e| e.is_export)
+    .map(|DBEntryPoint { entry_name, nonterm_name, nonterm_entry_name, nonterm_key, .. }| {
       let mut ref_index = 0;
       let ref_ = utils.ast_expr_to_ref(
         &ASTNode::AST_NamedReference(Box::new(AST_NamedReference {

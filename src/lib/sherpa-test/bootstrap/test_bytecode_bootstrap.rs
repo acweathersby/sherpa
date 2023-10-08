@@ -2,10 +2,11 @@
 //! End to end test for the compilation of a sherpa grammar parser the
 //! using bytecode parser engine.
 
-use sherpa_core::{ParserConfig, ParserStore, PrintConfig, SherpaGrammarBuilder, SherpaResult};
+use sherpa_bytecode::compile_bytecode;
+use sherpa_core::{ParserConfig, ParserStore, SherpaGrammarBuilder, SherpaResult};
 use sherpa_rust_runtime::types::{ParserProducer, RuntimeDatabase, StringInput};
 
-use crate::compile_bytecode;
+use crate::debug::{file_debugger, PrintConfig};
 
 #[test]
 fn test_full_grammar() -> SherpaResult<()> {
@@ -39,8 +40,10 @@ fn test_full_grammar() -> SherpaResult<()> {
   parser_builder._write_states_to_temp_file_()?;
 
   let db = parser_builder.get_db();
+
   let mut parser = pkg.get_parser()?;
-  parser.set_debugger(sherpa_core::file_debugger(
+
+  parser.set_debugger(file_debugger(
     db.to_owned(),
     PrintConfig {
       display_scanner_output: false,
@@ -62,7 +65,7 @@ fn test_full_grammar() -> SherpaResult<()> {
     match parser.collect_shifts_and_skips(&mut StringInput::from(input), entry) {
       Ok(_) => {}
       Err(_) => {
-        return Err(sherpa_core::SherpaError::Text("Failed to pars input".into()));
+        return Err(sherpa_core::SherpaError::Text("Failed to parse input".into()));
       }
     };
   }

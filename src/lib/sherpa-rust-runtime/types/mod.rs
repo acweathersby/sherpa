@@ -1,6 +1,9 @@
 mod ast;
 pub mod bytecode;
+mod bytecode_db;
+mod context;
 mod cst;
+mod debug;
 pub mod entrypoint;
 mod parse_action;
 mod parse_table_data;
@@ -11,7 +14,10 @@ mod range;
 mod token;
 
 pub use ast::*;
+pub use bytecode_db::*;
+pub use context::*;
 pub use cst::*;
+pub use debug::*;
 pub use entrypoint::*;
 pub use parse_action::*;
 pub use parse_table_data::*;

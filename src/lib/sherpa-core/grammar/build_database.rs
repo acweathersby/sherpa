@@ -11,6 +11,8 @@ use crate::{
 };
 use std::collections::{btree_map, VecDeque};
 
+type TrackedNonterm = (Token, IString, NonTermId);
+
 pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a GrammarSoup) -> SherpaResult<ParserDatabase> {
   // Gain read access to all parts of the GrammarCloud.
   // We don't want anything changing during these next steps.
@@ -80,7 +82,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
 
   // Build non-terminal list.
   let mut symbols = OrderedMap::from_iter(vec![(SymbolId::Default, 0)]);
-  let mut nonterminal_queue =
+  let mut nonterminal_queue: VecDeque<TrackedNonterm> =
     Queue::from_iter(root_grammar.pub_nterms.iter().map(|(_, p)| (p.1.clone(), root_grammar.identity.path, p.0)));
 
   // Maps non-terminal sym IDs to indices.
@@ -105,7 +107,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
 
   // Keeps track of the names of token_nonterminals.
   let mut token_names = OrderedMap::new();
-  let mut token_nonterminals = VecDeque::new();
+  let mut token_nonterminals: VecDeque<TrackedNonterm> = VecDeque::new();
 
   while let Some((loc, path, nterm_id)) = nonterminal_queue.pop_front() {
     if !p_map.contains_key(&nterm_id.as_sym()) {
@@ -184,91 +186,107 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
   }
 
   // Generate token nonterminals -----------------------------------------------
-  while let Some(nterm) = token_nonterminals.pop_front() {
+  while let Some((loc, path, nterm)) = token_nonterminals.pop_front() {
     // Convert any left immediate recursive rules to right.
     if !p_map.contains_key(&nterm.as_tok_sym()) {
-      let (internal_id, rules, name) = match nterm {
+      if let Some((internal_id, rules, name)) = match nterm {
         NonTermId::Standard(internal_id, ..) => {
-          let nterm =
-            o_to_r(nonterminals.get(&NonTermId::Standard(internal_id, NonTermSubType::Parser)), "Could not find non-terminal")?;
-          (internal_id, &nterm.rules, nterm.guid_name)
+          match nonterminals.get(&NonTermId::Standard(internal_id, NonTermSubType::Parser)) {
+            Some(nterm) => Some((internal_id, &nterm.rules, nterm.guid_name)),
+            None => {
+              j.report_mut().add_error(missing_nonterminal_rules(loc, path, s_store));
+              is_valid = false;
+              None
+            }
+          }
         }
         NonTermId::Sub(internal_id, index, ..) => {
-          let nterm =
-            o_to_r(nonterminals.get(&NonTermId::Standard(internal_id, NonTermSubType::Parser)), "Could not find non-terminal")?;
-          let nterm = &nterm.sub_nterms[index as usize];
-          (internal_id, &nterm.rules, nterm.guid_name)
+          match nonterminals.get(&NonTermId::Standard(internal_id, NonTermSubType::Parser)) {
+            Some(nterm) => {
+              let nterm = &nterm.sub_nterms[index as usize];
+              Some((internal_id, &nterm.rules, nterm.guid_name))
+            }
+            None => {
+              j.report_mut().add_error(missing_nonterminal_rules(loc, path, s_store));
+              is_valid = false;
+              None
+            }
+          }
         }
-      };
+      } {
+        let name = "tk_".to_string() + &name.to_string(s_store).as_str();
+        let name = name.intern(s_store);
 
-      let name = "tk_".to_string() + &name.to_string(s_store).as_str();
-      let name = name.intern(s_store);
+        if nterm_is_immediate_left_recursive(nterm, &rules) {
+          let rules = rules.clone();
 
-      if nterm_is_immediate_left_recursive(nterm, &rules) {
-        let rules = rules.clone();
+          let prime_id = NonTermId::Sub(internal_id, p_map.len() as u32 + 9000, NonTermSubType::Scanner);
 
-        let prime_id = NonTermId::Sub(internal_id, p_map.len() as u32 + 9000, NonTermSubType::Scanner);
+          let mut groups = hash_group_btreemap(rules, |_, r| match r.symbols[0].id {
+            SymbolId::NonTerminal { id, .. } if id == nterm => true,
+            _ => false,
+          });
 
-        let mut groups = hash_group_btreemap(rules, |_, r| match r.symbols[0].id {
-          SymbolId::NonTerminal { id, .. } if id == nterm => true,
-          _ => false,
-        });
+          let prime_rules = o_to_r(groups.remove(&true), "")?;
+          let mut r_rules = o_to_r(groups.remove(&false), "")?;
 
-        let prime_rules = o_to_r(groups.remove(&true), "")?;
-        let mut r_rules = o_to_r(groups.remove(&false), "")?;
-
-        let mut p_rules = prime_rules
-          .into_iter()
-          .flat_map(|mut r| {
-            r.symbols.remove(0);
-            let rule_a = r.clone();
-            r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), original_index: 0, ..Default::default() });
-            [rule_a, r]
-          })
-          .collect();
-
-        r_rules.append(
-          &mut r_rules
-            .clone()
+          let mut p_rules = prime_rules
             .into_iter()
-            .map(|mut r| {
+            .flat_map(|mut r| {
+              r.symbols.remove(0);
+              let rule_a = r.clone();
               r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), original_index: 0, ..Default::default() });
-              r
+              [rule_a, r]
             })
-            .collect(),
-        );
+            .collect();
 
-        insert_token_nonterminal(&mut r_rules, &mut token_nonterminals);
-        insert_token_nonterminal(&mut p_rules, &mut token_nonterminals);
+          r_rules.append(
+            &mut r_rules
+              .clone()
+              .into_iter()
+              .map(|mut r| {
+                r.symbols.push(SymbolRef { id: prime_id.as_tok_sym(), original_index: 0, ..Default::default() });
+                r
+              })
+              .collect(),
+          );
 
-        convert_sym_refs_to_token_sym_refs(&mut r_rules, s_store, 0);
-        convert_sym_refs_to_token_sym_refs(&mut p_rules, s_store, 0);
+          insert_token_nonterminal(&mut r_rules, &mut token_nonterminals);
+          insert_token_nonterminal(&mut p_rules, &mut token_nonterminals);
 
-        let nterm = nterm.as_tok_sym();
-        let prime_id = prime_id.as_tok_sym();
+          convert_sym_refs_to_token_sym_refs(&mut r_rules, s_store, 0);
+          convert_sym_refs_to_token_sym_refs(&mut p_rules, s_store, 0);
 
-        add_nterm_and_rules(nterm, r_rules, p_map, r_table, p_r_map, true);
-        add_nterm_name(nterm_name_lu, name, name);
-        add_empty_custom_state(c_states);
+          let nterm = nterm.as_tok_sym();
+          let prime_id = prime_id.as_tok_sym();
 
-        let name = (name.to_string(s_store) + "_prime").intern(s_store);
-        add_nterm_and_rules(prime_id, p_rules, p_map, r_table, p_r_map, true);
-        add_nterm_name(nterm_name_lu, name, name);
-        add_empty_custom_state(c_states);
-      } else {
-        let nterm = nterm.as_tok_sym();
-        if !p_map.contains_key(&nterm) {
-          let mut rules = rules.clone();
-
-          convert_sym_refs_to_token_sym_refs(&mut rules, s_store, 0);
-          insert_token_nonterminal(&mut rules, &mut token_nonterminals);
-
-          add_nterm_and_rules(nterm, rules, p_map, r_table, p_r_map, true);
+          add_nterm_and_rules(nterm, r_rules, p_map, r_table, p_r_map, true);
           add_nterm_name(nterm_name_lu, name, name);
           add_empty_custom_state(c_states);
+
+          let name = (name.to_string(s_store) + "_prime").intern(s_store);
+          add_nterm_and_rules(prime_id, p_rules, p_map, r_table, p_r_map, true);
+          add_nterm_name(nterm_name_lu, name, name);
+          add_empty_custom_state(c_states);
+        } else {
+          let nterm = nterm.as_tok_sym();
+          if !p_map.contains_key(&nterm) {
+            let mut rules = rules.clone();
+
+            convert_sym_refs_to_token_sym_refs(&mut rules, s_store, 0);
+            insert_token_nonterminal(&mut rules, &mut token_nonterminals);
+
+            add_nterm_and_rules(nterm, rules, p_map, r_table, p_r_map, true);
+            add_nterm_name(nterm_name_lu, name, name);
+            add_empty_custom_state(c_states);
+          }
         }
       }
     }
+  }
+
+  if !is_valid {
+    return Ok(ParserDatabase::default());
   }
 
   // Generate scanner nonterminals and symbol indices --------------------------
@@ -401,7 +419,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         .and_then(|d| Some(d.guid_name))
         .or_else(|| custom_states.get(nterm).and_then(|d| Some(d.guid_name)))
       {
-        EntryPoint {
+        DBEntryPoint {
           nonterm_key:        DBNonTermKey::from(*p_map.get(&nterm.as_sym()).unwrap()),
           entry_name:         *name,
           nonterm_name:       nterm_name,
@@ -425,7 +443,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         .filter_map(|nterm_id| {
           if let Some((guid_name, _)) = nterm_name_lu_owned.get(nterm_id) {
             let nterm_name = guid_name;
-            Some(EntryPoint {
+            Some(DBEntryPoint {
               nonterm_key:        DBNonTermKey::from(nterm_id),
               entry_name:         *guid_name,
               nonterm_name:       *guid_name,
@@ -523,7 +541,7 @@ fn extract_nterm_syms(
   s_store: &IStringStore,
   symbols: &mut OrderedMap<SymbolId, usize>,
   token_names: &mut OrderedMap<SymbolId, IString>,
-  token_nonterminals: &mut VecDeque<NonTermId>,
+  token_nonterminals: &mut VecDeque<TrackedNonterm>,
 ) -> SherpaResult<()> {
   for rule in rules {
     for (sym, tok) in
@@ -543,7 +561,7 @@ fn extract_nterm_syms(
           let name = ("tk:".to_string() + &name.to_string(s_store)).intern(s_store);
           insert_symbol(symbols, &sym);
           token_names.insert(id.as_parse_prod().as_tok_sym(), name);
-          token_nonterminals.push_back(id.as_parse_prod());
+          token_nonterminals.push_back((tok, rule.g_id.path, id.as_parse_prod()));
         }
         _ => {}
       }
@@ -631,14 +649,14 @@ fn convert_sym_refs_to_token_sym_refs(rules: &mut [Rule], s_store: &IStringStore
   }
 }
 
-fn insert_token_nonterminal(rules: &mut Vec<Rule>, token_nonterminals: &mut VecDeque<NonTermId>) {
+fn insert_token_nonterminal(rules: &mut Vec<Rule>, token_nonterminals: &mut VecDeque<TrackedNonterm>) {
   for rule in rules {
     let syms = rule
       .symbols
       .iter()
       .map(|sym_ref: &SymbolRef| match sym_ref.id {
         SymbolId::NonTerminalToken { id, .. } | SymbolId::NonTerminal { id } => {
-          token_nonterminals.push_back(id);
+          token_nonterminals.push_back((sym_ref.loc.clone(), rule.g_id.path, id));
           let mut tok_sym_ref = sym_ref.clone();
           tok_sym_ref.id = id.as_tok_sym();
           tok_sym_ref

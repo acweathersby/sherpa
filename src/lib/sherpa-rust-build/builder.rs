@@ -1615,9 +1615,11 @@ pub type Parser<T, UserCTX, Bytecode> = sherpa_rust_runtime::bytecode::ByteCodeP
       w.list(",", symbol_string.values().collect())
     })
   })?;
-  for EntryPoint { nonterm_entry_name, entry_name, .. } in w.db.entry_points() {
+  for DBEntryPoint { nonterm_entry_name, entry_name, .. } in w.db.entry_points().into_iter().filter(|e| e.is_export) {
     let entry_name = entry_name.to_string(w.db.string_store());
     let nonterm_entry_name = nonterm_entry_name.to_string(w.db.string_store());
+    //println!("{} {:#?}", nonterm_entry_name,
+    // state_lookups.keys().collect::<Vec<_>>());
     let bytecode_offset = o_to_r(state_lookups.get(&nonterm_entry_name), "could not find state")?;
     w.method(
       &format!("pub fn new_{entry_name}_parser<'a, T: Reader, UserCTX>"),
@@ -1765,9 +1767,9 @@ pub struct Parser<T: Reader, M>(ParseContext<T, M>, T);
       w.stmt("let _ptr = &mut self.0 as *const ParseContext<T, M>;".into())?;
       w.block("unsafe", "{", "}", &|w| w.stmt("drop(_ptr as *mut u8);".into()))
     })?;
-    for EntryPoint { export_id, nonterm_entry_name, entry_name, .. } in
+    for DBEntryPoint { export_id, nonterm_entry_name, entry_name, .. } in
       //for ExportedNon-terminal { export_name, export_id, .. } in
-      w.db.entry_points().iter()
+      w.db.entry_points().into_iter().filter(|e| e.is_export)
     {
       let entry_name = entry_name.to_string(w.db.string_store());
       let _nonterm_entry_name = nonterm_entry_name.to_string(w.db.string_store());

@@ -1,11 +1,23 @@
-use crate::*;
-use sherpa_core::{proxy::OrderedMap, test::utils::build_parse_states_from_multi_sources, *};
+use crate::debug::{file_debugger, PrintConfig};
+use sherpa_bytecode::compile_bytecode;
+use sherpa_core::{
+  proxy::OrderedMap,
+  test::utils::{build_parse_states_from_multi_sources, write_debug_file},
+  *,
+};
 use sherpa_rust_runtime::{
-  bytecode::ByteCodeParserNew,
-  types::{AstObjectNew, ParserInput, ParserProducer, ReducerNew, RuntimeDatabase, StringInput},
+  kernel::{disassemble_bytecode, ByteCodeParserNew},
+  types::{AstObjectNew, BytecodeParserDB, ParserInput, ParserProducer, ReducerNew, RuntimeDatabase, StringInput},
 };
 
 pub type TestParser = ByteCodeParserNew;
+
+/// Writes the parser IR states to a file in the temp directory
+#[cfg(all(debug_assertions))]
+pub fn _write_disassembly_to_temp_file_(pkg: &BytecodeParserDB, db: &ParserDatabase) -> SherpaResult<()> {
+  write_debug_file(db, "bc_disassembly.tmp", disassemble_bytecode(&pkg.bytecode), false)?;
+  Ok(())
+}
 
 pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], config: ParserConfig) -> SherpaResult<()> {
   build_parse_states_from_multi_sources(
@@ -19,21 +31,17 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
       let pkg = compile_bytecode(&tp, true)?;
       let TestPackage { db, .. } = tp;
 
-      pkg._write_disassembly_to_temp_file_(&db)?;
+      _write_disassembly_to_temp_file_(&pkg, &db)?;
 
       let mut parser = pkg.get_parser().unwrap();
 
       for (entry_name, input, should_pass) in inputs {
-        let (bc_offset, e): (u32, &EntryPoint) = db.get_entry_data(entry_name, &pkg).expect(&format!(
+        let entry = pkg.get_entry_data_from_name(entry_name).expect(&format!(
           "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
           db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
         ));
 
-        assert!(bc_offset != 0);
-
-        let entry = pkg.get_entry_data_from_name(entry_name)?;
-
-        parser.set_debugger(sherpa_core::file_debugger(
+        parser.set_debugger(file_debugger(
           db.to_owned(),
           PrintConfig {
             display_scanner_output: false,
@@ -45,7 +53,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
           pkg.address_to_state_name.clone(),
         ));
 
-        let result = parser.as_mut().completes(&mut StringInput::from(*input), entry);
+        let result = parser.as_mut().recognize(&mut StringInput::from(*input), entry);
 
         if result.is_ok() != *should_pass {
           if result.is_err() {

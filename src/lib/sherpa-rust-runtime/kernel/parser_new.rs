@@ -7,39 +7,12 @@ use crate::{
 };
 use std::{collections::HashMap, rc::Rc};
 
-#[allow(unused)]
-pub enum DebugEventNew<'ctx> {
-  ExecuteState { base_instruction: Instruction<'ctx> },
-  ExecuteInstruction { instruction: Instruction<'ctx>, cursor: usize, is_scanner: bool },
-  Complete { nonterminal_id: u32 },
-  ActionShift { offset_start: usize, offset_end: usize, token_id: u32 },
-  ActionReduce { rule_id: u32 },
-  ActionAccept,
-  ActionError,
-  EndOfFile,
+struct OpResult<'a> {
+  action:    ParseAction,
+  next:      Option<Instruction<'a>>,
+  is_goto:   bool,
+  can_debug: bool,
 }
-
-pub type DebugFnNew = dyn FnMut(&DebugEventNew, &dyn ParserInput);
-
-fn emit_state_debug(debug: &mut Option<&mut DebugFnNew>, bc: &[u8], address: usize, input: &dyn ParserInput) {
-  if let Some(debug) = debug {
-    debug(&DebugEventNew::ExecuteState { base_instruction: (bc, address as usize).into() }, input);
-  }
-}
-
-fn emit_instruction_debug(
-  debug: &mut Option<&mut DebugFnNew>,
-  i: Instruction<'_>,
-  input: &dyn ParserInput,
-  cursor: usize,
-  is_scanner: bool,
-) {
-  if let Some(debug) = debug {
-    debug(&DebugEventNew::ExecuteInstruction { instruction: i, cursor, is_scanner }, input);
-  }
-}
-
-type OpReturnVal<'a> = (ParseAction, Option<Instruction<'a>>, bool, bool);
 
 /// Yields parser Actions from parsing an input using the
 /// current active grammar bytecode.
@@ -79,20 +52,42 @@ fn dispatch<'a, 'debug>(
       AssignToken => assign_token(i, ctx),
       VectorBranch => vector_branch(i, ctx, input, debug, is_scanner),
       HashBranch => hash_branch(i, ctx, input, debug, is_scanner),
-      Fail => (FailState, Option::None, false, true),
-      Pass => (CompleteState, Option::None, false, true),
+      Fail => OpResult {
+        action:    FailState,
+        next:      Option::None,
+        is_goto:   false,
+        can_debug: true,
+      },
+      Pass => OpResult {
+        action:    CompleteState,
+        next:      Option::None,
+        is_goto:   false,
+        can_debug: true,
+      },
+      Fork => fork(i),
       Accept => {
         ctx.is_finished = true;
-        (ParseAction::Accept { nonterminal_id: ctx.nonterm, final_offset: ctx.sym_ptr }, Option::None, false, true)
+        OpResult {
+          action:    ParseAction::Accept { nonterminal_id: ctx.nonterm, final_offset: ctx.sym_ptr },
+          next:      Option::None,
+          is_goto:   false,
+          can_debug: true,
+        }
       }
-      NoOp => (None, i.next(), false, true),
+      NoOp => OpResult {
+        action:    None,
+        next:      i.next(),
+        is_goto:   false,
+        can_debug: true,
+      },
     } {
-      (None, Option::None, ..) => {
+      OpResult { action: None, next: Option::None, .. } => {
         unreachable!("Expected next instruction!")
       }
-      (None, Some(next_instruction), is_goto, instruction_debug) => {
+
+      OpResult { action: None, next: Some(next_instruction), is_goto, can_debug } => {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-        if instruction_debug {
+        if can_debug {
           emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
         }
         if is_goto {
@@ -102,22 +97,18 @@ fn dispatch<'a, 'debug>(
         }
         next_instruction
       }
-      (any, out, _, instruction_debug) => {
+      OpResult { action, next, can_debug, .. } => {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-        if instruction_debug {
+        if can_debug {
           emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
         }
-        break (any, out, block_base.address());
+        break (action, next, block_base.address());
       }
     }
   }
 }
 
-fn byte_sequence<'a>(
-  i: Instruction<'a>,
-  ctx: &mut ParserContext,
-  input: &impl ParserInput,
-) -> (ParseAction, Option<Instruction<'a>>, bool, bool) {
+fn byte_sequence<'a>(i: Instruction<'a>, ctx: &mut ParserContext, input: &impl ParserInput) -> OpResult<'a> {
   let mut iter = i.iter();
   let length = iter.next_u16_le().unwrap() as usize;
   let default_offset = iter.next_u32_le().unwrap() as usize;
@@ -128,9 +119,19 @@ fn byte_sequence<'a>(
     let byte = iter.next_u8();
     if byte != Some(input.byte(offset + b)) {
       if default_offset > 0 {
-        return (ParseAction::None, Some((i.bytecode(), i.address() + default_offset).into()), false, true);
+        return OpResult {
+          action:    ParseAction::None,
+          next:      Some((i.bytecode(), i.address() + default_offset).into()),
+          is_goto:   false,
+          can_debug: true,
+        };
       } else {
-        return (ParseAction::FailState, Option::None, false, true);
+        return OpResult {
+          action:    ParseAction::FailState,
+          next:      None,
+          is_goto:   false,
+          can_debug: true,
+        };
       }
     }
     if byte == Some(10) {
@@ -143,11 +144,17 @@ fn byte_sequence<'a>(
   ctx.end_line_num += line_incr;
 
   ctx.byte_len = length as u32;
-  (ParseAction::None, i.next(), false, true)
+
+  OpResult {
+    action:    ParseAction::None,
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::TokenShift] operation
-fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: ParserState) -> OpReturnVal<'a> {
+fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: ParserState) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::ShiftToken;
 
   debug_assert!(
@@ -183,27 +190,33 @@ fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: 
   ctx.recovery_tok_id = 0;
   ctx.tok_byte_len = 0;
 
-  (action, i.next(), false, true)
+  OpResult { action, next: i.next(), is_goto: false, can_debug: true }
 }
 
 /// Performs the [Opcode::ShiftTokenScanless] operation
-fn shift_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: ParserState) -> OpReturnVal<'a> {
+fn shift_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: ParserState) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::ShiftTokenScanless;
   ctx.tok_byte_len = ctx.byte_len;
   shift_token(i, ctx, emitting_state)
 }
 
 /// Performs the [Opcode::ScanShift] operation
-fn scan_shift<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn scan_shift<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::ScanShift;
 
   ctx.input_ptr = ctx.input_ptr + ctx.byte_len as usize;
   ctx.byte_len = 0;
-  (ParseAction::None, i.next(), false, true)
+
+  OpResult {
+    action:    ParseAction::None,
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::PeekToken] operation
-fn peek_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn peek_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PeekToken;
 
   let offset = ctx.sym_ptr + ctx.tok_byte_len as usize;
@@ -214,17 +227,22 @@ fn peek_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a
   ctx.recovery_tok_id = 0;
   ctx.tok_byte_len = 0;
 
-  (ParseAction::None, i.next(), false, true)
+  OpResult {
+    action:    ParseAction::None,
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::PeekTokenScanless] operation
-fn peek_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn peek_token_scanless<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PeekTokenScanless;
   ctx.tok_byte_len = ctx.byte_len;
   peek_token(i, ctx)
 }
 
-fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   let original_offset = ctx.sym_ptr;
   let offset = ctx.sym_ptr + ctx.tok_byte_len as usize;
   let tok_len = ctx.tok_byte_len;
@@ -234,21 +252,21 @@ fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserCo
   ctx.tok_id = 0;
   ctx.recovery_tok_id = 0;
 
-  (
-    ParseAction::Skip {
+  OpResult {
+    action:    ParseAction::Skip {
       byte_offset:       original_offset as u32,
       byte_length:       tok_len as u32,
       token_line_count:  ctx.start_line_num,
       token_line_offset: ctx.start_line_off,
       token_id:          token_id as u32,
     },
-    Some(base_instruction),
-    false,
-    false,
-  )
+    next:      Some(base_instruction),
+    is_goto:   false,
+    can_debug: false,
+  }
 }
 /// Performs the [Opcode::SkipToken] operation
-fn skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::SkipToken;
   let result = __skip_token_core__(base_instruction, ctx);
   ctx.start_line_num = ctx.chkp_line_num;
@@ -256,32 +274,39 @@ fn skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) ->
   ctx.end_line_num = ctx.start_line_num;
   ctx.end_line_off = ctx.end_line_off;
   //ctx.base_ptr = ctx.head_ptr;
+
   result
 }
 
 /// Performs the [Opcode::SkipTokenScanless] operation
-fn skip_token_scanless<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn skip_token_scanless<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::SkipTokenScanless;
   ctx.tok_byte_len = ctx.byte_len;
   skip_token(base_instruction, ctx)
 }
 
 /// Performs the [Opcode::PeekSkipToken] operation
-fn peek_skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn peek_skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PeekSkipToken;
   __skip_token_core__(base_instruction, ctx);
-  (ParseAction::None, Some(base_instruction), false, true)
+
+  OpResult {
+    action:    ParseAction::None,
+    next:      Some(base_instruction),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::PeekSkipTokenScanless] operation
-fn peek_skip_token_scanless<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn peek_skip_token_scanless<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PeekSkipTokenScanless;
   ctx.tok_byte_len = ctx.byte_len;
   peek_skip_token(base_instruction, ctx)
 }
 
 /// Performs the [Opcode::Reduce] operation
-fn reduce<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn reduce<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::Reduce;
   let mut iter = i.iter();
   let nonterminal_id = iter.next_u32_le().unwrap();
@@ -290,11 +315,35 @@ fn reduce<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
 
   ctx.nonterm = nonterminal_id;
 
-  (ParseAction::Reduce { nonterminal_id, rule_id, symbol_count }, i.next(), false, true)
+  OpResult {
+    action:    ParseAction::Reduce { nonterminal_id, rule_id, symbol_count },
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
+}
+
+/// Performs the [Opcode::Fork] operation
+fn fork<'a>(i: Instruction<'a>) -> OpResult<'a> {
+  let mut iter = i.iter();
+  let length = iter.next_u16_le().unwrap();
+  let mut goto_states = vec![];
+
+  for _ in 0..length {
+    let address = iter.next_u32_le().unwrap() as usize;
+    goto_states.push(ParserState::state_entry(address))
+  }
+
+  OpResult {
+    action:    ParseAction::Fork(goto_states),
+    next:      None,
+    is_goto:   false,
+    can_debug: false,
+  }
 }
 
 /// Performs the [Opcode::PushGoto] operation
-fn push_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn push_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PushGoto;
   let mut iter = i.iter();
   let state_mode = iter.next_u8().unwrap();
@@ -302,11 +351,16 @@ fn push_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpRetur
 
   ctx.push_state(ParserState::state_entry(address));
 
-  (ParseAction::None, i.next(), false, true)
+  OpResult {
+    action:    ParseAction::None,
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::PushExceptionHandler] operation
-fn push_exception_handler<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn push_exception_handler<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PushExceptionHandler;
   let mut iter = i.iter();
   let state_mode = iter.next_u8().unwrap();
@@ -314,41 +368,61 @@ fn push_exception_handler<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContex
 
   ctx.push_state(ParserState::state_entry(address));
 
-  (ParseAction::None, i.next(), false, true)
+  OpResult {
+    action:    ParseAction::None,
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::Goto] operation
-fn goto<'a, 'debug>(i: Instruction<'a>) -> OpReturnVal<'a> {
+fn goto<'a, 'debug>(i: Instruction<'a>) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::Goto;
   let mut iter = i.iter();
   let _state_mode_ = iter.next_u8().unwrap();
   let address = iter.next_u32_le().unwrap();
 
-  (ParseAction::None, Some((i.bytecode(), address as usize).into()), true, true)
+  OpResult {
+    action:    ParseAction::None,
+    next:      Some((i.bytecode(), address as usize).into()),
+    is_goto:   true,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::PopGoto] operation
-fn pop_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn pop_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PopGoto;
 
   ctx.pop_state();
 
-  (ParseAction::None, i.next(), false, true)
+  OpResult {
+    action:    ParseAction::None,
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::AssignToken] operation
-fn assign_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn assign_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::AssignToken;
   let mut iter = i.iter();
   ctx.tok_id = iter.next_u32_le().unwrap();
   ctx.tok_byte_len = (ctx.input_ptr - ctx.sym_ptr) as u32;
   ctx.chkp_line_num = ctx.end_line_num;
   ctx.chkp_line_off = ctx.end_line_off;
-  (ParseAction::None, i.next(), false, true)
+  OpResult {
+    action:    ParseAction::None,
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::PeekReset] operation
-fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a> {
+fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PeekReset;
   let offset = ctx.anchor_ptr;
   ctx.sym_ptr = offset;
@@ -359,7 +433,12 @@ fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpReturnVal<'a
   ctx.byte_len = 0;
   ctx.end_line_off = ctx.start_line_off;
   ctx.end_line_num = ctx.end_line_num;
-  (ParseAction::None, i.next(), false, true)
+  OpResult {
+    action:    ParseAction::None,
+    next:      i.next(),
+    is_goto:   false,
+    can_debug: true,
+  }
 }
 
 /// Performs the [Opcode::HashBranch] operation
@@ -369,7 +448,7 @@ fn hash_branch<'a, 'debug>(
   input: &impl ParserInput,
   debug: &mut Option<&mut DebugFnNew>,
   is_scanner: bool,
-) -> OpReturnVal<'a> {
+) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::HashBranch;
 
   emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
@@ -397,11 +476,21 @@ fn hash_branch<'a, 'debug>(
       let next = ((cell >> 22) & 0x3FF) as i32 - 512;
 
       if value == input_value {
-        return (ParseAction::None, Some((i.bytecode(), i.address() + off as usize).into()), false, false);
+        return OpResult {
+          action:    ParseAction::None,
+          next:      Some((i.bytecode(), i.address() + off as usize).into()),
+          is_goto:   false,
+          can_debug: false,
+        };
       } else if next != 0 {
         hash_index = ((hash_index as i32) + next) as usize;
       } else {
-        return (ParseAction::None, Some(default_block), false, false);
+        return OpResult {
+          action:    ParseAction::None,
+          next:      Some(default_block),
+          is_goto:   false,
+          can_debug: false,
+        };
       }
     }
   }
@@ -413,7 +502,7 @@ fn vector_branch<'a, 'debug>(
   input: &impl ParserInput,
   debug: &mut Option<&'debug mut DebugFnNew>,
   is_scanner: bool,
-) -> OpReturnVal<'a> {
+) -> OpResult<'a> {
   // Decode data
 
   let TableHeaderData {
@@ -433,9 +522,19 @@ fn vector_branch<'a, 'debug>(
     if value_index < table_length as usize {
       let mut iter: ByteCodeIterator = (i.bytecode(), table_start + value_index * 4).into();
       let address_offset = iter.next_u32_le().unwrap();
-      return (ParseAction::None, Some((i.bytecode(), i.address() + address_offset as usize).into()), false, false);
+      return OpResult {
+        action:    ParseAction::None,
+        next:      Some((i.bytecode(), i.address() + address_offset as usize).into()),
+        is_goto:   false,
+        can_debug: false,
+      };
     } else {
-      return (ParseAction::None, Some(default_block), false, false);
+      return OpResult {
+        action:    ParseAction::None,
+        next:      Some(default_block),
+        is_goto:   false,
+        can_debug: false,
+      };
     }
   }
 }

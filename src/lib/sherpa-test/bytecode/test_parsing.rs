@@ -1,12 +1,11 @@
 use crate::{
-  test::utils::{map_reduce_function, TestParser},
+  utils::{compile_and_run_grammars, map_reduce_function, TestParser, _write_disassembly_to_temp_file_},
   *,
 };
+use sherpa_bytecode::compile_bytecode;
 use sherpa_core::{test::utils::build_parse_states_from_source_str as build_states, *};
 use sherpa_rust_runtime::types::{ASTConstructor, AstSlotNew, EntryPoint, ParserInitializer, StringInput};
 use std::{path::PathBuf, rc::Rc};
-
-use super::utils::compile_and_run_grammars;
 
 #[test]
 pub fn construct_trivial_parser() -> SherpaResult<()> {
@@ -590,7 +589,7 @@ pub fn recursive_skipped_comments() -> SherpaResult<()> {
     <> A > "hello" "world"
 
     <> comment > '/' "*"{:9999} comment_body '*'{:9999} "/"{:9999}
-s
+
     <> comment_body >  ( c:nl | c:sym | c:num | c:sp | c:id | comment )(+)
     "##],
     &[
@@ -714,7 +713,7 @@ fn simple_newline_tracking() -> SherpaResult<()> {
 
       let pkg = compile_bytecode(&tp, true)?;
 
-      pkg._write_disassembly_to_temp_file_(&tp.db)?;
+      _write_disassembly_to_temp_file_(&pkg, &tp.db)?;
 
       let TestPackage { db, .. } = tp;
 

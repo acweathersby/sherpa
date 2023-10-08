@@ -14,7 +14,6 @@
 
 mod builder;
 mod compile;
-mod debug;
 mod grammar;
 mod journal;
 pub mod parser;
@@ -28,12 +27,12 @@ pub use types::{
   proxy,
   ASTToken,
   CachedString,
+  DBEntryPoint,
   DBNonTermKey,
   DBRule,
   DBRuleKey,
   DBTermKey,
   DBTokenData,
-  EntryPoint,
   ErrorClass,
   GrammarHeader,
   GrammarId,
@@ -67,7 +66,3 @@ pub use utils::{create_u64_hash as hash_id_value_u64, hash_group_btreemap};
 pub use writer::code_writer::CodeWriter;
 
 pub mod test;
-
-pub use debug::{console_debugger, PrintConfig};
-
-pub use debug::file_debugger;

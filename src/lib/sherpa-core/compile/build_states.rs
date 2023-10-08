@@ -188,12 +188,12 @@ fn create_parse_states_from_prod<'db>(
 }
 
 fn build_entry_ir<'db>(
-  EntryPoint {
+  DBEntryPoint {
     nonterm_name: nterm_name,
     nonterm_entry_name: nterm_entry_name,
     nonterm_exit_name: nterm_exit_name,
     ..
-  }: &EntryPoint,
+  }: &DBEntryPoint,
   db: &'db ParserDatabase,
 ) -> SherpaResult<Array<Box<ParseState>>> {
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));

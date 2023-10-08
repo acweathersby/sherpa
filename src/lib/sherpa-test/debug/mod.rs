@@ -1,9 +1,7 @@
-use super::types::ParserDatabase;
-use crate::types::*;
-use sherpa_rust_runtime::{
-  bytecode::{disassemble_parse_block, DebugEventNew},
-  types::{bytecode::Opcode, ParserInput},
-};
+use std::collections::HashMap;
+
+use sherpa_core::{test::utils::write_debug_file, ParserDatabase};
+use sherpa_rust_runtime::types::{bytecode::Opcode, DebugEventNew, ParserInput};
 #[derive(Debug, Clone, Copy)]
 pub struct PrintConfig {
   pub display_scanner_output: bool,
@@ -56,31 +54,31 @@ impl Node {
   }
 }
 
-#[cfg(all(debug_assertions))]
-#[allow(unused)]
 pub fn file_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,
-  state_lu: Map<u32, IString>,
-) -> Option<Box<sherpa_rust_runtime::bytecode::DebugFnNew>> {
+  state_lu: HashMap<u32, String>,
+) -> Option<Box<sherpa_rust_runtime::types::DebugFnNew>> {
+  use sherpa_core::{proxy::Map, ParserDatabase};
+
   let mut stack = vec![];
-  crate::test::utils::write_debug_file(&db, "parser_output.tmp", "    ", false);
+  write_debug_file(&db, "parser_output.tmp", "    ", false);
   Some(Box::new(move |event, ctx| {
     let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
-      crate::test::utils::write_debug_file(&db, "parser_output.tmp", string, true);
+      write_debug_file(&db, "parser_output.tmp", string, true);
     }
   }))
 }
 
-#[cfg(debug_assertions)]
-#[allow(unused)]
 pub fn console_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,
-  state_lu: Map<u32, IString>,
-) -> Option<Box<sherpa_rust_runtime::bytecode::DebugFnNew>> {
+  state_lu: HashMap<u32, String>,
+) -> Option<Box<sherpa_rust_runtime::types::DebugFnNew>> {
+  use sherpa_core::ParserDatabase;
+
   let mut stack = vec![];
   Some(Box::new(move |event, ctx| {
     let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
@@ -99,8 +97,11 @@ fn diagram_constructor(
   stack: &mut Vec<Node>,
   db: &ParserDatabase,
   pc: &PrintConfig,
-  state_lu: &Map<u32, IString>,
+  state_lu: &HashMap<u32, String>,
 ) -> String {
+  use sherpa_core::{DBRuleKey, Item, ReductionType};
+  use sherpa_rust_runtime::kernel::disassemble_parse_block;
+
   let PrintConfig {
     display_scanner_output,
     display_input_data,
@@ -112,15 +113,12 @@ fn diagram_constructor(
     DebugEventNew::ExecuteState { base_instruction } => {
       let i = base_instruction.address() as u32;
       if let Some(state_name) = state_lu.get(&i) {
-        let name = state_name.to_str(db.string_store());
-        let name = name.as_str();
-
         format!(
           "
   [STATE] --------------------------------------------------------------------
   {}
   -------------------------------------------------------------------------------",
-          name
+          state_name
         )
       } else {
         Default::default()

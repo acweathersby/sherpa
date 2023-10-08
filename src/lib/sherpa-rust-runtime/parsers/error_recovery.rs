@@ -1,11 +1,13 @@
 use crate::types::*;
 use std::{
   cmp::Ordering,
-  collections::{hash_map::DefaultHasher, HashMap, VecDeque},
-  fmt::{format, Debug},
+  collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
+  fmt::Debug,
   hash::Hasher,
-  ops::{Range, RangeInclusive},
+  ops::Range,
 };
+
+use super::Parser;
 
 const TOKEN_SYNTHESIS_PENALTY: isize = 1;
 
@@ -307,7 +309,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
           // ---------------------------------------------------------------
           // 3. Drop symbols until a state is reached where the input is accepted.
           if rec_ctx.symbols.len() > 0 {
-            drop_symbols(rec_ctx.split(), db, &mut to_process, best_failure, 0, ctx.sym_ptr);
+            drop_symbols(rec_ctx.split(), &mut to_process, best_failure, 0, ctx.sym_ptr);
           }
 
           // ---------------------------------------------------------------
@@ -339,7 +341,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
 
     all.sort();
 
-    for rec_ctx in all.into_iter().take(32) {
+    for rec_ctx in all.into_iter().take(4) {
       sort_and_enque(pending, rec_ctx)
     }
   }
@@ -424,7 +426,7 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
             drop_codepoints(rec_ctx, contexts, &mut best_failure, input, count, start_offset, last_state);
           }
           RecoveryMode::SymbolDiscard { count, end_offset, .. } => {
-            drop_symbols(rec_ctx, db, contexts, &mut best_failure, count, end_offset);
+            drop_symbols(rec_ctx, contexts, &mut best_failure, count, end_offset);
           }
           _ => unreachable!(),
         },
@@ -535,6 +537,12 @@ fn attempt_merge(groups: MergeGroups, merge_type: &'static str) -> impl Iterator
 
     let (mut first, following) = if group.len() > 1 {
       group.sort_by(|a, b| a.ctx.entropy.cmp(&b.ctx.entropy));
+      struct AltCandidate {
+        insert_point: usize,
+        alt:          Vec<Alternative>,
+        follow:       Option<CSTNode>,
+        ctx:          Box<RecoverableContext>,
+      }
 
       let mut iter = group.into_iter().map(|MergeCandidate { start_offset, mut ctx, sym_range, follow }| {
         let insert_point = sym_range.start;
@@ -558,20 +566,40 @@ fn attempt_merge(groups: MergeGroups, merge_type: &'static str) -> impl Iterator
 
         lowest_entropy = lowest_entropy.min(ctx.entropy);
 
-        (insert_point, alt, ctx, follow)
+        AltCandidate { insert_point, alt, ctx, follow }
       });
 
-      let (insert_point, merge, mut first, follow) = iter.next().expect("should be at least one");
+      let AltCandidate { insert_point, alt, follow, mut ctx } = iter.next().expect("should be at least one");
 
-      let mut alternates: Vec<_> = vec![merge].into_iter().chain(iter.map(|(_, alt, ..)| alt)).flatten().collect();
+      let mut hash_cache = HashSet::new();
 
-      alternates.sort_by(|a, b| a.entropy.cmp(&b.entropy));
+      let mut alternates: Vec<_> = vec![alt]
+        .into_iter()
+        .chain(iter.map(|AltCandidate { alt, .. }| alt))
+        .flatten()
+        .filter_map(|alt| {
+          let mut hasher = DefaultHasher::default();
+          alt.symbols.iter().for_each(|s| s.dedup_hash(&mut hasher));
+          if hash_cache.insert(hasher.finish()) {
+            Some(alt)
+          } else {
+            None
+          }
+        })
+        .collect();
 
-      first.symbols.insert(insert_point, Multi::typed(alternates, merge_type.clone()));
+      if alternates.len() == 1 {
+        for (offset, symbol) in alternates.pop().unwrap().symbols.into_iter().enumerate() {
+          ctx.symbols.insert(insert_point + offset, symbol);
+        }
+      } else {
+        alternates.sort_by(|a, b| a.entropy.cmp(&b.entropy));
+        ctx.symbols.insert(insert_point, Multi::typed(alternates, merge_type));
+      }
 
-      first.entropy = lowest_entropy;
+      ctx.entropy = lowest_entropy;
 
-      (first, follow)
+      (ctx, follow)
     } else {
       let MergeCandidate { ctx, follow, .. } = group.pop().expect("should be 1");
       (ctx, follow)
@@ -633,8 +661,6 @@ fn create_errata<I: ParserInput>(
 
 fn reduce_symbols(mut symbol_count: u32, rec_ctx: &mut Box<RecoverableContext>, nonterminal_id: u32, rule_id: u32) {
   let mut symbols = vec![];
-
-  let or_syms = rec_ctx.symbols.clone();
 
   while symbol_count > 0 {
     let sym = rec_ctx.symbols.pop().expect(&format!("Should have enough symbols to complete this Non-Terminal"));
@@ -717,9 +743,8 @@ fn drop_codepoints<I: ParserInput>(
   }
 }
 
-fn drop_symbols<I: ParserInput, DB: ParserProducer<I>>(
+fn drop_symbols(
   mut rec_ctx: Box<RecoverableContext>,
-  db: &DB,
   contexts: &mut VecDeque<Box<RecoverableContext>>,
   best_failure: &mut Option<Box<RecoverableContext>>,
   count: usize,

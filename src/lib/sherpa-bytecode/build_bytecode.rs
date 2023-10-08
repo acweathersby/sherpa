@@ -1,85 +1,13 @@
 use sherpa_core::{proxy::*, *};
-use sherpa_rust_runtime::{
-  bytecode::ByteCodeParserNew,
-  types::{
-    bytecode::{insert_op, Opcode as Op, *},
-    ParseError,
-    Parser,
-    ParserInput,
-    ParserProducer,
-    RuntimeDatabase,
-    TableHeaderData,
-    Token,
-  },
+use sherpa_rust_runtime::types::{
+  bytecode::{insert_op, Opcode as Op, *},
+  BytecodeParserDB,
+  TableHeaderData,
+  Token,
 };
-use std::{collections::VecDeque, rc::Rc};
+use std::collections::VecDeque;
 
-#[derive(Clone, Default)]
-pub struct BytecodePackage {
-  pub bytecode: Array<u8>,
-  pub ir_token_lookup: OrderedMap<u32, Token>,
-  pub nonterm_name_to_id: Map<IString, u32>,
-  pub state_name_to_address: Map<IString, u32>,
-  pub address_to_state_name: Map<u32, IString>,
-  pub nonterm_id_to_address: Map<u32, u32>,
-  pub state_to_token_ids_map: Map<u32, Vec<u32>>,
-  pub token_id_to_str: Map<u32, String>,
-}
-
-impl AsRef<[u8]> for BytecodePackage {
-  fn as_ref(&self) -> &[u8] {
-    &self.bytecode
-  }
-}
-
-impl AsRef<Map<IString, u32>> for BytecodePackage {
-  fn as_ref(&self) -> &Map<IString, u32> {
-    &self.state_name_to_address
-  }
-}
-
-impl AsRef<Map<u32, IString>> for BytecodePackage {
-  fn as_ref(&self) -> &Map<u32, IString> {
-    &self.address_to_state_name
-  }
-}
-
-impl RuntimeDatabase for BytecodePackage {
-  fn get_entry_data_from_name(&self, entry_name: &str) -> Result<sherpa_rust_runtime::types::EntryPoint, ParseError> {
-    if let Some(id) = self.nonterm_name_to_id.get(&entry_name.to_token()) {
-      Ok(sherpa_rust_runtime::types::EntryPoint { nonterm_id: *id })
-    } else {
-      Err(ParseError::InvalidEntryName)
-    }
-  }
-
-  fn get_expected_tok_ids_at_state(&self, state_id: u32) -> Option<&[u32]> {
-    self.state_to_token_ids_map.get(&state_id).map(|s| s.as_slice())
-  }
-
-  fn token_id_to_str(&self, tok_id: u32) -> Option<&str> {
-    self.token_id_to_str.get(&tok_id).map(|s| s.as_str())
-  }
-}
-
-impl<T: ParserInput> ParserProducer<T> for BytecodePackage {
-  fn get_parser(&self) -> Result<Box<dyn Parser<T>>, ParseError> {
-    Ok(Box::new(ByteCodeParserNew::new(Rc::new(self.bytecode.clone()), self.nonterm_id_to_address.clone())))
-  }
-}
-
-impl BytecodePackage {
-  /// Writes the parser IR states to a file in the temp directory
-  #[cfg(all(debug_assertions))]
-  pub fn _write_disassembly_to_temp_file_(&self, db: &ParserDatabase) -> SherpaResult<()> {
-    use sherpa_core::test::utils::write_debug_file;
-    use sherpa_rust_runtime::bytecode::disassemble_bytecode;
-    write_debug_file(db, "bc_disassembly.tmp", disassemble_bytecode(&self.bytecode), false)?;
-    Ok(())
-  }
-}
-
-/// Compiles bytecode from a set of parser states.
+/// Compiles a bytecode parser database.
 ///
 /// # Example
 ///
@@ -91,25 +19,25 @@ impl BytecodePackage {
 /// # fn main() -> SherpaResult<()> {
 ///
 /// let parser = SherpaGrammarBuilder::new()
-///   .add_source_from_string( "<> A > 'Hello' 'World' ", &PathBuf::default())?
+///   .add_source_from_string( "<> A > 'Hello' 'World' ", &PathBuf::default(), false)?
 ///   .build_db(&PathBuf::default())?
 ///   .build_parser(Default::default())?
 ///   .optimize(false)?;
 ///
-/// let (bytecode, state_lu) = compile_bytecode(&parser, true)?;
+/// let bytecode_db = compile_bytecode(&parser, true)?;
 ///
-/// assert_eq!(bytecode.len(), 1229);
+/// assert_eq!(bytecode_db.bytecode.len(), 148);
 ///
 /// # SherpaResult::Ok(())
 /// # }
 /// ```
-pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> SherpaResult<BytecodePackage> {
+pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> SherpaResult<BytecodeParserDB> {
   let states = store.get_states();
   let db = store.get_db();
 
   let mut state_name_to_proxy = OrderedMap::new();
 
-  let mut pkg = BytecodePackage {
+  let mut pkg = BytecodeParserDB {
     bytecode: Array::from_iter(bytecode_header()),
     nonterm_name_to_id: Default::default(),
     ir_token_lookup: Default::default(),
@@ -129,14 +57,16 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> S
         .insert(state_address, symbols.iter().filter(|s| !s.is_skipped()).map(|s| s.tok().to_val()).collect());
     }
 
-    pkg.state_name_to_address.insert(*name, state_address);
+    pkg.state_name_to_address.insert(name.to_string(db.string_store()), state_address);
 
     build_state(db, state.as_ref(), &mut pkg, &mut state_name_to_proxy, add_debug_symbols)?;
   }
 
   let proxy_to_address = state_name_to_proxy
     .into_iter()
-    .map(|(name, proxy_address)| (proxy_address as u32, *pkg.state_name_to_address.get(&name).unwrap()))
+    .map(|(name, proxy_address)| {
+      (proxy_address as u32, *pkg.state_name_to_address.get(&name.to_string(db.string_store())).unwrap())
+    })
     .collect::<OrderedMap<_, _>>()
     .into_values()
     .collect();
@@ -144,8 +74,8 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> S
   remap_goto_addresses(&mut pkg.bytecode, &proxy_to_address);
 
   for ep in db.entry_points().iter().filter(|i| store.get_config().EXPORT_ALL_NONTERMS || i.is_export) {
-    pkg.nonterm_name_to_id.insert(ep.entry_name, ep.nonterm_key.to_val());
-    if let Some(address) = pkg.state_name_to_address.get(&ep.nonterm_entry_name).cloned() {
+    pkg.nonterm_name_to_id.insert(ep.entry_name.to_string(db.string_store()), ep.nonterm_key.to_val());
+    if let Some(address) = pkg.state_name_to_address.get(&ep.nonterm_entry_name.to_string(db.string_store())).cloned() {
       pkg.nonterm_id_to_address.insert(ep.nonterm_key.to_val(), address);
     }
   }
@@ -176,6 +106,14 @@ fn remap_goto_addresses(bc: &mut Array<u8>, _goto_to_off: &Array<u32>) {
         set_goto_address(bc, _goto_to_off, i + 2);
         op.len()
       }
+      Op::Fork => {
+        let instr: Instruction = (bc.as_slice(), i).into();
+        let len = instr.iter().next_u16_le().unwrap() as usize;
+        for off in 0..len {
+          set_goto_address(bc, _goto_to_off, i + 3 + (off << 2));
+        }
+        op.len()
+      }
       Op::ByteSequence => Instruction::from((bc.as_slice(), i)).next().unwrap().address() - i,
       op => op.len(),
     }
@@ -191,7 +129,7 @@ fn set_goto_address(bc: &mut Vec<u8>, _goto_to_off: &[u32], offset: usize) {
 fn build_state<'db>(
   db: &'db ParserDatabase,
   state: &ParseState,
-  pkg: &mut BytecodePackage,
+  pkg: &mut BytecodeParserDB,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
   add_debug_symbols: bool,
 ) -> SherpaResult<()> {
@@ -204,7 +142,7 @@ fn build_state<'db>(
 fn build_statement<'db>(
   db: &'db ParserDatabase,
   stmt: &parser::Statement,
-  pkg: &mut BytecodePackage,
+  pkg: &mut BytecodeParserDB,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
   add_debug_symbols: bool,
 ) -> SherpaResult<()> {
@@ -230,19 +168,19 @@ fn build_statement<'db>(
     insert_tok_debug(pkg, non_branch.to_token(), add_debug_symbols);
 
     match non_branch {
-      parser::ASTNode::ReduceRaw(box parser::ReduceRaw { rule_id, len, nonterminal_id, .. }) => {
+      parser::ASTNode::ReduceRaw(r) => {
         insert_op(&mut pkg.bytecode, Op::Reduce);
-        insert_u32_le(&mut pkg.bytecode, *nonterminal_id as u32);
-        insert_u32_le(&mut pkg.bytecode, *rule_id as u32);
-        insert_u16_le(&mut pkg.bytecode, *len as u16);
+        insert_u32_le(&mut pkg.bytecode, r.nonterminal_id as u32);
+        insert_u32_le(&mut pkg.bytecode, r.rule_id as u32);
+        insert_u16_le(&mut pkg.bytecode, r.len as u16);
       }
-      parser::ASTNode::SetTokenId(box parser::SetTokenId { id, .. }) => {
+      parser::ASTNode::SetTokenId(st) => {
         insert_op(&mut pkg.bytecode, Op::AssignToken);
-        insert_u32_le(&mut pkg.bytecode, *id);
+        insert_u32_le(&mut pkg.bytecode, st.id);
       }
       parser::ASTNode::SetLine(_) => { /* ignored in bytecode parsers */ }
-      parser::ASTNode::Pop(box parser::Pop { popped_state, .. }) => {
-        for _ in 0..(*popped_state).max(1) {
+      parser::ASTNode::Pop(p) => {
+        for _ in 0..(p.popped_state).max(1) {
           insert_op(&mut pkg.bytecode, Op::PopGoto)
         }
       }
@@ -310,7 +248,7 @@ fn get_proxy_address(name: IString, state_name_to_proxy: &mut OrderedMap<IString
 fn build_match<'db>(
   db: &'db ParserDatabase,
   matches: &parser::ASTNode,
-  pkg: &mut BytecodePackage,
+  pkg: &mut BytecodeParserDB,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
   add_debug_symbols: bool,
 ) -> SherpaResult<()> {
@@ -320,20 +258,20 @@ fn build_match<'db>(
   let input_type_key;
 
   match matches {
-    parser::ASTNode::Matches(box parser::Matches { matches, mode, scanner, .. }) => {
-      input_type_key = match mode.as_str() {
+    parser::ASTNode::Matches(m) => {
+      input_type_key = match m.mode.as_str() {
         MatchInputType::TOKEN_STR => {
-          scanner_address = get_proxy_address(scanner.to_token(), state_name_to_proxy);
+          scanner_address = get_proxy_address(m.scanner.to_token(), state_name_to_proxy);
           MatchInputType::Token
         }
         s => MatchInputType::from(s),
       } as u32;
-      for m in matches.iter().rev() {
+      for m in m.matches.iter().rev() {
         match m {
-          parser::ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
-            default = Some(statement.as_ref());
+          parser::ASTNode::DefaultMatch(d) => {
+            default = Some(d.statement.as_ref());
           }
-          parser::ASTNode::IntMatch(box parser::IntMatch { statement, vals }) => match_branches.push((vals, statement.as_ref())),
+          parser::ASTNode::IntMatch(im) => match_branches.push((&im.vals, im.statement.as_ref())),
           _ => {}
         }
       }
@@ -354,8 +292,8 @@ fn build_match<'db>(
     insert_op(&mut pkg.bytecode, Op::ByteSequence);
     insert_u16_le(&mut pkg.bytecode, bytes.len() as u16);
 
-    let mut stmt_bc = BytecodePackage::default();
-    let mut default_bc = BytecodePackage::default();
+    let mut stmt_bc = BytecodeParserDB::default();
+    let mut default_bc = BytecodeParserDB::default();
 
     build_statement(db, stmt, &mut stmt_bc, state_name_to_proxy, add_debug_symbols)?;
 
@@ -385,7 +323,7 @@ fn build_match<'db>(
         val_offset_map.insert(*id as u32, offset);
       }
 
-      let mut sub_bc = BytecodePackage::default();
+      let mut sub_bc = BytecodeParserDB::default();
       build_statement(db, stmt, &mut sub_bc, state_name_to_proxy, add_debug_symbols)?;
       offset += sub_bc.bytecode.len() as u32;
       sub_bcs.push(sub_bc);
@@ -484,7 +422,7 @@ fn build_match<'db>(
   SherpaResult::Ok(())
 }
 
-fn insert_tok_debug(pkg: &mut BytecodePackage, tok: Token, add_debug_symbols: bool) {
+fn insert_tok_debug(pkg: &mut BytecodeParserDB, tok: Token, add_debug_symbols: bool) {
   if !add_debug_symbols {
     return;
   }
