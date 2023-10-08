@@ -1,8 +1,12 @@
 #![allow(unused)]
 
-use super::super::{
-  build::{GroupedFirsts, TransitionGroup},
-  graph::*,
+use super::{
+  super::{
+    build::{GroupedFirsts, TransitionGroup},
+    graph::*,
+  },
+  convert_peek_root_state_to_fork,
+  create_fork,
 };
 use crate::{
   compile::build_graph::errors::peek_not_allowed_error,
@@ -12,6 +16,8 @@ use crate::{
 use std::collections::{BTreeSet, HashSet};
 
 use GraphBuildState::*;
+
+const INITIAL_PEEK_K: u32 = 2;
 
 /// Peek needs --- collection nonterminal and terminal symbols to complete, and
 /// a set of follow items for each kernel item
@@ -32,7 +38,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
 
   let existing_items = incomplete_items.clone().to_next().heritage();
 
-  let mut state = gb.create_state::<DefaultIter>(Normal, sym, StateType::Peek(2), None);
+  let mut state = gb.create_state::<DefaultIter>(Normal, sym, StateType::Peek(INITIAL_PEEK_K), None);
 
   if let Some(completed_pairs) = completed_pairs {
     let pairs: BTreeSet<TransitionPair<'_>> = completed_pairs.into_iter().cloned().collect::<BTreeSet<_>>();
@@ -178,10 +184,16 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
         panic!("MULTIPLE INCOMPLETED -- Cannot resolve using peek within the limits of the grammar rules. This requires a fork");
       } else if cmpl_targets_len == 1 {
         let (origin_index, PeekGroup { items, .. }) = cmpl_targets.unwrap().into_iter().next().unwrap();
+
         let staged = items.clone();
+
         gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(staged.into_iter())).to_enqueued();
       } else if cmpl_targets_len > 1 {
-        panic!("MULTIPLE COMPLETED -- Cannot resolve using peek within the limits of the grammar rules. This requires a fork");
+        if gb.config.ALLOW_FORKING {
+          convert_peek_root_state_to_fork(gb)?;
+        } else {
+          panic!("MULTIPLE COMPLETED -- Cannot resolve using peek within the limits of the grammar rules. This requires a fork");
+        }
       } else {
         panic!("OOS STATES -- This can be discarded");
         /// Only have oos states

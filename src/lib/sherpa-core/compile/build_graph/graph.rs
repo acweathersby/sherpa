@@ -118,6 +118,8 @@ pub enum StateType {
   /// items.
   NonTerminalShiftLoop,
   NonTerminalComplete,
+  ForkInitiator,
+  ForkedState,
   Peek(u32),
   /// A peek path has been resolved to a single peek group located in the peek
   /// origin state.
@@ -1182,6 +1184,18 @@ impl<'db> GraphBuilder<'db> {
 
   pub fn get_state<'a>(&'a self, state_id: StateId) -> GraphStateRef<'a, 'db> {
     self.graph[state_id].as_ref(&self.graph)
+  }
+
+  pub fn detach_state<'a>(&'a mut self, state_id: StateId) -> bool {
+    let state = &mut self.graph[state_id];
+
+    if !state.parent.is_invalid() {
+      state.parent = StateId::default();
+      self.graph.state_predecessors.remove(&state_id);
+      true
+    } else {
+      false
+    }
   }
 
   pub fn get_state_mut<'a>(&'a mut self, state_id: StateId) -> GraphStateMutRef<'a, 'db> {

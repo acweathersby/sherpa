@@ -132,6 +132,15 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
                     reduce_symbols(symbol_count, &mut rec_ctx, nonterminal_id, rule_id);
                   }
 
+                  ParseAction::Fork(states) => {
+                    for state in states {
+                      let mut new_state = rec_ctx.split();
+                      new_state.ctx_mut().push_state(state);
+                      sort_and_enque(pending, new_state)
+                    }
+                    break;
+                  }
+
                   _ => unreachable!(),
                 }
               } else {

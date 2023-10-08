@@ -109,116 +109,132 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
   let db: &ParserDatabase = state.graph.get_db();
   let s_store = db.string_store();
 
-  let mut gotos = successors
-    .iter()
-    .filter_map(|goto_state| match goto_state.get_type() {
-      StateType::ShiftFrom(s) => Some((s, create_ir_state_name(GRAPH_STATE_NONE, goto_state).intern(s_store))),
-      _ => None,
-    })
-    .collect::<OrderedMap<_, _>>();
+  if matches!(state.get_type(), StateType::ForkInitiator) {
+    let mut writer = CodeWriter::new(vec![]);
+    let mut w = &mut writer;
 
-  debug_assert!(gotos.is_empty() || goto_state_id.is_none());
+    w = w + "fork {";
 
-  if gotos.is_empty() {
-    if let Some(goto_string) = goto_state_id {
-      gotos.extend(successors.iter().map(|i| (i.id, goto_string)))
+    for successor in successors {
+      let name = create_ir_state_name(Some(state), successor);
+      w = w + " " + &name;
     }
-  }
 
-  let successor_groups = hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
-    StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop => SType::GotoSuccessors,
-    _ => SType::SymbolSuccessors,
-  });
+    _ = w + " }";
 
-  let base_state = if let Some(successors) = successor_groups.get(&SType::SymbolSuccessors) {
-    let mut w = CodeWriter::new(vec![]);
-
-    w.indent();
-
-    add_tok_expr(state, successors, &mut w);
-
-    let mut classes = classify_successors(successors, db);
-
-    let scanner_data = add_match_expr(&mut w, state, &mut classes, &gotos);
-
-    Some(Box::new(create_ir_state(w, &state, scanner_data)?))
+    Ok(vec![(state_id, Box::new(create_ir_state(writer, &state, None)?))])
   } else {
-    None
-  };
+    let mut gotos = successors
+      .iter()
+      .filter_map(|goto_state| match goto_state.get_type() {
+        StateType::ShiftFrom(s) => Some((s, create_ir_state_name(GRAPH_STATE_NONE, goto_state).intern(s_store))),
+        _ => None,
+      })
+      .collect::<OrderedMap<_, _>>();
 
-  let mut out = vec![];
+    debug_assert!(gotos.is_empty() || goto_state_id.is_none());
 
-  if matches!(
-    state.get_type(),
-    StateType::CompleteToken | StateType::AssignAndFollow(..) | StateType::AssignToken(..) | StateType::Reduce(..)
-  ) {
-    let mut w = CodeWriter::new(vec![]);
-    w.increase_indent();
-    w.insert_newline()?;
-
-    match state.get_type() {
-      StateType::AssignAndFollow(tok_id) | StateType::AssignToken(tok_id) => {
-        let _ = (&mut w) + "set-tok " + db.tok_val(tok_id).to_string();
+    if gotos.is_empty() {
+      if let Some(goto_string) = goto_state_id {
+        gotos.extend(successors.iter().map(|i| (i.id, goto_string)))
       }
-      StateType::CompleteToken => w.write("pass")?,
+    }
 
-      StateType::Reduce(rule_id, completes) => {
-        debug_assert!(!state.get_kernel_items().iter().any(|i| i.origin_is_oos()));
+    let successor_groups = hash_group_btreemap(successors.clone(), |_, s| match s.get_type() {
+      StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop => SType::GotoSuccessors,
+      _ => SType::SymbolSuccessors,
+    });
 
-        w.write(&create_rule_reduction(rule_id, db))?;
+    let base_state = if let Some(successors) = successor_groups.get(&SType::SymbolSuccessors) {
+      let mut w = CodeWriter::new(vec![]);
 
-        if completes > 0 {
-          let _ = (&mut w) + "pop " + completes.to_string();
+      w.indent();
+
+      add_tok_expr(state, successors, &mut w);
+
+      let mut classes = classify_successors(successors, db);
+
+      let scanner_data = add_match_expr(&mut w, state, &mut classes, &gotos);
+
+      Some(Box::new(create_ir_state(w, &state, scanner_data)?))
+    } else {
+      None
+    };
+
+    let mut out = vec![];
+
+    if matches!(
+      state.get_type(),
+      StateType::CompleteToken | StateType::AssignAndFollow(..) | StateType::AssignToken(..) | StateType::Reduce(..)
+    ) {
+      let mut w = CodeWriter::new(vec![]);
+      w.increase_indent();
+      w.insert_newline()?;
+
+      match state.get_type() {
+        StateType::AssignAndFollow(tok_id) | StateType::AssignToken(tok_id) => {
+          let _ = (&mut w) + "set-tok " + db.tok_val(tok_id).to_string();
         }
-      }
-      _ => unreachable!(),
-    }
+        StateType::CompleteToken => w.write("pass")?,
 
-    if let Some(mut base_state) = base_state {
+        StateType::Reduce(rule_id, completes) => {
+          debug_assert!(!state.get_kernel_items().iter().any(|i| i.origin_is_oos()));
+
+          w.write(&create_rule_reduction(rule_id, db))?;
+
+          if completes > 0 {
+            let _ = (&mut w) + "pop " + completes.to_string();
+          }
+        }
+        _ => unreachable!(),
+      }
+
+      if let Some(mut base_state) = base_state {
+        if state_id.is_root() {
+          base_state.hash_name = (entry_name.to_string(s_store) + "_then").intern(s_store);
+        } else {
+          base_state.hash_name = (base_state.hash_name.to_string(s_store) + "_then").intern(s_store);
+        }
+
+        w.w(" then goto ")?.w(&base_state.hash_name.to_string(s_store))?;
+
+        out.push((state_id.to_post_reduce(), base_state));
+      }
+
+      let mut ir_state = create_ir_state(w, &state, None)?;
+
       if state_id.is_root() {
-        base_state.hash_name = (entry_name.to_string(s_store) + "_then").intern(s_store);
-      } else {
-        base_state.hash_name = (base_state.hash_name.to_string(s_store) + "_then").intern(s_store);
+        ir_state.hash_name = entry_name;
+        ir_state.root = true;
       }
 
-      w.w(" then goto ")?.w(&base_state.hash_name.to_string(s_store))?;
+      out.push((state_id, Box::new(ir_state)));
+    } else if let Some(mut base_state) = base_state {
+      if state_id.is_root() {
+        base_state.hash_name = entry_name;
+      }
 
-      out.push((state_id.to_post_reduce(), base_state));
+      out.push((state_id, base_state));
     }
+    #[cfg(debug_assertions)]
+    debug_assert!(
+      !out.is_empty()
+        || matches!(
+          state.get_type(),
+          StateType::NonTerminalComplete
+            | StateType::NonTermCompleteOOS
+            | StateType::ScannerCompleteOOS
+            | StateType::CompleteToken
+            | StateType::AssignToken(..)
+        ),
+      "Graph state failed to generate ir states:\nSTATE\n\n {} \n\nGraph\n{}\n{}",
+      state._debug_string_(),
+      "", // state.graph._debug_string_(),
+      successors.iter().map(|s| s._debug_string_()).collect::<Vec<_>>().join("\n\n")
+    );
 
-    let mut ir_state = create_ir_state(w, &state, None)?;
-
-    if state_id.is_root() {
-      ir_state.hash_name = entry_name;
-      ir_state.root = true;
-    }
-
-    out.push((state_id, Box::new(ir_state)));
-  } else if let Some(mut base_state) = base_state {
-    if state_id.is_root() {
-      base_state.hash_name = entry_name;
-    }
-
-    out.push((state_id, base_state));
+    Ok(out)
   }
-  #[cfg(debug_assertions)]
-  debug_assert!(
-    !out.is_empty()
-      || matches!(
-        state.get_type(),
-        StateType::NonTerminalComplete
-          | StateType::NonTermCompleteOOS
-          | StateType::ScannerCompleteOOS
-          | StateType::CompleteToken
-          | StateType::AssignToken(..)
-      ),
-    "Graph state failed to generate ir states:\nSTATE\n\n {} \n\nGraph\n{}\n{}",
-    state._debug_string_(),
-    "", // state.graph._debug_string_(),
-    successors.iter().map(|s| s._debug_string_()).collect::<Vec<_>>().join("\n\n")
-  );
-
-  SherpaResult::Ok(out)
 }
 
 fn add_tok_expr<'graph, 'db: 'graph>(

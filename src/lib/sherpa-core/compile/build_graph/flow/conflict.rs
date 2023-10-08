@@ -158,6 +158,17 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
 
       Ok(ShiftReduceConflictResolution::Peek(k as u16))
     }
+    KCalcResults::Unpeekable => {
+      if gb.config.ALLOW_FORKING {
+        return Ok(ShiftReduceConflictResolution::Fork);
+      } else {
+        peek_not_allowed_error(
+          gb,
+          &[shifts.cloned().collect(), reduces.cloned().collect()],
+          &format!("Forking must be enabled to resolve ambiguity"),
+        )
+      }
+    }
   }
 }
 
@@ -170,6 +181,9 @@ enum KCalcResults {
   /// The peek paths are looking promising, but k is going to be more than the
   /// max eval limit.
   LargerThanMaxLimit(usize),
+  /// One or more items resolve to goal symbol without further means of
+  /// disambiguation using peek states.
+  Unpeekable,
 }
 
 fn get_follow_artifacts<'db>(
@@ -208,9 +222,13 @@ fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: Transi
     let (out, shift_syms) = get_follow_artifacts(&shift_items.try_increment(), gb);
     shift_items = out;
 
+    if reduce_syms.len() == 0 || shift_syms.len() == 0 {
+      // Ran out of symbols to compare, this indicates that we have reached goal
+      // non-terminal and there are no further actions possible.
+      return KCalcResults::Unpeekable;
+    }
+
     if reduce_syms.intersection(&shift_syms).next().is_none() {
-      // Have to consider items outside the domain of the goal-nonterminal, so we'll
-      // have to a strategy other than peek to this conflict.
       return KCalcResults::K(k);
     }
 

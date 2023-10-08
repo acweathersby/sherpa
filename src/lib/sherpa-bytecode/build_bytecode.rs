@@ -112,7 +112,7 @@ fn remap_goto_addresses(bc: &mut Array<u8>, _goto_to_off: &Array<u32>) {
         for off in 0..len {
           set_goto_address(bc, _goto_to_off, i + 3 + (off << 2));
         }
-        op.len()
+        3 + len + 4
       }
       Op::ByteSequence => Instruction::from((bc.as_slice(), i)).next().unwrap().address() - i,
       op => op.len(),

@@ -1,5 +1,6 @@
 use super::{
   flow::{
+    handle_fork,
     handle_nonterminal_shift,
     handle_peek_complete_groups,
     handle_peek_incomplete_items,
@@ -18,6 +19,10 @@ pub(crate) type GroupedFirsts<'db> = OrderedMap<SymbolId, TransitionGroup<'db>>;
 
 pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
   let mut groups = get_firsts(gb)?;
+
+  if handle_fork(gb) {
+    return Ok(());
+  }
 
   handle_cst_actions(gb);
 

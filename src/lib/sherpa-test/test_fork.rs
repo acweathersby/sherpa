@@ -8,29 +8,20 @@ use std::path::PathBuf;
 pub fn construct_error_recovering_parser() -> SherpaResult<()> {
   let source = r#"
 
-  IGNORE { c:sp }
+  IGNORE { c:sp } 
 
-  <> taco > apple ";" $
 
-  <> apple > topic ";"
+  <> F > E "test"
 
-  <> topic > test "green" "toast"
+  <> E > A " !" | B
 
-  <> test > fn "{}" 
+  <> B > "id" "()" " !"
 
-  <> fn > ("fn" | "funct" | "function") "(" field(*",") ")" "{" field(*",") "}" 
-
-  <> field > tk:id ":" val
-
-  <> val > c:num
-
-  <> id > c:id(+)
+  <> A > "id" "()"
   
    "#;
 
-  let input = r#"fn ( d:2){  test:2  } {} green toast ; ;"#;
-
-  println!("------------------");
+  let input = r#"id () ! test"#;
 
   let root_path = PathBuf::from("test.sg");
 
@@ -38,7 +29,8 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
 
   grammar.add_source_from_string(source, &root_path, false)?;
 
-  let parser_data = grammar.build_db(&root_path)?.build_parser(ParserConfig::default().cst_editor())?.optimize(false)?;
+  let parser_data =
+    grammar.build_db(&root_path)?.build_parser(ParserConfig::default().cst_editor().enable_fork(true))?.optimize(false)?;
 
   parser_data._write_states_to_temp_file_()?;
 

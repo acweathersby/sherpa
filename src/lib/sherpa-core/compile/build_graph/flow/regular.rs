@@ -6,6 +6,7 @@ use super::{
     graph::*,
   },
   create_call,
+  create_fork,
   create_peek,
   handle_completed_item,
   resolve_conflicting_tokens,
@@ -194,8 +195,9 @@ pub(crate) fn handle_regular_complete_groups<'db>(
       } else {
         match resolve_reduce_reduce_conflict(gb, prec_sym, lookahead_pairs)? {
           ReduceReduceConflictResolution::Nothing => {}
-          ReduceReduceConflictResolution::Fork(_) => {
+          ReduceReduceConflictResolution::Fork(lookahead_pairs) => {
             gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
+            create_fork(gb, prec_sym, lookahead_pairs.iter().map(|i| i.kernel))?.to_pending();
           }
           ReduceReduceConflictResolution::Reduce(item) => todo!("Handle reduce result from reduce-reduce conflict resolution"),
           ReduceReduceConflictResolution::Peek(max_k, follow_pairs) => {
@@ -229,8 +231,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
           }
           ShiftReduceConflictResolution::Fork => {
             gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
-
-            return Err(SherpaError::Text("todo(anthony): Not ready for forking yet".into()));
+            create_fork(gb, prec_sym, lookahead_pairs.into_iter().chain(group.into_iter()).map(|i| i.kernel))?.to_pending();
           }
         }
       }
