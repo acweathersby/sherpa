@@ -3,10 +3,13 @@
 //! using bytecode parser engine.
 
 use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{ParserConfig, ParserStore, SherpaGrammarBuilder, SherpaResult};
+use sherpa_core::{ParserConfig, SherpaGrammarBuilder, SherpaResult};
 use sherpa_rust_runtime::types::{ParserProducer, RuntimeDatabase, StringInput};
 
-use crate::debug::{file_debugger, PrintConfig};
+use crate::{
+  debug::{file_debugger, PrintConfig},
+  utils::_write_states_to_temp_file_,
+};
 
 #[test]
 fn test_full_grammar() -> SherpaResult<()> {
@@ -36,8 +39,7 @@ fn test_full_grammar() -> SherpaResult<()> {
     .filter(|f| f.file_type().is_ok_and(|t| t.is_file()))
     .map(|f| f.path());
 
-  #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
-  parser_builder._write_states_to_temp_file_()?;
+  _write_states_to_temp_file_(&parser_builder)?;
 
   let db = parser_builder.get_db();
 

@@ -20,7 +20,7 @@ pub trait ForkableParser<I: ParserInput>: ParserIterator<I> + ParserInitializer 
     let mut completed = Default::default();
 
     while !pending.pop_is_empty() {
-      fork_kernel(input, self, &mut pending, &mut completed, &mut errored)?;
+      fork_meta_kernel(input, self, &mut pending, &mut completed, &mut errored)?;
       pending.swap_buffers();
     }
 
@@ -37,7 +37,7 @@ impl<T: ParserIterator<I> + ParserInitializer, I: ParserInput> ForkableParser<I>
 /// least one parse action, placing them back into the pending queue, the
 /// `completed` if they have been completed, or `errored` if an
 /// error was encountered.
-pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: ForkableContext>(
+pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: ForkableContext>(
   input: &mut I,
   parser: &mut P,
   pending: &mut ContextQueue<CTX>,
@@ -50,12 +50,12 @@ pub(crate) fn fork_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: Fo
 
   while let Some(mut rec_ctx) = pending.pop_front() {
     if !rec_ctx.ctx().is_finished {
-      if rec_ctx.ctx().anchor_ptr > min_advance {
+      if rec_ctx.get_offset() > min_advance {
         pending.push_with_priority(rec_ctx);
         continue;
       }
 
-      min_advance = min_advance.min(rec_ctx.ctx().anchor_ptr);
+      min_advance = min_advance.min(rec_ctx.get_offset());
 
       if let Some(action) = parser.next(input, rec_ctx.ctx_mut()) {
         match action {
@@ -191,7 +191,6 @@ pub fn insert_node<CTX: ForkableContext>(rec_ctx: &mut CTX, node: CSTNode) {
 fn create_skip<I: ParserInput>(input: &mut I, token_id: u32, token_byte_length: u32, token_byte_offset: u32) -> CSTNode {
   TokenNode::skipped_type(
     token_id,
-    token_byte_length,
     token_byte_offset,
     input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
   )
@@ -207,7 +206,6 @@ pub fn create_token<I: ParserInput>(
   TokenNode::token_type(
     emitting_state,
     token_id,
-    token_byte_length,
     token_byte_offset,
     input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
   )

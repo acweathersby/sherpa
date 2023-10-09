@@ -342,7 +342,7 @@ fn build_match<'db>(
 
     let default_offset = if let Some(default) = default {
       build_statement(db, default, &mut default_bc, state_name_to_proxy, add_debug_symbols)?;
-      (base_len + stmt_bc.bytecode.len())
+      base_len + stmt_bc.bytecode.len()
     } else {
       0
     };

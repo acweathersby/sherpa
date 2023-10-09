@@ -1,7 +1,7 @@
 use crate::grammar::{JSBytecodePackage, JSParserDB};
 use serde::{Deserialize, Serialize};
 use sherpa_core::parser;
-use sherpa_rust_runtime::{deprecate::*, types::*};
+use sherpa_rust_runtime::types::*;
 
 use std::{
   borrow::BorrowMut,

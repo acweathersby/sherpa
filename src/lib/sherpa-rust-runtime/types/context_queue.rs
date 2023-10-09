@@ -1,4 +1,4 @@
-use std::{alloc::Layout, cmp::Ordering, default, fmt::Debug, rc::Rc, sync::Arc};
+use std::{alloc::Layout, cmp::Ordering, fmt::Debug};
 
 use super::ParserError;
 
@@ -443,7 +443,7 @@ mod test {
 
   #[test]
   fn insert_and_retrieve_object_with_mixed_prority() -> Result<(), ParserError> {
-    let max_items = u16::MAX as usize >> 4;
+    let max_items = u16::MAX as usize;
 
     let mut queue = TestQueue::new_with_capacity(200)?;
 

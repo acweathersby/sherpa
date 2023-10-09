@@ -27,17 +27,29 @@ pub trait ParserIterator<T: ParserInput> {
   fn next<'ctx>(&mut self, input: &mut T, context: &'ctx mut ParserContext) -> Option<ParseAction>;
 }
 
-/// Provides information on artifacts consumed and produced by a parser
+pub type TokenData = u32;
+
+pub struct TokenData2 {
+  /// The lexical id of this token.
+  id: u32,
+  /// The amount of entropy created by the addition of this token.
+  entropic_weight: u32,
+}
+
+/// Provides information on artifacts consumed and produced by a specific parser
 pub trait RuntimeDatabase {
   fn get_entry_data_from_name(&self, entry_name: &str) -> Result<EntryPoint, ParserError>;
 
   /// Return the normal token ids (those that are not skipped) expected at the
   /// given state.
   #[allow(unused)]
-  fn get_expected_tok_ids_at_state(&self, state_id: u32) -> Option<&[u32]>;
+  fn get_expected_tok_ids_at_state(&self, state_id: u32) -> Option<&[TokenData]>;
 
   /// Returns a human friendly string representation of the given token id.
   fn token_id_to_str<'str>(&'str self, id: u32) -> Option<&'str str>;
+
+  ///// Returns a human friendly string representation of the given token id.
+  //fn state_id_to_ptr<'str>(&'str self, id: u32) -> Option<&'str str>;
 }
 
 /// An object capable of instantiating a parser

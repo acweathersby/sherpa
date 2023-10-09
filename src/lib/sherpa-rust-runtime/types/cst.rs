@@ -1,6 +1,6 @@
 use super::*;
 use std::{
-  collections::{hash_map::DefaultHasher, HashMap, HashSet},
+  collections::hash_map::DefaultHasher,
   fmt::Debug,
   hash::{Hash, Hasher},
   rc::Rc,
@@ -153,24 +153,24 @@ pub struct TokenNode {
 }
 
 impl TokenNode {
-  pub fn new(tok_id: u32, length: u32, offset: u32, val: String) -> Rc<Self> {
+  pub fn new(tok_id: u32, offset: u32, val: String) -> Rc<Self> {
     Rc::new(Self { tok_id, offset, val })
   }
 
-  pub fn skipped_type(tok_id: u32, length: u32, offset: u32, val: String) -> CSTNode {
-    CSTNode::Skipped(Self::new(tok_id, length, offset, val))
+  pub fn skipped_type(tok_id: u32, offset: u32, val: String) -> CSTNode {
+    CSTNode::Skipped(Self::new(tok_id, offset, val))
   }
 
-  pub fn token_type(state: ParserState, tok_id: u32, length: u32, offset: u32, val: String) -> CSTNode {
-    CSTNode::Token(state, Self::new(tok_id, length, offset, val))
+  pub fn token_type(state: ParserState, tok_id: u32, offset: u32, val: String) -> CSTNode {
+    CSTNode::Token(state, Self::new(tok_id, offset, val))
   }
 
   pub fn missing_type(state: ParserState, tok_id: u32, offset: u32, val: String, entropy: u32) -> CSTNode {
-    CSTNode::MissingToken(entropy, state, Self::new(tok_id, 0, offset, val))
+    CSTNode::MissingToken(entropy, state, Self::new(tok_id, offset, val))
   }
 
   pub fn error_type(tok_id: u32, offset: u32, val: String) -> CSTNode {
-    CSTNode::Errata(Self::new(tok_id, 0, offset, val))
+    CSTNode::Errata(Self::new(tok_id, offset, val))
   }
 
   pub fn length(&self) -> u32 {
@@ -294,10 +294,10 @@ impl<'node, 'db> Printer<'node, 'db> {
   pub fn print(&self) {
     use CSTNode::*;
     match self.node {
-      Skipped(skipped) => {
+      Skipped(..) => {
         //print!("{}", skipped.val);
       }
-      Token(state, token) => {
+      Token(_, token) => {
         print!("{}", token.val);
       }
       MissingToken(.., missing) => {
@@ -326,10 +326,10 @@ impl<'node, 'db> Printer<'node, 'db> {
   fn _print_all(&self) -> Vec<String> {
     use CSTNode::*;
     match self.node {
-      Skipped(skipped) => {
+      Skipped(..) => {
         vec![Default::default()]
       }
-      Token(state, token) => {
+      Token(_, token) => {
         vec![token.val.clone()]
       }
       MissingToken(.., missing) => {

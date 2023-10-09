@@ -346,7 +346,7 @@ fn fork<'a>(i: Instruction<'a>) -> OpResult<'a> {
 fn push_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PushGoto;
   let mut iter = i.iter();
-  let state_mode = iter.next_u8().unwrap();
+  iter.next_u8().unwrap();
   let address = iter.next_u32_le().unwrap() as usize;
 
   ctx.push_state(ParserState::state_entry(address));
@@ -363,7 +363,7 @@ fn push_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResul
 fn push_exception_handler<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PushExceptionHandler;
   let mut iter = i.iter();
-  let state_mode = iter.next_u8().unwrap();
+  iter.next_u8().unwrap();
   let address = iter.next_u32_le().unwrap() as usize;
 
   ctx.push_state(ParserState::state_entry(address));

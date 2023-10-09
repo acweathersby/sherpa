@@ -51,7 +51,7 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
   let ____is_scan____ = gb.is_scanner();
   let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
   let ____allow_lr____: bool = gb.config.ALLOW_LR || ____is_scan____;
-  let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false;
+  let ____allow_fork____: bool = gb.config.ALLOW_CONTEXT_SPLITTING && false;
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
 
   let out_of_scope = group.iter().out_scope();

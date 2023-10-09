@@ -42,18 +42,6 @@ pub trait ParserStore: JournalReporter {
     }
   }
 
-  /// Writes the parser IR states to a file in the temp directory
-  #[cfg(all(debug_assertions))]
-  fn _write_states_to_temp_file_(&self) -> SherpaResult<()> {
-    let db = self.get_db();
-
-    for (i, state) in self.get_states().iter().enumerate() {
-      crate::test::utils::write_debug_file(db, "ir_states.tmp", state.1.print(db, true)? + "\n", i > 0)?;
-    }
-
-    Ok(())
-  }
-
   /// Prints the ir code of the parser states to `stdout`
   #[inline(always)]
   fn _print_states_(&self) {

@@ -1,11 +1,14 @@
-use crate::{utils::_write_disassembly_to_temp_file_, *};
+use crate::{
+  utils::{_write_disassembly_to_temp_file_, _write_states_to_temp_file_},
+  *,
+};
 use sherpa_bytecode::compile_bytecode;
 use sherpa_core::*;
-use sherpa_rust_runtime::{parsers::fork::ForkableParser, types::*};
+use sherpa_rust_runtime::types::*;
 use std::path::PathBuf;
 
 #[test]
-pub fn construct_error_recovering_parser() -> SherpaResult<()> {
+pub fn construct_forking_parser_glr() -> SherpaResult<()> {
   let source = r#"
 
   IGNORE { c:sp } 
@@ -32,7 +35,7 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
   let parser_data =
     grammar.build_db(&root_path)?.build_parser(ParserConfig::default().cst_editor().enable_fork(true))?.optimize(false)?;
 
-  parser_data._write_states_to_temp_file_()?;
+  _write_states_to_temp_file_(&parser_data)?;
 
   let pkg = compile_bytecode(&parser_data, false)?;
 

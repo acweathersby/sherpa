@@ -1,10 +1,6 @@
 use crate::debug::{file_debugger, PrintConfig};
 use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{
-  proxy::OrderedMap,
-  test::utils::{build_parse_states_from_multi_sources, write_debug_file},
-  *,
-};
+use sherpa_core::{proxy::OrderedMap, test::utils::build_parse_states_from_multi_sources, *};
 use sherpa_rust_runtime::{
   kernel::{disassemble_bytecode, ByteCodeParserNew},
   types::{AstObjectNew, BytecodeParserDB, ParserInput, ParserProducer, ReducerNew, RuntimeDatabase, StringInput},
@@ -12,10 +8,48 @@ use sherpa_rust_runtime::{
 
 pub type TestParser = ByteCodeParserNew;
 
+/// Writes to a debug file for testing
+pub fn write_debug_file<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
+  db: &ParserDatabase,
+  file_name: FileName,
+  data: Data,
+  append: bool,
+) -> SherpaResult<()> {
+  use std::{env::*, fs::*, io::Write};
+
+  let file_dir = temp_dir().join("sherpa_testing").join(db.name_string());
+
+  let file_path = file_dir.join(file_name);
+
+  create_dir_all(file_dir)?;
+
+  let mut file = OpenOptions::new().append(append).truncate(!append).write(true).create(true).open(file_path)?;
+  file.write_all(data.as_ref())?;
+  file.flush()?;
+
+  Ok(())
+}
+
 /// Writes the parser IR states to a file in the temp directory
-#[cfg(all(debug_assertions))]
+pub fn _write_states_to_temp_file_(builder: &impl ParserStore) -> SherpaResult<()> {
+  #[cfg(all(debug_assertions))]
+  {
+    let db = builder.get_db();
+
+    for (i, state) in builder.get_states().iter().enumerate() {
+      write_debug_file(db, "ir_states.tmp", state.1.print(db, true)? + "\n", i > 0)?;
+    }
+  }
+
+  Ok(())
+}
+
+/// Writes the parser IR states to a file in the temp directory
 pub fn _write_disassembly_to_temp_file_(pkg: &BytecodeParserDB, db: &ParserDatabase) -> SherpaResult<()> {
-  write_debug_file(db, "bc_disassembly.tmp", disassemble_bytecode(&pkg.bytecode), false)?;
+  #[cfg(all(debug_assertions))]
+  {
+    write_debug_file(db, "bc_disassembly.tmp", disassemble_bytecode(&pkg.bytecode), false)?;
+  }
   Ok(())
 }
 
@@ -26,7 +60,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
     true,
     &|tp| {
       #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
-      tp._write_states_to_temp_file_()?;
+      _write_states_to_temp_file_(&tp)?;
 
       let pkg = compile_bytecode(&tp, true)?;
       let TestPackage { db, .. } = tp;

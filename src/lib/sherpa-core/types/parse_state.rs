@@ -304,7 +304,7 @@ fn render_IR<T: Write>(
 
         if let Some(fork) = fork {
           w = w + " fork {";
-          w.indent().newline();
+          w.indent().newline()?;
           for init in &fork.paths {
             w = (w + &init.name).newline()?;
           }
@@ -323,12 +323,12 @@ fn render_IR<T: Write>(
 
         if let Some(fork) = fork {
           w = w + " fork {";
-          w.indent().newline();
+          w.indent().newline()?;
           for init in &fork.paths {
             w = (w + &init.name).newline()?;
           }
           w.dedent().newline()?;
-          w = w + "}";
+          _ = w + "}";
         }
       }
     }

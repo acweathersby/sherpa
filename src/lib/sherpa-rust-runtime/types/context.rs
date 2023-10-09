@@ -288,7 +288,7 @@ impl ForkableContext for RecoverableContext {
 }
 
 impl PartialEq for RecoverableContext {
-  fn eq(&self, other: &Self) -> bool {
+  fn eq(&self, _other: &Self) -> bool {
     false
   }
 }

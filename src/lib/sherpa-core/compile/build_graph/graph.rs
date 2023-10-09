@@ -128,6 +128,8 @@ pub enum StateType {
   Follow,
   AssignAndFollow(DBTermKey),
   Reduce(DBRuleKey, usize),
+  /// Assigns the token id of a terminal symbol. This is always a leaf statement
+  /// for scanner graphs.
   AssignToken(DBTermKey),
   /// Accept the current Nonterminal within the CST
   CSTNodeAccept(DBNonTermKey),

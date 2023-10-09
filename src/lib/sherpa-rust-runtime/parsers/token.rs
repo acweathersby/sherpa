@@ -46,7 +46,7 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
           //if let Some(debug) = debug {
           //  debug(&DebugEvent::ActionError {}, self.get_ctx());
           //}
-          let mut token: Token = last_input.to_token_from_ref(input.get_owned_ref());
+          let token: Token = last_input.to_token_from_ref(input.get_owned_ref());
 
           return Err(ParserError::InputError {
             message: "Could not recognize the following input:".to_string(),
@@ -61,12 +61,7 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
         ParseAction::Skip { byte_offset: token_byte_offset, byte_length: token_byte_length, .. } => {
           skips.push(input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize));
         }
-        ParseAction::Shift {
-          byte_length: token_byte_length,
-          byte_offset: token_byte_offset,
-          token_id,
-          ..
-        } => {
+        ParseAction::Shift { byte_length: token_byte_length, byte_offset: token_byte_offset, .. } => {
           let offset_start = token_byte_offset as usize;
           let offset_end = (token_byte_offset + token_byte_length) as usize;
 

@@ -33,7 +33,7 @@ fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuil
   let ____is_scan____ = gb.is_scanner();
   let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
   let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
-  let ____allow_fork____: bool = gb.config.ALLOW_FORKING && false; // Forking is disabled
+  let ____allow_fork____: bool = gb.config.ALLOW_CONTEXT_SPLITTING && false; // Forking is disabled
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
 
   #[cfg(debug_assertions)]

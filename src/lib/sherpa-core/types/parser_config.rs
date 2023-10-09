@@ -22,10 +22,10 @@ pub struct ParserConfig {
   /// Allow merging of states that only differ in their look ahead sets. This
   /// will lead to a decrease in accuracy of error messages.
   pub ALLOW_LOOKAHEAD_MERGE: bool,
-  /// Allow the parser to split its context to handle ambiguous rules. This may
-  /// lead to a CSF (Concrete Syntax Forest) or a CSDAG (Concrete Syntax DAG)
-  /// being returned by the parser instead of a CST
-  pub ALLOW_FORKING: bool,
+  /// Allow the parser to split its context to handle ambiguity. This
+  /// may lead to a CSF (Concrete Syntax Forest) or a CSDAG (Concrete Syntax
+  /// DAG) being returned by the parser instead of a CST
+  pub ALLOW_CONTEXT_SPLITTING: bool,
   /// Creates a single scanner instead of multiple contextual scanners. More
   /// likely to report terminal conflicts.
   pub CONTEXT_FREE: bool,
@@ -40,6 +40,18 @@ pub struct ParserConfig {
   pub EXPORT_ALL_NONTERMS: bool,
   /// Allow the parser to shift on CST non-term nodes.
   pub ALLOW_CST_NONTERM_SHIFT: bool,
+  /// Allow inlining of scanners that yield single codepoint tokens.
+  ///
+  /// Parser created with this type of optimization tend to perform poorly when
+  /// used for error correction.
+  pub ALLOW_SCANNER_INLINING: bool,
+  /// An anonymous non-terminal, aka grouped rules `e.g ( symA symB | symC | ..
+  /// )`, may be inlined into the body of its host rule if none of the grouped
+  /// rules contain semantic actions, such as `:ast` definitions.  
+  ///
+  /// Parser created with this type of optimization tend to perform poorly when
+  /// used for error correcting.
+  pub ALLOW_ANONYMOUS_NONTERM_INLINING: bool,
 }
 
 impl Default for ParserConfig {
@@ -49,12 +61,14 @@ impl Default for ParserConfig {
       ALLOW_LR: true,
       ALLOW_LOOKAHEAD_MERGE: true,
       ALLOW_PEEKING: true,
-      ALLOW_FORKING: false,
+      ALLOW_CONTEXT_SPLITTING: false,
       AllOW_CST_MERGING: false,
       AllOW_ERROR_RECOVERY: false,
       CONTEXT_FREE: false,
       EXPORT_ALL_NONTERMS: false,
       ALLOW_CST_NONTERM_SHIFT: false,
+      ALLOW_SCANNER_INLINING: true,
+      ALLOW_ANONYMOUS_NONTERM_INLINING: true,
       max_k: usize::MAX,
     }
   }
@@ -72,7 +86,7 @@ impl ParserConfig {
       gotos_present: self.ALLOW_LR,
       calls_present: self.ALLOW_RECURSIVE_DESCENT,
       peeks_present: self.ALLOW_PEEKING,
-      forks_present: self.ALLOW_FORKING,
+      forks_present: self.ALLOW_CONTEXT_SPLITTING,
     }
   }
 
@@ -85,8 +99,10 @@ impl ParserConfig {
   }
 
   pub fn cst_editor(mut self) -> Self {
-    self = self.hybrid();
+    self = self.g_hybrid();
     self.EXPORT_ALL_NONTERMS = true;
+    self.ALLOW_ANONYMOUS_NONTERM_INLINING = false;
+    self.ALLOW_SCANNER_INLINING = false;
     //self.ALLOW_CST_NONTERM_SHIFT = true;
     self
   }
@@ -104,20 +120,20 @@ impl ParserConfig {
 
   pub fn glr(mut self) -> Self {
     self = self.lrk(8);
-    self.ALLOW_FORKING = true;
+    self.ALLOW_CONTEXT_SPLITTING = true;
     self
   }
 
   pub fn gll(mut self) -> Self {
     self = self.llk(8);
-    self.ALLOW_FORKING = true;
+    self.ALLOW_CONTEXT_SPLITTING = true;
     self
   }
 
   pub fn lrk(mut self, k: usize) -> Self {
     self.ALLOW_RECURSIVE_DESCENT = false;
     self.ALLOW_LOOKAHEAD_MERGE = false;
-    self.ALLOW_FORKING = false;
+    self.ALLOW_CONTEXT_SPLITTING = false;
     self.ALLOW_LR = true;
     self.set_k(k)
   }
@@ -125,7 +141,7 @@ impl ParserConfig {
   pub fn llk(mut self, k: usize) -> Self {
     self.ALLOW_RECURSIVE_DESCENT = false;
     self.ALLOW_LR = false;
-    self.ALLOW_FORKING = false;
+    self.ALLOW_CONTEXT_SPLITTING = false;
     self.set_k(k)
   }
 
@@ -157,7 +173,7 @@ impl ParserConfig {
   }
 
   pub fn enable_fork(mut self, enable: bool) -> Self {
-    self.ALLOW_FORKING = enable;
+    self.ALLOW_CONTEXT_SPLITTING = enable;
     self
   }
 

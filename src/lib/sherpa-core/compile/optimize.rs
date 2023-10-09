@@ -7,7 +7,6 @@ use crate::{
     ASTNodeType,
     DefaultMatch,
     GetASTNodeType,
-    Gotos,
     IntMatch,
     Matches,
     NonTermMatch,
@@ -25,7 +24,7 @@ type Map<A, B> = BTreeMap<A, B>;
 type Set<A> = BTreeSet<A>;
 
 /// Performance various transformation on the parse state graph
-/// to reduce number of steps between transient actions, and to
+/// to reduce the number of steps between transient actions, and to
 /// reduce the number of parse states overall.
 pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
@@ -35,21 +34,19 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 ) -> SherpaResult<R> {
   let start_complexity = ComplexityMarker::new(db, parse_states.iter());
 
-  //return garbage_collect(db, parse_states, "initial purge");
-
   let parse_states = garbage_collect(db, config, parse_states, "initial purge")?;
 
-  let parse_states = canonicalize_states(db, config, parse_states, None)?;
+  let parse_states = canonicalize_states(db, config, parse_states, None)?.0;
 
   let parse_states = merge_branches(db, parse_states)?;
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
-  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?;
+  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?.0;
 
   //let parse_states = _inline_states(db, config, parse_states)?;
 
-  let parse_states = inline_scanners(db, config, parse_states)?;
+  let parse_states = if config.ALLOW_SCANNER_INLINING { inline_scanners(db, config, parse_states)? } else { parse_states };
 
   let parse_states = create_byte_sequences(db, config, parse_states)?;
 
@@ -57,11 +54,24 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = remove_redundant_defaults(db, config, parse_states)?;
 
-  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?;
+  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?.0;
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
-  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?;
+  // Perform final rounds of canonicalization, removing as many redundant states
+  // as possible.
+  let parse_states = {
+    let mut states = parse_states;
+    loop {
+      match canonicalize_states(db, config, states, Some("state combine"))? {
+        (s, true) => {
+          println!("round--");
+          states = s;
+        }
+        (s, false) => break s,
+      }
+    }
+  };
 
   //
   // let parse_states = inline_matches(db, parse_states)?;
@@ -292,7 +302,7 @@ fn create_byte_sequences<'db>(
 
     loop {
       let Some(ASTNode::Gotos(gt)) = &active_statement.branch else { break };
-      let parser::Gotos { goto, pushes, fork } = gt.as_ref();
+      let parser::Gotos { goto, pushes, .. } = gt.as_ref();
 
       if let Some(goto) = goto {
         if pushes.len() > 0 {
@@ -728,7 +738,8 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
   gc_label: Option<&str>,
-) -> SherpaResult<R> {
+) -> SherpaResult<(R, bool)> {
+  let mut has_changed = false;
   let mut state_name_to_canonical_state_name = Map::new();
   let mut hash_to_name_set = Map::new();
 
@@ -749,33 +760,42 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     }
   }
 
-  fn canonicalize_goto_name(db: &ParserDatabase, name: String, name_lu: &Map<IString, IString>) -> SherpaResult<String> {
+  fn canonicalize_goto_name(db: &ParserDatabase, name: &str, name_lu: &Map<IString, IString>) -> Option<String> {
     let iname = name.to_token();
     let canonical_name =
       *name_lu.get(&iname).expect(&("State name should exist: ".to_string() + &iname.to_string(db.string_store())));
 
-    let name = if iname != canonical_name { canonical_name.to_string(db.string_store()) } else { name };
-    SherpaResult::Ok(name)
+    (iname != canonical_name).then(|| canonical_name.to_string(db.string_store()))
   }
 
   fn canonicalize_statement(
     db: &ParserDatabase,
     statement: &mut parser::Statement,
     name_lu: &Map<IString, IString>,
-  ) -> SherpaResult<()> {
+  ) -> SherpaResult<bool> {
     let parser::Statement { branch, .. } = statement;
+    let mut has_changed = false;
     if let Some(branch) = branch.as_mut() {
       match branch {
         ASTNode::Gotos(gt) => {
           for push in gt.pushes.iter_mut() {
-            push.name = canonicalize_goto_name(db, push.name.clone(), &name_lu)?;
+            if let Some(name) = canonicalize_goto_name(db, &push.name, name_lu) {
+              push.name = name;
+              has_changed = true;
+            }
           }
           if let Some(goto) = gt.goto.as_mut() {
-            goto.name = canonicalize_goto_name(db, goto.name.clone(), &name_lu)?;
+            if let Some(name) = canonicalize_goto_name(db, &goto.name, name_lu) {
+              goto.name = name;
+              has_changed = true
+            }
           }
           if let Some(fork) = gt.fork.as_mut() {
             for init in fork.paths.iter_mut() {
-              init.name = canonicalize_goto_name(db, init.name.clone(), &name_lu)?;
+              if let Some(name) = canonicalize_goto_name(db, &init.name, name_lu) {
+                init.name = name;
+                has_changed = true
+              }
             }
           }
         }
@@ -784,7 +804,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
             match m {
               ASTNode::TermMatch(..) | ASTNode::DefaultMatch(..) | ASTNode::IntMatch(..) | ASTNode::NonTermMatch(..) => {
                 let Some(stmt) = get_match_statement_mut(m) else { continue };
-                canonicalize_statement(db, stmt, name_lu)?;
+                has_changed |= canonicalize_statement(db, stmt, name_lu)?;
               }
               _ => {}
             }
@@ -793,16 +813,20 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
         _ => {}
       }
     }
-    SherpaResult::Ok(())
+    SherpaResult::Ok(has_changed)
   }
 
   for state in parse_states.values_mut() {
     if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
-      canonicalize_statement(db, statement, &state_name_to_canonical_state_name)?;
+      has_changed |= canonicalize_statement(db, statement, &state_name_to_canonical_state_name)?;
     }
   }
 
-  garbage_collect(db, config, parse_states, gc_label.unwrap_or("conanicalize"))
+  if has_changed {
+    garbage_collect(db, config, parse_states, gc_label.unwrap_or("conanicalize")).map(|v| (v, true))
+  } else {
+    Ok((parse_states.into_iter().collect(), false))
+  }
 }
 
 /// Removes any states that are not referenced, directly or indirectly, by

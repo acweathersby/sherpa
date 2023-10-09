@@ -79,7 +79,7 @@ impl Into<ParserConfig> for JSParserConfig {
       ALLOW_PEEKING: self.ALLOW_PEEKING,
       max_k: self.max_k,
       ALLOW_LOOKAHEAD_MERGE: self.ALLOW_LOOKAHEAD_MERGE,
-      ALLOW_FORKING: self.ALLOW_FORKING,
+      ALLOW_CONTEXT_SPLITTING: self.ALLOW_FORKING,
       CONTEXT_FREE: self.CONTEXT_FREE,
       AllOW_CST_MERGING: self.AllOW_CST_MERGING,
       AllOW_ERROR_RECOVERY: self.AllOW_ERROR_RECOVERY,

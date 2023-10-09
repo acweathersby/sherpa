@@ -1,4 +1,4 @@
-use crate::{parsers::fork::fork_kernel, types::*};
+use crate::{parsers::fork::fork_meta_kernel, types::*};
 use std::collections::VecDeque;
 
 use super::{
@@ -6,10 +6,10 @@ use super::{
   Parser,
 };
 
-const TOKEN_SYNTHESIS_PENALTY: isize = 1;
+const _TOKEN_SYNTHESIS_PENALTY: isize = 1;
 
 /// Maximum number of subsequent synthetic tokens
-const SYNTH_LIMIT: usize = 5;
+const SYNTH_LIMIT: usize = 8;
 
 pub trait ErrorRecoveringDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// Parse while attempting to recover from any errors encountered in the
@@ -52,12 +52,16 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   let mut best_failure = None;
 
   while !pending.pop_is_empty() {
-    fork_kernel(input, parser.as_mut(), &mut pending, &mut completed, &mut failed_contexts)?;
+    fork_meta_kernel(input, parser.as_mut(), &mut pending, &mut completed, &mut failed_contexts)?;
     handle_failed_contexts(&mut failed_contexts, input, db, &mut best_failure, &mut parser, &mut pending);
     pending.swap_buffers();
   }
 
   completed.sort();
+
+  // if completed is empty then we should take our best failed context wrap the
+  // remaining input into an errata symbol, create an error non-terminal that
+  // matches the goal, and wrap all remaining symbols underneath that nonterminal.
 
   #[cfg(debug_assertions)]
   dbg!(&completed);
@@ -86,7 +90,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
   if failed_contexts.len() > 0 {
     let mut to_process = VecDeque::new();
 
-    for mut rec_ctx in attempt_merge(
+    for rec_ctx in attempt_merge(
       create_merge_groups(failed_contexts.drain(..).map(|(ps, mut s)| {
         s.last_failed_state = ps;
         (s.last_failed_state.address as u32, s, None)
@@ -103,29 +107,32 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
 
       match rec_ctx.mode {
         RecoveryMode::Normal | RecoveryMode::SyntheticInput { .. } => {
+          let offset = rec_ctx.get_offset();
           let ctx = &rec_ctx.ctx;
-          let sym_ptr = ctx.sym_ptr;
 
           // We fork our contexts into different recovery modes. This may create a large
-          // parse tree, but we'll likely prune many of the recovery
-          // paths as they become unrecoverable or score poorly relative to other paths.
+          // number of independent contexts, but we'll likely prune many of the recovered
+          // paths as they become unrecoverable or, score poorly relative to other paths,
+          // or are eventually merged back into each other.
 
           // We can do several actions to recover from this error.
           // ---------------------------------------------------------------
           // 1. Create a zero length token whose id matches one of the expected tokens at
           //    this point. The failing state address can be used as a key into a lookup
           //    table that contains all possible token id's expected at this point.
+
           inject_synthetics(&rec_ctx, db, last_state, &mut to_process);
 
           // ---------------------------------------------------------------
           // 2. Drop bytes/codepoints until the input is positioned at the start of an
           //    acceptable token.
-          if ctx.sym_ptr < end {
-            drop_codepoints(rec_ctx.split(), &mut to_process, best_failure, input, 0, sym_ptr, last_state);
+          if offset < end {
+            drop_codepoints(rec_ctx.split(), &mut to_process, best_failure, input, 0, offset, last_state);
           }
 
           // ---------------------------------------------------------------
-          // 3. Drop symbols until a state is reached where the current input is accepted.
+          // 3. Drop symbols until a prior state is reached where the current input is
+          //    accepted.
           if rec_ctx.symbols.len() > 0 {
             drop_symbols(rec_ctx.split(), &mut to_process, best_failure, 0, ctx.sym_ptr);
           }
@@ -174,7 +181,6 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
   contexts: &mut VecDeque<Box<RecoverableContext>>,
 ) -> Vec<Box<RecoverableContext>> {
   let mut to_continue = vec![];
-
   let mut best_failure = None;
 
   while let Some(mut rec_ctx) = contexts.pop_front() {
@@ -364,9 +370,9 @@ fn drop_symbols(
           let TokenNode { offset, .. } = tok.as_ref();
 
           rec_ctx.mode = RecoveryMode::SymbolDiscard { count, end_offset, start_offset: *offset as usize };
+
           // Remove any states that have been pushed to the stack since this token was
           // introduced.
-
           let ctx = &mut rec_ctx.ctx;
           while ctx.stack.len() > state.info.stack_address as usize {
             ctx.stack.pop();
@@ -378,6 +384,7 @@ fn drop_symbols(
           }
 
           let ctx = &mut rec_ctx.ctx;
+
           // Restore the context to the previous state
           ctx.push_state(*state);
           ctx.is_finished = false;
@@ -387,13 +394,32 @@ fn drop_symbols(
 
           break;
         }
-        CSTNode::NonTerm(node) => {
-          //rec_ctx.symbols.extend(node.symbols.clone())
-        }
-        CSTNode::Multi(node) => {
-          if let Some(node) = node.alternatives.first() {
-            rec_ctx.symbols.extend(node.symbols.clone())
+        CSTNode::NonTerm(..) | CSTNode::Multi(..) => {
+          // Reduce or increase errata based on the contents of the node
+
+          let mut queue = VecDeque::from_iter(vec![token]);
+          let mut entropy_delta = 0;
+
+          while let Some(token) = queue.pop_front() {
+            match token {
+              CSTNode::Errata(tok) => {
+                entropy_delta -= tok.length() as isize;
+              }
+              CSTNode::MissingToken(entropy, ..) => {
+                entropy_delta -= entropy as isize;
+              }
+              CSTNode::Skipped(tok) => {
+                entropy_delta += tok.length() as isize;
+              }
+              tok @ CSTNode::Token(..) => {
+                entropy_delta += tok.length() as isize;
+              }
+              CSTNode::NonTerm(node) => queue.extend(node.symbols.iter().cloned()),
+              CSTNode::Multi(node) => queue.extend(node.alternatives.first().unwrap().symbols.iter().cloned()),
+            }
           }
+
+          rec_ctx.entropy += entropy_delta;
         }
       }
     } else {

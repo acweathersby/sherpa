@@ -1,4 +1,6 @@
 //! Functions for translating parse graphs into Sherpa IR code.
+use std::collections::BTreeMap;
+
 use crate::{
   compile::build_graph::graph::{GraphIterator, GraphStateReference, PeekGroup, StateId, StateType},
   journal::Journal,
@@ -6,9 +8,12 @@ use crate::{
   utils::{hash_group_btree_iter, hash_group_btreemap},
   writer::code_writer::CodeWriter,
 };
-use sherpa_rust_runtime::types::bytecode::MatchInputType;
+use sherpa_rust_runtime::{parsers::token, types::bytecode::MatchInputType};
 
-use super::build_graph::graph::{GotoGraphStateRef, GraphStateRef};
+use super::build_graph::{
+  flow::resolve_token_assign_id,
+  graph::{GotoGraphStateRef, GraphStateRef},
+};
 
 pub(crate) fn build_ir<'a, 'db: 'a>(
   j: &mut Journal,
@@ -244,21 +249,12 @@ fn add_tok_expr<'graph, 'db: 'graph>(
 ) {
   let db = state.graph.get_db();
 
-  let mut set_token = successors.iter().filter_map(|s| match s.get_type() {
+  let token_set = successors.iter().filter_map(|s| match s.get_type() {
     StateType::AssignToken(tok) | StateType::AssignAndFollow(tok) => Some(tok),
     _ => None,
   });
 
-  if let Some(tok_id) = set_token.next() {
-    #[cfg(debug_assertions)]
-    debug_assert!(
-      set_token.all(|tok| tok == tok_id),
-      "[INTERNAL ERROR] Expected a single token assignment, got [ {} ]\n in scanner state: \n{}. \n Successor:{}",
-      set_token.map(|tok| db.token(tok).name.to_string(db.string_store())).collect::<Vec<_>>().join(" | "),
-      state._debug_string_(),
-      successors.iter().map(|s| { s._debug_string_() }).collect::<Vec<_>>().join("\n")
-    );
-
+  if let Some(tok_id) = resolve_token_assign_id(token_set, db) {
     (w + "set-tok " + db.tok_val(tok_id).to_string()).prime_join(" then ");
   }
 }

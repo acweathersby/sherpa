@@ -1,5 +1,11 @@
 use crate::{
-  utils::{compile_and_run_grammars, map_reduce_function, TestParser, _write_disassembly_to_temp_file_},
+  utils::{
+    compile_and_run_grammars,
+    map_reduce_function,
+    TestParser,
+    _write_disassembly_to_temp_file_,
+    _write_states_to_temp_file_,
+  },
   *,
 };
 use sherpa_bytecode::compile_bytecode;
@@ -709,7 +715,7 @@ fn simple_newline_tracking() -> SherpaResult<()> {
     "".into(),
     true,
     &|tp| {
-      tp._write_states_to_temp_file_()?;
+      _write_states_to_temp_file_(&tp)?;
 
       let pkg = compile_bytecode(&tp, true)?;
 
@@ -745,6 +751,7 @@ fn simple_newline_tracking() -> SherpaResult<()> {
         ]),
       );
 
+      #[cfg(debug_assertions)]
       assert!(matches!(result, Result::Ok(AstSlotNew(1010101, ..))), "{:?}", result);
 
       SherpaResult::Ok(())

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use sherpa_core::{test::utils::write_debug_file, ParserDatabase};
+use sherpa_core::ParserDatabase;
 use sherpa_rust_runtime::types::{bytecode::Opcode, DebugEventNew, ParserInput};
+
+use crate::utils::write_debug_file;
 #[derive(Debug, Clone, Copy)]
 pub struct PrintConfig {
   pub display_scanner_output: bool,
@@ -89,7 +91,6 @@ pub fn console_debugger(
   }))
 }
 
-#[cfg(debug_assertions)]
 #[allow(unused)]
 fn diagram_constructor(
   event: &DebugEventNew<'_>,

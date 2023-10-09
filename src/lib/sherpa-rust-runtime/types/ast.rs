@@ -1,10 +1,6 @@
 use super::*;
 
-use std::{
-  ops::Index,
-  rc::{self, Rc},
-  vec::Drain,
-};
+use std::{ops::Index, rc::Rc};
 pub type ReducerNew<Input, Node> = fn(&Input, &AstStackSliceNew<AstSlotNew<Node>>);
 
 /// Used within an LLVM parser to provide access to This intermediate AST
@@ -138,7 +134,7 @@ pub trait ASTConstructor<T: ParserInput>: ParserIterator<T> + ParserInitializer 
           ast_stack.push(AstSlotNew(Node::default(), tok, Default::default()));
         }
         ParseAction::Error { .. } => {
-          let mut last_input = ctx.current_tok();
+          let last_input = ctx.current_tok();
 
           let mut start = last_input.off as usize;
           while start < input.len() && input.byte(start) == 32 {
@@ -262,7 +258,6 @@ pub trait ASTProducer<I: ParserInput, ASTNode>: ParserProducer<I> {
         } => {
           nodes.push(ASTBaseNode::Token(TokenNode::new(
             token_id,
-            token_byte_length,
             token_byte_offset,
             input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
           )));

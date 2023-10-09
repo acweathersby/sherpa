@@ -49,7 +49,7 @@ pub(super) fn resolve_reduce_reduce_conflict<'db>(
     match calculate_k_multi(gb, follow_pairs.iter().map(|i| [i].into_iter()).collect(), MAX_EVAL_K) {
       KCalcResults::K(k) => {
         if !gb.config.ALLOW_PEEKING || k >= MAX_EVAL_K {
-          if gb.config.ALLOW_FORKING {
+          if gb.config.ALLOW_CONTEXT_SPLITTING {
             return Ok(ReduceReduceConflictResolution::Fork(follow_pairs));
           }
           return peek_not_allowed_error(
@@ -89,23 +89,35 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
   // completed after shifting the same nterm, then the precedence of the shift
   // items determines whether we should shift first or reduce.
 
-  let incom_nterm_set: OrderedSet<DBNonTermKey> = shifts.clone().to_next().rule_nonterm_ids();
+  let incom_next_nterm_set: OrderedSet<DBNonTermKey> = shifts.clone().to_next().rule_nonterm_ids();
   let compl_nterm_set: OrderedSet<DBNonTermKey> = reduces.clone().map(|i| i.kernel.nonterm_index()).collect();
 
-  if incom_nterm_set.len() == 1 && incom_nterm_set.is_superset(&compl_nterm_set) {
+  if incom_next_nterm_set.len() == 1 && incom_next_nterm_set.is_superset(&compl_nterm_set) {
     return if incom_prec >= compl_prec {
       Ok(ShiftReduceConflictResolution::Shift)
     } else {
       Ok(ShiftReduceConflictResolution::Reduce)
     };
   }
+
+  /// If the complete set is and the incomplete set are reducing to the same
+  /// nonterminal then prefer shift.
+  let incom_kernel_nterm_set: OrderedSet<DBNonTermKey> = shifts.clone().to_kernel().rule_nonterm_ids();
+  if incom_kernel_nterm_set.len() == 1 && incom_kernel_nterm_set.is_superset(&compl_nterm_set) {
+    return if incom_prec >= compl_prec {
+      Ok(ShiftReduceConflictResolution::Shift)
+    } else {
+      Ok(ShiftReduceConflictResolution::Reduce)
+    };
+  }
+
   /// This conflict requires some form of lookahead or fork to disambiguate,
   /// prefer peeking unless k is too large or the ambiguity is resolved outside
   /// the goal non-terminal
   match calculate_k(gb, reduces.clone(), shifts.clone(), MAX_EVAL_K) {
     KCalcResults::K(k) => {
       if !gb.config.ALLOW_PEEKING {
-        if gb.config.ALLOW_FORKING {
+        if gb.config.ALLOW_CONTEXT_SPLITTING {
           return Ok(ShiftReduceConflictResolution::Fork);
         }
         peek_not_allowed_error(
@@ -142,7 +154,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
     }
     KCalcResults::LargerThanMaxLimit(k) => {
       if !gb.config.ALLOW_PEEKING {
-        if gb.config.ALLOW_FORKING {
+        if gb.config.ALLOW_CONTEXT_SPLITTING {
           return Ok(ShiftReduceConflictResolution::Fork);
         }
         peek_not_allowed_error(
@@ -159,7 +171,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
       Ok(ShiftReduceConflictResolution::Peek(k as u16))
     }
     KCalcResults::Unpeekable => {
-      if gb.config.ALLOW_FORKING {
+      if gb.config.ALLOW_CONTEXT_SPLITTING {
         return Ok(ShiftReduceConflictResolution::Fork);
       } else {
         peek_not_allowed_error(
@@ -317,5 +329,31 @@ pub(crate) fn resolve_conflicting_tokens<'a, 'db: 'a, T: TransitionPairRefIter<'
     }
   } else {
     Ok(())
+  }
+}
+
+pub fn resolve_token_assign_id<I: Iterator<Item = DBTermKey>>(set_token: I, db: &ParserDatabase) -> Option<DBTermKey> {
+  let token_set: std::collections::BTreeSet<DBTermKey> = set_token.collect::<OrderedSet<_>>();
+  if token_set.len() == 1 {
+    Some(token_set.into_iter().next().unwrap())
+  } else if token_set.len() > 1 {
+    if let Some((_, groups)) = hash_group_btree_iter::<Vec<_>, _, _, _, _>(
+      token_set.clone().into_iter().map(|key| (key, db.token(key))),
+      |_, (key, tok)| tok.sym_id.conflict_precedence(),
+    )
+    .into_iter()
+    .rev()
+    .next()
+    {
+      if groups.len() == 1 {
+        Some(groups.into_iter().next().unwrap().0)
+      } else {
+        panic!("can't resolve symbols");
+      }
+    } else {
+      panic!("can't resolve symbols");
+    }
+  } else {
+    None
   }
 }

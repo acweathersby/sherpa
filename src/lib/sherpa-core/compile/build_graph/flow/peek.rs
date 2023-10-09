@@ -189,7 +189,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
 
         gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(staged.into_iter())).to_enqueued();
       } else if cmpl_targets_len > 1 {
-        if gb.config.ALLOW_FORKING {
+        if gb.config.ALLOW_CONTEXT_SPLITTING {
           convert_peek_root_state_to_fork(gb)?;
         } else {
           panic!("MULTIPLE COMPLETED -- Cannot resolve using peek within the limits of the grammar rules. This requires a fork");
@@ -200,23 +200,6 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
         // If the number of resolve states is two and one of the states is oos then
         // resolve to the none oos state.
 
-        #[cfg(debug_assertions)]
-        {
-          let kernel_items =
-            follows.iter().map(|fp| &get_kernel_items_from_peek_item(gb, &fp.kernel).items).collect::<OrderedSet<_>>();
-          let db = gb.db;
-          crate::test::utils::write_debug_file(db, "parse_graph.tmp", gb.graph()._debug_string_(), true)?;
-          unimplemented!(
-        "\nCompleted Peek Items On Symbol:[{}]\n \n\nAcceptItems\n{}\n\nPeekItems:\n{}\n\nKernelItems:\n{}\n\nParent State\n{}\n\n",
-
-        prec_sym.sym().debug_string(gb.db),
-        gb.graph().goal_items().to_debug_string( "\n"),
-        cmpl.to_debug_string("\n"),
-        kernel_items.iter().map(|s| s.to_debug_string("\n")).collect::<Vec<_>>().join("\n"),
-        gb.current_state()._debug_string_(),
-        //graph.debug_string()
-      );
-        }
         #[cfg(not(debug_assertions))]
         unimplemented!()
       }
