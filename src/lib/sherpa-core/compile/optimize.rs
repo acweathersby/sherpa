@@ -49,7 +49,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = if config.ALLOW_SCANNER_INLINING { inline_scanners(db, config, parse_states)? } else { parse_states };
 
-  //let parse_states = create_byte_sequences(db, config, parse_states)?;
+  let parse_states = create_byte_sequences(db, config, parse_states)?;
 
   let parse_states = merge_branches(db, parse_states)?;
 
@@ -408,7 +408,8 @@ fn inline_scanners<'db>(
               setup_match(db, queue, &mut matches, default);
 
               let matches = ASTNode::Matches(Box::new(matches));
-              let stmt = Box::new(parser::Statement::new(Some(matches), Default::default(), Default::default()));
+              let stmt =
+                Box::new(parser::Statement::new(Some(matches), Default::default(), Default::default(), Default::default()));
               let default = ASTNode::DefaultMatch(Box::new(parser::DefaultMatch::new(stmt)));
 
               match_stmt.matches.push(default);
@@ -470,23 +471,22 @@ fn inline_states<'db>(
     if let Some(parser::Matches { matches, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
       for m in matches {
         let Some(statement) = get_match_statement_mut(m) else { continue };
-        let parser::Statement { branch, non_branch, transitive, .. } = statement;
-        let mut pop_count = 0;
+        let parser::Statement { branch, non_branch, transitive, pop } = statement;
+
+        let mut pop_count = pop.as_ref().map(|p| p.count.max(1)).unwrap_or_default();
+
+        *pop = None;
         loop {
           if let Some(own_gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
             if let Some(goto) = &mut own_gotos.goto {
               let name = goto.name.to_token();
 
-              if let Some(stmt @ parser::Statement { branch: b, non_branch: nb, transitive: t, .. }) = stmt_lu.get(&name) {
+              if let Some(stmt @ parser::Statement { branch: b, non_branch: nb, transitive: t, pop }) = stmt_lu.get(&name) {
                 let t = t.clone();
 
                 // Pops and Pushes annihilate each other. For each pop level remove 1 goto in
                 // the incoming push list, starting from right to left. Re-create the pop
                 // command if all incoming pushes where annihilated.
-
-                let (pops, nb) = nb.clone().into_iter().partition::<Vec<_>, _>(|p| p.as_Pop().is_some());
-
-                debug_assert!(pops.len() <= 1, "Should be only one pop instruction per statement");
 
                 let replace_branch = match b {
                   // We do not want to replace GOTOS if we have a Fail or Accept branch, so we make sure
@@ -509,10 +509,10 @@ fn inline_states<'db>(
                     true
                   }
                 } {
-                  non_branch.extend(nb);
+                  non_branch.extend(nb.clone());
 
-                  if let Some(ASTNode::Pop(pop)) = pops.first() {
-                    pop_count += pop.popped_state;
+                  if let Some(pop) = pop {
+                    pop_count += pop.count;
                     let push_len = own_gotos.pushes.len() as u32;
                     let diff = push_len as isize - pop_count as isize;
                     if diff > 0 {
@@ -566,7 +566,7 @@ fn inline_states<'db>(
 
         if pop_count > 0 {
           // Insert a pop instruction as the last non-branching statement.
-          statement.non_branch.push(ASTNode::Pop(Box::new(sherpa_bc::Pop::new(pop_count, Default::default()))));
+          statement.pop = Some(Box::new(sherpa_bc::Pop::new(pop_count, Default::default())));
         }
       }
     }
@@ -680,7 +680,7 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
 /// their respective contexts.
 fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   fn merge_statements(from: parser::Statement, to: &mut parser::Statement) {
-    let parser::Statement { branch, mut non_branch, transitive } = from;
+    let parser::Statement { branch, mut non_branch, transitive, pop } = from;
 
     if let Some(transitive) = transitive {
       debug_assert!(to.transitive.is_none() && to.non_branch.is_empty());
@@ -688,8 +688,8 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
     }
 
     to.branch = branch;
-
     to.non_branch.append(&mut non_branch);
+    to.pop = pop;
   }
   fn combine_branches(db: &ParserDatabase, statement: &mut parser::Statement) -> SherpaResult<Option<Statement>> {
     let parser::Statement { branch, .. } = statement;

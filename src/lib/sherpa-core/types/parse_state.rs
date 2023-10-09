@@ -2,7 +2,7 @@ use sherpa_rust_runtime::types::bytecode::MatchInputType;
 
 use super::*;
 use crate::{
-  parser::{self, ASTNode, State},
+  parser::{self, ASTNode, Ascript, State},
   utils::create_u64_hash,
   writer::code_writer::CodeWriter,
 };
@@ -80,7 +80,7 @@ impl<'db> ParseState {
     if self.ast.is_none() {
       let code = String::from_utf8(self.source(db))?;
 
-      // println!("{code}");
+      //println!("{code}");
 
       match parser::ast::ir_from((&code).into()) {
         Ok(ast) => self.ast = Some(ast),
@@ -98,6 +98,7 @@ impl<'db> ParseState {
     let _ = &mut w + name.clone() + " =>\n" + self.code.as_str().replace("%%%%", name.as_str());
 
     let string = w.into_output();
+
     string
   }
 
@@ -172,7 +173,7 @@ fn render_IR<T: Write>(
       }
       render_IR(db, w, &ASTNode::Statement(statement.clone()), false, match_type)?;
     }
-    ASTNode::Statement(box parser::Statement { branch, non_branch, transitive }) => {
+    ASTNode::Statement(box parser::Statement { branch, non_branch, transitive, pop }) => {
       let mut nodes = vec![];
 
       if let Some(transitive) = transitive {
@@ -181,6 +182,11 @@ fn render_IR<T: Write>(
 
       for stmt in non_branch {
         nodes.push(stmt);
+      }
+
+      let pop = pop.as_ref().map(|p| ASTNode::Pop(p.clone()));
+      if let Some(pop) = pop.as_ref() {
+        nodes.push(pop);
       }
 
       if let Some(branch) = branch {
@@ -288,9 +294,9 @@ fn render_IR<T: Write>(
         _ = w + " peek " + &peek.ptr_type;
       }
     }
-    ASTNode::Reset(reset) => w.w(" reset")?.write(&reset.ptr_type)?,
+    ASTNode::Reset(reset) => w.w(" reset ")?.write(&reset.ptr_type)?,
     ASTNode::Pop(pop) => {
-      w.w(" pop ")?.w(&(pop.popped_state.max(1)).to_string())?;
+      w.w(" pop ")?.w(&(pop.count.max(1)).to_string())?;
     }
     ASTNode::Fail(..) => w.write(" fail")?,
     ASTNode::Pass(..) => w.write(" pass")?,

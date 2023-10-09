@@ -423,7 +423,7 @@ fn build_body<'graph, 'db: 'graph>(
       }
       StateType::NonTermCompleteOOS => {
         debug_assert!(!is_scanner, "NonTermCompleteOOS states should only exist in normal parse graphs");
-        body_string.push("pop".into());
+        body_string.push("pop 1".into());
         HALT
       }
       StateType::ScannerCompleteOOS => {

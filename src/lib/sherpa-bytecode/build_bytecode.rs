@@ -146,7 +146,7 @@ fn build_statement<'db>(
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
   add_debug_symbols: bool,
 ) -> SherpaResult<()> {
-  let parser::Statement { branch, non_branch, transitive } = stmt;
+  let parser::Statement { branch, non_branch, transitive, pop } = stmt;
 
   if let Some(transitive) = transitive {
     insert_tok_debug(pkg, transitive.to_token(), add_debug_symbols);
@@ -208,14 +208,15 @@ fn build_statement<'db>(
         insert_u32_le(&mut pkg.bytecode, st.id);
       }
       parser::ASTNode::SetLine(_) => { /* ignored in bytecode parsers */ }
-      parser::ASTNode::Pop(p) => {
-        for _ in 0..(p.popped_state).max(1) {
-          insert_op(&mut pkg.bytecode, Op::PopGoto)
-        }
-      }
       _ => {
         unreachable!();
       }
+    }
+  }
+
+  if let Some(pop) = pop {
+    for _ in 0..(pop.count).max(1) {
+      insert_op(&mut pkg.bytecode, Op::PopGoto)
     }
   }
 

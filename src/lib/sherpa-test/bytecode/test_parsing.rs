@@ -6,7 +6,7 @@ use crate::{
     _write_disassembly_to_temp_file_,
     _write_states_to_temp_file_,
   },
-  *, 
+  *,
 };
 use sherpa_bytecode::compile_bytecode;
 use sherpa_core::{test::utils::build_parse_states_from_source_str as build_states, *};
