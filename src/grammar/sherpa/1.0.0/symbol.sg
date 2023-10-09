@@ -25,6 +25,15 @@ IGNORE { c:sp c:nl }
 
             :ast { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok, optional:true }
 
+        | symbol "+"
+
+            :ast { t_List_Production, c_Symbol, symbols:$1, tok }
+            
+        | symbol "*"
+
+            :ast { t_List_Production, c_Symbol, symbols:$1, tok, optional:true }
+
+
         | symbol
 
 <> symbol >
