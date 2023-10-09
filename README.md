@@ -33,19 +33,23 @@ API documentation can be found here.
 
 ## Earley Parser
 
- - [Marpa](https://jeffreykegler.github.io/Marpa-web-site/)
- - [Santiago](https://github.com/kamadorueda/santiago)
+- [Marpa](https://jeffreykegler.github.io/Marpa-web-site/)
+- [Santiago](https://github.com/kamadorueda/santiago)
 
-## LR Compilers
+## LR/LL Parser Compilers
+- [Antlr](https://github.com/antlr/antlr4) (Java (+ others)) - An incremental 
+- [Bison](https://www.gnu.org/software/bison/) (C/C++ (+ others)) -  a general-purpose parser generator 
 - [LALRPOP](https://github.com/lalrpop/lalrpop) (rust) - LR(1) parser generator for Rust
-- [tree-sitter](https://github.com/tree-sitter/tree-sitter) (C / JavaScript) - An incremental 
-parsing system for programming tools
-- [Antlr](https://github.com/tree-sitter/tree-sitter) (C / JavaScript) - An incremental 
+- [tree-sitter](https://github.com/tree-sitter/tree-sitter) (C & JavaScript (+ others)) - An incremental parsing system for programming tools, supporting error recovery 
 
 ## Parsing Expression Grammar (PEG) Compilers
 
 - [Pest](https://github.com/pest-parser/pest) (rust) - The Elegant Parser
+- [rust-peg](https://github.com/kevinmehall/rust-peg) (rust) - The Elegant Parser
 
 ## Abstract and Concrete Syntax Trees
 
 - [Rowan](https://github.com/rust-analyzer/rowan) (rust) - lossless syntax trees
+
+
+> `(+ others)` - These projects support programming language targets other than their host language.
