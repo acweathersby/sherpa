@@ -101,6 +101,10 @@ impl std::fmt::Debug for IString {
 }
 
 impl IString {
+  pub fn is_empty(&self) -> bool {
+    self.0 == 0
+  }
+
   pub fn from_u64(val: u64) -> Self {
     Self(val)
   }
@@ -159,27 +163,31 @@ impl IString {
   }
 
   fn from_bytes(string: &[u8]) -> Self {
-    let byte_len = string.len();
-    if byte_len > 8 || (byte_len == 8 && (string[7] & 0x80) > 0) {
-      let mut val = create_u64_hash(string);
-      unsafe {
-        let val_bytes = &mut val as *mut u64 as *mut [u8; 8];
-        (*val_bytes)[7] |= 0x80;
-      }
-      Self(val)
+    if string.is_empty() {
+      Self(0)
     } else {
-      let bytes = string;
-      let mut val = 0u64;
-      unsafe {
-        let val_bytes = &mut val as *mut u64 as *mut [u8; 8];
-        for (off, byte) in bytes.iter().enumerate() {
-          (*val_bytes)[off] = *byte;
+      let byte_len = string.len();
+      if byte_len > 8 || (byte_len == 8 && (string[7] & 0x80) > 0) {
+        let mut val = create_u64_hash(string);
+        unsafe {
+          let val_bytes = &mut val as *mut u64 as *mut [u8; 8];
+          (*val_bytes)[7] |= 0x80;
         }
-        if byte_len < 8 {
-          (*val_bytes)[byte_len] = 0;
+        Self(val)
+      } else {
+        let bytes = string;
+        let mut val = 0u64;
+        unsafe {
+          let val_bytes = &mut val as *mut u64 as *mut [u8; 8];
+          for (off, byte) in bytes.iter().enumerate() {
+            (*val_bytes)[off] = *byte;
+          }
+          if byte_len < 8 {
+            (*val_bytes)[byte_len] = 0;
+          }
         }
+        Self(val)
       }
-      Self(val)
     }
   }
 }
@@ -277,6 +285,20 @@ impl CachedString for &Path {
   fn get_string(&self) -> String {
     self.to_str().unwrap().to_owned()
   }
+}
+
+#[test]
+fn interning_empty_string() {
+  let store = IStringStore::default();
+
+  let empty_string = "";
+
+  let tok = empty_string.intern(&store);
+  "".to_string().intern(&store);
+
+  assert_eq!(tok.to_string(&store), "");
+  assert_eq!(tok.to_string(&store).as_str(), "");
+  assert_eq!(store._data.read().unwrap().is_empty(), true);
 }
 
 #[test]

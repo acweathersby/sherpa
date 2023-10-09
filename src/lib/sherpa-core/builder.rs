@@ -220,12 +220,12 @@ impl SherpaGrammarBuilder {
     Ok(Self { j, soup: std::sync::Arc::new(soup) })
   }
 
-  pub fn build_db(&self, root_grammar: &std::path::Path) -> SherpaResult<SherpaDatabaseBuilder> {
+  pub fn build_db(&self, root_grammar: &std::path::Path, config: &ParserConfig) -> SherpaResult<SherpaDatabaseBuilder> {
     let SherpaGrammarBuilder { soup, j } = self;
 
     let id = GrammarIdentities::from_path(root_grammar, &soup.string_store);
 
-    let db = build_compile_db(j.transfer(), id, soup)?;
+    let db = build_compile_db(j.transfer(), id, soup, config)?;
 
     if !db.is_valid() {
       let mut j = j.transfer();
@@ -451,7 +451,10 @@ pub fn source_path_to_default_file() -> SherpaResult<()> {
 pub fn build_db() -> SherpaResult<()> {
   let grammar_source_path =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
-  assert!(SherpaGrammarBuilder::new().add_source(&grammar_source_path)?.build_db(&grammar_source_path).is_ok());
+  assert!(SherpaGrammarBuilder::new()
+    .add_source(&grammar_source_path)?
+    .build_db(&grammar_source_path, &Default::default())
+    .is_ok());
   Ok(())
 }
 
@@ -461,7 +464,7 @@ pub fn build_states() -> SherpaResult<()> {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   assert!(SherpaGrammarBuilder::new()
     .add_source(&grammar_source_path)?
-    .build_db(&grammar_source_path)?
+    .build_db(&grammar_source_path, &Default::default())?
     .build_parser(Default::default())
     .is_ok());
   Ok(())
@@ -473,7 +476,7 @@ pub fn build_with_optimized_states() -> SherpaResult<()> {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   assert!(SherpaGrammarBuilder::new()
     .add_source(&grammar_source_path)?
-    .build_db(&grammar_source_path)?
+    .build_db(&grammar_source_path, &Default::default())?
     .build_parser(Default::default())?
     .optimize(false)?
     .get_optimized_states()

@@ -28,8 +28,8 @@ pub enum NonTermId {
   /// Non-terminals directly defined within a grammar.
   Standard(u64, NonTermSubType),
   /// Non-terminals derived from grammar symbols such as the
-  /// group `(...)` symbol. All sub nonterminals belong to
-  /// only one "Standard" non-terminal
+  /// group `(...)` symbol and at-least-one `sym(+)` symbols. All Sub
+  /// non-terminals belong to only one Standard non-terminal
   Sub(u64, u32, NonTermSubType),
 }
 

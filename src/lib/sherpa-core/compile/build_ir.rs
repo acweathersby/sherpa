@@ -1,6 +1,4 @@
 //! Functions for translating parse graphs into Sherpa IR code.
-use std::collections::BTreeMap;
-
 use crate::{
   compile::build_graph::graph::{GraphIterator, GraphStateReference, PeekGroup, StateId, StateType},
   journal::Journal,
@@ -8,7 +6,7 @@ use crate::{
   utils::{hash_group_btree_iter, hash_group_btreemap},
   writer::code_writer::CodeWriter,
 };
-use sherpa_rust_runtime::{parsers::token, types::bytecode::MatchInputType};
+use sherpa_rust_runtime::types::bytecode::MatchInputType;
 
 use super::build_graph::{
   flow::resolve_token_assign_id,

@@ -13,7 +13,12 @@ use std::collections::{btree_map, VecDeque};
 
 type TrackedNonterm = (Token, IString, NonTermId);
 
-pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a GrammarSoup) -> SherpaResult<ParserDatabase> {
+pub(crate) fn build_compile_db<'a>(
+  mut j: Journal,
+  g: GrammarIdentities,
+  gs: &'a GrammarSoup,
+  config: &ParserConfig,
+) -> SherpaResult<ParserDatabase> {
   // Gain read access to all parts of the GrammarCloud.
   // We don't want anything changing during these next steps.
 
@@ -115,9 +120,17 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         (None, Some(nterm)) => {
           let g_name = nterm.guid_name;
           let f_name = nterm.friendly_name;
-          let rules = nterm.rules.clone();
+          let inline_candidates = get_inline_candidates(&nterm);
 
-          add_nterm_and_rules(nterm_id.as_sym(), rules, p_map, r_table, p_r_map, false);
+          add_nterm_and_rules(
+            nterm_id.as_sym(),
+            inline_rules(&nterm.rules, &inline_candidates, config, false),
+            p_map,
+            r_table,
+            p_r_map,
+            false,
+          );
+
           add_nterm_name(nterm_name_lu, g_name, f_name);
           add_empty_custom_state(c_states);
 
@@ -130,7 +143,15 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
               let g_name = nterm.guid_name;
               let f_name = nterm.friendly_name;
 
-              add_nterm_and_rules(nterm_id.as_sym(), rules, p_map, r_table, p_r_map, false);
+              add_nterm_and_rules(
+                nterm_id.as_sym(),
+                inline_rules(&nterm.rules, &inline_candidates, config, false),
+                p_map,
+                r_table,
+                p_r_map,
+                false,
+              );
+
               add_nterm_name(nterm_name_lu, g_name, f_name);
               add_empty_custom_state(c_states);
 
@@ -186,13 +207,15 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
   }
 
   // Generate token nonterminals -----------------------------------------------
-  while let Some((loc, path, nterm)) = token_nonterminals.pop_front() {
+  while let Some((loc, path, nterm_id)) = token_nonterminals.pop_front() {
     // Convert any left immediate recursive rules to right.
-    if !p_map.contains_key(&nterm.as_tok_sym()) {
-      if let Some((internal_id, rules, name)) = match nterm {
+    if !p_map.contains_key(&nterm_id.as_tok_sym()) {
+      if let Some((internal_id, rules, name)) = match nterm_id {
         NonTermId::Standard(internal_id, ..) => {
           match nonterminals.get(&NonTermId::Standard(internal_id, NonTermSubType::Parser)) {
-            Some(nterm) => Some((internal_id, &nterm.rules, nterm.guid_name)),
+            Some(nterm) => {
+              Some((internal_id, inline_rules(&nterm.rules, &get_inline_candidates(nterm), config, true), nterm.guid_name))
+            }
             None => {
               j.report_mut().add_error(missing_nonterminal_rules(loc, path, s_store));
               is_valid = false;
@@ -202,9 +225,13 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         }
         NonTermId::Sub(internal_id, index, ..) => {
           match nonterminals.get(&NonTermId::Standard(internal_id, NonTermSubType::Parser)) {
-            Some(nterm) => {
-              let nterm = &nterm.sub_nterms[index as usize];
-              Some((internal_id, &nterm.rules, nterm.guid_name))
+            Some(standard_nterm) => {
+              let nterm = &standard_nterm.sub_nterms[index as usize];
+              Some((
+                internal_id,
+                inline_rules(&nterm.rules, &get_inline_candidates(standard_nterm), config, true),
+                nterm.guid_name,
+              ))
             }
             None => {
               j.report_mut().add_error(missing_nonterminal_rules(loc, path, s_store));
@@ -217,13 +244,11 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
         let name = "tk_".to_string() + &name.to_string(s_store).as_str();
         let name = name.intern(s_store);
 
-        if nterm_is_immediate_left_recursive(nterm, &rules) {
-          let rules = rules.clone();
-
+        if nterm_is_immediate_left_recursive(nterm_id, &rules) {
           let prime_id = NonTermId::Sub(internal_id, p_map.len() as u32 + 9000, NonTermSubType::Scanner);
 
           let mut groups = hash_group_btreemap(rules, |_, r| match r.symbols[0].id {
-            SymbolId::NonTerminal { id, .. } if id == nterm => true,
+            SymbolId::NonTerminal { id, .. } if id == nterm_id => true,
             _ => false,
           });
 
@@ -257,10 +282,10 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
           convert_sym_refs_to_token_sym_refs(&mut r_rules, s_store, 0);
           convert_sym_refs_to_token_sym_refs(&mut p_rules, s_store, 0);
 
-          let nterm = nterm.as_tok_sym();
+          let nterm_id = nterm_id.as_tok_sym();
           let prime_id = prime_id.as_tok_sym();
 
-          add_nterm_and_rules(nterm, r_rules, p_map, r_table, p_r_map, true);
+          add_nterm_and_rules(nterm_id, r_rules, p_map, r_table, p_r_map, true);
           add_nterm_name(nterm_name_lu, name, name);
           add_empty_custom_state(c_states);
 
@@ -269,7 +294,7 @@ pub(crate) fn build_compile_db<'a>(mut j: Journal, g: GrammarIdentities, gs: &'a
           add_nterm_name(nterm_name_lu, name, name);
           add_empty_custom_state(c_states);
         } else {
-          let nterm = nterm.as_tok_sym();
+          let nterm = nterm_id.as_tok_sym();
           if !p_map.contains_key(&nterm) {
             let mut rules = rules.clone();
 
@@ -594,6 +619,90 @@ fn add_nterm_and_rules(
   let val = nonterminal_map.insert(nterm_sym, nonterm_index);
 
   debug_assert!(val.is_none());
+}
+
+fn get_inline_candidates(nterm: &NonTerminal) -> std::collections::HashMap<NonTermId, &Box<SubNonTerminal>> {
+  let inline_candidates = nterm
+    .sub_nterms
+    .iter()
+    .filter_map(|i| (matches!(i.type_, SubNonTermType::Group) && i.rules.iter().all(|r| r.ast.is_none())).then_some((i.id, i)))
+    .collect::<Map<_, _>>();
+  inline_candidates
+}
+
+/// Inlines the symbols of anonymous non-term groups if the group does not have
+/// semantic actions.
+fn inline_rules(
+  rules: &Array<Rule>,
+  inline_candidates: &Map<NonTermId, &Box<SubNonTerminal>>,
+  config: &ParserConfig,
+  is_scanner: bool,
+) -> Array<Rule> {
+  // Inline suitable group rules if the configuration allows for it.
+  if config.ALLOW_ANONYMOUS_NONTERM_INLINING || is_scanner {
+    rules
+      .iter()
+      .flat_map(|rule| {
+        let mut outputs = vec![vec![]];
+        let syms = &rule.symbols;
+        let mut rules = vec![];
+
+        inline_groups(syms, &inline_candidates, &mut outputs, true);
+
+        for output in outputs {
+          let mut new_rule = rule.clone();
+          new_rule.symbols = output;
+          rules.push(new_rule)
+        }
+        rules
+      })
+      .collect()
+  } else {
+    rules.clone()
+  }
+}
+
+fn inline_groups(
+  syms: &Vec<SymbolRef>,
+  inline_candidates: &Map<NonTermId, &Box<SubNonTerminal>>,
+  outputs: &mut Vec<Vec<SymbolRef>>,
+  is_root: bool,
+) {
+  for (index, sym) in syms.iter().enumerate() {
+    if sym.annotation.is_empty() {
+      if let SymbolId::NonTerminal { id } = sym.id {
+        if let Some(candidate) = inline_candidates.get(&id) {
+          let mut out = candidate
+            .rules
+            .iter()
+            .flat_map(|r| {
+              let mut o = vec![vec![]];
+              inline_groups(&r.symbols, inline_candidates, &mut o, false);
+              o
+            })
+            .collect::<Array<_>>();
+
+          if is_root {
+            // Set the original_indexo of the last symbol in the inline chain to
+            // index the of the host symbol it has replaced. All other
+            // symbols original_index is set to invalid (9999)
+            for syms in &mut out {
+              syms.iter_mut().for_each(|s| s.original_index = 9999);
+              syms.last_mut().map(|s| s.original_index = index as u32);
+            }
+          }
+
+          *outputs = outputs
+            .into_iter()
+            .flat_map(|output| out.iter().map(|o| output.iter().cloned().chain(o.iter().cloned()).collect::<Vec<_>>()))
+            .collect();
+          continue;
+        }
+      }
+    }
+
+    outputs.iter_mut().for_each(|o| o.push(sym.clone()));
+  }
 }
 
 fn convert_index_map_to_vec<T, C: IntoIterator<Item = (T, usize)>>(nonterminal_map: C) -> Array<T> {

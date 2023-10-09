@@ -26,7 +26,7 @@ pub fn build_parse_states_from_source_str<'a, T>(
     test_fn(
       SherpaGrammarBuilder::new()
         .add_source_from_string(source, &source_path, false)?
-        .build_db(&source_path)?
+        .build_db(&source_path, &Default::default())?
         .build_parser(Default::default())?
         .optimize(false)?
         .into(),
@@ -35,7 +35,7 @@ pub fn build_parse_states_from_source_str<'a, T>(
     test_fn(
       SherpaGrammarBuilder::new()
         .add_source_from_string(source, &source_path, false)?
-        .build_db(&source_path)?
+        .build_db(&source_path, &Default::default())?
         .build_parser(Default::default())?
         .into(),
     )
@@ -62,9 +62,9 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   let root_path = source_path.join("A");
 
   if optimize {
-    test_fn(grammar.build_db(&root_path)?.build_parser(config)?.optimize(false)?.into())
+    test_fn(grammar.build_db(&root_path, &config)?.build_parser(config)?.optimize(false)?.into())
   } else {
-    test_fn(grammar.build_db(&root_path)?.build_parser(config)?.into())
+    test_fn(grammar.build_db(&root_path, &config)?.build_parser(config)?.into())
   }
 }
 
@@ -74,7 +74,12 @@ pub fn build_parse_db_from_source_str<'a, T>(
   source_path: PathBuf,
   test_fn: &dyn Fn(DBPackage) -> SherpaResult<T>,
 ) -> SherpaResult<T> {
-  test_fn(SherpaGrammarBuilder::new().add_source_from_string(source, &source_path, false)?.build_db(&source_path)?.into())
+  test_fn(
+    SherpaGrammarBuilder::new()
+      .add_source_from_string(source, &source_path, false)?
+      .build_db(&source_path, &Default::default())?
+      .into(),
+  )
 }
 
 /// Writes to a debug file for testing
@@ -135,7 +140,7 @@ impl ParserDatabase {
       false,
     )?;
 
-    let db = grammar.build_db(&path)?;
+    let db = grammar.build_db(&path, &Default::default())?;
 
     Ok(db.into_inner())
   }

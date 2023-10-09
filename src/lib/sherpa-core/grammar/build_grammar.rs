@@ -530,75 +530,36 @@ fn process_rule_symbols(
         // the next iteration.
         continue;
       }
+      
       ASTNode::Grouped_Rules(group) => {
-        // All bodies are plain without annotations or functions
-        if annotation.is_empty() && !some_rules_have_ast_definitions(&group.rules) {
-          // For each rule in the group clone the existing rule lists and
-          // process each list independently, inserting the new symbols
-          // into the existing bodies. We must make sure the indices are
-          // preserved since only the last symbol in each rule can be bound
-          // to the index of the group non-terminal symbol.
+        let mut sub_nterm_rules = Default::default();
 
-          let mut p = vec![];
-
-          for rule in &group.rules {
-            process_rule_symbols(
-              &RuleData { symbols: &map_symbols_to_unindexed(&rule.symbols), ast_ref: None },
-              &mut p_data.set_rules(&mut p),
-              g_data,
-              s_store,
-              rule.tok.clone(),
-            )?;
-          }
-
-          let mut new_rules = vec![];
-
-          for pending_rule in &mut p {
-            // The last symbol in each of these new bodies is set
-            // with the original symbol id
-            pending_rule.symbols.last_mut().expect("There should be at least one symbol").original_index = *index as u32;
-            for rule in &mut rules[original_bodies.clone()] {
-              let mut new_rule = rule.clone();
-              new_rule.symbols.extend(pending_rule.symbols.iter().cloned());
-              new_rules.push(new_rule)
-            }
-          }
-
-          rules.splice(original_bodies, new_rules);
-
-          // We do not to process the existing symbol as it is
-          // now replaced with its component rule symbols,
-          // so we'll skip the rest of the loop
-          continue;
-        } else {
-          let mut sub_nterm_rules = Default::default();
-
-          for rule in &group.rules {
-            let n_rule = &RuleData {
-              symbols: &rule.symbols.iter().enumerate().collect::<Array<_>>(),
-              ast_ref: intern_ast(rule, p_data),
-            };
-            process_rule_symbols(n_rule, &mut p_data.set_rules(&mut sub_nterm_rules), g_data, s_store, rule.tok.clone())?
-          }
-
-          let nterm = p_data.root_nterm;
-          let index = p_data.sub_nonterminals.len();
-          let id = NonTermId::from((nterm, index));
-
-          let (guid_name, friendly_name) = sub_nterm_names("group", p_data, s_store);
-
-          p_data.sub_nonterminals.push(Box::new(SubNonTerminal {
-            id,
-            guid_name,
-            friendly_name,
-            type_: SubNonTermType::Group,
-            g_id: g_data.id.guid,
-            rules: sub_nterm_rules,
-          }));
-
-          (id.as_sym(), group.tok.clone())
+        for rule in &group.rules {
+          let n_rule = &RuleData {
+            symbols: &rule.symbols.iter().enumerate().collect::<Array<_>>(),
+            ast_ref: intern_ast(rule, p_data),
+          };
+          process_rule_symbols(n_rule, &mut p_data.set_rules(&mut sub_nterm_rules), g_data, s_store, rule.tok.clone())?
         }
+
+        let nterm = p_data.root_nterm;
+        let index = p_data.sub_nonterminals.len();
+        let id = NonTermId::from((nterm, index));
+
+        let (guid_name, friendly_name) = sub_nterm_names("group", p_data, s_store);
+
+        p_data.sub_nonterminals.push(Box::new(SubNonTerminal {
+          id,
+          guid_name,
+          friendly_name,
+          type_: SubNonTermType::Group,
+          g_id: g_data.id.guid,
+          rules: sub_nterm_rules,
+        }));
+
+        (id.as_sym(), group.tok.clone())
       }
+
       ASTNode::List_Rules(box parser::List_Rules { symbol, terminal_symbol, tok, .. }) => {
         let mut rule_syms = vec![symbol.clone()];
         let mut rules = Default::default();
@@ -706,16 +667,8 @@ fn intern_ast(rule: &parser::Rule, _p_data: &mut NonTermData) -> Option<ASTToken
   ast_ref
 }
 
-fn map_symbols_to_unindexed(ast_syms: &Array<ASTNode>) -> Array<(usize, &ASTNode)> {
-  ast_syms.iter().map(|s| (9999, s)).collect::<Array<_>>()
-}
-
 fn map_symbols_to_indexed(ast_syms: &Array<ASTNode>) -> Array<(usize, &ASTNode)> {
   ast_syms.iter().enumerate().map(|(i, s)| (i, s)).collect::<Array<_>>()
-}
-
-fn some_rules_have_ast_definitions(rules: &[Box<parser::Rule>]) -> bool {
-  rules.iter().any(|rule| rule.ast.is_some())
 }
 
 /// Converts a Symbol AST node into a symbol object and

@@ -33,7 +33,9 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
   let root_path = PathBuf::from("test.sg");
   let mut grammar = SherpaGrammarBuilder::new();
   grammar.add_source_from_string(source, &root_path, false)?;
-  let parser_data = grammar.build_db(&root_path)?.build_parser(ParserConfig::default().cst_editor())?.optimize(false)?;
+
+  let config = ParserConfig::default().cst_editor();
+  let parser_data = grammar.build_db(&root_path, &config)?.build_parser(config)?.optimize(false)?;
 
   _write_states_to_temp_file_(&parser_data)?;
 
@@ -73,7 +75,9 @@ pub fn construct_error_recovering_erlang_toy() -> SherpaResult<()> {
   let root_path = PathBuf::from("test.sg");
   let mut grammar = SherpaGrammarBuilder::new();
   grammar.add_source_from_string(source, &root_path, false)?;
-  let parser_data = grammar.build_db(&root_path)?.build_parser(ParserConfig::default().cst_editor())?.optimize(false)?;
+
+  let config = ParserConfig::default().cst_editor();
+  let parser_data = grammar.build_db(&root_path, &config)?.build_parser(config)?.optimize(false)?;
 
   _write_states_to_temp_file_(&parser_data)?;
 

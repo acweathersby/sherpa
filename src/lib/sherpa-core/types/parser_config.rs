@@ -42,14 +42,14 @@ pub struct ParserConfig {
   pub ALLOW_CST_NONTERM_SHIFT: bool,
   /// Allow inlining of scanners that yield single codepoint tokens.
   ///
-  /// Parser created with this type of optimization tend to perform poorly when
+  /// Parsers created with this type of optimization tend to perform poorly when
   /// used for error correction.
   pub ALLOW_SCANNER_INLINING: bool,
   /// An anonymous non-terminal, aka grouped rules `e.g ( symA symB | symC | ..
   /// )`, may be inlined into the body of its host rule if none of the grouped
   /// rules contain semantic actions, such as `:ast` definitions.  
   ///
-  /// Parser created with this type of optimization tend to perform poorly when
+  /// Parsers created with this type of optimization tend to perform poorly when
   /// used for error correcting.
   pub ALLOW_ANONYMOUS_NONTERM_INLINING: bool,
 }
