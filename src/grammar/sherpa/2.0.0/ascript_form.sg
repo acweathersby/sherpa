@@ -1,0 +1,38 @@
+NAME ascript_formatter
+
+IGNORE { c:sp c:nl }
+
+<> ascript_form > script_statement*
+
+<> script_statement > text | function | format | call | object | block::<script_statement>
+
+<> function_statement > format | call | match | object | block::<function_statement>
+
+<> function > fn_name params '{' function_statement+ "}"{kw}
+
+<> params > id ( ":" id )?
+
+<> call > fn_name args
+
+<> args > "(" ( object | text )(*) ")"
+
+<> format > "#indent" | "#dedent" | "_" 
+
+<> text > tk:( c:any+ )
+
+ <Content> block >
+        "[" Content? "]" 
+    |   "(" Content? ")" 
+    |   "{" Content? "}"
+ 
+ <> match > "#match" arg "{"  match_arm*  "}"
+
+ <> match_arm > id "->" ( text | format | call | block | for )+
+
+ <> for > "#for" id ":" member ( "(" function_statement+ ")" )? "{" function_statement+ "}"
+ 
+ <> fn_name > tk:( "#" id )
+
+ <> id > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )
+
+ <> object > id{kw} ("." id)+

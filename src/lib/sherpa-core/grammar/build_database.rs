@@ -668,7 +668,8 @@ fn inline_groups(
   outputs: &mut Vec<Vec<SymbolRef>>,
   is_root: bool,
 ) {
-  for (index, sym) in syms.iter().enumerate() {
+  for sym in syms.iter() {
+    let original_index = sym.original_index;
     if sym.annotation.is_empty() {
       if let SymbolId::NonTerminal { id } = sym.id {
         if let Some(candidate) = inline_candidates.get(&id) {
@@ -683,12 +684,12 @@ fn inline_groups(
             .collect::<Array<_>>();
 
           if is_root {
-            // Set the original_indexo of the last symbol in the inline chain to
+            // Set the original_index of the last symbol in the inline chain to
             // index the of the host symbol it has replaced. All other
             // symbols original_index is set to invalid (9999)
             for syms in &mut out {
               syms.iter_mut().for_each(|s| s.original_index = 9999);
-              syms.last_mut().map(|s| s.original_index = index as u32);
+              syms.last_mut().map(|s| s.original_index = original_index as u32);
             }
           }
 

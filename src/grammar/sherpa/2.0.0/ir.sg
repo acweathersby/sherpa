@@ -34,9 +34,12 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
      :ast { t_Statement, non_branch, branch, pop }
 
-    | branch_statement^branch 
+    | ( pop^pop "then" )?
+      branch_statement^branch 
 
-     :ast { t_Statement, branch }
+     :ast { t_Statement, branch, pop }
+
+    | pop^pop :ast { t_Statement, pop }
 
 <> branch_statement > match | goto_sequence | terminal_statement
 

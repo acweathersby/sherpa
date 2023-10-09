@@ -15,5 +15,5 @@
 
 <> escaped_vals > c:num | c:id | c:sym | c:nl | c:sp
 
-<> escaped > " \\"{:9999} ( c:num | c:id | c:sym | c:nl | c:sp ) :ast str($2)
+<> escaped > "\\"{:9999} ( c:num | c:id | c:sym | c:nl | c:sp ) :ast str($2)
            | "\\"{:9999} :ast str($1)

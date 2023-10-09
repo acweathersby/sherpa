@@ -111,6 +111,8 @@ fn build_parser(
   _lib_out_dir: PathBuf,
   out_dir: PathBuf,
 ) -> SherpaResult<()> {
+  let config = Default::default();
+
   let mut grammar = SherpaGrammarBuilder::new();
 
   for path in grammar_sources {
@@ -121,13 +123,13 @@ fn build_parser(
     panic!("Failed To parse due to the above errors")
   }
 
-  let db = grammar.build_db(grammar_sources.first().unwrap())?;
+  let db = grammar.build_db(grammar_sources.first().unwrap(), &config)?;
 
   if db.dump_errors() {
     panic!("Failed To parse due to the above errors")
   }
 
-  let parser = db.build_parser(Default::default())?.optimize(false)?;
+  let parser = db.build_parser(config)?.optimize(false)?;
 
   if parser.dump_errors() {
     panic!("Failed To parse due to the above errors")

@@ -50,7 +50,7 @@ fn test_full_grammar() -> SherpaResult<()> {
     db.to_owned(),
     PrintConfig {
       display_scanner_output: false,
-      display_instruction: false,
+      display_instruction: true,
       display_input_data: true,
       display_state: true,
       ..Default::default()
