@@ -122,7 +122,10 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
       | ASTNode::NonTerminal_Symbol(_)
       | ASTNode::NonTerminal_Import_Symbol(_) => {
         break;
-      }
+      }    
+      #[cfg(debug_assertions)]
+      node => unreachable!("unknown node: {:#?}", node),
+      #[cfg(not(debug_assertions))]
       _ => unreachable!()
     }
   }

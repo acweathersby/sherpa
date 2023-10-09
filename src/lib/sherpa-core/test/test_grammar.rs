@@ -26,11 +26,6 @@ fn grammar_with_name_clause() -> R<()> {
 }
 
 #[test]
-fn grammar_with_pratt_nonterminal() -> R<()> {
-  build("#> a > 'b'", "".into(), Default::default(), &|_| R::Ok(()))
-}
-
-#[test]
 fn grammar_with_peg_nonterminal() -> R<()> {
   build(":> a > 'b'", "".into(), Default::default(), &|_| R::Ok(()))
 }
@@ -50,6 +45,21 @@ fn grammar_with_append_nonterminal() -> R<()> {
 #[test]
 fn grammar_id_grammar() -> R<()> {
   build("<> a > c:id", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_with_templates() -> R<()> {
+  build("<C> a > 't' C", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_with_keyword() -> R<()> {
+  build("<> a > 't'{kw} ", "".into(), Default::default(), &|_| R::Ok(()))
+}
+
+#[test]
+fn grammar_with_token_group_keywords() -> R<()> {
+  build("<> a > tk:( 't' ) ", "".into(), Default::default(), &|_| R::Ok(()))
 }
 
 #[test]

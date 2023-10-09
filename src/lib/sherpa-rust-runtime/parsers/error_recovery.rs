@@ -9,7 +9,7 @@ use super::{
 const _TOKEN_SYNTHESIS_PENALTY: isize = 1;
 
 /// Maximum number of subsequent synthetic tokens
-const SYNTH_LIMIT: usize = 8;
+const SYNTH_LIMIT: usize = 12;
 
 pub trait ErrorRecoveringDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// Parse while attempting to recover from any errors encountered in the

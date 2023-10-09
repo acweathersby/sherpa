@@ -530,7 +530,7 @@ fn process_rule_symbols(
         // the next iteration.
         continue;
       }
-      
+
       ASTNode::Grouped_Rules(group) => {
         let mut sub_nterm_rules = Default::default();
 
@@ -759,6 +759,9 @@ fn get_nonterminal_symbol<'a>(
     | ASTNode::PegRules(box parser::PegRules { name_sym: id, .. })
     | ASTNode::CFRules(box parser::CFRules { name_sym: id, .. }) => (Some(id.as_ref()), None),
     ASTNode::AppendRules(box parser::AppendRules { name_sym, .. }) => get_nonterminal_symbol(g_data, name_sym),
+    #[cfg(debug_assertions)]
+    node => unreachable!("unknown node: {:#?}", node),
+    #[cfg(not(debug_assertions))]
     _ => unreachable!(),
   }
 }

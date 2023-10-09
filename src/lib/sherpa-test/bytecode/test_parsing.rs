@@ -6,7 +6,7 @@ use crate::{
     _write_disassembly_to_temp_file_,
     _write_states_to_temp_file_,
   },
-  *,
+  *, 
 };
 use sherpa_bytecode::compile_bytecode;
 use sherpa_core::{test::utils::build_parse_states_from_source_str as build_states, *};
@@ -16,6 +16,18 @@ use std::{path::PathBuf, rc::Rc};
 #[test]
 pub fn construct_trivial_parser() -> SherpaResult<()> {
   compile_and_run_grammars(&[r#"<> A > 'hello' ' ' 'world' "#], &[("default", "hello world", true)], Default::default())
+}
+
+#[test]
+pub fn group_inline() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    <> E > ( ("a" "b") "d" ( "o" ) | "b" "o" ) E | "b"
+
+  "#],
+    &[("default", "abdob", true)],
+    ParserConfig::default(),
+  )
 }
 
 #[test]

@@ -145,6 +145,18 @@ impl ParseState {
   }
 }
 
+#[cfg(debug_assertions)]
+pub fn printIRNode(db: &ParserDatabase, node: &ASTNode) -> SherpaResult<()> {
+  let mut cw = CodeWriter::new(vec![]);
+  render_IR(db, &mut cw, node, false, MatchInputType::Default)?;
+
+  unsafe {
+    println!("{}", String::from_utf8_unchecked(cw.into_output()));
+  }
+
+  Ok(())
+}
+
 /// Renders a string from an IR AST
 fn render_IR<T: Write>(
   db: &ParserDatabase,

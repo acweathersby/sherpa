@@ -3,6 +3,7 @@ use crate::{
   hash_id_value_u64,
   parser::{
     self,
+    sherpa_bc,
     ASTNode,
     ASTNodeType,
     DefaultMatch,
@@ -44,7 +45,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?.0;
 
-  //let parse_states = _inline_states(db, config, parse_states)?;
+  let parse_states = inline_states(db, config, parse_states)?;
 
   let parse_states = if config.ALLOW_SCANNER_INLINING { inline_scanners(db, config, parse_states)? } else { parse_states };
 
@@ -65,7 +66,6 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     loop {
       match canonicalize_states(db, config, states, Some("state combine"))? {
         (s, true) => {
-          println!("round--");
           states = s;
         }
         (s, false) => break s,
@@ -441,21 +441,21 @@ fn inline_scanners<'db>(
 }
 
 /// Inline statements of states that don't have transitive actions or matches.
-fn _inline_states<'db>(
+fn inline_states<'db>(
   db: &'db ParserDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
 ) -> SherpaResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
-  let mut naked_state_lookup = Map::new();
+  let mut trivial_state_lookup = Map::new();
 
   for (name, state) in &parse_states {
-    // Only statements with branches that are not Matches can be considered as
-    // naked.
+    // Only statements that don't contain branches can be
+    // considered "trivial".
     if let Some(box parser::State { statement, .. }) = state.ast.as_ref() {
       if !matches!(statement.branch, Some(ASTNode::Matches(..))) {
-        naked_state_lookup.insert(*name, *statement.clone());
+        trivial_state_lookup.insert(*name, *statement.clone());
       }
     }
   }
@@ -471,19 +471,22 @@ fn _inline_states<'db>(
       for m in matches {
         let Some(statement) = get_match_statement_mut(m) else { continue };
         let parser::Statement { branch, non_branch, transitive, .. } = statement;
+        let mut pop_count = 0;
         loop {
           if let Some(own_gotos) = branch.as_mut().and_then(|b| b.as_Gotos_mut()) {
             if let Some(goto) = &mut own_gotos.goto {
               let name = goto.name.to_token();
 
-              if let Some(parser::Statement { branch: b, non_branch: nb, transitive: t, .. }) = stmt_lu.get(&name) {
-                let mut t = t.clone();
+              if let Some(stmt @ parser::Statement { branch: b, non_branch: nb, transitive: t, .. }) = stmt_lu.get(&name) {
+                let t = t.clone();
 
-                // Pop the last goto (if present) if the incoming transitive action is `POP`
-                if own_gotos.pushes.len() > 0 && t.as_ref().is_some_and(|t| t.as_Pop().is_some()) {
-                  t = None;
-                  own_gotos.pushes.pop();
-                }
+                // Pops and Pushes annihilate each other. For each pop level remove 1 goto in
+                // the incoming push list, starting from right to left. Re-create the pop
+                // command if all incoming pushes where annihilated.
+
+                let (pops, nb) = nb.clone().into_iter().partition::<Vec<_>, _>(|p| p.as_Pop().is_some());
+
+                debug_assert!(pops.len() <= 1, "Should be only one pop instruction per statement");
 
                 let replace_branch = match b {
                   // We do not want to replace GOTOS if we have a Fail or Accept branch, so we make sure
@@ -506,13 +509,35 @@ fn _inline_states<'db>(
                     true
                   }
                 } {
-                  non_branch.append(&mut nb.clone());
+                  non_branch.extend(nb);
+
+                  if let Some(ASTNode::Pop(pop)) = pops.first() {
+                    pop_count += pop.popped_state;
+                    let push_len = own_gotos.pushes.len() as u32;
+                    let diff = push_len as isize - pop_count as isize;
+                    if diff > 0 {
+                      // There are more Pushes then Pop. Remove the last `len`
+                      // pushes and
+                      pop_count = 0;
+                      own_gotos.pushes.drain(diff as usize..);
+                    } else if diff == 0 {
+                      // Pushes and Pops perfectly cancel each other out.
+                      own_gotos.pushes.clear();
+                      pop_count = 0;
+                    } else {
+                      // There are more Pops then Pushes. Push the pop
+                      // instruction back into the the
+                      // states instructions, less the number of pushes
+                      pop_count -= push_len;
+                      own_gotos.pushes.clear();
+                    }
+                  }
 
                   if replace_branch {
                     *branch = b.clone();
                   } else if let Some(g) = b.as_ref().and_then(|b| b.as_Gotos()) {
                     own_gotos.goto = g.goto.clone();
-                    own_gotos.pushes.append(&mut g.pushes.clone());
+                    own_gotos.pushes.extend(g.pushes.iter().cloned());
                     // New gotos, we can continue the loop
                     continue;
                   } else if own_gotos.pushes.len() > 0 {
@@ -532,8 +557,16 @@ fn _inline_states<'db>(
             } else if let Some(_) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
               inline_statement(db, statement, stmt_lu)?;
             }
+
+            break;
+          } else {
             break;
           }
+        }
+
+        if pop_count > 0 {
+          // Insert a pop instruction as the last non-branching statement.
+          statement.non_branch.push(ASTNode::Pop(Box::new(sherpa_bc::Pop::new(pop_count, Default::default()))));
         }
       }
     }
@@ -542,7 +575,7 @@ fn _inline_states<'db>(
 
   for (_, state) in &mut parse_states {
     if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
-      inline_statement(db, statement, &naked_state_lookup)?;
+      inline_statement(db, statement, &trivial_state_lookup)?;
     }
   }
 

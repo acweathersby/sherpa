@@ -17,4 +17,4 @@ cargo test --workspace
 
 pushd $SHERPA_CLI_DIR
 
-cargo test
+cargo test --release

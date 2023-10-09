@@ -21,16 +21,18 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
     transitive_statement^transitive 
      ( "then" non_branch_statement(+"then")^non_branch )?
+     ( "then" pop^pop )?
      ( "then" branch_statement^branch )?
 
-     :ast { t_Statement, transitive, non_branch, branch }
+     :ast { t_Statement, transitive, non_branch, pop, branch }
 
      |
 
      non_branch_statement(+"then")^non_branch
+     ( "then" pop^pop )?
      ( "then" branch_statement^branch )?
 
-     :ast { t_Statement, non_branch, branch }
+     :ast { t_Statement, non_branch, branch, pop }
 
     | branch_statement^branch 
 
@@ -78,9 +80,10 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
     | "set-line"        :ast { t_SetLine, tok }
 
 
-    | "pop" tok::int?    :ast { t_Pop, popped_state: u32($2), tok }
-    
+<> pop > 
 
+    "pop" tok::int      :ast { t_Pop, count: u32($2), tok }
+    
 
 <> goto_sequence >
 

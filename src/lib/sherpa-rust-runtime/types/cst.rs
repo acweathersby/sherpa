@@ -1,3 +1,7 @@
+//! A CST implementation, heavily inspired by rowan, suitable for
+//! handling ambiguous and error corrected trees (technically a shared packed
+//! parser forest)
+
 use super::*;
 use std::{
   collections::hash_map::DefaultHasher,
