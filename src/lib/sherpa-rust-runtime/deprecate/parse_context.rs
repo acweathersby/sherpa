@@ -99,7 +99,7 @@ pub struct ParseContext<T: ByteReader, M = u32> {
   // Input data ----------
   /// The head of the input window
   pub begin_ptr:      usize,
-  /// 
+  ///
   pub anchor_ptr:     usize,
   /// The the end of the last shifted token
   pub base_ptr:       usize,
@@ -483,7 +483,13 @@ pub trait SherpaParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: boo
           ast_stack.push(AstSlot(Node::default(), tok, Default::default()));
         }
         ParseAction::Error { .. } => {
-          let last_input = TokenRange::default();
+          let ctx = self.get_ctx();
+          let last_input = TokenRange {
+            off:      ctx.sym_ptr as u32,
+            len:      ctx.sym_len as u32,
+            line_num: ctx.start_line_num,
+            line_off: ctx.start_line_off,
+          };
           let string = self.get_reader().get_bytes();
 
           let mut start = last_input.off as usize;

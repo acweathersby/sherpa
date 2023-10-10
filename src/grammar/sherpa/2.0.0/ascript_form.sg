@@ -4,35 +4,49 @@ IGNORE { c:sp c:nl }
 
 <> ascript_form > script_statement+
 
-<> script_statement > text | function | format | call | for | object | block::<script_statement>
+<> script_statement > text | function | format | call | for | object | block::<t_SBlock, script_statement>
 
-<> function_statement > text | format | call | match | object | for | block::<function_statement+>
+<> function_statement > text | format | call | match | object | for | block::<t_FBlock, function_statement+>
 
-<> function > fn_name params '{' function_statement+ "}"{kw}
+<> function > fn_name param+ '{' function_statement+ "}"{kw}
+                                    
+                                    :ast { t_Funct, name: str($1), params:$2, content: $4 }
 
-<> params > id ( ":" id )?
+<> param > id ( ":" id )?           :ast { t_Param, name: str($1), type: str($2) }
 
-<> call > fn_name args
+<> call > fn_name args              :ast { t_Call, name: str($1), args: $2 }
 
-<> args > "(" ( object | text )(*) ")"
+<> args > "(" ( object | text )(*) ")" 
+                                    :ast { $2 }
 
-<> format > "#++" | "#--" | "_" 
+<> format 
+    > "#++"                         :ast { t_Indent }
+    | "#--"                         :ast { t_Dedent }
+    | "_"                           :ast { t_Space }
 
-<> text > tk:( ( c:id | c:num | c:sym )+ ) | id
+<> text 
+    > tk:( ( c:id | c:num | c:sym )+ ) 
+                                    :ast { t_Text, val: str(tok) }
+    | id                            :ast { t_Id, val: str(tok) }
 
- <Content> block >
-        "[" Content? "]" 
-    |   "(" Content? ")" 
-    |   "{" Content? "}"
+<t_T:ast, Content:sym> block 
+    >   "[" Content? "]"            :ast { t_T, type: 1, content: $2 }
+    |   "(" Content? ")"            :ast { t_T, type: 2, content: $2 }
+    |   "{" Content? "}"            :ast { t_T, type: 3, content: $2 }
+    
+<> match > "#match" object "{"  match_arm*  "}" 
+                                    :ast { t_Match, obj: $2, matches:$4 }
+
+<> match_arm > id "->" ( function_statement )+
+                                    :ast { t_MatchArm, matches: $1, content: $2 }
+
+<> for > "#for" id ":" object /* ( "(" function_statement+ ")" )? */ "{" function_statement+ "}"
+                                    :ast { t_For, local: $2, object: $4, content: $6 }
  
- <> match > "#match" object "{"  match_arm*  "}"
 
- <> match_arm > id "->" ( function_statement )+
+<> object > id ("." id :ast str($2) )+            
+                                    :ast { t_Obj, name: str($1), path:$2 }
+    
+<> id > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )  
 
- <> for > "#for" id ":" object ( "(" function_statement+ ")" )? "{" function_statement+ "}"
- 
- <> fn_name > tk:( "#" id )
-
- <> id > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )
-
- <> object > id ("." id)+
+<> fn_name > tk:( "#" id )

@@ -49,7 +49,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = if config.ALLOW_SCANNER_INLINING { inline_scanners(db, config, parse_states)? } else { parse_states };
 
-  let parse_states = create_byte_sequences(db, config, parse_states)?;
+  let parse_states = if config.ALLOW_BYTE_SEQUENCES { create_byte_sequences(db, config, parse_states)? } else { parse_states };
 
   let parse_states = merge_branches(db, parse_states)?;
 

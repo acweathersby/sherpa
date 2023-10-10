@@ -52,6 +52,9 @@ pub struct ParserConfig {
   /// Parsers created with this type of optimization tend to perform poorly when
   /// used for error correcting.
   pub ALLOW_ANONYMOUS_NONTERM_INLINING: bool,
+  /// Enables using wide data types ( u16 | u32 | u64 | u128+ ) to recognize a
+  /// sequence of bytes.
+  pub ALLOW_BYTE_SEQUENCES: bool,
 }
 
 impl Default for ParserConfig {
@@ -69,6 +72,7 @@ impl Default for ParserConfig {
       ALLOW_CST_NONTERM_SHIFT: false,
       ALLOW_SCANNER_INLINING: true,
       ALLOW_ANONYMOUS_NONTERM_INLINING: true,
+      ALLOW_BYTE_SEQUENCES: false,
       max_k: usize::MAX,
     }
   }

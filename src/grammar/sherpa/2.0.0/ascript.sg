@@ -35,7 +35,7 @@ IMPORT ./token as token
 <> struct > 
 
     "{" type_identifier^t ( "," struct_prop(+",") )? '}'
-        :ast { t_AST_Struct, typ:$t, props:$3, tok }
+        :ast { t_AST_Struct, typ: str($t), props:$3, tok }
 
 <> struct_prop >
 
@@ -52,7 +52,7 @@ IMPORT ./token as token
 
 <> type_identifier > 
 
-    "t_" identifier
+    tk:( 't' "_"{:9999} ) identifier
 
 <> vector >
 
@@ -83,7 +83,7 @@ IMPORT ./token as token
 <> string_convert > 
 
     "str" convert_initializer?
-        :ast { t_AST_STRING, value: $2, tok  }
+        :ast { t_AST_STRING, initializer: $2, tok  }
 
 <> bool_convert > 
 
@@ -139,6 +139,9 @@ IMPORT ./token as token
 
     | token::int
         :ast { t_AST_NUMBER, value:f64($1) }
+
+    | token::string
+        :ast { t_AST_STRING, value:str($1), tok }
 
 <> reference > 
 
