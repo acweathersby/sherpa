@@ -49,7 +49,7 @@ fn grammar_id_grammar() -> R<()> {
 
 #[test]
 fn grammar_with_templates() -> R<()> {
-  build("<C> a > 't' C <> b > a::<B>", "".into(), Default::default(), &|_| R::Ok(()))
+  build("<C> a > 't' C <> b > a::<B> <> B > 'r'", "".into(), Default::default(), &|_| R::Ok(()))
 }
 
 #[test]

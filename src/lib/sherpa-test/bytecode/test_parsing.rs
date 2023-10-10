@@ -31,6 +31,33 @@ pub fn group_inline() -> SherpaResult<()> {
 }
 
 #[test]
+pub fn templates() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+
+    <> A > block::<"test">
+
+    <Content> block >
+        wrapped::<"[", Content, "]">
+      | wrapped::<"(", Content, ")">
+      | wrapped::<"{", Content, "}">
+
+    <A, B, C> wrapped > A B? C
+
+  "#],
+    &[
+      ("default", "{test}", true),
+      ("default", "(test)", true),
+      ("default", "[test]", true),
+      ("default", "{}", true),
+      ("default", "()", true),
+      ("default", "[]", true),
+    ],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn right_recursive() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"

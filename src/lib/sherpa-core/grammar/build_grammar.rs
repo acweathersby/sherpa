@@ -155,9 +155,14 @@ pub fn create_grammar_data(
     }
   } else {
     // Use the fist declared non-terminal as the default entry
-    let nterm = &g_data.grammar.rules[0];
-    if let Ok(nterm_id) = get_nonterminal_id_from_ast_node(&g_data, &nterm) {
-      g_data.exports.push(("default".intern(string_store), (nterm_id, nterm.to_token())));
+    for nterm in &g_data.grammar.rules {
+      if nterm.as_TemplateRules().is_some() {
+        continue;
+      }
+      if let Ok(nterm_id) = get_nonterminal_id_from_ast_node(&g_data, &nterm) {
+        g_data.exports.push(("default".intern(string_store), (nterm_id, nterm.to_token())));
+        break;
+      }
     }
   }
 
@@ -168,11 +173,26 @@ pub fn extract_nonterminals<'a>(
   _j: &mut Journal,
   g_data: &'a GrammarData,
   s_store: &IStringStore,
-) -> SherpaResult<(Array<(Box<NonTerminal>, &'a ASTNode)>, Array<Box<CustomState>>)> {
+) -> SherpaResult<(Array<(Box<NonTerminal>, &'a ASTNode)>, Map<IString, Box<NonTerminalTemplate>>, Array<Box<CustomState>>)> {
   let mut nterms = Array::new();
   let mut parse_states = Array::new();
+  let mut templates = Map::new();
   for prod_rule in &g_data.grammar.rules {
     match prod_rule {
+      ASTNode::TemplateRules(node) => {
+        let (guid_name, friendly_name) = nterm_names(&(node.name_sym.name.clone() + "_template"), &g_data.id, s_store);
+        templates.insert(
+          guid_name,
+          Box::new(NonTerminalTemplate {
+            guid_name,
+            friendly_name,
+            rules: node.rules.clone(),
+            tok: node.tok.clone(),
+            g_id: g_data.id.guid,
+            templates: node.template_params.clone(),
+          }),
+        );
+      }
       ASTNode::State(parse_state) => {
         let (guid_name, friendly_name) = nterm_names(parse_state.id.name.as_str(), &g_data.id, s_store);
         parse_states.push(Box::new(CustomState {
@@ -257,7 +277,7 @@ pub fn extract_nonterminals<'a>(
     }
   }
 
-  SherpaResult::Ok((nterms, parse_states))
+  SherpaResult::Ok((nterms, templates, parse_states))
 }
 
 pub fn process_parse_state<'a>(
@@ -389,6 +409,8 @@ pub fn process_nonterminals<'a>(
   (mut nterm, nterm_ast): (Box<NonTerminal>, &'a ASTNode),
   g_data: &GrammarData,
   s_store: &IStringStore,
+  templates: &Map<IString, Box<NonTerminalTemplate>>,
+  resolved: &mut Map<NonTermId, Option<Box<NonTerminal>>>,
 ) -> SherpaResult<Box<NonTerminal>> {
   let (type_, rules) = match nterm_ast {
     ASTNode::CFRules(nterm) => (NonTermType::ContextFree, &nterm.rules),
@@ -405,7 +427,7 @@ pub fn process_nonterminals<'a>(
   nterm.type_ = type_;
 
   for rule in rules {
-    process_rule(&mut nterm, rule, g_data, s_store)?;
+    process_rule(&mut nterm, rule, g_data, s_store, templates, resolved)?;
   }
 
   for rule in &nterm.rules {
@@ -417,7 +439,14 @@ pub fn process_nonterminals<'a>(
   SherpaResult::Ok(nterm)
 }
 
-fn process_rule(nterm: &mut NonTerminal, rule: &parser::Rule, g_data: &GrammarData, s_store: &IStringStore) -> SherpaResult<()> {
+fn process_rule(
+  nterm: &mut NonTerminal,
+  rule: &parser::Rule,
+  g_data: &GrammarData,
+  s_store: &IStringStore,
+  templates: &Map<IString, Box<NonTerminalTemplate>>,
+  resolved: &mut Map<NonTermId, Option<Box<NonTerminal>>>,
+) -> SherpaResult<()> {
   let ast_syms = rule.symbols.iter().enumerate().collect::<Array<_>>();
 
   let NonTerminal { id, rules, sub_nterms, symbols, .. } = nterm;
@@ -432,7 +461,15 @@ fn process_rule(nterm: &mut NonTerminal, rule: &parser::Rule, g_data: &GrammarDa
 
   let ast_ref = intern_ast(rule, &mut nterm_data);
 
-  process_rule_symbols(&RuleData { symbols: &ast_syms, ast_ref }, &mut nterm_data, g_data, s_store, rule.tok.clone())?;
+  process_rule_symbols(
+    &RuleData { symbols: &ast_syms, ast_ref },
+    &mut nterm_data,
+    g_data,
+    s_store,
+    rule.tok.clone(),
+    templates,
+    resolved,
+  )?;
 
   SherpaResult::Ok(())
 }
@@ -443,6 +480,8 @@ fn process_rule_symbols(
   g_data: &GrammarData,
   s_store: &IStringStore,
   tok: Token,
+  tmpl: &Map<IString, Box<NonTerminalTemplate>>,
+  resolved: &mut Map<NonTermId, Option<Box<NonTerminal>>>,
 ) -> SherpaResult<()> {
   let mut rules: Array<Rule> = Default::default();
 
@@ -499,6 +538,8 @@ fn process_rule_symbols(
             g_data,
             s_store,
             tok.clone(),
+            tmpl,
+            resolved,
           )?;
         }
 
@@ -539,7 +580,15 @@ fn process_rule_symbols(
             symbols: &rule.symbols.iter().enumerate().collect::<Array<_>>(),
             ast_ref: intern_ast(rule, p_data),
           };
-          process_rule_symbols(n_rule, &mut p_data.set_rules(&mut sub_nterm_rules), g_data, s_store, rule.tok.clone())?
+          process_rule_symbols(
+            n_rule,
+            &mut p_data.set_rules(&mut sub_nterm_rules),
+            g_data,
+            s_store,
+            rule.tok.clone(),
+            tmpl,
+            resolved,
+          )?
         }
 
         let nterm = p_data.root_nterm;
@@ -560,6 +609,70 @@ fn process_rule_symbols(
         (id.as_sym(), group.tok.clone())
       }
 
+      node @ ASTNode::Template_NonTerminal_Symbol(template_sym) => {
+        // Replace the template symbol with the resolved non-terminal
+        if let (Some(name_sym), _) = get_nonterminal_symbol(g_data, node) {
+          let (guid_name, _) = nterm_names(&(name_sym.name.clone() + "_template"), &g_data.id, s_store);
+
+          if let Some(template) = tmpl.get(&guid_name) {
+            let hash = create_u64_hash(&template_sym.template_args);
+            let name = name_sym.name.clone() + "_template_" + &hash.to_string();
+            let (guid_name, f_name) = nterm_names(name.as_str(), &g_data.id, s_store);
+            let id = NonTermId::from((g_data.id.guid, name.as_str()));
+
+            if resolved.get(&id).is_none() {
+              let symbol_lookup = Map::from_iter(template.templates.iter().cloned().zip(template_sym.template_args.iter()));
+              resolved.insert(id, None);
+
+              let node = ASTNode::CFRules(Box::new(crate::parser::CFRules::new(
+                Box::new(name_sym.clone()),
+                template
+                  .rules
+                  .iter()
+                  .map(|r| {
+                    let mut rule = r.clone();
+                    rule.symbols = rule.symbols.iter().cloned().map(|s| replace_template_symbol(s, &symbol_lookup)).collect();
+                    rule
+                  })
+                  .collect(),
+                template.tok.clone(),
+              )));
+
+              let nt = process_nonterminals(
+                (
+                  Box::new(NonTerminal {
+                    id,
+                    guid_name,
+                    friendly_name: f_name,
+                    g_id: g_data.id.guid,
+                    type_: NonTermType::ContextFree,
+                    rules: Default::default(),
+                    sub_nterms: Default::default(),
+                    symbols: Default::default(),
+                    tok_nterms: Default::default(),
+                    tok: tok.clone(),
+                    asts: Default::default(),
+                  }),
+                  &node,
+                ),
+                g_data,
+                s_store,
+                tmpl,
+                resolved,
+              )?;
+
+              resolved.insert(id, Some(nt));
+            }
+
+            (id.as_sym(), template_sym.tok.clone())
+          } else {
+            unreachable!("Can't resolve template")
+          }
+        } else {
+          unreachable!()
+        }
+      }
+
       ASTNode::List_Rules(box parser::List_Rules { symbol, terminal_symbol, tok, .. }) => {
         let mut rule_syms = vec![symbol.clone()];
         let mut rules = Default::default();
@@ -573,7 +686,15 @@ fn process_rule_symbols(
           ast_ref: Some(ASTToken::ListEntry(symbol.to_token().get_tok_range())),
         };
 
-        process_rule_symbols(r_data, &mut p_data.set_rules(&mut rules), g_data, s_store, symbol.to_token().clone())?;
+        process_rule_symbols(
+          r_data,
+          &mut p_data.set_rules(&mut rules),
+          g_data,
+          s_store,
+          symbol.to_token().clone(),
+          tmpl,
+          resolved,
+        )?;
 
         let nterm = p_data.root_nterm;
         let nterm_index = p_data.sub_nonterminals.len();
@@ -660,6 +781,37 @@ fn process_rule_symbols(
   p_data.rules.append(&mut rules);
 
   SherpaResult::Ok(())
+}
+
+fn replace_template_symbol(s: ASTNode, symbol_lookup: &Map<String, &ASTNode>) -> ASTNode {
+  match s {
+    ASTNode::AnnotatedSymbol(mut s) => {
+      s.symbol = replace_template_symbol(s.symbol.clone(), symbol_lookup);
+      ASTNode::AnnotatedSymbol(s)
+    }
+    ASTNode::List_Rules(mut s) => {
+      s.symbol = replace_template_symbol(s.symbol.clone(), symbol_lookup);
+      ASTNode::List_Rules(s)
+    }
+    ASTNode::Grouped_Rules(mut group) => {
+      for rule in &mut group.rules {
+        rule.symbols = rule.symbols.iter().map(|s| replace_template_symbol(s.clone(), symbol_lookup)).collect();
+      }
+      ASTNode::Grouped_Rules(group)
+    }
+    ASTNode::Template_NonTerminal_Symbol(mut sym) => {
+      sym.template_args = sym.template_args.iter().map(|s| replace_template_symbol(s.clone(), symbol_lookup)).collect();
+      ASTNode::Template_NonTerminal_Symbol(sym)
+    }
+    ASTNode::NonTerminal_Symbol(nt) => {
+      if let Some(sym) = symbol_lookup.get(&nt.name) {
+        (*sym).clone()
+      } else {
+        ASTNode::NonTerminal_Symbol(nt)
+      }
+    }
+    s => s,
+  }
 }
 
 fn intern_ast(rule: &parser::Rule, _p_data: &mut NonTermData) -> Option<ASTToken> {
@@ -758,7 +910,9 @@ fn get_nonterminal_symbol<'a>(
     ASTNode::State(box parser::State { id, .. })
     | ASTNode::PegRules(box parser::PegRules { name_sym: id, .. })
     | ASTNode::CFRules(box parser::CFRules { name_sym: id, .. }) => (Some(id.as_ref()), None),
-    ASTNode::AppendRules(box parser::AppendRules { name_sym, .. }) => get_nonterminal_symbol(g_data, name_sym),
+    ASTNode::AppendRules(r) => get_nonterminal_symbol(g_data, &r.name_sym),
+    ASTNode::Template_NonTerminal_Symbol(sym) => get_nonterminal_symbol(g_data, &sym.name),
+    ASTNode::TemplateRules(sym) => (Some(sym.name_sym.as_ref()), None),
     #[cfg(debug_assertions)]
     node => unreachable!("unknown node: {:#?}", node),
     #[cfg(not(debug_assertions))]
@@ -791,7 +945,7 @@ fn get_nonterminal_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> She
       #[allow(unreachable_code)]
       {
         #[cfg(debug_assertions)]
-        unreachable!("Unrecognized node: {:?}", node.get_type());
+        unreachable!("Unrecognized node: {:#?}", node);
         unreachable!()
       }
     }
@@ -902,11 +1056,11 @@ mod test {
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (mut nterms, ..) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
+    let (mut nterms, templates, ..) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
 
     assert_eq!(nterms.len(), 1);
 
-    let nterm = super::process_nonterminals(o_to_r(nterms.pop(), "")?, &g_data, &s_store)?;
+    let nterm = super::process_nonterminals(o_to_r(nterms.pop(), "")?, &g_data, &s_store, &templates, &mut Default::default())?;
 
     dbg!(&nterm.symbols);
 
@@ -932,7 +1086,7 @@ mod test {
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (nonterminals, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
+    let (nonterminals, templates, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
 
     assert_eq!(nonterminals.len(), 0);
     assert_eq!(parse_states.len(), 1);

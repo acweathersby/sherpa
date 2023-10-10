@@ -220,6 +220,30 @@ pub struct CustomState {
 
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
+pub struct NonTerminalTemplate {
+  /// The globally unique name string of the non-terminal. Similar to a C++
+  /// mangled name
+  pub guid_name: IString,
+
+  /// The name of the non-terminal as it is found in the source grammar. This is
+  /// the same as name within the definition for the template rules appended
+  /// with  `_template`
+  pub friendly_name: IString,
+
+  /// The unique identifier of the owning GrammarHeader.
+  pub g_id:  GrammarId,
+  
+  /// All rules that reduce to this non-terminal
+  pub rules: Array<Box<crate::parser::Rule>>,
+
+  /// A list of non-terminal symbol names that are to be replaced by template args
+  pub templates: Array<String>,
+
+  pub tok: Token,
+}
+
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct NonTerminal {
   /// The unique identifier of this non-terminal.
   pub id: NonTermId,

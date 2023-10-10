@@ -63,10 +63,9 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
   loop {
     match sym {
       ASTNode::AnnotatedSymbol(annotated) => {
-
         data.is_optional |= annotated.is_optional;
 
-        let (sym_prec, tok_prec) = annotated.precedence.as_ref().and_then(|p| Some((p.sym_prec, p.kot_prec)) ).unwrap_or_default();
+        let (sym_prec, tok_prec) = annotated.precedence.as_ref().and_then(|p| Some((p.sym_prec, p.kot_prec))).unwrap_or_default();
 
         data.symbol_precedence = sym_prec as u16;
 
@@ -75,12 +74,13 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
         }
 
         if !annotated.reference.is_empty() {
-
-        debug_assert_eq!(
-          &annotated.reference[0..1], "^",
-          "Annotation values are no longer prefixed with \"^\". The following line needs to be changed to:
+          debug_assert_eq!(
+            &annotated.reference[0..1],
+            "^",
+            "Annotation values are no longer prefixed with \"^\". The following line needs to be changed to:
           data.annotation = annotated.reference.clone(); 
-          This assert can be removed after the change is made.");
+          This assert can be removed after the change is made."
+          );
 
           data.annotation = annotated.reference[1..].to_string();
         }
@@ -91,13 +91,14 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
         data.is_group = true;
         break;
       }
-      ASTNode::List_Rules( p) => {
+      ASTNode::List_Rules(p) => {
         data.is_list = true;
         data.is_optional |= p.optional;
         break;
       }
-      ASTNode::TerminalToken( t) => {
-        data.token_precedence = data.token_precedence.max(TERMINAL_TOKEN_PRECEDENCE).max((t.is_exclusive as u16) * EXCLUSIVE_TERMINAL_TOKEN_PRECEDENCE);
+      ASTNode::TerminalToken(t) => {
+        data.token_precedence =
+          data.token_precedence.max(TERMINAL_TOKEN_PRECEDENCE).max((t.is_exclusive as u16) * EXCLUSIVE_TERMINAL_TOKEN_PRECEDENCE);
         break;
       }
       ASTNode::EOFSymbol(_) => {
@@ -116,17 +117,16 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
       // This symbol types are "real" symbols, in as much
       // as they represent actual parsable entities which are
       // submitted to the bytecode compiler for evaluation
-       ASTNode::NotEmptySet(_)
-
-      //| ASTNode::TemplateNonTerminalSymbol(_)
+      ASTNode::NotEmptySet(_)
+      | ASTNode::Template_NonTerminal_Symbol(_)
       | ASTNode::NonTerminal_Symbol(_)
       | ASTNode::NonTerminal_Import_Symbol(_) => {
         break;
-      }    
+      }
       #[cfg(debug_assertions)]
       node => unreachable!("unknown node: {:#?}", node),
       #[cfg(not(debug_assertions))]
-      _ => unreachable!()
+      _ => unreachable!(),
     }
   }
 

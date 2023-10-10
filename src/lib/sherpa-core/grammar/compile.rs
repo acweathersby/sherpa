@@ -71,10 +71,20 @@ pub fn load_grammar(
 fn compile_grammar_data(j: &mut Journal, g_data: GrammarData, g_s: &GrammarSoup) -> SherpaResult<GrammarIdentities> {
   let id = g_data.id;
 
-  let (mut nterms, mut parse_states) = extract_nonterminals(j, &g_data, &g_s.string_store)?;
-
+  let (mut nterms, templates, mut parse_states) = extract_nonterminals(j, &g_data, &g_s.string_store)?;
+  let mut resolved_templates = Map::<NonTermId, Option<Box<NonTerminal>>>::new();
   for nterm in nterms {
-    g_s.nonterminals.write().unwrap().push(process_nonterminals(nterm, &g_data, &g_s.string_store)?);
+    g_s.nonterminals.write().unwrap().push(process_nonterminals(
+      nterm,
+      &g_data,
+      &g_s.string_store,
+      &templates,
+      &mut resolved_templates,
+    )?);
+  }
+
+  for (_, resolved_template) in resolved_templates {
+    g_s.nonterminals.write().unwrap().push(resolved_template.expect("Should be resolved"));
   }
 
   for state in parse_states {
