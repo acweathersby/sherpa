@@ -108,6 +108,10 @@ pub fn disassemble_parse_block<'a>(i: Option<Instruction<'a>>, recursive: bool) 
 
         (format!("\n{}ASSIGN-TK [{}]{string}", dh(i.address()), tok_id), i_last)
       }
+      ReadCodepoint => {
+        let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
+        (format!("\n{}READ-CP {string}", dh(i.address())), i_last)
+      }
       NoOp => {
         let (string, i_last) = if r { ds(i.next(), r) } else { Default::default() };
         let byte = i.bytecode()[i.address()];

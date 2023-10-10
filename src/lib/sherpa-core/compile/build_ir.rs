@@ -6,7 +6,7 @@ use crate::{
   utils::{hash_group_btree_iter, hash_group_btreemap},
   writer::code_writer::CodeWriter,
 };
-use sherpa_rust_runtime::types::bytecode::MatchInputType;
+use sherpa_rust_runtime::{types::bytecode::MatchInputType, utf8::lookup_table::CodePointClass};
 
 use super::build_graph::{
   flow::resolve_token_assign_id,
@@ -271,6 +271,7 @@ fn classify_successors<'graph, 'db: 'graph>(
           SymbolId::Char { .. } => (2, MatchInputType::Byte),
           SymbolId::Codepoint { .. } => (3, MatchInputType::Codepoint),
           sym if sym.is_class() => (4, MatchInputType::Class),
+          SymbolId::Any => (4, MatchInputType::Class),
           SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. } => (5, MatchInputType::Token),
           SymbolId::Default => (6, MatchInputType::Default),
           _sym => {
@@ -355,8 +356,13 @@ fn add_match_expr<'graph, 'db: 'graph>(
       let peeking = successors.iter().any(|s| matches!(s.get_type(), StateType::PeekEndComplete(_) | StateType::Peek(_)));
 
       for (state_val, s) in successors.iter().map(|s| (s.get_symbol().sym().to_state_val(db), s)).collect::<OrderedMap<_, _>>() {
-        w = w + "\n\n( " + state_val.to_string() + " ){ ";
-        w = w + build_body(state, *s, goto_state_id).join(" then ") + " }";
+        if state_val == CodePointClass::Any as u32 {
+          w = w + "\n\ndefault { ";
+          w = w + build_body(state, *s, goto_state_id).join(" then ") + " }";
+        } else {
+          w = w + "\n\n( " + state_val.to_string() + " ){ ";
+          w = w + build_body(state, *s, goto_state_id).join(" then ") + " }";
+        }
       }
 
       // Add skips

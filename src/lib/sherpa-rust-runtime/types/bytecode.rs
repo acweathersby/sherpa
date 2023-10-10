@@ -218,13 +218,17 @@ pub enum Opcode {
   ///
   /// This is variable length instruction. Its base length is 3 bytes
   Fork,
+  /// Reads one codepoint from the input, priming line_counter and tok_len
+  /// as needed. Fails if the value of the codepoint is 0
+  /// This is a 1 byte instruction.
+  ReadCodepoint,
 }
 
 impl From<u8> for Opcode {
   fn from(value: u8) -> Self {
     use Opcode::*;
 
-    const LU_TABLE: [Opcode; 24] = [
+    const LU_TABLE: [Opcode; 25] = [
       NoOp,
       Pass,
       Fail,
@@ -249,6 +253,7 @@ impl From<u8> for Opcode {
       HashBranch,
       ByteSequence,
       Fork,
+      ReadCodepoint,
     ];
 
     if (value as usize) < LU_TABLE.len() {
@@ -550,27 +555,27 @@ pub enum MatchInputType {
   /// Matches the last reduced nonterminal id
   NonTerminal = 0,
   /// Matches the token id set from a scanner call
-  Token,
+  Token     = 1,
   /// Matches the class of a character in the input
-  Class,
+  Class     = 2,
   /// Matches a utf8 codepoint byte sequence in the input
-  Codepoint,
+  Codepoint = 3,
   /// Matches a byte in the input
-  Byte,
+  Byte      = 4,
   /// Matches the virtual $eof token in the input stream
-  EndOfFile,
+  EndOfFile = 5,
   /// Matches anything
-  Default,
+  Default   = 6,
   /// Matches a byte in the input
-  ByteScanless,
+  ByteScanless = 7,
   /// Matches a utf8 codepoint byte sequence in the input
-  CodepointScanless,
+  CodepointScanless = 8,
   /// Matches the class of a character in the input
-  ClassScanless,
+  ClassScanless = 9,
   /// Matches a distinct sequence of bytes.
-  ByteSequence,
+  ByteSequence = 10,
   /// Matches the top node on the output stack.
-  CSTNode,
+  CSTNode   = 11,
 }
 
 impl MatchInputType {

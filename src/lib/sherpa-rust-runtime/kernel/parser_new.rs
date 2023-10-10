@@ -52,6 +52,7 @@ fn dispatch<'a, 'debug>(
       AssignToken => assign_token(i, ctx),
       VectorBranch => vector_branch(i, ctx, input, debug, is_scanner),
       HashBranch => hash_branch(i, ctx, input, debug, is_scanner),
+      ReadCodepoint => read_codepoint(i, ctx, input, debug, is_scanner),
       Fail => OpResult {
         action:    FailState,
         next:      Option::None,
@@ -438,6 +439,33 @@ fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
     next:      i.next(),
     is_goto:   false,
     can_debug: true,
+  }
+}
+
+/// Performs the [Opcode::ReadCodepoint] operation
+fn read_codepoint<'a, 'debug>(
+  i: Instruction<'a>,
+  ctx: &mut ParserContext,
+  input: &impl ParserInput,
+  debug: &mut Option<&mut DebugFnNew>,
+  is_scanner: bool,
+) -> OpResult<'a> {
+  const __HINT__: Opcode = Opcode::ReadCodepoint;
+  emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
+  if get_input_value(MatchInputType::Codepoint, i, ctx, input, debug, is_scanner) == 0 {
+    OpResult {
+      action:    ParseAction::FailState,
+      next:      None,
+      is_goto:   false,
+      can_debug: false,
+    }
+  } else {
+    OpResult {
+      action:    ParseAction::None,
+      next:      i.next(),
+      is_goto:   false,
+      can_debug: false,
+    }
   }
 }
 

@@ -120,6 +120,7 @@ pub fn get_symbol_details<'a>(mut sym: &'a ASTNode) -> SymbolData<'a> {
       ASTNode::NotEmptySet(_)
       | ASTNode::Template_NonTerminal_Symbol(_)
       | ASTNode::NonTerminal_Symbol(_)
+      | ASTNode::TokenGroupRules(_)
       | ASTNode::NonTerminal_Import_Symbol(_) => {
         break;
       }

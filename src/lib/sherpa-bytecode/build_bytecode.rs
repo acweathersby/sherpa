@@ -325,142 +325,151 @@ fn build_match<'db>(
     }
   };
 
-  if input_type_key == MatchInputType::ByteSequence as u32 {
-    debug_assert_eq!(match_branches.len(), 1, "Expected match statement _BYTE_SEQUENCE_  to have exactly 1 branch");
-
-    let (bytes, stmt) = match_branches[0];
-    debug_assert!(bytes.len() < (u16::MAX - 1) as usize, "Too many bytes need to be matched in _BYTE_SEQUENCE_");
-
-    let base_len = 1 + 2 + 4 + bytes.len();
-
-    insert_op(&mut pkg.bytecode, Op::ByteSequence);
-    insert_u16_le(&mut pkg.bytecode, bytes.len() as u16);
-
-    let mut stmt_bc = BytecodeParserDB::default();
-    let mut default_bc = BytecodeParserDB::default();
-
-    build_statement(db, stmt, &mut stmt_bc, state_name_to_proxy, add_debug_symbols)?;
-
-    let default_offset = if let Some(default) = default {
-      build_statement(db, default, &mut default_bc, state_name_to_proxy, add_debug_symbols)?;
-      base_len + stmt_bc.bytecode.len()
-    } else {
-      0
-    };
-
-    insert_u32_le(&mut pkg.bytecode, default_offset as u32);
-
-    for byte in bytes {
-      let byte = *byte as u8;
-      insert_u8(&mut pkg.bytecode, byte);
-    }
-
-    pkg.bytecode.extend(stmt_bc.bytecode);
-    pkg.bytecode.extend(default_bc.bytecode);
-  } else {
-    let mut offset = 0;
-    let mut val_offset_map = OrderedMap::new();
-    let mut sub_bcs = Array::new();
-
-    for (ids, stmt) in match_branches {
-      for id in ids {
-        val_offset_map.insert(*id as u32, offset);
-      }
-
-      let mut sub_bc = BytecodeParserDB::default();
-      build_statement(db, stmt, &mut sub_bc, state_name_to_proxy, add_debug_symbols)?;
-      offset += sub_bc.bytecode.len() as u32;
-      sub_bcs.push(sub_bc);
-    }
-
-    let offset_lookup_table_length = val_offset_map.len() as u32;
-    let instruction_field_start = 18 + offset_lookup_table_length * 4;
-    let default_offset = offset + instruction_field_start;
-
-    let mut pending_pairs =
-      val_offset_map.clone().into_iter().map(|(k, v)| (k, v + instruction_field_start)).collect::<VecDeque<_>>();
-
-    let mod_base = f64::log2(val_offset_map.len() as f64) as u32;
-    let mod_mask = (1 << mod_base) - 1;
-
-    let mut hash_entries = (0..pending_pairs.len()).into_iter().map(|_| 0).collect::<Vec<_>>();
-
-    let mut leftover_pairs = vec![];
-
-    // Distribute keys-values with unique hashes into hash table
-    // slots.
-
-    while let Some(pair) = pending_pairs.pop_front() {
-      let (val, offset) = pair;
-      let hash_index = (val & mod_mask) as usize;
-      if hash_entries[hash_index] == 0 {
-        debug_assert!(
-          offset <= 0x7FF,
-          "Hash table offset overflow. Offsets [{}] overflow bounds by [{}]",
-          offset,
-          offset - 0x7FF
-        );
-        debug_assert!(val <= 0x7FF, "Hash table value overflow. Value [{}] overflow bounds by [{}]", val, val - 0x7FF);
-        hash_entries[hash_index] = (val & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
-      } else {
-        leftover_pairs.push(pair);
-      }
-    }
-
-    // What remains are hash collisions. We use simple linear
-    // probing to find the next available slot, and
-    // attach it to the probing chain using a signed
-    // delta index.
-    for (val, offset) in leftover_pairs {
-      let mut pointer;
-      let mut prev_node = (val & mod_mask) as usize;
-
-      loop {
-        pointer = (((hash_entries[prev_node] >> 22) & 0x3FF) as i32) - 512;
-
-        if pointer == 0 {
-          break;
-        } else {
-          prev_node = (prev_node as i32 + pointer as i32) as usize;
-        }
-      }
-
-      for i in 0..hash_entries.len() {
-        if hash_entries[i] == 0 {
-          // Update the previous node in the chain with the
-          // diff pointer to the new node.
-          hash_entries[prev_node] =
-            ((((i as i32 - prev_node as i32) + 512) as u32 & 0x3FF) << 22) | (hash_entries[prev_node] & ((1 << 22) - 1));
-          // Add data for the new node.
-          hash_entries[i] = ((val) & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
-          break;
-        }
-      }
-    }
-
-    insert_op(&mut pkg.bytecode, Op::HashBranch); // 1
-    insert_u8(&mut pkg.bytecode, input_type_key as u8); // 2
-    insert_u32_le(&mut pkg.bytecode, default_offset); // 6
-    insert_u32_le(&mut pkg.bytecode, scanner_address); // 10
-    insert_u32_le(&mut pkg.bytecode, offset_lookup_table_length); // 14
-    insert_u32_le(&mut pkg.bytecode, mod_base); // 18
-
-    for instruction in hash_entries {
-      insert_u32_le(&mut pkg.bytecode, instruction)
-    }
-
-    for sub_bc in sub_bcs {
-      let len = pkg.bytecode.len() as u32;
-
-      pkg.bytecode.extend(sub_bc.bytecode);
-
-      pkg.ir_token_lookup.extend(sub_bc.ir_token_lookup.into_iter().map(|(address, token)| (address + len, token)));
-    }
-
+  if match_branches.is_empty() {
     if let Some(stmt) = default {
+      insert_op(&mut pkg.bytecode, Op::ReadCodepoint);
       build_statement(db, stmt, pkg, state_name_to_proxy, add_debug_symbols)?;
     } else {
-      insert_op(&mut pkg.bytecode, Op::Fail)
+      unreachable!("Match statement is empty")
+    }
+  } else {
+    if input_type_key == MatchInputType::ByteSequence as u32 {
+      debug_assert_eq!(match_branches.len(), 1, "Expected match statement _BYTE_SEQUENCE_  to have exactly 1 branch");
+
+      let (bytes, stmt) = match_branches[0];
+      debug_assert!(bytes.len() < (u16::MAX - 1) as usize, "Too many bytes need to be matched in _BYTE_SEQUENCE_");
+
+      let base_len = 1 + 2 + 4 + bytes.len();
+
+      insert_op(&mut pkg.bytecode, Op::ByteSequence);
+      insert_u16_le(&mut pkg.bytecode, bytes.len() as u16);
+
+      let mut stmt_bc = BytecodeParserDB::default();
+      let mut default_bc = BytecodeParserDB::default();
+
+      build_statement(db, stmt, &mut stmt_bc, state_name_to_proxy, add_debug_symbols)?;
+
+      let default_offset = if let Some(default) = default {
+        build_statement(db, default, &mut default_bc, state_name_to_proxy, add_debug_symbols)?;
+        base_len + stmt_bc.bytecode.len()
+      } else {
+        0
+      };
+
+      insert_u32_le(&mut pkg.bytecode, default_offset as u32);
+
+      for byte in bytes {
+        let byte = *byte as u8;
+        insert_u8(&mut pkg.bytecode, byte);
+      }
+
+      pkg.bytecode.extend(stmt_bc.bytecode);
+      pkg.bytecode.extend(default_bc.bytecode);
+    } else {
+      let mut offset = 0;
+      let mut val_offset_map = OrderedMap::new();
+      let mut sub_bcs = Array::new();
+
+      for (ids, stmt) in match_branches {
+        for id in ids {
+          val_offset_map.insert(*id as u32, offset);
+        }
+
+        let mut sub_bc = BytecodeParserDB::default();
+        build_statement(db, stmt, &mut sub_bc, state_name_to_proxy, add_debug_symbols)?;
+        offset += sub_bc.bytecode.len() as u32;
+        sub_bcs.push(sub_bc);
+      }
+
+      let offset_lookup_table_length = val_offset_map.len() as u32;
+      let instruction_field_start = 18 + offset_lookup_table_length * 4;
+      let default_offset = offset + instruction_field_start;
+
+      let mut pending_pairs =
+        val_offset_map.clone().into_iter().map(|(k, v)| (k, v + instruction_field_start)).collect::<VecDeque<_>>();
+
+      let mod_base = f64::log2(val_offset_map.len() as f64) as u32;
+      let mod_mask = (1 << mod_base) - 1;
+
+      let mut hash_entries = (0..pending_pairs.len()).into_iter().map(|_| 0).collect::<Vec<_>>();
+
+      let mut leftover_pairs = vec![];
+
+      // Distribute keys-values with unique hashes into hash table
+      // slots.
+
+      while let Some(pair) = pending_pairs.pop_front() {
+        let (val, offset) = pair;
+        let hash_index = (val & mod_mask) as usize;
+        if hash_entries[hash_index] == 0 {
+          debug_assert!(
+            offset <= 0x7FF,
+            "Hash table offset overflow. Offsets [{}] overflow bounds by [{}]",
+            offset,
+            offset - 0x7FF
+          );
+          debug_assert!(val <= 0x7FF, "Hash table value overflow. Value [{}] overflow bounds by [{}]", val, val - 0x7FF);
+          hash_entries[hash_index] = (val & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
+        } else {
+          leftover_pairs.push(pair);
+        }
+      }
+
+      // What remains are hash collisions. We use simple linear
+      // probing to find the next available slot, and
+      // attach it to the probing chain using a signed
+      // delta index.
+      for (val, offset) in leftover_pairs {
+        let mut pointer;
+        let mut prev_node = (val & mod_mask) as usize;
+
+        loop {
+          pointer = (((hash_entries[prev_node] >> 22) & 0x3FF) as i32) - 512;
+
+          if pointer == 0 {
+            break;
+          } else {
+            prev_node = (prev_node as i32 + pointer as i32) as usize;
+          }
+        }
+
+        for i in 0..hash_entries.len() {
+          if hash_entries[i] == 0 {
+            // Update the previous node in the chain with the
+            // diff pointer to the new node.
+            hash_entries[prev_node] =
+              ((((i as i32 - prev_node as i32) + 512) as u32 & 0x3FF) << 22) | (hash_entries[prev_node] & ((1 << 22) - 1));
+            // Add data for the new node.
+            hash_entries[i] = ((val) & 0x7FF) | ((offset & 0x7FF) << 11) | (512 << 22);
+            break;
+          }
+        }
+      }
+
+      insert_op(&mut pkg.bytecode, Op::HashBranch); // 1
+      insert_u8(&mut pkg.bytecode, input_type_key as u8); // 2
+      insert_u32_le(&mut pkg.bytecode, default_offset); // 6
+      insert_u32_le(&mut pkg.bytecode, scanner_address); // 10
+      insert_u32_le(&mut pkg.bytecode, offset_lookup_table_length); // 14
+      insert_u32_le(&mut pkg.bytecode, mod_base); // 18
+
+      for instruction in hash_entries {
+        insert_u32_le(&mut pkg.bytecode, instruction)
+      }
+
+      for sub_bc in sub_bcs {
+        let len = pkg.bytecode.len() as u32;
+
+        pkg.bytecode.extend(sub_bc.bytecode);
+
+        pkg.ir_token_lookup.extend(sub_bc.ir_token_lookup.into_iter().map(|(address, token)| (address + len, token)));
+      }
+
+      if let Some(stmt) = default {
+        build_statement(db, stmt, pkg, state_name_to_proxy, add_debug_symbols)?;
+      } else {
+        insert_op(&mut pkg.bytecode, Op::Fail)
+      }
     }
   }
   SherpaResult::Ok(())

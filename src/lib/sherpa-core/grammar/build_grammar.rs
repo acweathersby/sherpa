@@ -8,7 +8,7 @@ use super::{
 use crate::{
   grammar::utils::resolve_grammar_path,
   journal::Journal,
-  parser::ast::escaped_from,
+  parser::{ast::escaped_from, NonTerminal_Symbol},
   types::error_types::{add_invalid_import_source_error, empty_rule_error},
   utils::create_u64_hash,
 };
@@ -209,66 +209,22 @@ pub fn extract_nonterminals<'a>(
       ASTNode::CFRules(box parser::CFRules { name_sym, rules: _, tok })
       | ASTNode::PegRules(box parser::PegRules { name_sym, rules: _, tok }) => {
         let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), &g_data.id, s_store);
-        nterms.push((
-          Box::new(NonTerminal {
-            id: NonTermId::from((g_data.id.guid, name_sym.name.as_str())),
-            guid_name,
-            friendly_name: f_name,
-            g_id: g_data.id.guid,
-            type_: NonTermType::ContextFree,
-            rules: Default::default(),
-            sub_nterms: Default::default(),
-            symbols: Default::default(),
-            tok_nterms: Default::default(),
-            tok: tok.clone(),
-            asts: Default::default(),
-          }),
-          prod_rule,
-        ));
+        let id = NonTermId::from((g_data.id.guid, name_sym.name.as_str()));
+        nterms.push((create_bare_nonterm_struct(id, guid_name, f_name, &g_data.id, tok), prod_rule));
       }
       ASTNode::AppendRules(box parser::AppendRules { name_sym, rules: _, tok }) => {
         match get_nonterminal_symbol(g_data, &name_sym) {
           (Some(name_sym), _) => {
             let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), &g_data.id, s_store);
-            nterms.push((
-              Box::new(NonTerminal {
-                id: NonTermId::from((g_data.id.guid, name_sym.name.as_str())),
-                guid_name,
-                friendly_name: f_name,
-                g_id: g_data.id.guid,
-                type_: NonTermType::ContextFree,
-                rules: Default::default(),
-                sub_nterms: Default::default(),
-                symbols: Default::default(),
-                tok_nterms: Default::default(),
-                tok: tok.clone(),
-                asts: Default::default(),
-              }),
-              prod_rule,
-            ));
+            let id = NonTermId::from((g_data.id.guid, name_sym.name.as_str()));
+            nterms.push((create_bare_nonterm_struct(id, guid_name, f_name, &g_data.id, tok), prod_rule));
           }
           (_, Some(name_sym)) => {
             let import_grammar_name = name_sym.module.to_string().intern(s_store);
-
             let import_g_id = o_to_r(g_data.imports.get(&import_grammar_name), "could not find grammar")?;
-
             let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), import_g_id, s_store);
-            nterms.push((
-              Box::new(NonTerminal {
-                id: NonTermId::from((import_g_id.guid, name_sym.name.as_str())),
-                guid_name,
-                friendly_name: f_name,
-                g_id: import_g_id.guid,
-                type_: NonTermType::ContextFree,
-                rules: Default::default(),
-                sub_nterms: Default::default(),
-                symbols: Default::default(),
-                tok_nterms: Default::default(),
-                tok: tok.clone(),
-                asts: Default::default(),
-              }),
-              prod_rule,
-            ));
+            let id = NonTermId::from((import_g_id.guid, name_sym.name.as_str()));
+            nterms.push((create_bare_nonterm_struct(id, guid_name, f_name, import_g_id, tok), prod_rule));
           }
           _ => unreachable!(),
         };
@@ -278,6 +234,28 @@ pub fn extract_nonterminals<'a>(
   }
 
   SherpaResult::Ok((nterms, templates, parse_states))
+}
+
+fn create_bare_nonterm_struct(
+  id: NonTermId,
+  guid_name: IString,
+  f_name: IString,
+  g_id: &GrammarIdentities,
+  tok: &Token,
+) -> Box<NonTerminal> {
+  Box::new(NonTerminal {
+    id,
+    guid_name,
+    friendly_name: f_name,
+    g_id: g_id.guid,
+    type_: NonTermType::ContextFree,
+    rules: Default::default(),
+    sub_nterms: Default::default(),
+    symbols: Default::default(),
+    tok_nterms: Default::default(),
+    tok: tok.clone(),
+    asts: Default::default(),
+  })
 }
 
 pub fn process_parse_state<'a>(
@@ -638,28 +616,9 @@ fn process_rule_symbols(
                 template.tok.clone(),
               )));
 
-              let nt = process_nonterminals(
-                (
-                  Box::new(NonTerminal {
-                    id,
-                    guid_name,
-                    friendly_name: f_name,
-                    g_id: g_data.id.guid,
-                    type_: NonTermType::ContextFree,
-                    rules: Default::default(),
-                    sub_nterms: Default::default(),
-                    symbols: Default::default(),
-                    tok_nterms: Default::default(),
-                    tok: tok.clone(),
-                    asts: Default::default(),
-                  }),
-                  &node,
-                ),
-                g_data,
-                s_store,
-                tmpl,
-                resolved,
-              )?;
+              let nonterm = (create_bare_nonterm_struct(id, guid_name, f_name, &g_data.id, &tok), &node);
+
+              let nt = process_nonterminals(nonterm, g_data, s_store, tmpl, resolved)?;
 
               resolved.insert(id, Some(nt));
             }
@@ -671,6 +630,32 @@ fn process_rule_symbols(
         } else {
           unreachable!()
         }
+      }
+
+      ASTNode::TokenGroupRules(tk_group) => {
+        let hash = create_u64_hash(&tk_group.rules);
+        let name = "tk_group_".to_string() + &hash.to_string();
+        let (guid_name, f_name) = nterm_names(name.as_str(), &g_data.id, s_store);
+        let id = NonTermId::from((g_data.id.guid, name.as_str()));
+
+        if resolved.get(&id).is_none() {
+          // Create a new production for this group
+          resolved.insert(id, None);
+
+          let node = ASTNode::CFRules(Box::new(crate::parser::CFRules::new(
+            Box::new(NonTerminal_Symbol::new(name, tk_group.tok.clone())),
+            tk_group.rules.clone(),
+            tk_group.tok.clone(),
+          )));
+
+          let nonterm = (create_bare_nonterm_struct(id, guid_name, f_name, &g_data.id, &tok), &node);
+
+          let nt = process_nonterminals(nonterm, g_data, s_store, tmpl, resolved)?;
+
+          resolved.insert(id, Some(nt));
+        }
+
+        (id.as_tok_sym(), tk_group.tok.clone())
       }
 
       ASTNode::List_Rules(box parser::List_Rules { symbol, terminal_symbol, tok, .. }) => {
@@ -845,12 +830,13 @@ fn record_symbol(
     ASTNode::EOFSymbol(_) => SymbolId::EndOfFile {},
 
     ASTNode::ClassSymbol(gen) => match gen.val.as_str() {
-      "sp" => SymbolId::ClassSpace {},
-      "tab" => SymbolId::ClassHorizontalTab {},
-      "nl" => SymbolId::ClassNewLine {},
-      "id" => SymbolId::ClassIdentifier {},
-      "num" => SymbolId::ClassNumber {},
-      "sym" => SymbolId::ClassSymbol {},
+      "sp" => SymbolId::ClassSpace,
+      "tab" => SymbolId::ClassHorizontalTab,
+      "nl" => SymbolId::ClassNewLine,
+      "id" => SymbolId::ClassIdentifier,
+      "num" => SymbolId::ClassNumber,
+      "sym" => SymbolId::ClassSymbol,
+      "any" => SymbolId::Any,
       _ => {
         #[allow(unreachable_code)]
         {

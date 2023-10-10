@@ -676,8 +676,8 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
 
 /// Joins branches of match statements that differ only in specifier. If
 /// joined branches include the default branch, all other item info is
-/// scrubbed. Match blocks that only have a default match are lowered into
-/// their respective contexts.
+/// scrubbed. Match blocks that only have a default match without a transitive
+/// instruciton are lowered into their respective contexts.
 fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> SherpaResult<ParseStatesMap> {
   fn merge_statements(from: parser::Statement, to: &mut parser::Statement) {
     let parser::Statement { branch, mut non_branch, transitive, pop } = from;
@@ -740,10 +740,15 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
             }
           }
 
-          if matches.len() == 1 && matches!(matches[0], ASTNode::DefaultMatch(..)) {
-            SherpaResult::Ok(Some(*matches[0].clone().to_DefaultMatch().statement))
-          } else {
-            SherpaResult::Ok(None)
+          match (matches.len(), &matches[0]) {
+            (1, ASTNode::DefaultMatch(default)) => {
+              if default.statement.transitive.is_none() {
+                SherpaResult::Ok(Some(*default.statement.clone()))
+              } else {
+                SherpaResult::Ok(None)
+              }
+            }
+            _ => SherpaResult::Ok(None),
           }
         }
         _ => SherpaResult::Ok(None),

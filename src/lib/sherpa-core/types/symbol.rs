@@ -12,6 +12,7 @@ pub const NON_TERMINAL_TOKEN_PRECEDENCE: u16 = 3;
 pub const TERMINAL_TOKEN_PRECEDENCE_IN_CONFLICT: u16 = 4;
 pub const TERMINAL_TOKEN_PRECEDENCE: u16 = 1;
 pub const CLASS_TOKEN_PRECEDENCE: u16 = 1;
+pub const ANY_TOKEN_PRECEDENCE: u16 = 0;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -26,6 +27,7 @@ pub enum SymbolId {
   ClassIdentifier,
   ClassNumber,
   ClassSymbol,
+  Any,
   Token { val: IString },
   NonTerminal { id: NonTermId },
   NonTerminalToken { id: NonTermId },
@@ -95,12 +97,7 @@ impl SymbolId {
   pub fn is_class(&self) -> bool {
     use SymbolId::*;
     match *self {
-      ClassSymbol { .. }
-      | ClassSpace { .. }
-      | ClassHorizontalTab { .. }
-      | ClassNewLine { .. }
-      | ClassIdentifier { .. }
-      | ClassNumber { .. } => true,
+      ClassSymbol | ClassSpace | ClassHorizontalTab | ClassNewLine | ClassIdentifier | ClassNumber => true,
       _ => false,
     }
   }
@@ -109,6 +106,7 @@ impl SymbolId {
     match self {
       Self::Token { .. } => TERMINAL_TOKEN_PRECEDENCE_IN_CONFLICT,
       Self::NonTerminalToken { .. } => NON_TERMINAL_TOKEN_PRECEDENCE,
+      Self::Any => ANY_TOKEN_PRECEDENCE,
       _ if self.is_class() => CLASS_TOKEN_PRECEDENCE,
       _ => 0,
     }
@@ -118,6 +116,7 @@ impl SymbolId {
     match self {
       Self::Token { .. } => TERMINAL_TOKEN_PRECEDENCE,
       Self::NonTerminalToken { .. } => NON_TERMINAL_TOKEN_PRECEDENCE,
+      Self::Any => ANY_TOKEN_PRECEDENCE,
       _ if self.is_class() => CLASS_TOKEN_PRECEDENCE,
       _ => 0,
     }
@@ -157,14 +156,15 @@ impl SymbolId {
       NonTerminal { id } | NonTerminalToken { id, .. } => id.as_scan_prod(),
       Token { .. } => NonTermId::Standard(create_u64_hash(self), NonTermSubType::ScannerToken),
       EndOfFile { .. }
-      | ClassSymbol { .. }
-      | ClassSpace { .. }
-      | ClassHorizontalTab { .. }
-      | ClassNewLine { .. }
-      | ClassIdentifier { .. }
-      | ClassNumber { .. }
+      | ClassSymbol
+      | ClassSpace
+      | ClassHorizontalTab
+      | ClassNewLine
+      | ClassIdentifier
+      | ClassNumber
       | Codepoint { .. }
-      | Char { .. } => NonTermId::Standard(create_u64_hash(self), NonTermSubType::ScannerSym),
+      | Char { .. }
+      | Any => NonTermId::Standard(create_u64_hash(self), NonTermSubType::ScannerSym),
       _ => {
         #[cfg(debug_assertions)]
         unimplemented!("{:?}", self);
@@ -180,12 +180,13 @@ impl SymbolId {
     match *self {
       Default => DEFAULT_SYM_ID,
       EndOfFile { .. } => CodePointClass::EndOfInput as u32,
-      ClassSymbol { .. } => CodePointClass::Symbol as u32,
-      ClassSpace { .. } => CodePointClass::Space as u32,
-      ClassHorizontalTab { .. } => CodePointClass::HorizontalTab as u32,
-      ClassNewLine { .. } => CodePointClass::NewLine as u32,
-      ClassIdentifier { .. } => CodePointClass::Identifier as u32,
-      ClassNumber { .. } => CodePointClass::Number as u32,
+      ClassSymbol => CodePointClass::Symbol as u32,
+      ClassSpace => CodePointClass::Space as u32,
+      ClassHorizontalTab => CodePointClass::HorizontalTab as u32,
+      ClassNewLine => CodePointClass::NewLine as u32,
+      ClassIdentifier => CodePointClass::Identifier as u32,
+      ClassNumber => CodePointClass::Number as u32,
+      Any => CodePointClass::Any as u32,
       Codepoint { val, .. } => val,
       Char { char, .. } => char as u32,
       DBNonTerminal { key } => (Into::<usize>::into(key)) as u32,
@@ -214,12 +215,13 @@ impl SymbolId {
       Undefined => &mut w + "Undefine",
       Default => &mut w + "Default",
       EndOfFile { .. } => &mut w + "{EOF}",
-      ClassSpace { .. } => &mut w + "c:sp",
-      ClassHorizontalTab { .. } => &mut w + "c:tab",
-      ClassNewLine { .. } => &mut w + "c:nl",
-      ClassIdentifier { .. } => &mut w + "c:id",
-      ClassNumber { .. } => &mut w + "c:num",
-      ClassSymbol { .. } => &mut w + "c:sym",
+      ClassSpace => &mut w + "c:sp",
+      ClassHorizontalTab => &mut w + "c:tab",
+      ClassNewLine => &mut w + "c:nl",
+      ClassIdentifier => &mut w + "c:id",
+      ClassNumber => &mut w + "c:num",
+      ClassSymbol => &mut w + "c:sym",
+      Any => &mut w + "c:any",
       Token { val } => &mut w + " " + val.to_str(db.string_store()).as_str() + " ",
       NonTerminalState { .. } => &mut w + "nonterm_state",
       NonTerminal { .. } => &mut w + "nonterm",

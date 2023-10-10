@@ -12,9 +12,9 @@ pub enum CodePointClass {
   NewLine    = 5,
   Space      = 6,
   HorizontalTab = 7,
-  Any        = 8,
   UnicodeIdStart = 32,
   UnicodeIdCont = 64,
+  Any        = u32::MAX as isize,
 }
 
 impl Into<u32> for CodePointClass {
