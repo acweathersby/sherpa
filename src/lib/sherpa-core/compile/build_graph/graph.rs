@@ -19,8 +19,6 @@ pub enum Origin {
   TerminalGoal(DBTermKey, u16),
   /// The hash and state of the goal items set the peek item will resolve to
   Peek(u32),
-  /// The item
-  BreadCrumb(DBRuleKey),
   Fork(DBRuleKey),
   PEG(DBNonTermKey),
   Closure(StateId),
@@ -44,7 +42,7 @@ impl Hash for Origin {
         resolve_id.hash(state);
         prec.hash(state);
       }
-      Origin::Fork(resolve_id) | Origin::BreadCrumb(resolve_id) => {
+      Origin::Fork(resolve_id) => {
         resolve_id.hash(state);
       }
       _ => {}
@@ -69,10 +67,6 @@ impl Origin {
       }
       Origin::TerminalGoal(sym_id, prec) => {
         format!("TerminalGoal[ {:?} {prec} ]", sym_id)
-      }
-      Origin::BreadCrumb(rule_id) => {
-        let item = Item::from((*rule_id, db));
-        format!("BreadCrumb[ {:?} ]", item._debug_string_())
       }
       _ => format!("{:?}", self),
     }
@@ -476,10 +470,6 @@ pub enum GraphBuildState {
   Normal,
   NormalGoto,
   Leaf,
-  _LongestMatch,
-  _ShortestMatch,
-  _FirstMatch,
-  _BreadCrumb,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
