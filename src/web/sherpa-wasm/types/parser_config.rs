@@ -74,7 +74,7 @@ impl Default for JSParserConfig {
 impl Into<ParserConfig> for JSParserConfig {
   fn into(self) -> ParserConfig {
     ParserConfig {
-      ALLOW_RECURSIVE_DESCENT: self.ALLOW_RECURSIVE_DESCENT,
+      ALLOW_CALLS: self.ALLOW_RECURSIVE_DESCENT,
       ALLOW_LR: self.ALLOW_LR,
       ALLOW_PEEKING: self.ALLOW_PEEKING,
       max_k: self.max_k,

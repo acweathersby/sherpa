@@ -1,5 +1,5 @@
 use super::*;
-use crate::{compile::build_graph::graph::GraphType, parser, CachedString, SherpaResult};
+use crate::{compile::states::build_graph::graph::GraphType, parser, CachedString, SherpaResult};
 use std::collections::VecDeque;
 
 /// Data used for the compilation of parse states. contains

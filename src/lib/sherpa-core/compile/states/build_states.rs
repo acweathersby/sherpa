@@ -1,9 +1,9 @@
 use super::{
+  super::ir::build_ir,
   build_graph::{
     build,
-    graph::{GraphIterator, GraphType, Origin},
+    graph::{GraphHost, GraphIterator, GraphType, Origin},
   },
-  build_ir::build_ir,
 };
 use crate::{
   journal::{Journal, ReportType},
@@ -13,7 +13,124 @@ use crate::{
 type States = OrderedMap<IString, Box<ParseState>>;
 type Scanners = OrderedSet<(IString, OrderedSet<PrecedentDBTerm>)>;
 type Errors = Array<SherpaError>;
-use rayon::prelude::*;
+
+pub struct NonTermStates<'db> {
+  nonterm_id:     DBNonTermKey,
+  states:         Option<GraphHost<'db>>,
+  lr_only:        bool,
+  classification: ParserClassification,
+}
+
+pub struct ScannerStates<'db> {
+  tokens: OrderedSet<DBTermKey>,
+  follow: OrderedSet<DBTermKey>,
+  states: Option<GraphHost<'db>>,
+}
+
+enum StateConstructionError<T> {
+  FailedPeek(T),
+  OtherError(T),
+}
+
+fn process_nonterm_states<'db>(
+  j: &mut Journal,
+  db: &'db ParserDatabase,
+  config: ParserConfig,
+  mut work: Box<NonTermStates<'db>>,
+) -> Result<Box<NonTermStates<'db>>, StateConstructionError<Box<NonTermStates<'db>>>> {
+  let nterm_key = work.nonterm_id;
+
+  j.set_active_report("Non-terminal Compile", ReportType::NonTerminalCompile(nterm_key));
+
+  let start_items = ItemSet::start_items(nterm_key, db).to_origin(Origin::NonTermGoal(nterm_key));
+
+  start_items.iter()._debug_print_("START_ITEMS");
+
+  match build(j, db.nonterm_guid_name(nterm_key), GraphType::Parser, start_items, db, config) {
+    Ok((class, graph)) => {
+      work.classification |= class;
+
+      println!("-- {}Kb", (std::mem::size_of_val(&graph) as f32 / 1024. * 100.0).round() / 100.0);
+
+      work.states = Some(graph);
+
+      Ok(work)
+    }
+    _ => Err(StateConstructionError::OtherError(work)),
+  }
+}
+
+fn process_scanner_states<'db>(
+  db: &'db ParserDatabase,
+  config: ParserConfig,
+  work: Box<ScannerStates<'db>>,
+) -> Result<Box<ScannerStates<'db>>, StateConstructionError<Box<ScannerStates<'db>>>> {
+  todo!("Construct parse states for non-term");
+  Err(StateConstructionError::OtherError(work))
+}
+
+pub fn compile_parser_states<'db>(
+  mut j: Journal,
+  db: &ParserDatabase,
+  config: ParserConfig,
+) -> SherpaResult<(Vec<Box<NonTermStates<'db>>>, Vec<Box<ScannerStates<'db>>>)> {
+  let mut states_inbox = OrderedMap::<DBNonTermKey, Box<NonTermStates<'db>>>::new();
+  let states_outbox = OrderedMap::<DBNonTermKey, Box<NonTermStates<'db>>>::new();
+  let scanner_inbox = OrderedMap::<u64, Box<NonTermStates<'db>>>::new();
+  let scanner_outbox = OrderedMap::<u64, Box<NonTermStates<'db>>>::new();
+
+  // Prepare our queue
+  for nonterm_id in db.nonterms().iter().enumerate().filter_map(|(index, sym)| {
+    if sym.is_term() {
+      //TODO: We'll process scanners independently.
+      None
+    } else {
+      let id = DBNonTermKey::from(index);
+      if !config.ALLOW_CALLS {
+        // If we can't make calls to another non-terminal parse graph then it
+        // doesn't make sense to create parse graphs for non-terminals
+        // that are not exported by the grammar, as the root of those graphs
+        // will be unreachable.
+        db.entry_nterm_keys().contains(&id).then_some(id)
+      } else {
+        Some(id)
+      }
+    }
+  }) {
+    states_inbox.insert(
+      nonterm_id,
+      Box::new(NonTermStates {
+        nonterm_id,
+        states: None,
+        lr_only: config.ALLOW_LR && !config.ALLOW_CALLS,
+        classification: Default::default(),
+      }),
+    );
+  }
+
+  while let Some((id, work)) = states_inbox.pop_first() {
+    match process_nonterm_states(&mut j, db, config, work) {
+      Ok(work) => {
+        todo!("Extract scanner states");
+        states_outbox.insert(id, work);
+      }
+      Err(StateConstructionError::FailedPeek(work)) => {
+        todo!("Handle failed peek");
+        if config.ALLOW_LR {
+          // Rebuild effected states
+        } else {
+        }
+      }
+      Err(StateConstructionError::OtherError(work)) => {
+        todo!("Handle General errors");
+      }
+    }
+  }
+
+  todo!("Compile non-term scanner entry states");
+
+  Err(SherpaError::Text("Not Implemented".to_string()))
+}
 
 pub fn compile_parse_states(
   mut j: Journal,
@@ -21,6 +138,10 @@ pub fn compile_parse_states(
   config: ParserConfig,
 ) -> SherpaResult<(ParserClassification, ParseStatesMap)> {
   j.set_active_report("State Compile", ReportType::NonTerminalCompile(Default::default()));
+
+  compile_parser_states(j.transfer(), db, config);
+
+  todo!("Return parser and Scanner State structs");
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
   crate::test::utils::write_debug_file(db, "parse_graph.tmp", "", false)?;
@@ -34,7 +155,7 @@ pub fn compile_parse_states(
     .enumerate()
     .map(|(index, sym)| (DBNonTermKey::from(index), sym.clone()))
     .filter(|(nt_id, sym)| {
-      if !config.ALLOW_RECURSIVE_DESCENT {
+      if !config.ALLOW_CALLS {
         // If we can't make calls to another nonterminal parse graph then it
         // doesn't make sense to create parse graphs for non-terminals
         // that are not exported by the grammar, as the root of those graphs
@@ -47,8 +168,8 @@ pub fn compile_parse_states(
     .collect::<Vec<_>>()
     .chunks(10)
     .map(|chunks| (j.transfer(), chunks))
-    .par_bridge()
-    .into_par_iter()
+    // /.par_bridge()
+    // /.into_par_iter()
     .map(|(mut local_j, chunks)| {
       let mut states = States::new();
       let mut scanners = Scanners::new();
@@ -134,7 +255,7 @@ fn create_parse_states_from_prod<'db>(
   scanners: &mut Scanners,
   config: ParserConfig,
 ) -> SherpaResult<ParserClassification> {
-  j.set_active_report("Non-terminal Compile", ReportType::NonTerminalCompile(nterm_sym.to_nterm()));
+  j.set_active_report("Non-terminal Compile", ReportType::NonTerminalCompile(nterm_key));
 
   let mut classification = Default::default();
 

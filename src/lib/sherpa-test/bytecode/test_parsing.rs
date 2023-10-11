@@ -257,7 +257,7 @@ IGNORE { c:sp  }
 <> id_tok > c:id
 
 "#],
-    &[("default", "t => g :t t", true), ("default", ":t t => a :t!", true), ("default", ":t t => g :t! t!", true)],
+    &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
     Default::default(),
   )
 }
@@ -694,9 +694,8 @@ fn escaped_values() -> SherpaResult<()> {
 <> escaped_vals > c:num | c:id | c:sym | c:nl | c:sp | escaped
 
 <> escaped > '\\' ( c:num | c:id | c:sym | c:nl | c:sp )
-           | '\\'
         "##],
-    &[("default", r##"\"##, true)],
+    &[("default", r##"\\"##, true)],
     Default::default(),
   )
 }

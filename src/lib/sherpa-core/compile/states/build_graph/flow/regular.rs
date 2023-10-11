@@ -17,7 +17,7 @@ use super::{
   ShiftReduceConflictResolution,
 };
 use crate::{
-  compile::build_graph::{
+  compile::states::build_graph::{
     build::handle_completed_groups,
     errors::{conflicting_symbols_error, lr_disabled_error, peek_not_allowed_error},
     items::{get_follow, get_follow_symbols},
@@ -49,7 +49,7 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
   (prec, group): TransitionGroup<'db>,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
-  let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
+  let ____allow_rd____: bool = gb.config.ALLOW_CALLS || ____is_scan____;
   let ____allow_lr____: bool = gb.config.ALLOW_LR || ____is_scan____;
   let ____allow_fork____: bool = gb.config.ALLOW_CONTEXT_SPLITTING && false;
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;

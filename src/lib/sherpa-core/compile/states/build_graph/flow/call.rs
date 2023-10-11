@@ -25,7 +25,7 @@ pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone
   sym: PrecedentSymbol,
 ) -> Option<CreateCallResult<'db>> {
   let ____is_scan____ = gb.is_scanner();
-  let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
+  let ____allow_rd____: bool = gb.config.ALLOW_CALLS || ____is_scan____;
   let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
 
   if

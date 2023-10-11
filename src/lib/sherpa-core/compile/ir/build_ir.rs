@@ -1,6 +1,6 @@
 //! Functions for translating parse graphs into Sherpa IR code.
 use crate::{
-  compile::build_graph::graph::{GraphIterator, GraphStateReference, PeekGroup, StateId, StateType},
+  compile::states::build_graph::graph::{GraphIterator, GraphStateReference, PeekGroup, StateId, StateType},
   journal::Journal,
   types::*,
   utils::{hash_group_btree_iter, hash_group_btreemap},
@@ -8,7 +8,7 @@ use crate::{
 };
 use sherpa_rust_runtime::{types::bytecode::MatchInputType, utf8::lookup_table::CodePointClass};
 
-use super::build_graph::{
+use super::super::states::build_graph::{
   flow::resolve_token_assign_id,
   graph::{GotoGraphStateRef, GraphStateRef},
 };

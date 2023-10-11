@@ -5,7 +5,7 @@ use super::super::{
   graph::*,
 };
 use crate::{
-  compile::build_graph::errors::peek_not_allowed_error,
+  compile::states::build_graph::errors::peek_not_allowed_error,
   types::*,
   utils::{hash_group_btree_iter, hash_group_btreemap},
 };

@@ -47,7 +47,7 @@ pub enum ReportType {
   /// Matches the dissassembly generation report.
   Disassembly,
   /// TODO
-  NonTerminalCompile(NonTermId),
+  NonTerminalCompile(DBNonTermKey),
   /// TODO
   Optimize,
 }
@@ -217,10 +217,9 @@ impl Report {
     use ReportType::{NonTerminalCompile as PC, TokenNonTermCompile as TPC, *};
     match (discriminant, self.report_type) {
       (GrammarCompile(any), GrammarCompile(_)) if any == GrammarId::default() => true,
-      (PC(any), PC(_)) if any == NonTermId::default() => true,
+      // (PC(any), PC(_)) if any == NonTermId::default() => true,
       (TPC(any), TPC(_)) if any == NonTermId::default() => true,
-      (PC(any), PC(_)) if any == NonTermId::default() => true,
-
+      // (PC(any), PC(_)) if any == NonTermId::default() => true,
       (AnyNonTermCompile, PC(_))
       | (AnyNonTermCompile, TPC(_))
       | (IntermediateCompile, TokenNonTermCompile(_))

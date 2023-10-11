@@ -1,6 +1,6 @@
 use super::utils::build_parse_states_from_multi_sources;
 use crate::{
-  compile::optimize,
+  compile::ir::optimize,
   test::utils::build_parse_states_from_source_str as build,
   DBNonTermKey,
   ParseStatesVec,
@@ -31,7 +31,7 @@ fn basic_optimize_unknown() -> R<()> {
       //  println!("A: store{:#}\n", state.1.source_string(db.string_store()))
       // }
 
-      let states = optimize::optimize::<ParseStatesVec>(&db, &Default::default(), states.into_iter().collect(), false)?;
+      let states = optimize::<ParseStatesVec>(&db, &Default::default(), states.into_iter().collect(), false)?;
 
       println!("AFTER -------------------");
 

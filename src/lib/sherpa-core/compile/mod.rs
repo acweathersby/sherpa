@@ -1,6 +1,4 @@
-//! Handles the compilation of a grammar.
+//! Handles the compilation of a grammar's states and IR.
 
-pub(crate) mod build_graph;
-pub(crate) mod build_ir;
-pub(crate) mod build_states;
-pub(crate) mod optimize;
+pub(crate) mod ir;
+pub(crate) mod states;

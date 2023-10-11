@@ -3,9 +3,9 @@
 /// Settings for configuring the type of parser Sherpa will generate.
 pub struct ParserConfig {
   /// When enable, recursive descent style `Call` states will be generated
-  pub ALLOW_RECURSIVE_DESCENT: bool,
-  /// When enable, LR style states can be produced, in general
-  /// allowing more advanced grammar constructs to be parsed, such
+  pub ALLOW_CALLS: bool,
+  /// When enable, LR style states may be produced. In general, this
+  /// allows more advanced grammar constructs to be parsed, such
   /// as left recursive rules.
   ///
   /// When disabled, grammars with rules that require LR style parse states
@@ -60,7 +60,7 @@ pub struct ParserConfig {
 impl Default for ParserConfig {
   fn default() -> Self {
     Self {
-      ALLOW_RECURSIVE_DESCENT: true,
+      ALLOW_CALLS: true,
       ALLOW_LR: true,
       ALLOW_LOOKAHEAD_MERGE: true,
       ALLOW_PEEKING: true,
@@ -88,7 +88,7 @@ impl ParserConfig {
       max_k:         self.max_k as u16,
       bottom_up:     self.ALLOW_LR,
       gotos_present: self.ALLOW_LR,
-      calls_present: self.ALLOW_RECURSIVE_DESCENT,
+      calls_present: self.ALLOW_CALLS,
       peeks_present: self.ALLOW_PEEKING,
       forks_present: self.ALLOW_CONTEXT_SPLITTING,
     }
@@ -116,7 +116,7 @@ impl ParserConfig {
   }
 
   pub fn recursive_descent_k(mut self, k: usize) -> Self {
-    self.ALLOW_RECURSIVE_DESCENT = true;
+    self.ALLOW_CALLS = true;
     self.ALLOW_LR = false;
     self.ALLOW_LOOKAHEAD_MERGE = false;
     self.set_k(k)
@@ -135,7 +135,7 @@ impl ParserConfig {
   }
 
   pub fn lrk(mut self, k: usize) -> Self {
-    self.ALLOW_RECURSIVE_DESCENT = false;
+    self.ALLOW_CALLS = false;
     self.ALLOW_LOOKAHEAD_MERGE = false;
     self.ALLOW_CONTEXT_SPLITTING = false;
     self.ALLOW_LR = true;
@@ -143,14 +143,14 @@ impl ParserConfig {
   }
 
   pub fn llk(mut self, k: usize) -> Self {
-    self.ALLOW_RECURSIVE_DESCENT = false;
+    self.ALLOW_CALLS = false;
     self.ALLOW_LR = false;
     self.ALLOW_CONTEXT_SPLITTING = false;
     self.set_k(k)
   }
 
   pub fn ll1(mut self) -> Self {
-    self.ALLOW_RECURSIVE_DESCENT = false;
+    self.ALLOW_CALLS = false;
     self.ALLOW_LR = false;
     self.ALLOW_PEEKING = false;
     self
@@ -172,7 +172,7 @@ impl ParserConfig {
   }
 
   pub fn enable_calls(mut self, enable: bool) -> Self {
-    self.ALLOW_RECURSIVE_DESCENT = enable;
+    self.ALLOW_CALLS = enable;
     self
   }
 

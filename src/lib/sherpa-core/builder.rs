@@ -1,5 +1,5 @@
 use crate::{
-  compile::{build_states::compile_parse_states, optimize::optimize},
+  compile::{ir::optimize, states::build_states::compile_parse_states},
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut},
   o_to_r,
   proxy::{Array, DeduplicateIterator, Queue, Set},

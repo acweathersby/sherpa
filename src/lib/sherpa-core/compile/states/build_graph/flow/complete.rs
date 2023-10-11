@@ -2,7 +2,7 @@
 
 use super::super::graph::*;
 use crate::{
-  compile::build_graph::items::{get_follow, get_follow_internal, get_goal_items_from_completed, FollowType},
+  compile::states::build_graph::items::{get_follow, get_follow_internal, get_goal_items_from_completed, FollowType},
   types::*,
 };
 
@@ -31,7 +31,7 @@ pub(crate) fn handle_completed_item<'db, 'follow>(
 fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuilder<'db>, sym: PrecedentSymbol) {
   let root_item = completed[0].kernel;
   let ____is_scan____ = gb.is_scanner();
-  let ____allow_rd____: bool = gb.config.ALLOW_RECURSIVE_DESCENT || ____is_scan____;
+  let ____allow_rd____: bool = gb.config.ALLOW_CALLS || ____is_scan____;
   let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
   let ____allow_fork____: bool = gb.config.ALLOW_CONTEXT_SPLITTING && false; // Forking is disabled
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;

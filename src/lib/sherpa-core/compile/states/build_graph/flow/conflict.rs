@@ -15,7 +15,7 @@ use super::{
   CreateCallResult,
 };
 use crate::{
-  compile::build_graph::{
+  compile::states::build_graph::{
     build::handle_completed_groups,
     errors::{conflicting_symbols_error, lr_disabled_error, peek_not_allowed_error},
     items::{get_follow, get_follow_symbols},

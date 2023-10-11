@@ -1,5 +1,5 @@
 use super::super::types::*;
-use crate::compile::build_graph::graph::*;
+use crate::compile::states::build_graph::graph::*;
 use std::hash::Hash;
 
 pub enum ItemType {
