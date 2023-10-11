@@ -462,7 +462,7 @@ pub(crate) fn build_compile_db<'a>(
         .iter()
         .enumerate()
         .filter_map(|(index, n)| match n {
-          SymbolId::NonTerminal { .. } => Some(index),
+          SymbolId::NonTerminal { .. } if config.EXPORT_ALL_NONTERMS => Some(index),
           _ => None,
         })
         .filter_map(|nterm_id| {

@@ -1,6 +1,8 @@
 #![allow(unused)]
 
-use std::collections::VecDeque;
+use std::{clone, collections::VecDeque};
+
+use rayon::collections::btree_set;
 
 use super::{
   super::{
@@ -21,7 +23,7 @@ use crate::{
   journal::config,
   parser::Shift,
   types::*,
-  utils::{hash_group_btree_iter, hash_group_btreemap},
+  utils::{create_u64_hash, hash_group_btree_iter, hash_group_btreemap},
 };
 pub(super) enum ShiftReduceConflictResolution {
   Shift,
@@ -31,6 +33,7 @@ pub(super) enum ShiftReduceConflictResolution {
 }
 
 const MAX_EVAL_K: usize = 8;
+
 pub(super) enum ReduceReduceConflictResolution<'db> {
   Reduce(Item<'db>),
   Fork(Lookaheads<'db>),
@@ -85,14 +88,22 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
   let compl_prec = reduces.clone().map(|i| i.kernel.decrement().unwrap().precedence(gb.get_mode())).max().unwrap_or_default();
   let incom_prec = shifts.clone().max_precedence();
 
+  if incom_prec > compl_prec {
+    return Ok(ShiftReduceConflictResolution::Shift);
+  } else if incom_prec < compl_prec {
+    return Ok(ShiftReduceConflictResolution::Reduce);
+  };
+
+  let oos = reduces.clone().any(|r| r.next.is_oos());
+
   // If all the shift items reduce to the same nterm and all completed items where
   // completed after shifting the same nterm, then the precedence of the shift
   // items determines whether we should shift first or reduce.
 
-  let incom_next_nterm_set: OrderedSet<DBNonTermKey> = shifts.clone().to_next().rule_nonterm_ids();
-  let compl_nterm_set: OrderedSet<DBNonTermKey> = reduces.clone().map(|i| i.kernel.nonterm_index()).collect();
+  let incom_nterm_set: OrderedSet<DBNonTermKey> = shifts.clone().to_kernel().rule_nonterm_ids();
+  let compl_next_nterm_set: OrderedSet<DBNonTermKey> = reduces.clone().to_next().rule_nonterm_ids();
 
-  if incom_next_nterm_set.len() == 1 && incom_next_nterm_set.is_superset(&compl_nterm_set) {
+  if incom_nterm_set.len() == 1 && incom_nterm_set.is_superset(&compl_next_nterm_set) {
     return if incom_prec >= compl_prec {
       Ok(ShiftReduceConflictResolution::Shift)
     } else {
@@ -100,59 +111,89 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
     };
   }
 
-  /// If the complete set is and the incomplete set are reducing to the same
-  /// nonterminal then prefer shift.
-  let incom_kernel_nterm_set: OrderedSet<DBNonTermKey> = shifts.clone().to_kernel().rule_nonterm_ids();
-  if incom_kernel_nterm_set.len() == 1 && incom_kernel_nterm_set.is_superset(&compl_nterm_set) {
-    return if incom_prec >= compl_prec {
-      Ok(ShiftReduceConflictResolution::Shift)
-    } else {
-      Ok(ShiftReduceConflictResolution::Reduce)
-    };
-  }
+  /*   let symbols = shifts.clone().chain(reduces.clone()).map(|i| i.kernel.decrement().map(|i| i.sym_id())).collect::<Set<_>>();
+
+  match (symbols.len(), symbols.into_iter().next().flatten()) {
+    (1, Some(sym)) => {
+      if !sym.is_term() {
+        // All items shifted on the same non-terminal
+        let shifted_left_recursion =
+          shifts.clone().all(|i| i.kernel.rule_is_left_recursive(gb.get_mode()) && i.kernel.sym_index() == 1);
+        let completed_are_goals = reduces.clone().all(|i| gb.graph().item_is_goal(&i.kernel));
+
+        shifts.clone()._debug_print_("GREEDY-TRANSITION");
+        reduces.clone()._debug_print_("GREEDY-LOOKAHEADS");
+        if shifted_left_recursion
+        /* && completed_are_goals */
+        {
+          // Greedy left recursion
+          return Ok(ShiftReduceConflictResolution::Shift);
+        }
+      }
+    }
+    _ => {}
+  } */
 
   /// This conflict requires some form of lookahead or fork to disambiguate,
   /// prefer peeking unless k is too large or the ambiguity is resolved outside
   /// the goal non-terminal
   match calculate_k(gb, reduces.clone(), shifts.clone(), MAX_EVAL_K) {
     KCalcResults::K(k) => {
+      gb.set_classification(ParserClassification { peeks_present: true, max_k: k as u16, ..Default::default() });
       if !gb.config.ALLOW_PEEKING {
         if gb.config.ALLOW_CONTEXT_SPLITTING {
-          return Ok(ShiftReduceConflictResolution::Fork);
+          Ok(ShiftReduceConflictResolution::Fork)
+        } else {
+          peek_not_allowed_error(
+            gb,
+            &[shifts.cloned().collect(), reduces.cloned().collect()],
+            &format!("Either peeking or forking must be enabled to resolve this ambiguity, which requires a lookahead of k={k}"),
+          )
         }
+      } else if k > gb.config.max_k {
+        peek_not_allowed_error(gb, &[shifts.cloned().collect(), reduces.cloned().collect()], "")
+      } else {
+        Ok(ShiftReduceConflictResolution::Peek(k as u16))
+      }
+    }
+    KCalcResults::RecursiveAt(k) => {
+      gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
+      if gb.config.ALLOW_CONTEXT_SPLITTING {
+        Ok(ShiftReduceConflictResolution::Fork)
+      } else {
+        // Non-term is invalid. If this is a root entry state then we can't construct a
+        // parser for it. Otherwise, we can mark the parser for this non-term as
+        // invalid, And then proceed to "collapse" our overall parser, if the LR parsing
+        // is enabled.
+        //
+        // This involves the following:
+        // let A = the non-terminal whose peek has failed.
+        //
+        // Dropping all the states of A; this will results in a parser that is not
+        // enterable at A. Then, mark all exported non-terminals whose root
+        // rules contains an A in the right side as "LR only", preventing states
+        // with call type transitions from being created. Rebuild the states for
+        // effected non-terminals. Repeat this process for any non-terminal, marked as
+        // "LR only", that fails to generate states due to undeterministic peek.
+        //
+        // If during this iterative process a non-terminal is encountered that is "LR
+        // only", is non-deterministic during peeking, and is a root
+        // entry point for the parser, then we have failed to generate a minimum
+        // acceptable parser for this grammar configuration. Report parser as failed
+        // and produce relevant diagnostic messages.
+        //
+        // If LR style parsing is disabled, then we cannot perform this process. Report
+        // parser as failed and produce relevant diagnostic messages.
+        //
         peek_not_allowed_error(
           gb,
           &[shifts.cloned().collect(), reduces.cloned().collect()],
-          &format!("Either peeking or forking must be enabled to resolve this ambiguity, which requires a lookahead of k={k}"),
-        )?;
-      } else if k > gb.config.max_k {
-        peek_not_allowed_error(gb, &[shifts.cloned().collect(), reduces.cloned().collect()], "")?;
+          &format!("This is undeterministic at k>={k}"),
+        )
       }
-      gb.set_classification(ParserClassification { peeks_present: true, max_k: k as u16, ..Default::default() });
-
-      Ok(ShiftReduceConflictResolution::Peek(k as u16))
-    }
-    KCalcResults::RecursiveAt(k) => {
-      // Test for classic shift reduce problem.
-      let incom_nterm_set_sr: OrderedSet<Option<DBNonTermKey>> =
-        shifts.clone().to_kernel().map(|i| i.decrement().and_then(|i| i.nonterm_index_at_sym(mode))).collect();
-      let compl_nterm_set_sr: OrderedSet<Option<DBNonTermKey>> =
-        reduces.clone().to_kernel().map(|i| i.decrement().and_then(|i| i.nonterm_index_at_sym(mode))).collect();
-
-      if !incom_nterm_set_sr.contains(&None)
-        && !compl_nterm_set_sr.contains(&None)
-        && incom_nterm_set_sr.len() == 1
-        && incom_nterm_set_sr.is_superset(&compl_nterm_set_sr)
-      {
-        if incom_prec >= compl_prec {
-          return Ok(ShiftReduceConflictResolution::Shift);
-        } else if incom_prec < compl_prec {
-          return Ok(ShiftReduceConflictResolution::Reduce);
-        }
-      }
-      Ok(ShiftReduceConflictResolution::Fork)
     }
     KCalcResults::LargerThanMaxLimit(k) => {
+      gb.set_classification(ParserClassification { peeks_present: true, ..Default::default() });
       if !gb.config.ALLOW_PEEKING {
         if gb.config.ALLOW_CONTEXT_SPLITTING {
           return Ok(ShiftReduceConflictResolution::Fork);
@@ -165,8 +206,6 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
           ),
         )?;
       }
-
-      gb.set_classification(ParserClassification { peeks_present: true, ..Default::default() });
 
       Ok(ShiftReduceConflictResolution::Peek(k as u16))
     }
@@ -198,20 +237,25 @@ enum KCalcResults {
   Unpeekable,
 }
 
-fn get_follow_artifacts<'db>(
+fn get_conflict_follow_artifacts<'db>(
   i_reduce: &Vec<Item<'db>>,
   gb: &mut GraphBuilder<'db>,
 ) -> (OrderedSet<Item<'db>>, OrderedSet<DBTermKey>) {
   let mut out = OrderedSet::default();
   let mut syms = OrderedSet::default();
+  let mut item_filter = Set::new();
   for item in i_reduce {
     let (follow, default) = get_follow(gb, *item);
 
     let items = follow.iter().flat_map(|i| i.closure_iter_align(*i));
-
-    syms.extend(items.clone().filter_map(|i| i.term_index_at_sym(gb.get_mode())));
-
-    out.extend(items);
+    for item in items {
+      if item_filter.insert(item.index) || !item.is_oos() {
+        if let Some(sym) = item.term_index_at_sym(gb.get_mode()) {
+          out.insert(item);
+          syms.insert(sym);
+        }
+      }
+    }
   }
   (out, syms)
 }
@@ -227,11 +271,13 @@ fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: Transi
   let mut reduce_items: ItemSet = reduces.clone().to_next().cloned().collect();
   let mut shift_items: ItemSet = shifts.clone().to_next().cloned().collect();
 
+  let mut conflict_sets = Set::<_>::new();
+
   for k in 2..=(max_eval) {
-    let (out, reduce_syms) = get_follow_artifacts(&reduce_items.try_increment(), gb);
+    let (out, reduce_syms) = get_conflict_follow_artifacts(&reduce_items.try_increment(), gb);
     reduce_items = out;
 
-    let (out, shift_syms) = get_follow_artifacts(&shift_items.try_increment(), gb);
+    let (out, shift_syms) = get_conflict_follow_artifacts(&shift_items.try_increment(), gb);
     shift_items = out;
 
     if reduce_syms.len() == 0 || shift_syms.len() == 0 {
@@ -240,11 +286,24 @@ fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: Transi
       return KCalcResults::Unpeekable;
     }
 
-    if reduce_syms.intersection(&shift_syms).next().is_none() {
+    let shift_groups = hash_group_btreemap(shift_items, |_, i| i.term_index_at_sym(gb.get_mode()).unwrap());
+    let mut reduce_groups = hash_group_btreemap(reduce_items, |_, i| i.term_index_at_sym(gb.get_mode()).unwrap());
+
+    let (s, r) = shift_groups
+      .into_iter()
+      .filter_map(|(sym, group)| reduce_groups.remove(&sym).map(|g| (group, g)))
+      .unzip::<_, _, Vec<_>, Vec<_>>();
+
+    if s.is_empty() {
       return KCalcResults::K(k);
     }
 
-    if shift_items.iter().filter(|i| i.rule_is_recursive()).any(|i| reduce_items.contains(i)) {
+    shift_items = s.into_iter().flatten().collect();
+    reduce_items = r.into_iter().flatten().collect();
+
+    if !conflict_sets
+      .insert(create_u64_hash(reduce_items.iter().chain(shift_items.iter()).map(|i| i.index).collect::<OrderedSet<_>>()))
+    {
       return KCalcResults::RecursiveAt(k);
     }
   }
@@ -262,7 +321,7 @@ fn calculate_k_multi<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
   // Find max K for the conflicts to determine if we should us the peek mechanism
 
   for k in 2..=(max_eval) {
-    let mut queue = groups.iter().map(|items| get_follow_artifacts(&items.try_increment(), gb)).collect::<Vec<_>>();
+    let mut queue = groups.iter().map(|items| get_conflict_follow_artifacts(&items.try_increment(), gb)).collect::<Vec<_>>();
 
     let sym_table = queue.iter().flat_map(|(_, syms)| syms.iter()).fold(OrderedMap::<DBTermKey, u32>::new(), |mut map, sym| {
       (*map.entry(*sym).or_default()) += 1;

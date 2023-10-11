@@ -34,6 +34,16 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
 
   handle_nonterminal_shift(gb)?;
 
+  if gb.process_successors() == 0 {
+    if gb.current_state().get_type().peek_level() > 0 {
+      if gb.get_child_count() == 0 {
+        println!("Leafless path {}", gb.get_child_count());
+        gb._print_state_();
+        //panic!("Peeking has an empty path ")
+      }
+    }
+  }
+
   Ok(())
 }
 
@@ -157,7 +167,7 @@ fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedF
     let default: Lookaheads = if completed.1.iter().to_kernel().items_are_the_same_rule() {
       completed.1
     } else {
-      lookahead_pairs.iter().filter(|i| i.is_complete()).cloned().collect()
+      lookahead_pairs.iter().filter(|i| i.is_eoi_complete()).cloned().collect()
     };
 
     if default.len() > 0 {
@@ -180,7 +190,7 @@ pub(crate) fn handle_completed_groups<'db>(
   let prec_sym: PrecedentSymbol = (sym, follow_pairs.iter().max_precedence()).into();
 
   match gb.current_state().get_type() {
-    StateType::Peek(_) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs),
+    StateType::Peek(level) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs, level),
     _REGULAR_ => handle_regular_complete_groups(gb, groups, prec_sym, follow_pairs),
   }
 }

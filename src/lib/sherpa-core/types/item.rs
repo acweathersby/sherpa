@@ -192,7 +192,7 @@ impl<'db> std::fmt::Debug for Item<'db> {
 #[allow(unused)]
 impl<'db> Item<'db> {
   /// If true, `self` is an item that was derived from `other`, or
-  /// from the "from" ancestor of `other`.
+  /// the `from` ancestor of `other`.
   pub fn is_successor_of(&self, other: &Self) -> bool {
     // This item follows the other item
     self.from == other.index ||
@@ -276,8 +276,8 @@ impl<'db> Item<'db> {
   }
 
   #[inline]
-  pub fn origin_is_oos(&self) -> bool {
-    self.origin.is_out_of_scope()
+  pub fn is_oos(&self) -> bool {
+    self.origin_state.is_oos()
   }
 
   /// Returns true if the rule of this item has some form of direct
@@ -578,6 +578,11 @@ impl<'db> Item<'db> {
     name.to_str(self.db.string_store())
   }
 
+  #[cfg(debug_assertions)]
+  pub fn _debug_print_(&self) {
+    println!("{}", self._debug_string_())
+  }
+
   pub fn _debug_string_(&self) -> String {
     if self.is_null() {
       "null".to_string()
@@ -589,7 +594,7 @@ impl<'db> Item<'db> {
         .origin
         .is_none()
         .then_some(String::new())
-        .unwrap_or_else(|| format!("<[{}-{:?}]  ", self.origin.debug_string(self.db), self.origin_state));
+        .unwrap_or_else(|| format!("<[{}-{:?}]  ", self.origin._debug_string_(self.db), self.origin_state));
       #[cfg(not(debug_assertions))]
       let mut string = String::new();
 
@@ -731,15 +736,18 @@ pub type Lookaheads<'db> = Array<Lookahead<'db>>;
 
 impl<'db> TransitionPair<'db> {
   pub fn is_kernel_terminal(&self) -> bool {
-    !self.is_complete() && self.kernel.index == self.next.index
+    !self.is_eoi_complete() && self.kernel.index == self.next.index
   }
 
-  pub fn is_complete(&self) -> bool {
+  /// True if the kernel item is the same as the next item, and both are
+  /// complete. Indicates a situation where the item has reached some goal state
+  /// and the FOLLOW set is empty.
+  pub fn is_eoi_complete(&self) -> bool {
     self.kernel.is_complete() && self.kernel.index == self.next.index
   }
 
   pub fn is_out_of_scope(&self) -> bool {
-    self.kernel.origin_is_oos()
+    self.kernel.is_oos()
   }
 
   #[cfg(debug_assertions)]
@@ -886,11 +894,11 @@ macro_rules! common_iter_functions {
     }
 
     fn contains_out_of_scope(&mut self) -> bool {
-      self.any(|i| i.origin_is_oos())
+      self.any(|i| i.is_oos())
     }
 
     fn all_are_out_of_scope(&mut self) -> bool {
-      self.all(|i| i.origin_is_oos())
+      self.all(|i| i.is_oos())
     }
 
     fn all_items_are_from_same_peek_origin(&mut self) -> bool {
@@ -932,11 +940,11 @@ macro_rules! common_iter_functions {
     }
 
     fn inscope_items<T: ItemContainer<'db>>(self) -> T {
-      self.filter_map(|i| (!i.origin_is_oos()).then(|| i.clone())).collect()
+      self.filter_map(|i| (!i.is_oos()).then(|| i.clone())).collect()
     }
 
     fn outscope_items<T: ItemContainer<'db>>(self) -> T {
-      self.filter_map(|i| (!i.origin_is_oos()).then(|| i.clone())).collect()
+      self.filter_map(|i| (!i.is_oos()).then(|| i.clone())).collect()
     }
 
     fn to_canonical<T: ItemContainer<'db>>(self) -> T {
@@ -1040,11 +1048,11 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
   }
 
   fn inscope_items(self) -> Self {
-    self.into_iter().filter(|i| !i.origin_is_oos()).collect()
+    self.into_iter().filter(|i| !i.is_oos()).collect()
   }
 
   fn outscope_items(self) -> Self {
-    self.into_iter().filter(|i| i.origin_is_oos()).collect()
+    self.into_iter().filter(|i| i.is_oos()).collect()
   }
 
   fn uncompleted_items(self) -> Self {

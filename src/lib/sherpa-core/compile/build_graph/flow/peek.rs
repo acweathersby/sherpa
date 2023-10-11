@@ -134,9 +134,11 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
   groups: &mut GroupedFirsts<'db>,
   prec_sym: PrecedentSymbol,
   follows: Lookaheads<'db>,
+  level: u32,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
   let mut cmpl = follows.iter().to_next();
+
   match (follows.len(), groups.remove(&prec_sym.sym())) {
     (1, None) => {
       resolve_peek(gb, follows.iter(), prec_sym)?;
@@ -174,39 +176,70 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
       let cmpl_targets_len = cmpl_targets.as_ref().map(|t| t.len()).unwrap_or_default();
       let incpl_targets_len = incpl_targets.as_ref().map(|t| t.len()).unwrap_or_default();
 
-      // Prefer shift.
-      if incpl_targets_len == 1 {
-        // Single shift resolution, this is the ideal situation.
-        let (origin_index, PeekGroup { items, .. }) = incpl_targets.unwrap().into_iter().next().unwrap();
-        let staged = items.clone();
-        gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(staged.into_iter())).to_enqueued();
-      } else if incpl_targets_len > 1 {
-        panic!("MULTIPLE INCOMPLETED -- Cannot resolve using peek within the limits of the grammar rules. This requires a fork");
-      } else if cmpl_targets_len == 1 {
-        let (origin_index, PeekGroup { items, .. }) = cmpl_targets.unwrap().into_iter().next().unwrap();
-
-        let staged = items.clone();
-
-        gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(staged.into_iter())).to_enqueued();
-      } else if cmpl_targets_len > 1 {
-        if gb.config.ALLOW_CONTEXT_SPLITTING {
-          convert_peek_root_state_to_fork(gb)?;
-        } else {
-          panic!("MULTIPLE COMPLETED -- Cannot resolve using peek within the limits of the grammar rules. This requires a fork");
+      match (__oos_targets_len, cmpl_targets_len, incpl_targets_len) {
+        (_, 0, 1..) if gb.config.ALLOW_LR => {
+          // Can do any number of shifts
+          let (origin_index, PeekGroup { items, .. }) = incpl_targets.unwrap().into_iter().next().unwrap();
+          let staged = items.clone();
+          gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(staged.into_iter())).to_enqueued();
         }
-      } else {
-        panic!("OOS STATES -- This can be discarded");
-        /// Only have oos states
-        // If the number of resolve states is two and one of the states is oos then
-        // resolve to the none oos state.
-
-        #[cfg(not(debug_assertions))]
-        unimplemented!()
+        (_, 0, 1) => {
+          // Can do any number of shifts
+          let (origin_index, PeekGroup { items, .. }) = incpl_targets.unwrap().into_iter().next().unwrap();
+          let staged = items.clone();
+          gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(staged.into_iter())).to_enqueued();
+        }
+        (_, 1, 0) => {
+          let (origin_index, PeekGroup { items, .. }) = cmpl_targets.unwrap().into_iter().next().unwrap();
+          let staged = items.clone();
+          gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(staged.into_iter())).to_enqueued();
+        }
+        (1.., 0, 0) => {
+          let (origin_index, PeekGroup { items, .. }) = _oos_targets.unwrap().into_iter().next().unwrap();
+          let staged = items.clone();
+          gb.create_state(NormalGoto, prec_sym, StateType::PeekEndComplete(origin_index), Some(staged.into_iter())).to_enqueued();
+        }
+        _ => {
+          if !prec_sym.sym().is_default() {
+            // Continue peeking
+            gb.create_state(
+              Normal,
+              prec_sym,
+              StateType::Peek(level + 1),
+              Some(follows.iter().map(|f| f.next.to_origin(f.kernel.origin)).try_increment().iter().cloned()),
+            )
+            .to_enqueued();
+          }
+        }
       }
     }
 
     (_, Some((_, group))) => {
-      todo!("(anthony): Resolve intermediate peek! Also figure out what \"intermediate peek\" means ");
+      //if the follows are not complete then we can continue peeking.
+
+      if follows.iter().any(|f| f.is_eoi_complete()) {
+        panic!("Cannot disambiguate using peek!!!");
+      } else {
+        // create a new peek state with the follow items.
+        gb.create_state(
+          Normal,
+          prec_sym,
+          StateType::Peek(level + 1),
+          Some(
+            group
+              .iter()
+              .to_next()
+              .cloned()
+              .chain(follows.iter().map(|f| f.next.to_origin(f.kernel.origin)))
+              .try_increment()
+              .iter()
+              .cloned(),
+          ),
+        )
+        .to_enqueued();
+        //todo!("(anthony): Resolve intermediate peek! Also figure out what
+        // \"intermediate peek\" means ");
+      }
     }
   }
   Ok(())

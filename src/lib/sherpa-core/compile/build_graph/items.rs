@@ -51,9 +51,11 @@ pub(crate) fn get_follow_internal<'db>(
   let ____is_scan____ = gb.graph().graph_type == GraphType::Scanner;
   let mut completed = OrderedSet::new();
   let mut follow = OrderedSet::new();
+  let mut oos_follow = OrderedSet::new();
   let mut queue = VecDeque::from_iter(vec![item]);
   let mode = gb.graph().graph_type;
   let root_nterm = item.nonterm_index();
+  let mut seen_nonterminal_extents = OrderedSet::new();
 
   while let Some(c_item) = queue.pop_front() {
     if completed.insert(c_item) {
@@ -63,26 +65,39 @@ pub(crate) fn get_follow_internal<'db>(
         continue;
       }
 
-      let result = if c_item.origin_state.is_extended() {
-        if c_item.origin_state.is_extended_entry_base() {
+      let result = if c_item.origin_state.is_oos() {
+        if c_item.origin_state.is_oos_entry() {
           // Create or retrieve a new OOS state for this set of items.
-          let state_id = gb.get_oos_root_state(nterm);
-          let state = gb.get_state(state_id);
-          let closure = state.get_kernel_items().iter().cloned();
-          process_closure(closure, &mut queue, &mut follow)
+          if seen_nonterminal_extents.insert(nterm) {
+            let state_id = gb.get_oos_root_state(nterm);
+            let state = gb.get_state(state_id);
+            let closure = state.get_kernel_items().iter().cloned();
+            process_closure(closure, &mut queue, &mut follow)
+          } else {
+            None
+          }
         } else {
-          let state = gb.get_state(c_item.origin_state);
-          let closure = state
+          let state = gb.get_oos_closure_state(c_item);
+          let state = gb.get_state(state);
+          let mut closure = state
             .get_kernel_items()
             .iter()
             .filter(|i| i.nonterm_index_at_sym(mode) == Some(nterm))
             .cloned()
-            .filter_map(|i| i.increment());
-          process_closure(closure, &mut queue, &mut follow)
+            .filter_map(|i| i.increment())
+            .peekable();
+
+          if closure.peek().is_none() {
+            queue.push_back(c_item.to_origin_state(StateId::extended_entry_base()));
+            None
+          } else {
+            process_closure(closure, &mut queue, &mut follow)
+          }
         }
       } else {
         let closure_state_id = c_item.origin_state;
         let origin = c_item.origin;
+
         let state = gb.get_state(c_item.origin_state);
 
         let closure = state
@@ -99,22 +114,22 @@ pub(crate) fn get_follow_internal<'db>(
       if let Some(oos_queue) = result {
         for next_item in oos_queue {
           gb.get_oos_closure_state(next_item);
-          follow.insert(next_item);
+          oos_follow.insert(next_item);
         }
       } else {
-        if !c_item.origin_state.is_root() && !c_item.origin_state.is_extended_entry_base() {
+        if !c_item.origin_state.is_root() && !c_item.origin_state.is_oos() {
           let parent_state = gb.get_state(c_item.origin_state).get_parent();
           if !parent_state.is_invalid() {
             queue.push_back(c_item.to_origin_state(parent_state));
           }
-        } else if !____is_scan____ && !c_item.origin_state.is_extended_entry_base() {
+        } else if !____is_scan____ && !c_item.origin_state.is_oos_entry() {
           queue.push_back(c_item.to_origin_state(StateId::extended_entry_base()));
         }
       }
     }
   }
 
-  (follow.to_vec(), completed.to_vec())
+  (follow.into_iter().chain(oos_follow.into_iter()).collect(), completed.to_vec())
 }
 
 fn process_closure<'db>(
@@ -130,7 +145,7 @@ fn process_closure<'db>(
     match item.get_type() {
       ItemType::Completed(_) => queue.push_back(item),
       _ => {
-        if item.origin_state.is_extend_closure() {
+        if item.is_oos() {
           oos_queue.push_front(item);
         } else {
           follow.insert(item);
@@ -160,6 +175,7 @@ pub(crate) fn get_completed_item_artifacts<'a, 'db: 'a, 'follow, T: ItemRefConta
 
   for k_i in completed {
     let (f, d) = get_follow_internal(gb, *k_i, FollowType::AllItems);
+
     if f.is_empty() {
       debug_assert!(!d.is_empty());
       default_only_items.insert(*k_i);

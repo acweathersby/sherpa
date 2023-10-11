@@ -181,7 +181,7 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
         StateType::CompleteToken => w.write("pass")?,
 
         StateType::Reduce(rule_id, completes) => {
-          debug_assert!(!state.get_kernel_items().iter().any(|i| i.origin_is_oos()));
+          debug_assert!(!state.get_kernel_items().iter().any(|i| i.is_oos()));
 
           w.write(&create_rule_reduction(rule_id, db))?;
 
@@ -438,7 +438,7 @@ fn build_body<'graph, 'db: 'graph>(
         HALT
       }
       StateType::Reduce(rule_id, completes) => {
-        debug_assert!(!successor.get_kernel_items().iter().any(|i| i.origin_is_oos()));
+        debug_assert!(!successor.get_kernel_items().iter().any(|i| i.is_oos()));
 
         body_string.push(create_rule_reduction(rule_id, db));
 
