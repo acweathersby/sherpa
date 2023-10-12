@@ -1,30 +1,115 @@
 //! Functions for translating parse graphs into Sherpa IR code.
+
 use crate::{
-  compile::states::build_graph::graph::{GraphIterator, GraphStateReference, PeekGroup, StateId, StateType},
+  compile::states::{
+    build_graph::graph::{GraphStateReference, ReversedGraph, ScannerData, StateId, StateType},
+    build_states::get_scanner_name,
+  },
   journal::Journal,
   types::*,
   utils::{hash_group_btree_iter, hash_group_btreemap},
   writer::code_writer::CodeWriter,
+  SherpaGraph,
 };
 use sherpa_rust_runtime::{types::bytecode::MatchInputType, utf8::lookup_table::CodePointClass};
+
+type States = OrderedMap<IString, Box<ParseState>>;
 
 use super::super::states::build_graph::{
   flow::resolve_token_assign_id,
   graph::{GotoGraphStateRef, GraphStateRef},
 };
 
-pub(crate) fn build_ir<'a, 'db: 'a>(
+pub fn build_ir_from_graph(graph: &SherpaGraph) -> SherpaResult<(ParserClassification, ParseStatesMap)> {
+  let SherpaGraph { j, db, config, parsers, scanners } = graph;
+
+  let mut j = j.transfer();
+  j.set_active_report("States Compile", crate::ReportType::AnyNonTermCompile);
+
+  let mut classification = ParserClassification::default();
+
+  let mut states = States::default();
+
+  // Build entry states
+  for entry in db.entry_points().iter().filter(|i| config.EXPORT_ALL_NONTERMS || i.is_export) {
+    let ir = build_entry_ir(entry, db)?;
+
+    for state in ir {
+      states.insert(state.hash_name, state);
+    }
+  }
+
+  // Build parser_states
+  for state in parsers {
+    debug_assert!(state.graph.is_some());
+
+    classification |= state.classification;
+
+    if let Some(graph) = state.graph.as_ref() {
+      states.extend(build_ir(&mut j, graph, state.name)?.into_iter().map(|s| (s.hash_name, s)));
+    }
+  }
+
+  // Build scanner_states
+  for state in scanners {
+    debug_assert!(state.graph.is_some());
+
+    if let Some(graph) = state.graph.as_ref() {
+      states.extend(build_ir(&mut j, graph, state.name)?.into_iter().map(|s| (s.hash_name, s)));
+    }
+  }
+
+  for (_, state) in &mut states {
+    state.build_ast(db)?;
+  }
+
+  println!("{}", classification.get_type());
+  SherpaResult::Ok((classification, states))
+}
+
+pub(crate) fn build_entry_ir<'db>(
+  DBEntryPoint {
+    nonterm_name: nterm_name,
+    nonterm_entry_name: nterm_entry_name,
+    nonterm_exit_name: nterm_exit_name,
+    ..
+  }: &DBEntryPoint,
+  db: &'db ParserDatabase,
+) -> SherpaResult<Array<Box<ParseState>>> {
+  let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+
+  let _ = (&mut w) + "push " + nterm_exit_name.to_string(db.string_store());
+  let _ = (&mut w) + " then goto " + nterm_name.to_string(db.string_store());
+
+  let entry_state = ParseState {
+    code: w.to_string(),
+    hash_name: *nterm_entry_name,
+    ..Default::default()
+  };
+
+  let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
+
+  let _ = (&mut w) + "accept";
+
+  let exit_state = ParseState { code: w.to_string(), hash_name: *nterm_exit_name, ..Default::default() };
+
+  SherpaResult::Ok(Array::from_iter([Box::new(entry_state), Box::new(exit_state)]))
+}
+
+pub(crate) fn build_ir<'db>(
   j: &mut Journal,
-  mut iter: GraphIterator<'a, 'db>,
+  graph: &ReversedGraph<'db>,
   entry_name: IString,
 ) -> SherpaResult<Array<Box<ParseState>>> {
   debug_assert!(entry_name.as_u64() != 0);
 
   let mut output = OrderedMap::<StateId, Box<ParseState>>::new();
 
-  while let Some((state, successors)) = iter.next() {
+  let mut iter = graph.iter();
+
+  while let Some((state, scanner, successors)) = iter.next() {
     let goto_name = if let Some(goto) = state.get_goto_state() {
-      let goto_pair = convert_nonterm_shift_state_to_ir(j, goto, successors)?;
+      let goto_pair = convert_nonterm_shift_state_to_ir(j, goto, &successors)?;
       let out = Some(goto_pair.1.hash_name.clone());
       output.insert(goto_pair.0, goto_pair.1);
       out
@@ -32,12 +117,12 @@ pub(crate) fn build_ir<'a, 'db: 'a>(
       None
     };
 
-    for (id, ir_state) in convert_state_to_ir(j, state, successors, entry_name, goto_name)? {
+    for (id, ir_state) in convert_state_to_ir(j, state, scanner, &successors, entry_name, goto_name)? {
       output.entry(id).or_insert(ir_state);
     }
   }
   #[cfg(debug_assertions)]
-  debug_assert!(!output.is_empty(), "This graph did not yield any states! \n{}", iter.graph._debug_string_());
+  debug_assert!(!output.is_empty(), "This graph did not yield any states! \n");
 
   j.report_mut().wrap_ok_or_return_errors(output.into_values().collect())
 }
@@ -53,7 +138,7 @@ const GRAPH_STATE_NONE: Option<GraphStateRef> = None;
 fn convert_nonterm_shift_state_to_ir<'graph, 'db: 'graph>(
   _j: &mut Journal,
   state: GotoGraphStateRef<'graph, 'db>,
-  successors: &OrderedSet<GraphStateRef<'graph, 'db>>,
+  successors: &Vec<GraphStateRef<'graph, 'db>>,
 ) -> SherpaResult<(StateId, Box<ParseState>)> {
   let db = state.graph.get_db();
 
@@ -104,7 +189,8 @@ fn convert_nonterm_shift_state_to_ir<'graph, 'db: 'graph>(
 fn convert_state_to_ir<'graph, 'db: 'graph>(
   _j: &mut Journal,
   state: GraphStateRef<'graph, 'db>,
-  successors: &OrderedSet<GraphStateRef<'graph, 'db>>,
+  scanner_data: Option<&ScannerData>,
+  successors: &Vec<GraphStateRef<'graph, 'db>>,
   entry_name: IString,
   goto_state_id: Option<IString>,
 ) -> SherpaResult<Vec<(StateId, Box<ParseState>)>> {
@@ -157,9 +243,9 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
 
       let mut classes = classify_successors(successors, db);
 
-      let scanner_data = add_match_expr(&mut w, state, &mut classes, &gotos);
+      add_match_expr(&mut w, state, scanner_data, &mut classes, &gotos);
 
-      Some(Box::new(create_ir_state(w, &state, scanner_data)?))
+      Some(Box::new(create_ir_state(w, &state, scanner_data.cloned())?))
     } else {
       None
     };
@@ -242,7 +328,7 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
 
 fn add_tok_expr<'graph, 'db: 'graph>(
   state: GraphStateRef<'graph, 'db>,
-  successors: &OrderedSet<GraphStateRef<'graph, 'db>>,
+  successors: &Vec<GraphStateRef<'graph, 'db>>,
   w: &mut CodeWriter<Vec<u8>>,
 ) {
   let db = state.graph.get_db();
@@ -258,9 +344,9 @@ fn add_tok_expr<'graph, 'db: 'graph>(
 }
 
 fn classify_successors<'graph, 'db: 'graph>(
-  successors: &OrderedSet<GraphStateRef<'graph, 'db>>,
+  successors: &Vec<GraphStateRef<'graph, 'db>>,
   _db: &'db ParserDatabase,
-) -> Queue<((u32, MatchInputType), OrderedSet<GraphStateRef<'graph, 'db>>)> {
+) -> Queue<((u32, MatchInputType), Vec<GraphStateRef<'graph, 'db>>)> {
   Queue::from_iter(
     hash_group_btree_iter(successors.iter().filter(|i| !matches!(i.get_type(), StateType::ShiftFrom(_))), |_, s| {
       if matches!(s.get_type(), StateType::CSTNodeAccept(_)) {
@@ -290,10 +376,10 @@ fn classify_successors<'graph, 'db: 'graph>(
 fn add_match_expr<'graph, 'db: 'graph>(
   mut w: &mut CodeWriter<Vec<u8>>,
   state: GraphStateRef<'graph, 'db>,
-  branches: &mut Queue<((u32, MatchInputType), OrderedSet<GraphStateRef<'graph, 'db>>)>,
+  scanner_data: Option<&ScannerData>,
+  branches: &mut Queue<((u32, MatchInputType), Vec<GraphStateRef<'graph, 'db>>)>,
   goto_state_id: &OrderedMap<StateId, IString>,
-) -> Option<(IString, OrderedSet<PrecedentDBTerm>)> {
-  let graph = state.graph;
+) {
   let db = state.graph.get_db();
 
   if let Some(((_, input_type), successors)) = branches.pop_front() {
@@ -305,49 +391,15 @@ fn add_match_expr<'graph, 'db: 'graph>(
       if !string.is_empty() {
         let _ = w + string;
       }
-
-      None
     } else {
-      let (symbols, skipped) = if input_type == MatchInputType::Token {
-        let syms = state.get_symbols().map(|s| s.clone()).unwrap_or_default();
-
-        debug_assert!(!syms.is_empty());
-
-        // get a collection of skipped symbols.
-        let skipped = if let Some(test) = state.get_peek_resolve_items() {
-          test.map(|(_, PeekGroup { items, .. })| items).flatten().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
-        } else {
-          state.get_kernel_items().iter().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
-        }
-        .into_iter()
-        .filter_map(|s| {
-          let id = s.tok_db_key().unwrap();
-          (!syms.contains(&id)).then_some(id)
-        })
-        .collect::<OrderedSet<_>>();
-
-        // Build scanner collection
-        let mut symbols = OrderedSet::default();
-
-        for state in &successors {
-          symbols.insert(PrecedentDBTerm::from(state.get_symbol(), db, false));
-        }
-
-        for sym in &skipped {
-          symbols.insert((*sym, 0, true).into());
-        }
-
-        let skipped = if successors.iter().all(|s| matches!(s.get_type(), StateType::Reduce(..))) { None } else { Some(skipped) };
-
-        (Some((ParseState::get_interned_scanner_name(&symbols, graph.get_db().string_store()), symbols)), skipped)
-      } else {
-        (None, None)
-      };
-
       w = w + "\nmatch: " + input_type.as_str();
 
-      if let Some((name, _)) = &symbols {
-        w = w + ":" + name.to_str(db.string_store()).as_str();
+      if input_type == MatchInputType::Token {
+        w = w
+          + ":"
+          + get_scanner_name(scanner_data.expect("Token matches should have accompanying scanner"), db)
+            .to_str(db.string_store())
+            .as_str();
       }
 
       w = (w + " {").indent();
@@ -366,9 +418,11 @@ fn add_match_expr<'graph, 'db: 'graph>(
       }
 
       // Add skips
-      if let Some(skipped) = skipped {
-        if !skipped.is_empty() {
-          let vals = skipped.iter().map(|v| v.to_val().to_string()).collect::<Array<_>>().join(" | ");
+
+      if input_type == MatchInputType::Token {
+        let scanner = scanner_data.expect("Token matches should have accompanying scanner");
+        if !scanner.skipped.is_empty() {
+          let vals = scanner.skipped.iter().map(|v| v.to_val().to_string()).collect::<Array<_>>().join(" | ");
           if vals.len() > 0 {
             w = w + "\n( " + vals + " ){ " + peeking.then_some("peek-skip tok").unwrap_or("shift-skip tok") + " }";
           }
@@ -377,17 +431,13 @@ fn add_match_expr<'graph, 'db: 'graph>(
 
       if !branches.is_empty() {
         w = (w + "\n\ndefault { ").indent();
-        add_match_expr(w, state, branches, goto_state_id);
+        add_match_expr(w, state, scanner_data, branches, goto_state_id);
         w = w + " }";
         w = w.dedent();
       }
 
       let _ = w.dedent() + "\n}";
-
-      symbols
     }
-  } else {
-    None
   }
 }
 
@@ -514,7 +564,7 @@ pub(super) fn create_ir_state_name<'graph, 'db: 'graph>(
 pub(super) fn create_ir_state<'graph, 'db: 'graph>(
   w: CodeWriter<Vec<u8>>,
   state: &'graph impl GraphStateReference<'graph, 'db>,
-  scanner: Option<(IString, OrderedSet<PrecedentDBTerm>)>,
+  scanner: Option<ScannerData>,
 ) -> SherpaResult<ParseState> {
   let ir_state = ParseState {
     code: w.to_string(),

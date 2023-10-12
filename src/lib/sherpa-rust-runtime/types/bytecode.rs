@@ -588,7 +588,7 @@ impl MatchInputType {
   pub const CODEPOINT_STR: &'static str = "_CODEPOINT_";
   pub const CST_NODE: &'static str = "_CST_NODE_";
   pub const END_OF_FILE_STR: &'static str = "_EOF_";
-  pub const NONTERMINAL_STR: &'static str = "_PRODUCTION_";
+  pub const NONTERMINAL_STR: &'static str = "_NONTERMINAL_";
   pub const TOKEN_STR: &'static str = "_TOKEN_";
 
   pub fn as_str(&self) -> &'static str {

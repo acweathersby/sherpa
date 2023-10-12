@@ -189,6 +189,7 @@ impl ParserConfig {
 
 /// Used to track the type of parser that has been created by sherpa.
 #[derive(Default, Clone, Copy)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ParserClassification {
   /// Maximum peek level used to disambiguate conflicting phrases. If this is
   /// equal to `u16::MAX`, then peeking failed or a fork was used in its place.

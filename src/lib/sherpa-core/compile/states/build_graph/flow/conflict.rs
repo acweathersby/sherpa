@@ -2,8 +2,6 @@
 
 use std::{clone, collections::VecDeque};
 
-use rayon::collections::btree_set;
-
 use super::{
   super::{
     build::{GroupedFirsts, TransitionGroup},
@@ -185,6 +183,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
         // If LR style parsing is disabled, then we cannot perform this process. Report
         // parser as failed and produce relevant diagnostic messages.
         //
+        gb.declare_recursive_peek_error();
         peek_not_allowed_error(
           gb,
           &[shifts.cloned().collect(), reduces.cloned().collect()],

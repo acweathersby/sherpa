@@ -112,7 +112,7 @@ impl ComplexityMarker {
   }
 
   pub fn print_comparison(&self, other: &Self, label: &str) {
-    println!(
+    eprintln!(
       "Opt {} ---- {} -> {} State Reduction: {}% Complexity Reduction: {}%",
       label,
       self.num_of_states,
@@ -481,7 +481,7 @@ fn inline_states<'db>(
             if let Some(goto) = &mut own_gotos.goto {
               let name = goto.name.to_token();
 
-              if let Some(stmt @ parser::Statement { branch: b, non_branch: nb, transitive: t, pop }) = stmt_lu.get(&name) {
+              if let Some(parser::Statement { branch: b, non_branch: nb, transitive: t, pop }) = stmt_lu.get(&name) {
                 let t = t.clone();
 
                 // Pops and Pushes annihilate each other. For each pop level remove 1 goto in

@@ -3,7 +3,7 @@
 //! using bytecode parser engine.
 
 use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{ParserConfig, SherpaGrammarBuilder, SherpaResult};
+use sherpa_core::{ParserConfig, SherpaGrammar, SherpaResult};
 use sherpa_rust_runtime::types::{ParserProducer, RuntimeDatabase, StringInput};
 
 use crate::{
@@ -19,10 +19,10 @@ fn test_full_grammar() -> SherpaResult<()> {
   // Build our parser;
 
   let sherpa_grammar = grammar_folder.join("grammar.sg");
-  let mut grammar = SherpaGrammarBuilder::new();
+  let mut grammar = SherpaGrammar::new();
   let config = ParserConfig::new().hybrid();
   let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar, &config)?;
-  let parser_builder = database.build_parser(config)?.optimize(false)?;
+  let parser_builder = database.build_states(config)?.build_ir_parser(false, false)?;
   let pkg = compile_bytecode(&parser_builder, true)?;
 
   // Gather list of files to validate. This includes the latest sherpa grammar

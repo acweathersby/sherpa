@@ -4,18 +4,18 @@ pub(crate) mod flow;
 pub mod graph;
 pub(crate) mod items;
 
-use crate::{journal::Journal, types::*};
-
 use self::graph::{GraphBuilder, GraphHost, GraphType};
+use crate::types::*;
+
+use super::build_states::StateConstructionError;
 
 pub(crate) fn build<'follow, 'db: 'follow>(
-  j: &mut Journal,
   name: IString,
   graph_type: GraphType,
   kernel_items: ItemSet<'db>,
   db: &'db ParserDatabase,
   config: ParserConfig,
-) -> SherpaResult<(ParserClassification, GraphHost<'db>)> {
+) -> Result<(ParserClassification, GraphHost<'db>), StateConstructionError<()>> {
   let mut gb = GraphBuilder::new(db, name, graph_type, config, kernel_items);
 
   gb.run();
@@ -30,16 +30,21 @@ pub(crate) fn build<'follow, 'db: 'follow>(
         + "\n"
         + &gb.graph()._debug_string_(),
       true,
-    )?;
+    )
+    .unwrap();
   } else {
-    crate::test::utils::write_debug_file(db, "scanner_graph.tmp", gb.graph()._debug_string_(), true)?;
+    crate::test::utils::write_debug_file(db, "scanner_graph.tmp", gb.graph()._debug_string_(), true).unwrap();
   }
 
-  let (class, graph, errors) = gb.into_inner();
+  let (class, graph, errors, have_non_deterministic_peek) = gb.into_inner();
 
-  for error in errors {
-    j.report_mut().add_error(error)
+  if errors.len() > 0 {
+    if have_non_deterministic_peek {
+      Err(StateConstructionError::NonDeterministicPeek((), errors))
+    } else {
+      Err(StateConstructionError::OtherErrors((), errors))
+    }
+  } else {
+    Ok((class, graph))
   }
-
-  j.report_mut().wrap_ok_or_return_errors((class, graph))
 }

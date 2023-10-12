@@ -13,6 +13,9 @@ pub struct ParserDatabase {
   pub name: IString,
   /// Table of symbols.
   nonterm_symbols: Array<SymbolId>,
+  /// Maps a non-terminal to all other non-terminals that reference it, directly
+  /// or indirectly,  within their rules.
+  nonterm_predecessors: OrderedMap<DBNonTermKey, OrderedSet<DBNonTermKey>>,
   /// Table of non-terminal names for public non-terminal.
   ///
   /// - First tuple member: GUID name,
@@ -79,6 +82,7 @@ impl ParserDatabase {
       item_closures: Default::default(),
       recursion_types: Default::default(),
       reduction_types: Default::default(),
+      nonterm_predecessors: Default::default(),
     }
     .process_data()
   }
@@ -89,6 +93,7 @@ impl ParserDatabase {
     let mut follow_items_final: Array<Array<ItemIndex>> = vec![Default::default(); self.nonterms_len()];
     let mut reduce_types: Array<ReductionType> = vec![Default::default(); self.rules.len()];
     let mut closure_map = Array::with_capacity(self.rules.len());
+    let mut nonterm_predecessors: OrderedMap<DBNonTermKey, OrderedSet<DBNonTermKey>> = OrderedMap::default();
 
     let db = &self;
     // Calculate closure for all items, and follow sets and recursion type for all
@@ -135,7 +140,6 @@ impl ParserDatabase {
 
       //-------------------------------------------------------------------------------------------
       // Calculate closures for uncompleted items.
-
       fn create_closure<'db>(value: Item, db: &'db ParserDatabase, mode: GraphType) -> Items<'db> {
         if let Some(nterm) = value.nonterm_index_at_sym(mode) {
           if let Ok(rules) = db.nonterm_rules(nterm) {
@@ -167,7 +171,11 @@ impl ParserDatabase {
             ItemType::NonTerminal(nonterm) => {
               for item in create_closure(kernel_item, &self, mode) {
                 recursion_encountered |= nonterm == root_nonterm;
-                queue.push_back(item.align(&kernel_item))
+                queue.push_back(item.align(&kernel_item));
+
+                if root_nonterm != nonterm {
+                  nonterm_predecessors.entry(nonterm).or_insert(Default::default()).insert(root_nonterm);
+                }
               }
             }
             _ => {}
@@ -212,7 +220,7 @@ impl ParserDatabase {
         }
       }
     }
-
+    self.nonterm_predecessors = nonterm_predecessors;
     self.item_closures = closure_map;
     self.recursion_types = recursion_types;
     self.follow_items = follow_items_final;
@@ -238,6 +246,11 @@ impl ParserDatabase {
     self.entry_points.iter().map(|k| k.nonterm_key).collect()
   }
 
+  /// Returns an array of [DBNonTermKey]s of the entry point non-terminals.
+  pub fn entry_nterm_map(&self) -> OrderedMap<DBNonTermKey, &DBEntryPoint> {
+    self.entry_points.iter().map(|k| (k.nonterm_key, k)).collect()
+  }
+
   /// Returns an array of [EntryPoint]s of the entry point non-terminals.
   pub fn entry_points(&self) -> Array<&DBEntryPoint> {
     self.entry_points.iter().map(|k| k).collect()
@@ -251,6 +264,11 @@ impl ParserDatabase {
   /// Returns an ordered array of all non-terminals within the DB
   pub fn nonterms(&self) -> &Array<SymbolId> {
     &self.nonterm_symbols
+  }
+
+  /// Returns an ordered array of all non-terminals within the DB
+  pub fn get_nonterminal_predecessors(&self, key: DBNonTermKey) -> Option<&OrderedSet<DBNonTermKey>> {
+    self.nonterm_predecessors.get(&key)
   }
 
   /// Given a [DBNonTermKey] returns the SymbolId representing the non-terminal,

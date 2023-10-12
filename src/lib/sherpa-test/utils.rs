@@ -36,7 +36,7 @@ pub fn _write_states_to_temp_file_(builder: &impl ParserStore) -> SherpaResult<(
   {
     let db = builder.get_db();
 
-    for (i, state) in builder.get_states().iter().enumerate() {
+    for (i, state) in builder.get_states().enumerate() {
       write_debug_file(db, "ir_states.tmp", state.1.print(db, true)? + "\n", i > 0)?;
     }
   }

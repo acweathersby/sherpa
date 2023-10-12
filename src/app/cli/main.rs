@@ -1,6 +1,6 @@
 use clap::{arg, value_parser, ArgMatches, Command};
 use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{JournalReporter, SherpaError, SherpaGrammarBuilder, SherpaResult};
+use sherpa_core::{JournalReporter, SherpaError, SherpaGrammar, SherpaResult};
 use sherpa_rust_build::compile_rust_bytecode_parser;
 use std::{fs::File, io::Write, path::PathBuf};
 
@@ -113,7 +113,7 @@ fn build_parser(
 ) -> SherpaResult<()> {
   let config = Default::default();
 
-  let mut grammar = SherpaGrammarBuilder::new();
+  let mut grammar = SherpaGrammar::new();
 
   for path in grammar_sources {
     grammar.add_source(path)?;
@@ -129,7 +129,7 @@ fn build_parser(
     panic!("Failed To parse due to the above errors")
   }
 
-  let parser = db.build_parser(config)?.optimize(false)?;
+  let parser = db.build_states(config)?.optimize(false)?;
 
   if parser.dump_errors() {
     panic!("Failed To parse due to the above errors")

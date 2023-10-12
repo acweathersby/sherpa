@@ -1072,7 +1072,7 @@ mod test {
 
     let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
 
-    let (nonterminals, templates, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
+    let (nonterminals, _, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
 
     assert_eq!(nonterminals.len(), 0);
     assert_eq!(parse_states.len(), 1);

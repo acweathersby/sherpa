@@ -31,11 +31,11 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
   let input = r#"fn()(}greentoast;;"#;
 
   let root_path = PathBuf::from("test.sg");
-  let mut grammar = SherpaGrammarBuilder::new();
+  let mut grammar = SherpaGrammar::new();
   grammar.add_source_from_string(source, &root_path, false)?;
 
   let config = ParserConfig::default().cst_editor();
-  let parser_data = grammar.build_db(&root_path, &config)?.build_parser(config)?.optimize(false)?;
+  let parser_data = grammar.build_db(&root_path, &config)?.build_states(config)?.build_ir_parser(false, false)?;
 
   _write_states_to_temp_file_(&parser_data)?;
 
@@ -73,11 +73,11 @@ pub fn construct_error_recovering_erlang_toy() -> SherpaResult<()> {
   println!("------------------");
 
   let root_path = PathBuf::from("test.sg");
-  let mut grammar = SherpaGrammarBuilder::new();
+  let mut grammar = SherpaGrammar::new();
   grammar.add_source_from_string(source, &root_path, false)?;
 
   let config = ParserConfig::default().cst_editor();
-  let parser_data = grammar.build_db(&root_path, &config)?.build_parser(config)?.optimize(false)?;
+  let parser_data = grammar.build_db(&root_path, &config)?.build_states(config)?.build_ir_parser(false, false)?;
 
   _write_states_to_temp_file_(&parser_data)?;
 

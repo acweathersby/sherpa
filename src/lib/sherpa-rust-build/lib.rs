@@ -14,10 +14,10 @@ use builder::{
   write_rust_bytecode_parser_file,
 };
 use sherpa_ascript::{output_base::AscriptWriter, types::AScriptStore};
-use sherpa_core::{CodeWriter, Journal, ParserStore, SherpaDatabaseBuilder, SherpaResult};
+use sherpa_core::{CodeWriter, Journal, ParserStore, SherpaDatabase, SherpaResult};
 use sherpa_rust_runtime::types::BytecodeParserDB;
 
-pub fn build_rust(mut j: Journal, db: &SherpaDatabaseBuilder) -> SherpaResult<String> {
+pub fn build_rust(mut j: Journal, db: &SherpaDatabase) -> SherpaResult<String> {
   j.set_active_report("Rust AST Compile", sherpa_core::ReportType::Any);
 
   let store = AScriptStore::new(j.transfer(), db.get_db())?;

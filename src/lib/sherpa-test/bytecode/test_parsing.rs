@@ -258,7 +258,7 @@ IGNORE { c:sp  }
 
 "#],
     &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
-    Default::default(),
+    ParserConfig::default(),
   )
 }
 

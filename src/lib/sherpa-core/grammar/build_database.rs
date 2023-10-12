@@ -139,7 +139,7 @@ pub(crate) fn build_compile_db<'a>(
             let nterm_id = nterm.id;
 
             if !p_map.contains_key(&nterm_id.as_sym()) {
-              let rules = nterm.rules.clone();
+              //let rules = nterm.rules.clone();
               let g_name = nterm.guid_name;
               let f_name = nterm.friendly_name;
 

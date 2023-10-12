@@ -51,15 +51,15 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> S
   for (name, state) in states {
     let state_address = pkg.bytecode.len() as u32;
 
-    if let Some((_, symbols)) = state.get_scanner() {
+    if let Some(scanner) = state.get_scanner() {
       pkg
         .state_to_token_ids_map
-        .insert(state_address, symbols.iter().filter(|s| !s.is_skipped()).map(|s| s.tok().to_val()).collect());
+        .insert(state_address, scanner.symbols.iter().filter(|s| !s.is_skipped()).map(|s| s.tok().to_val()).collect());
     }
 
     pkg.state_name_to_address.insert(name.to_string(db.string_store()), state_address);
 
-    build_state(db, state.as_ref(), &mut pkg, &mut state_name_to_proxy, add_debug_symbols)?;
+    build_state(db, state, &mut pkg, &mut state_name_to_proxy, add_debug_symbols)?;
   }
 
   let proxy_to_address = state_name_to_proxy

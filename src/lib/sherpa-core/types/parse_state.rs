@@ -2,7 +2,8 @@ use sherpa_rust_runtime::types::bytecode::MatchInputType;
 
 use super::*;
 use crate::{
-  parser::{self, ASTNode, Ascript, State},
+  compile::states::{build_graph::graph::ScannerData, build_states::get_scanner_name},
+  parser::{self, ASTNode, State},
   utils::create_u64_hash,
   writer::code_writer::CodeWriter,
 };
@@ -27,21 +28,13 @@ pub struct ParseState {
   pub ast: Option<Box<State>>,
   pub compile_error: Option<SherpaError>,
   /// Collections of scanner based on TOKEN match statements
-  pub(crate) scanner: Option<(IString, OrderedSet<PrecedentDBTerm>)>,
+  pub(crate) scanner: Option<ScannerData>,
   pub root: bool,
 }
 
 impl<'db> ParseState {
-  pub fn get_scanner(&self) -> Option<&(IString, OrderedSet<PrecedentDBTerm>)> {
+  pub fn get_scanner(&self) -> Option<&ScannerData> {
     self.scanner.as_ref()
-  }
-
-  pub fn get_interned_scanner_name(scanner_syms: &OrderedSet<PrecedentDBTerm>, string_store: &IStringStore) -> IString {
-    Self::get_scanner_name(scanner_syms).intern(string_store)
-  }
-
-  pub fn get_scanner_name(scanner_syms: &OrderedSet<PrecedentDBTerm>) -> String {
-    "scan".to_string() + &create_u64_hash(scanner_syms).to_string()
   }
 
   /// Returns a reference to the AST.
@@ -141,13 +134,13 @@ impl ParseState {
       self.hash_name.to_string(db.string_store()),
       &self.code.split("\n").collect::<Vec<_>>().join("\n    "),
       &self.get_ast(),
-      self.scanner.as_ref().map(|(name, _)| { name.to_string(db.string_store()) })
+      self.scanner.as_ref().map(|scanner| { get_scanner_name(scanner, db) })
     )
   }
 }
 
 #[cfg(debug_assertions)]
-pub fn printIRNode(db: &ParserDatabase, node: &ASTNode) -> SherpaResult<()> {
+pub fn _printIRNode_(db: &ParserDatabase, node: &ASTNode) -> SherpaResult<()> {
   let mut cw = CodeWriter::new(vec![]);
   render_IR(db, &mut cw, node, false, MatchInputType::Default)?;
 

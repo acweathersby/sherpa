@@ -196,7 +196,7 @@ impl StateType {
 }
 
 // State -------------------------------------------------------------
-
+#[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct GraphState {
   id: StateId,
@@ -211,10 +211,12 @@ pub struct GraphState {
 }
 
 impl<'graph, 'db: 'graph> GraphState {
+  #[inline]
   pub fn as_ref(&self, graph: &'graph GraphHost<'db>) -> GraphStateRef<'graph, 'db> {
     GraphStateRef { id: self.id, graph }
   }
 
+  #[inline]
   pub fn as_mut_ref(&self, graph: &'graph mut GraphHost<'db>) -> GraphStateMutRef<'graph, 'db> {
     GraphStateMutRef { id: self.id, graph }
   }
@@ -483,18 +485,17 @@ pub enum GraphType {
 
 use GraphBuildState::*;
 
-use super::{
-  build::{self, handle_kernel_items},
-  items::get_follow,
-};
+use super::{build::handle_kernel_items, items::get_follow};
 impl GraphBuildState {}
 
 #[derive(Hash)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct PeekGroup<'db> {
   pub items:  ItemSet<'db>,
   pub is_oos: bool,
 }
 
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GraphHost<'db> {
   pub leaf_states: OrderedSet<StateId>,
   pub states: Array<GraphState>,
@@ -888,6 +889,7 @@ pub(crate) struct GraphBuilder<'db> {
   oos_roots: OrderedMap<DBNonTermKey, StateId>,
   oos_closure_states: OrderedMap<Item<'db>, StateId>,
   classification: ParserClassification,
+  have_non_deterministic_peek: bool,
   pub child_count: usize,
   pub db: &'db ParserDatabase,
   pub config: ParserConfig,
@@ -914,6 +916,7 @@ impl<'db> GraphBuilder<'db> {
       child_count: 0,
       db,
       config,
+      have_non_deterministic_peek: false,
     };
 
     builder.create_root_state(kernel_items);
@@ -1013,12 +1016,16 @@ impl<'db> GraphBuilder<'db> {
     }
   }
 
-  pub fn into_inner(self) -> (ParserClassification, GraphHost<'db>, Vec<SherpaError>) {
-    (self.classification, self.graph, self.errors)
+  pub fn into_inner(self) -> (ParserClassification, GraphHost<'db>, Vec<SherpaError>, bool) {
+    (self.classification, self.graph, self.errors, self.have_non_deterministic_peek)
   }
 
   pub fn get_child_count(&self) -> usize {
     self.child_count + self.pending.len()
+  }
+
+  pub fn declare_recursive_peek_error(&mut self) {
+    self.have_non_deterministic_peek = true;
   }
 
   fn create_state_hash<'a, H: std::hash::Hasher>(state: GraphStateRef, lookahead: u64, mut hasher: H) -> u64 {
@@ -1295,19 +1302,29 @@ impl<'db> GraphBuilder<'db> {
   }
 }
 
-/// Iterates over valid state nodes within the graph. Valid nodes are those that
-/// reachable from leaf states.
-pub struct GraphIterator<'graph, 'db: 'graph> {
-  pub graph:   &'graph GraphHost<'db>,
-  queue:       Queue<StateId>,
-  #[allow(unused)]
-  used_states: OrderedSet<StateId>,
-  links:       OrderedMap<StateId, OrderedSet<GraphStateRef<'graph, 'db>>>,
-  empty_hash:  OrderedSet<GraphStateRef<'graph, 'db>>,
+#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Default)]
+pub struct ScannerData {
+  pub hash:    u64,
+  pub symbols: OrderedSet<PrecedentDBTerm>,
+  pub skipped: OrderedSet<DBTermKey>,
+  pub follow:  OrderedSet<DBTermKey>,
 }
 
-impl<'a, 'db: 'a> GraphIterator<'a, 'db> {
-  pub fn new(graph: &'a GraphHost<'db>) -> Self {
+/// Represent the underlying graph with links reversed, that is, links are now
+/// directed from parent to children
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct ReversedGraph<'db> {
+  graph:         GraphHost<'db>,
+  queue:         Array<StateId>,
+  links:         OrderedMap<StateId, OrderedSet<StateId>>,
+  scanner_links: OrderedMap<StateId, u64>,
+  scanners:      OrderedMap<u64, ScannerData>,
+  empty_hash:    OrderedSet<StateId>,
+}
+
+impl<'db> ReversedGraph<'db> {
+  pub fn new(graph: GraphHost<'db>) -> Self {
     let (used_states, links) = graph
       .get_leaf_states()
       .iter()
@@ -1322,9 +1339,9 @@ impl<'a, 'db: 'a> GraphIterator<'a, 'db> {
             continue;
           }
 
-          if let Some(predecessors) = graph[state].as_ref(graph).get_predecessors().clone() {
+          if let Some(predecessors) = graph[state].as_ref(&graph).get_predecessors().clone() {
             for predecessor in predecessors {
-              links.entry(*predecessor).or_insert(OrderedSet::new()).insert(graph[state].as_ref(graph));
+              links.entry(*predecessor).or_insert(OrderedSet::new()).insert(state);
               queue.push_back(*predecessor);
             }
           }
@@ -1338,20 +1355,127 @@ impl<'a, 'db: 'a> GraphIterator<'a, 'db> {
         (a1, a2)
       });
 
+    let (scanners, scanner_links) = if graph.graph_type != GraphType::Scanner {
+      Self::create_scanner_data(&links, &graph)
+    } else {
+      (Default::default(), Default::default())
+    };
+
     Self {
-      queue: Queue::from_iter(used_states.iter().cloned()),
-      empty_hash: OrderedSet::new(),
-      used_states,
+      queue: Array::from_iter(used_states.iter().cloned()),
       links,
       graph,
+      scanners,
+      scanner_links,
+      empty_hash: OrderedSet::new(),
     }
   }
 
-  pub fn next<'b>(&'b mut self) -> Option<(GraphStateRef, &'b OrderedSet<GraphStateRef>)> {
-    while let Some(state) = self.queue.pop_front() {
-      return Some((self.graph[state].as_ref(self.graph), self.links.get(&state).unwrap_or(&self.empty_hash)));
+  pub fn iter<'a>(&'a self) -> GraphIterator<'a, 'db> {
+    GraphIterator { internal: self, cursor: -1 }
+  }
+
+  fn create_scanner_data<'a>(
+    links: &OrderedMap<StateId, OrderedSet<StateId>>,
+    graph: &GraphHost<'a>,
+  ) -> (OrderedMap<u64, ScannerData>, OrderedMap<StateId, u64>) {
+    let mut scanners = OrderedMap::new();
+    let mut scanner_links = OrderedMap::new();
+
+    for (state_id, successors) in links {
+      let graph = graph;
+      let db = graph.db;
+      let state = graph[*state_id].as_ref(graph);
+      if successors.iter().any(|s| {
+        matches!(&graph[*s].as_ref(&graph).get_symbol().sym(), SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. })
+      }) {
+        let syms = state.get_symbols().map(|s| s.clone()).unwrap_or_default();
+
+        // get a collection of skipped symbols.
+        let skipped = if let Some(test) = state.get_peek_resolve_items() {
+          test.map(|(_, PeekGroup { items, .. })| items).flatten().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
+        } else {
+          state.get_kernel_items().iter().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
+        }
+        .into_iter()
+        .filter_map(|s| {
+          let id = s.tok_db_key().unwrap();
+          (!syms.contains(&id)).then_some(id)
+        })
+        .collect::<OrderedSet<_>>();
+
+        let mut symbols = OrderedSet::default();
+
+        for state in successors {
+          let state = &graph[*state].as_ref(&graph);
+          match state.get_type() {
+            // Do not add symbol from non-terminal shifts.
+            StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop => {}
+            _ => {
+              let sym = state.get_symbol();
+              // The default symbol need be included.
+              if !sym.sym().is_default() {
+                symbols.insert(PrecedentDBTerm::from(sym, db, false));
+              }
+            }
+          }
+        }
+
+        for sym in &skipped {
+          symbols.insert((*sym, 0, true).into());
+        }
+
+        let skipped = if successors.iter().all(|s| matches!(graph[*s].as_ref(&graph).get_type(), StateType::Reduce(..))) {
+          None
+        } else {
+          Some(skipped)
+        };
+
+        let follow = Default::default();
+
+        let hash = hash_id_value_u64(&(&symbols, &skipped, &follow));
+
+        scanner_links.insert(*state_id, hash);
+
+        scanners.insert(hash, ScannerData { hash, symbols, skipped: skipped.unwrap_or_default(), follow });
+      }
     }
 
-    None
+    (scanners, scanner_links)
+  }
+
+  pub fn iter_scanners(&self) -> impl Iterator<Item = &ScannerData> {
+    self.scanners.values()
+  }
+}
+
+pub struct GraphIterator<'reversed, 'db: 'reversed> {
+  internal: &'reversed ReversedGraph<'db>,
+  cursor:   isize,
+}
+
+impl<'reversed, 'db: 'reversed> GraphIterator<'reversed, 'db> {
+  fn get_result(&self) -> (GraphStateRef<'reversed, 'db>, Option<&'reversed ScannerData>, Vec<GraphStateRef<'reversed, 'db>>) {
+    let state = self.internal.queue[self.cursor as usize];
+    let reveresed = self.internal;
+    let graph = &reveresed.graph;
+    (
+      graph[state].as_ref(graph),
+      reveresed.scanner_links.get(&state).and_then(|s| reveresed.scanners.get(s)),
+      self.internal.links.get(&state).unwrap_or(&self.internal.empty_hash).iter().map(|s| graph[*s].as_ref(graph)).collect(),
+    )
+  }
+}
+
+impl<'reversed, 'db: 'reversed> Iterator for GraphIterator<'reversed, 'db> {
+  type Item = (GraphStateRef<'reversed, 'db>, Option<&'reversed ScannerData>, Vec<GraphStateRef<'reversed, 'db>>);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    self.cursor += 1;
+    if self.cursor < self.internal.queue.len() as isize {
+      Some(self.get_result())
+    } else {
+      None
+    }
   }
 }
