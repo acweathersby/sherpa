@@ -219,6 +219,16 @@ impl SherpaError {
       err => vec![err],
     }
   }
+
+  /// Flattens errors in to a single error type. If the nested level of errors
+  /// is 1 and only a single error in that level, that error is returned,
+  /// otherwise a flattened Multi error is returned.
+  pub fn flattened_multi(self) -> SherpaError {
+    match self {
+      Multi(errors) => Multi(errors.into_iter().flat_map(|e| e.flatten()).collect()),
+      err => err,
+    }
+  }
 }
 
 impl<T> From<PoisonError<T>> for SherpaError {
