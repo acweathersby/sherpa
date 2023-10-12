@@ -11,7 +11,6 @@ path = "./lib.rs"
 
 [dependencies]
 sherpa_rust_runtime = {path = "../sherpa-rust-runtime"}
-rayon = "1.7.0"
 
 [features]
 # Uses the binary parser instead of the bytecode parser. This parser needs
@@ -29,3 +28,5 @@ multithread = []
 
 # Enable the debug printing of errors
 auto_print_errors = []
+
+
