@@ -7,6 +7,7 @@ use crate::{
   ParseStatesMap,
   ParserDatabase,
   ReportType,
+  SherpaDatabase,
   SherpaGrammar,
   SherpaIRParser,
   SherpaResult,
@@ -119,7 +120,7 @@ impl ParserDatabase {
   ///
   /// <> C > c:num c:num(+)
   /// ```
-  pub fn test_lr() -> SherpaResult<ParserDatabase> {
+  pub fn test_lr() -> SherpaResult<SherpaDatabase> {
     let mut grammar = SherpaGrammar::new();
 
     let path = PathBuf::from("/test/grammar.sg");
@@ -140,6 +141,6 @@ impl ParserDatabase {
 
     let db = grammar.build_db(&path, &Default::default())?;
 
-    Ok(db.into_inner())
+    Ok(db)
   }
 }

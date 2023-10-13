@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
   compile::{
     ir::{build_ir_from_graph, optimize},
@@ -6,7 +8,7 @@ use crate::{
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut},
   o_to_r,
   proxy::{Array, DeduplicateIterator, Queue, Set},
-  types::{ErrorContainerIter, ParserConfig},
+  types::{ErrorContainerIter, ParserConfig, SharedParserDatabase},
   GrammarIdentities,
   GrammarSoup,
   IString,
@@ -204,7 +206,7 @@ impl SherpaGrammar {
       }
     }
 
-    Ok(SherpaDatabase { j: j.transfer(), db })
+    Ok(SherpaDatabase { j: j.transfer(), db: std::sync::Arc::new(db) })
   }
 }
 
@@ -214,7 +216,7 @@ impl SherpaGrammar {
 
 pub struct SherpaDatabase {
   j:  Journal,
-  db: ParserDatabase,
+  db: SharedParserDatabase,
 }
 
 impl JournalReporter for SherpaDatabase {
@@ -225,23 +227,20 @@ impl JournalReporter for SherpaDatabase {
 
 impl SherpaDatabase {
   /// Consumes self and returns the [ParserDatabase] stored within.
-  pub fn into_inner(self) -> ParserDatabase {
-    self.db
-  }
 
-  pub fn get_db(&self) -> &ParserDatabase {
+  pub fn get_internal(&self) -> &ParserDatabase {
     &self.db
   }
 
   /// Constructs parser and scanner graphs for this variant of the grammar.
-  pub fn build_states<'a>(&'a self, config: ParserConfig) -> SherpaResult<SherpaGraph<'a>> {
+  pub fn build_states(&self, config: ParserConfig) -> SherpaResult<SherpaGraph> {
     let SherpaDatabase { j, db } = self;
 
-    match compile_parser_states(j.transfer(), db, config) {
+    match compile_parser_states(j.transfer(), db.clone(), config) {
       Ok((parsers, scanners)) => {
         j.transfer().flush_reports();
 
-        Ok(SherpaGraph { parsers, scanners, j: j.transfer(), db, config })
+        Ok(SherpaGraph { parsers, scanners, j: j.transfer(), db: db.clone(), config })
       }
       Err(err) => {
         let mut errors = err.flatten();
@@ -268,21 +267,21 @@ impl SherpaDatabase {
 // ----------------------------------------------------------------------------------------
 
 /// Comprised of the parser and scanner graphs for the given grammar
-pub struct SherpaGraph<'db> {
+pub struct SherpaGraph {
   pub(crate) j:        Journal,
-  pub(crate) db:       &'db ParserDatabase,
+  pub(crate) db:       SharedParserDatabase,
   pub(crate) config:   ParserConfig,
-  pub(crate) parsers:  Vec<Box<NonTermGraph<'db>>>,
-  pub(crate) scanners: Vec<Box<ScannerGraph<'db>>>,
+  pub(crate) parsers:  Arc<Vec<Box<NonTermGraph>>>,
+  pub(crate) scanners: Arc<Vec<Box<ScannerGraph>>>,
 }
 
-impl<'db> JournalReporter for SherpaGraph<'db> {
+impl JournalReporter for SherpaGraph {
   fn get_journal(&self) -> &Journal {
     &self.j
   }
 }
 
-impl<'db> SherpaGraph<'db> {
+impl SherpaGraph {
   pub fn build_ir_parser(&self, opt: bool, optimize_for_debugging: bool) -> SherpaResult<SherpaIRParser> {
     match build_ir_from_graph(self) {
       Ok((classification, ir_states)) => {
@@ -295,7 +294,7 @@ impl<'db> SherpaGraph<'db> {
         Ok(SherpaIRParser {
           classification,
           config: *config,
-          db: (*db).clone(),
+          db: db.clone(),
           states,
           is_optimized: opt,
           j,
@@ -327,7 +326,7 @@ impl<'db> SherpaGraph<'db> {
 
 pub struct SherpaIRParser {
   j: Journal,
-  db: ParserDatabase,
+  db: SharedParserDatabase,
   config: ParserConfig,
   states: ParseStatesMap,
   classification: ParserClassification,
@@ -391,7 +390,7 @@ pub fn empty_source_path() -> SherpaResult<()> {
 pub struct TestPackage {
   pub journal: Journal,
   pub states:  ParseStatesVec,
-  pub db:      ParserDatabase,
+  pub db:      SharedParserDatabase,
   pub config:  ParserConfig,
 }
 
@@ -440,12 +439,12 @@ impl From<SherpaIRParser> for TestPackage {
 
 pub struct DBPackage {
   pub journal: Journal,
-  pub db:      ParserDatabase,
+  pub db:      SharedParserDatabase,
 }
 
 impl From<SherpaDatabase> for DBPackage {
   fn from(value: SherpaDatabase) -> Self {
-    DBPackage { journal: value.j.transfer(), db: value.db }
+    DBPackage { journal: value.j.transfer(), db: value.db.clone() }
   }
 }
 

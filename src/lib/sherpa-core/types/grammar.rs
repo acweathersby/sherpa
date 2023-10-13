@@ -231,12 +231,13 @@ pub struct NonTerminalTemplate {
   pub friendly_name: IString,
 
   /// The unique identifier of the owning GrammarHeader.
-  pub g_id:  GrammarId,
-  
+  pub g_id: GrammarId,
+
   /// All rules that reduce to this non-terminal
   pub rules: Array<Box<crate::parser::Rule>>,
 
-  /// A list of non-terminal symbol names that are to be replaced by template args
+  /// A list of non-terminal symbol names that are to be replaced by template
+  /// args
   pub templates: Array<String>,
 
   pub tok: Token,

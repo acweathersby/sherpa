@@ -148,10 +148,10 @@ Stack:\n{}\n
     }
     DebugEventNew::ActionReduce { rule_id } => {
       let item = Item::from((DBRuleKey::from(*rule_id), db));
-      let nterm_name = item.nonterm_name().to_string(db.string_store());
+      let nterm_name = item.nonterm_name(db).to_string(db.string_store());
       let nterm_name = nterm_name.split("____").last().unwrap();
 
-      match item.reduction_type() {
+      match item.reduction_type(db) {
         /* ReductionType::LeftRecursive => {
           let mut items = stack.drain((stack.len() - item.len as usize)..);
           let mut first = items.next().unwrap();

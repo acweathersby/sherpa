@@ -32,18 +32,18 @@ pub(super) enum ShiftReduceConflictResolution {
 
 const MAX_EVAL_K: usize = 8;
 
-pub(super) enum ReduceReduceConflictResolution<'db> {
-  Reduce(Item<'db>),
-  Fork(Lookaheads<'db>),
-  Peek(u16, Lookaheads<'db>),
+pub(super) enum ReduceReduceConflictResolution {
+  Reduce(Item),
+  Fork(Lookaheads),
+  Peek(u16, Lookaheads),
   Nothing,
 }
 
-pub(super) fn resolve_reduce_reduce_conflict<'db>(
-  gb: &mut GraphBuilder<'db>,
+pub(super) fn resolve_reduce_reduce_conflict(
+  gb: &mut GraphBuilder,
   prec_sym: PrecedentSymbol,
-  follow_pairs: Lookaheads<'db>,
-) -> SherpaResult<ReduceReduceConflictResolution<'db>> {
+  follow_pairs: Lookaheads,
+) -> SherpaResult<ReduceReduceConflictResolution> {
   if prec_sym.sym().is_default() {
     Ok(ReduceReduceConflictResolution::Nothing)
   } else {
@@ -76,14 +76,15 @@ pub(super) fn resolve_reduce_reduce_conflict<'db>(
   }
 }
 
-pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &mut GraphBuilder<'db>,
+pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + Clone>(
+  gb: &mut GraphBuilder,
   shifts: T,
   reduces: T,
 ) -> SherpaResult<ShiftReduceConflictResolution> {
+  let db = gb.db();
   let mode = gb.get_mode();
 
-  let compl_prec = reduces.clone().map(|i| i.kernel.decrement().unwrap().precedence(gb.get_mode())).max().unwrap_or_default();
+  let compl_prec = reduces.clone().map(|i| i.kernel.decrement().unwrap().precedence(mode, db)).max().unwrap_or_default();
   let incom_prec = shifts.clone().max_precedence();
 
   if incom_prec > compl_prec {
@@ -98,8 +99,8 @@ pub(super) fn resolve_shift_reduce_conflict<'a, 'db: 'a, T: TransitionPairRefIte
   // completed after shifting the same nterm, then the precedence of the shift
   // items determines whether we should shift first or reduce.
 
-  let incom_nterm_set: OrderedSet<DBNonTermKey> = shifts.clone().to_kernel().rule_nonterm_ids();
-  let compl_next_nterm_set: OrderedSet<DBNonTermKey> = reduces.clone().to_next().rule_nonterm_ids();
+  let incom_nterm_set: OrderedSet<DBNonTermKey> = shifts.clone().to_kernel().rule_nonterm_ids(db);
+  let compl_next_nterm_set: OrderedSet<DBNonTermKey> = reduces.clone().to_next().rule_nonterm_ids(db);
 
   if incom_nterm_set.len() == 1 && incom_nterm_set.is_superset(&compl_next_nterm_set) {
     return if incom_prec >= compl_prec {
@@ -236,20 +237,17 @@ enum KCalcResults {
   Unpeekable,
 }
 
-fn get_conflict_follow_artifacts<'db>(
-  i_reduce: &Vec<Item<'db>>,
-  gb: &mut GraphBuilder<'db>,
-) -> (OrderedSet<Item<'db>>, OrderedSet<DBTermKey>) {
+fn get_conflict_follow_artifacts(i_reduce: &Vec<Item>, gb: &mut GraphBuilder) -> (OrderedSet<Item>, OrderedSet<DBTermKey>) {
   let mut out = OrderedSet::default();
   let mut syms = OrderedSet::default();
   let mut item_filter = Set::new();
   for item in i_reduce {
     let (follow, default) = get_follow(gb, *item);
 
-    let items = follow.iter().flat_map(|i| i.closure_iter_align(*i));
+    let items = follow.iter().flat_map(|i| i.closure_iter_align(*i, gb.db()));
     for item in items {
       if item_filter.insert(item.index) || !item.is_oos() {
-        if let Some(sym) = item.term_index_at_sym(gb.get_mode()) {
+        if let Some(sym) = item.term_index_at_sym(gb.get_mode(), gb.db()) {
           out.insert(item);
           syms.insert(sym);
         }
@@ -259,14 +257,14 @@ fn get_conflict_follow_artifacts<'db>(
   (out, syms)
 }
 
-fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &mut GraphBuilder<'db>,
+fn calculate_k<'a, A: TransitionPairRefIter<'a> + Clone, B: TransitionPairRefIter<'a> + Clone>(
+  gb: &mut GraphBuilder,
   reduces: B,
   shifts: A,
   max_eval: usize,
 ) -> KCalcResults {
   // Find max K for the conflicts to determine if we should us the peek mechanism
-
+  let db = &gb.db_rc();
   let mut reduce_items: ItemSet = reduces.clone().to_next().cloned().collect();
   let mut shift_items: ItemSet = shifts.clone().to_next().cloned().collect();
 
@@ -285,8 +283,8 @@ fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: Transi
       return KCalcResults::Unpeekable;
     }
 
-    let shift_groups = hash_group_btreemap(shift_items, |_, i| i.term_index_at_sym(gb.get_mode()).unwrap());
-    let mut reduce_groups = hash_group_btreemap(reduce_items, |_, i| i.term_index_at_sym(gb.get_mode()).unwrap());
+    let shift_groups = hash_group_btreemap(shift_items, |_, i| i.term_index_at_sym(gb.get_mode(), db).unwrap());
+    let mut reduce_groups = hash_group_btreemap(reduce_items, |_, i| i.term_index_at_sym(gb.get_mode(), db).unwrap());
 
     let (s, r) = shift_groups
       .into_iter()
@@ -310,11 +308,12 @@ fn calculate_k<'a, 'db: 'a, A: TransitionPairRefIter<'a, 'db> + Clone, B: Transi
   KCalcResults::LargerThanMaxLimit(max_eval)
 }
 
-fn calculate_k_multi<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &mut GraphBuilder<'db>,
+fn calculate_k_multi<'a, T: TransitionPairRefIter<'a> + Clone>(
+  gb: &mut GraphBuilder,
   transition_groups: Vec<T>,
   max_eval: usize,
 ) -> KCalcResults {
+  let db = &gb.db_rc();
   let mut groups = transition_groups.into_iter().map(|i| i.to_next().cloned().collect::<ItemSet>()).collect::<Vec<_>>();
 
   // Find max K for the conflicts to determine if we should us the peek mechanism
@@ -334,7 +333,7 @@ fn calculate_k_multi<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
     let recursive = queue
       .iter()
       .flat_map(|((items, _))| items.iter())
-      .filter_map(|i| -> Option<usize> { i.rule_is_recursive().then_some(i.rule_id().into()) })
+      .filter_map(|i| -> Option<usize> { i.rule_is_recursive(db).then_some(i.rule_id().into()) })
       .fold(OrderedMap::<usize, u32>::new(), |mut map, sym| {
         (*map.entry(sym).or_default()) += 1;
         map
@@ -357,14 +356,14 @@ fn calculate_k_multi<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
   KCalcResults::LargerThanMaxLimit(max_eval)
 }
 
-pub(crate) fn resolve_conflicting_tokens<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &mut GraphBuilder<'db>,
+pub(crate) fn resolve_conflicting_tokens<'a, T: TransitionPairRefIter<'a> + Clone>(
+  gb: &mut GraphBuilder,
   sym: SymbolId,
   completed: T,
 ) -> SherpaResult<()> {
   // Map items according to their symbols
   let token_precedence_groups = hash_group_btree_iter::<Vec<_>, _, _, _, _>(completed.clone(), |_, i| {
-    (i.kernel.origin_precedence(), i.kernel.origin.get_symbol(gb.db))
+    (i.kernel.origin_precedence(), i.kernel.origin.get_symbol(gb.db()))
   });
 
   let base_precedence_groups = hash_group_btreemap(token_precedence_groups, |_, ((_, sym), _)| sym.conflict_precedence());

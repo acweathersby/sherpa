@@ -60,10 +60,10 @@ impl Default for Origin {
 
 impl Origin {
   #[cfg(debug_assertions)]
-  pub fn _debug_string_(&self, db: &ParserDatabase) -> String {
+  pub fn _debug_string_(&self) -> String {
     match self {
       Origin::NonTermGoal(nterm) => {
-        format!("NonTermGoal[ {} {:?} ]", db.nonterm_guid_name(*nterm).to_string(db.string_store()), nterm)
+        format!("NonTermGoal[ {:?} ]", nterm)
       }
       Origin::TerminalGoal(sym_id, prec) => {
         format!("TerminalGoal[ {:?} {prec} ]", sym_id)
@@ -210,20 +210,20 @@ pub struct GraphState {
   used: bool,
 }
 
-impl<'graph, 'db: 'graph> GraphState {
+impl<'graph> GraphState {
   #[inline]
-  pub fn as_ref(&self, graph: &'graph GraphHost<'db>) -> GraphStateRef<'graph, 'db> {
+  pub fn as_ref(&self, graph: &'graph GraphHost) -> GraphStateRef<'graph> {
     GraphStateRef { id: self.id, graph }
   }
 
   #[inline]
-  pub fn as_mut_ref(&self, graph: &'graph mut GraphHost<'db>) -> GraphStateMutRef<'graph, 'db> {
+  pub fn as_mut_ref(&self, graph: &'graph mut GraphHost) -> GraphStateMutRef<'graph> {
     GraphStateMutRef { id: self.id, graph }
   }
 }
 
-pub trait GraphStateReference<'graph, 'db: 'graph> {
-  fn graph(&self) -> &'graph GraphHost<'db>;
+pub trait GraphStateReference<'graph> {
+  fn graph(&self) -> &'graph GraphHost;
   fn _id_(&self) -> StateId;
 
   fn get_hash(&'graph self) -> u64 {
@@ -250,7 +250,7 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     self.internal().build_state
   }
 
-  fn get_goto_state(&self) -> Option<GotoGraphStateRef<'graph, 'db>> {
+  fn get_goto_state(&self) -> Option<GotoGraphStateRef<'graph>> {
     if let Some(nonterm_items) = self.graph().nonterm_items.get(&self._id_()) {
       Some(GotoGraphStateRef {
         id: self._id_(),
@@ -268,11 +268,11 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     self.graph()[self._id_()]
   }
 
-  fn get_resolve_item_set<'a>(&'a self, peek_origin_key: u32) -> &'graph PeekGroup<'db> {
+  fn get_resolve_item_set<'a>(&'a self, peek_origin_key: u32) -> &'graph PeekGroup {
     self.graph().peek_resolve_items.get(&peek_origin_key).as_ref().unwrap()
   }
 
-  fn get_peek_resolve_items<'a: 'graph>(&'a self) -> Option<impl Iterator<Item = (u32, &'graph PeekGroup<'db>)>> {
+  fn get_peek_resolve_items<'a: 'graph>(&'a self) -> Option<impl Iterator<Item = (u32, &'graph PeekGroup)>> {
     if let Some(resolve_ids) = self.graph().peek_resolve_ids.get(&self._id_()) {
       Some(resolve_ids.iter().map(|i| (*i, self.get_resolve_item_set(*i))))
     } else {
@@ -280,11 +280,11 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     }
   }
 
-  fn get_kernel_items<'a: 'graph>(&'a self) -> &'graph ItemSet<'db> {
+  fn get_kernel_items<'a: 'graph>(&'a self) -> &'graph ItemSet {
     self.graph().kernel_items.get(&self._id_()).as_ref().unwrap()
   }
 
-  fn get_nonterm_items<'a: 'graph>(&'a self) -> Option<&'graph ItemSet<'db>> {
+  fn get_nonterm_items<'a: 'graph>(&'a self) -> Option<&'graph ItemSet> {
     self.graph().nonterm_items.get(&self._id_())
   }
 
@@ -297,7 +297,7 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
     self.graph().term_symbol.get(&self._id_()).cloned().unwrap_or((SymbolId::Undefined, 0).into())
   }
 
-  fn get_reduce_item<'a: 'graph>(&'a self) -> Option<&'graph Item<'db>> {
+  fn get_reduce_item<'a: 'graph>(&'a self) -> Option<&'graph Item> {
     self.graph().reduce_item.get(&self._id_())
   }
 
@@ -313,7 +313,7 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
 
   #[cfg(debug_assertions)]
   fn _debug_string_(&'graph self) -> String {
-    let db = self.graph().db;
+    let db = &self.graph().db;
     let state = self.internal();
     let mut string = String::new();
     string += &format!(
@@ -342,18 +342,18 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
       for (index, PeekGroup { items, .. }) in peek_items_sets {
         string += &format!("\n  Peek Resolve: {}", index);
 
-        string += &format!("\n   - {}", items.to_debug_string("\n     "));
+        string += &format!("\n   - {}", items.to_debug_string(db, "\n     "));
       }
     }
 
     if let Some(item) = &self.get_reduce_item() {
       string += &format!("\n  Reduce:");
-      string += &format!("\n   - {}", item._debug_string_());
+      string += &format!("\n   - {}", item._debug_string_w_db_(db));
     }
 
     string += "\n-- kernel-items:";
     for item in self.get_kernel_items() {
-      string += &format!("\n   - {}", item._debug_string_());
+      string += &format!("\n   - {}", item._debug_string_w_db_(db));
     }
 
     if let Some(non_term_items) = self.get_nonterm_items() {
@@ -362,7 +362,7 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
       }
       string += "\n-- non-terms:";
       for item in non_term_items {
-        string += &format!("\n   - {}", item._debug_string_());
+        string += &format!("\n   - {}", item._debug_string_w_db_(db));
       }
     }
 
@@ -371,30 +371,30 @@ pub trait GraphStateReference<'graph, 'db: 'graph> {
 }
 
 #[derive(Clone, Copy)]
-pub struct GraphStateRef<'graph, 'db: 'graph> {
+pub struct GraphStateRef<'graph> {
   pub id:    StateId,
-  pub graph: &'graph GraphHost<'db>,
+  pub graph: &'graph GraphHost,
 }
-impl<'graph, 'db: 'graph> Ord for GraphStateRef<'graph, 'db> {
+impl<'graph> Ord for GraphStateRef<'graph> {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
     self.id.cmp(&other.id)
   }
 }
-impl<'graph, 'db: 'graph> PartialOrd for GraphStateRef<'graph, 'db> {
+impl<'graph> PartialOrd for GraphStateRef<'graph> {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     self.id.partial_cmp(&other.id)
   }
 }
 
-impl<'graph, 'db: 'graph> Eq for GraphStateRef<'graph, 'db> {}
-impl<'graph, 'db: 'graph> PartialEq for GraphStateRef<'graph, 'db> {
+impl<'graph> Eq for GraphStateRef<'graph> {}
+impl<'graph> PartialEq for GraphStateRef<'graph> {
   fn eq(&self, other: &Self) -> bool {
     self.id.eq(&other.id)
   }
 }
 
-impl<'graph, 'db: 'graph> GraphStateReference<'graph, 'db> for GraphStateRef<'graph, 'db> {
-  fn graph(&self) -> &'graph GraphHost<'db> {
+impl<'graph> GraphStateReference<'graph> for GraphStateRef<'graph> {
+  fn graph(&self) -> &'graph GraphHost {
     self.graph
   }
 
@@ -404,16 +404,16 @@ impl<'graph, 'db: 'graph> GraphStateReference<'graph, 'db> for GraphStateRef<'gr
 }
 
 #[derive(Clone, Copy)]
-pub struct GotoGraphStateRef<'graph, 'db: 'graph> {
+pub struct GotoGraphStateRef<'graph> {
   pub id: StateId,
   pub goto_id: StateId,
-  pub graph: &'graph GraphHost<'db>,
-  pub nonterm_items: &'graph ItemSet<'db>,
+  pub graph: &'graph GraphHost,
+  pub nonterm_items: &'graph ItemSet,
   pub canonical_hash: u64,
 }
 
-impl<'graph, 'db: 'graph> GraphStateReference<'graph, 'db> for GotoGraphStateRef<'graph, 'db> {
-  fn graph(&self) -> &'graph GraphHost<'db> {
+impl<'graph> GraphStateReference<'graph> for GotoGraphStateRef<'graph> {
+  fn graph(&self) -> &'graph GraphHost {
     self.graph
   }
 
@@ -426,17 +426,17 @@ impl<'graph, 'db: 'graph> GraphStateReference<'graph, 'db> for GotoGraphStateRef
   }
 }
 
-pub struct GraphStateMutRef<'graph, 'db: 'graph> {
+pub struct GraphStateMutRef<'graph> {
   pub id:    StateId,
-  pub graph: &'graph mut GraphHost<'db>,
+  pub graph: &'graph mut GraphHost,
 }
 
-impl<'graph, 'db: 'graph> GraphStateMutRef<'graph, 'db> {
-  pub fn set_nonterm_items(&mut self, nonterm_items: &ItemSet<'db>) {
+impl<'graph> GraphStateMutRef<'graph> {
+  pub fn set_nonterm_items(&mut self, nonterm_items: &ItemSet) {
     self.graph.nonterm_items.insert(self.id, nonterm_items.clone());
   }
 
-  pub(crate) fn set_kernel_items<T: Iterator<Item = Item<'db>>>(&mut self, kernel_items: T) {
+  pub(crate) fn set_kernel_items<T: Iterator<Item = Item>>(&mut self, kernel_items: T) {
     self.graph.kernel_items.insert(
       self.id,
       kernel_items
@@ -452,7 +452,7 @@ impl<'graph, 'db: 'graph> GraphStateMutRef<'graph, 'db> {
     );
   }
 
-  pub(crate) fn add_kernel_items<T: ItemContainerIter<'db>>(&mut self, kernel_items: T) {
+  pub(crate) fn add_kernel_items<T: ItemContainerIter>(&mut self, kernel_items: T) {
     self.graph.kernel_items.entry(self.id).or_default().extend(kernel_items.map(|i| {
       if i.origin_state.is_invalid() {
         i.to_origin_state(self.id)
@@ -490,30 +490,30 @@ impl GraphBuildState {}
 
 #[derive(Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct PeekGroup<'db> {
-  pub items:  ItemSet<'db>,
+pub struct PeekGroup {
+  pub items:  ItemSet,
   pub is_oos: bool,
 }
 
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct GraphHost<'db> {
+pub struct GraphHost {
   pub leaf_states: OrderedSet<StateId>,
   pub states: Array<GraphState>,
-  pub peek_resolve_items: OrderedMap<u32, PeekGroup<'db>>,
+  pub peek_resolve_items: OrderedMap<u32, PeekGroup>,
   pub peek_resolve_ids: OrderedMap<StateId, Vec<u32>>,
   pub state_predecessors: OrderedMap<StateId, OrderedSet<StateId>>,
   pub term_symbol: OrderedMap<StateId, PrecedentSymbol>,
-  pub reduce_item: OrderedMap<StateId, Item<'db>>,
-  pub kernel_items: OrderedMap<StateId, ItemSet<'db>>,
-  pub nonterm_items: OrderedMap<StateId, ItemSet<'db>>,
-  pub db: &'db ParserDatabase,
+  pub reduce_item: OrderedMap<StateId, Item>,
+  pub kernel_items: OrderedMap<StateId, ItemSet>,
+  pub nonterm_items: OrderedMap<StateId, ItemSet>,
+  pub db: SharedParserDatabase,
   pub name: IString,
   pub graph_type: GraphType,
   pub symbol_sets: Map<u64, OrderedSet<DBTermKey>>,
 }
 
-impl<'follow, 'db: 'follow> GraphHost<'db> {
-  pub fn new(db: &'db ParserDatabase, name: IString, graph_type: GraphType) -> Self {
+impl<'follow: 'follow> GraphHost {
+  pub fn new(db: SharedParserDatabase, name: IString, graph_type: GraphType) -> Self {
     Self {
       states: Array::with_capacity(1024),
       leaf_states: Default::default(),
@@ -531,8 +531,8 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
     }
   }
 
-  pub fn get_db(&self) -> &'db ParserDatabase {
-    self.db
+  pub fn get_db(&self) -> &ParserDatabase {
+    &self.db
   }
 
   pub fn get_leaf_states(&self) -> Vec<&GraphState> {
@@ -544,12 +544,12 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
   }
 
   pub fn get_goal_nonterm_index(&self) -> DBNonTermKey {
-    self.goal_items().iter().next().unwrap().nonterm_index()
+    self.goal_items().iter().next().unwrap().nonterm_index(&self.db)
   }
 
   /// Returns true the item is the completed form an item in
   /// the kernel of the root state
-  pub fn item_is_goal(&self, item: &Item<'db>) -> bool {
+  pub fn item_is_goal(&self, item: &Item) -> bool {
     if !item.is_complete() {
       return false;
     }
@@ -588,7 +588,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
         if let Some(la) = self.symbol_sets.get(&state.symbol_set_id) {
           string += &format!(
             "\n\n  Symbols: {}",
-            la.iter().map(|sym| self.db.sym(*sym).debug_string(self.db)).collect::<Vec<_>>().join(" | ")
+            la.iter().map(|sym| self.db.sym(*sym).debug_string(self.get_db())).collect::<Vec<_>>().join(" | ")
           );
         }
         string += "\n===============================================";
@@ -598,7 +598,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
         if let Some(la) = self.symbol_sets.get(&state.symbol_set_id) {
           string += &format!(
             "\n\n  Symbols: {}",
-            la.iter().map(|sym| self.db.sym(*sym).debug_string(self.db)).collect::<Vec<_>>().join(" | ")
+            la.iter().map(|sym| self.db.sym(*sym).debug_string(self.get_db())).collect::<Vec<_>>().join(" | ")
           );
         }
         string += "\n\n---------------------------------------------";
@@ -627,7 +627,7 @@ impl<'follow, 'db: 'follow> GraphHost<'db> {
   }
 }
 
-impl<'db> Index<usize> for GraphHost<'db> {
+impl Index<usize> for GraphHost {
   type Output = GraphState;
 
   fn index(&self, index: usize) -> &Self::Output {
@@ -648,7 +648,7 @@ pub enum GraphIdSubType {
   Invalid = 0xF,
 }
 
-impl<'db> Index<StateId> for GraphHost<'db> {
+impl Index<StateId> for GraphHost {
   type Output = GraphState;
 
   fn index(&self, index: StateId) -> &Self::Output {
@@ -656,7 +656,7 @@ impl<'db> Index<StateId> for GraphHost<'db> {
   }
 }
 
-impl<'db> IndexMut<StateId> for GraphHost<'db> {
+impl IndexMut<StateId> for GraphHost {
   fn index_mut(&mut self, index: StateId) -> &mut Self::Output {
     &mut self.states[index.index()]
   }
@@ -771,14 +771,14 @@ pub(crate) enum EnqueResult {
   Merged(StateId),
 }
 
-pub struct StateBuilder<'graph_builder, 'db: 'graph_builder> {
+pub struct StateBuilder<'graph_builder> {
   state_id: StateId,
-  builder:  &'graph_builder mut GraphBuilder<'db>,
+  builder:  &'graph_builder mut GraphBuilder,
   resolved: bool,
 }
 
-impl<'graph_iter, 'db: 'graph_iter> StateBuilder<'graph_iter, 'db> {
-  pub fn state_ref<'a>(&'a self) -> GraphStateRef<'a, 'db> {
+impl<'graph_iter> StateBuilder<'graph_iter> {
+  pub fn state_ref<'a>(&'a self) -> GraphStateRef<'a> {
     self.builder.get_state(self.state_id)
   }
 
@@ -792,7 +792,7 @@ impl<'graph_iter, 'db: 'graph_iter> StateBuilder<'graph_iter, 'db> {
     predecessors.insert(parent);
   }
 
-  pub fn set_peek_resolve_state<T: Iterator<Item = Item<'db>>>(&mut self, items: T, is_oos: bool) -> Origin {
+  pub fn set_peek_resolve_state<T: Iterator<Item = Item>>(&mut self, items: T, is_oos: bool) -> Origin {
     let peek_group = PeekGroup { items: items.collect(), is_oos };
 
     let index = hash_id_value_u64(&peek_group) as u32;
@@ -805,17 +805,17 @@ impl<'graph_iter, 'db: 'graph_iter> StateBuilder<'graph_iter, 'db> {
     Origin::Peek(index)
   }
 
-  pub fn add_kernel_items<T: ItemContainerIter<'db>>(&mut self, items: T) {
+  pub fn add_kernel_items<T: ItemContainerIter>(&mut self, items: T) {
     let StateBuilder { builder, .. } = self;
     builder.get_state_mut(self.state_id).add_kernel_items(items);
   }
 
-  pub fn set_kernel_items<T: ItemContainerIter<'db>>(&mut self, items: T) {
+  pub fn set_kernel_items<T: ItemContainerIter>(&mut self, items: T) {
     let StateBuilder { builder, .. } = self;
     builder.get_state_mut(self.state_id).set_kernel_items(items);
   }
 
-  pub fn set_reduce_item(&mut self, item: Item<'db>) {
+  pub fn set_reduce_item(&mut self, item: Item) {
     let StateBuilder { state_id, builder, .. } = self;
     builder.graph.reduce_item.insert(*state_id, item);
   }
@@ -878,30 +878,29 @@ impl<'graph_iter, 'db: 'graph_iter> StateBuilder<'graph_iter, 'db> {
   }
 }
 
-pub type DefaultIter<'db> = std::vec::IntoIter<Item<'db>>;
-pub(crate) struct GraphBuilder<'db> {
-  graph: GraphHost<'db>,
+pub type DefaultIter = std::vec::IntoIter<Item>;
+pub(crate) struct GraphBuilder {
+  graph: GraphHost,
   state_id: StateId,
   pending: Vec<StateId>,
   state_queue: VecDeque<StateId>,
   errors: Vec<SherpaError>,
   state_map: OrderedMap<u64, StateId>,
   oos_roots: OrderedMap<DBNonTermKey, StateId>,
-  oos_closure_states: OrderedMap<Item<'db>, StateId>,
+  oos_closure_states: OrderedMap<Item, StateId>,
   classification: ParserClassification,
   have_non_deterministic_peek: bool,
   pub child_count: usize,
-  pub db: &'db ParserDatabase,
   pub config: ParserConfig,
 }
 
-impl<'db> GraphBuilder<'db> {
+impl GraphBuilder {
   pub fn new(
-    db: &'db ParserDatabase,
+    db: SharedParserDatabase,
     name: IString,
     graph_type: GraphType,
     config: ParserConfig,
-    kernel_items: ItemSet<'db>,
+    kernel_items: ItemSet,
   ) -> Self {
     let mut builder = Self {
       graph: GraphHost::new(db, name, graph_type),
@@ -914,7 +913,6 @@ impl<'db> GraphBuilder<'db> {
       state_map: Default::default(),
       classification: Default::default(),
       child_count: 0,
-      db,
       config,
       have_non_deterministic_peek: false,
     };
@@ -937,6 +935,14 @@ impl<'db> GraphBuilder<'db> {
         _ => {}
       }
     }
+  }
+
+  pub fn db<'db>(&'db self) -> &'db ParserDatabase {
+    self.graph.get_db()
+  }
+
+  pub fn db_rc(&self) -> SharedParserDatabase {
+    self.graph.db.clone()
   }
 
   /// Enque remaining states
@@ -962,7 +968,7 @@ impl<'db> GraphBuilder<'db> {
       let item_id = StateId::new(0, GraphIdSubType::ExtendedClosure);
 
       let closure = self
-        .db
+        .db()
         .nonterm_follow_items(nterm)
         .map(|i| i.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(item_id))
         .filter_map(|i| i.increment());
@@ -983,7 +989,7 @@ impl<'db> GraphBuilder<'db> {
     }
   }
 
-  pub fn get_oos_closure_state(&mut self, item: Item<'db>) -> StateId {
+  pub fn get_oos_closure_state(&mut self, item: Item) -> StateId {
     debug_assert!(item.origin_state.is_oos());
 
     let state = item.origin_state;
@@ -998,7 +1004,7 @@ impl<'db> GraphBuilder<'db> {
 
       let kernel = item.to_origin_state(id).to_origin(Origin::__OOS_CLOSURE__);
 
-      let closure = kernel.closure_iter_align(kernel);
+      let closure = kernel.closure_iter_align(kernel, self.db());
 
       let state = GraphState {
         id,
@@ -1016,7 +1022,7 @@ impl<'db> GraphBuilder<'db> {
     }
   }
 
-  pub fn into_inner(self) -> (ParserClassification, GraphHost<'db>, Vec<SherpaError>, bool) {
+  pub fn into_inner(self) -> (ParserClassification, GraphHost, Vec<SherpaError>, bool) {
     (self.classification, self.graph, self.errors, self.have_non_deterministic_peek)
   }
 
@@ -1072,22 +1078,22 @@ impl<'db> GraphBuilder<'db> {
     let mut symbols = OrderedSet::new();
 
     for item in self.get_state(state).get_kernel_items().clone() {
-      if let Some(term) = item.term_index_at_sym(mode) {
+      if let Some(term) = item.term_index_at_sym(mode, self.db()) {
         symbols.insert(term);
-      } else if item.is_nonterm(mode) {
-        for item in self.db.get_closure(&item) {
-          if let Some(term) = item.term_index_at_sym(self.graph.graph_type) {
+      } else if item.is_nonterm(mode, self.db()) {
+        for item in self.db().get_closure(&item) {
+          if let Some(term) = item.term_index_at_sym(self.graph.graph_type, self.db()) {
             symbols.insert(term);
           }
         }
       } else {
         let (follow, _) = get_follow(self, item);
         for item in follow {
-          if let Some(term) = item.term_index_at_sym(mode) {
+          if let Some(term) = item.term_index_at_sym(mode, self.db()) {
             symbols.insert(term);
-          } else if item.is_nonterm(mode) {
-            for item in self.db.get_closure(&item) {
-              if let Some(term) = item.term_index_at_sym(self.graph.graph_type) {
+          } else if item.is_nonterm(mode, self.db()) {
+            for item in self.db().get_closure(&item) {
+              if let Some(term) = item.term_index_at_sym(self.graph.graph_type, self.db()) {
                 symbols.insert(term);
               }
             }
@@ -1105,7 +1111,7 @@ impl<'db> GraphBuilder<'db> {
     }
   }
 
-  pub fn get_pending_items(&self) -> ItemSet<'db> {
+  pub fn get_pending_items(&self) -> ItemSet {
     let items = self
       .pending
       .iter()
@@ -1114,7 +1120,7 @@ impl<'db> GraphBuilder<'db> {
           self.graph[*s]
             .as_ref(&self.graph)
             .get_peek_resolve_items()
-            .map(|i| i.flat_map(|(_, PeekGroup { items, .. })| items).cloned().collect::<ItemSet<'db>>())
+            .map(|i| i.flat_map(|(_, PeekGroup { items, .. })| items).cloned().collect::<ItemSet>())
         } else {
           Some(self.get_state(*s).get_kernel_items().iter().to_set())
         }
@@ -1124,7 +1130,7 @@ impl<'db> GraphBuilder<'db> {
     items
   }
 
-  fn create_root_state(&mut self, kernel_items: BTreeSet<Item<'db>>) {
+  fn create_root_state(&mut self, kernel_items: BTreeSet<Item>) {
     self.create_state(Normal, (SymbolId::Default, 0).into(), StateType::Start, Some(kernel_items.into_iter())).to_enqueued();
   }
 
@@ -1198,11 +1204,11 @@ impl<'db> GraphBuilder<'db> {
     self.state_id
   }
 
-  pub fn current_state<'a>(&'a self) -> GraphStateRef<'a, 'db> {
+  pub fn current_state<'a>(&'a self) -> GraphStateRef<'a> {
     GraphStateRef { graph: &self.graph, id: self.state_id }
   }
 
-  pub fn current_state_mut<'a>(&'a mut self) -> GraphStateMutRef<'a, 'db> {
+  pub fn current_state_mut<'a>(&'a mut self) -> GraphStateMutRef<'a> {
     self.get_state_mut(self.state_id)
   }
 
@@ -1214,11 +1220,11 @@ impl<'db> GraphBuilder<'db> {
     matches!(self.graph.graph_type, GraphType::Scanner)
   }
 
-  pub fn graph(&self) -> &GraphHost<'db> {
+  pub fn graph(&self) -> &GraphHost {
     &self.graph
   }
 
-  pub fn get_state<'a>(&'a self, state_id: StateId) -> GraphStateRef<'a, 'db> {
+  pub fn get_state<'a>(&'a self, state_id: StateId) -> GraphStateRef<'a> {
     self.graph[state_id].as_ref(&self.graph)
   }
 
@@ -1234,17 +1240,17 @@ impl<'db> GraphBuilder<'db> {
     }
   }
 
-  pub fn get_state_mut<'a>(&'a mut self, state_id: StateId) -> GraphStateMutRef<'a, 'db> {
+  pub fn get_state_mut<'a>(&'a mut self, state_id: StateId) -> GraphStateMutRef<'a> {
     GraphStateMutRef { graph: &mut self.graph, id: state_id }
   }
 
-  pub fn create_state<'a, T: Iterator<Item = Item<'db>>>(
+  pub fn create_state<'a, T: Iterator<Item = Item>>(
     &'a mut self,
     state: GraphBuildState,
     symbol: PrecedentSymbol,
     t_type: StateType,
     kernel_items: Option<T>,
-  ) -> StateBuilder<'a, 'db> {
+  ) -> StateBuilder<'a> {
     let index = self.graph.states.len();
     let id = StateId::new(index, if index > 0 { GraphIdSubType::Regular } else { GraphIdSubType::Root });
 
@@ -1287,7 +1293,7 @@ impl<'db> GraphBuilder<'db> {
   pub fn _is_terminal_state_(&self, nterm_id: u32, state_id: usize) -> bool {
     self.graph.goal_items().iter().any(|i| i.origin.get_symbol_key() == DBTermKey::from(nterm_id))
       && self.current_state_id().index() == state_id as usize
-      || self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id)
+      || self.graph.goal_items().iter().any(|i| i.nonterm_index(self.db()).to_val() == nterm_id)
         && self.current_state_id().index() == state_id
   }
 
@@ -1298,7 +1304,7 @@ impl<'db> GraphBuilder<'db> {
 
   #[cfg(debug_assertions)]
   pub fn _is_nonterminal_(&self, nterm_id: u32) -> bool {
-    self.graph.goal_items().iter().any(|i| i.nonterm_index().to_val() == nterm_id)
+    self.graph.goal_items().iter().any(|i| i.nonterm_index(self.db()).to_val() == nterm_id)
   }
 }
 
@@ -1314,8 +1320,8 @@ pub struct ScannerData {
 /// Represent the underlying graph with links reversed, that is, links are now
 /// directed from parent to children
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct ReversedGraph<'db> {
-  graph:         GraphHost<'db>,
+pub struct ReversedGraph {
+  graph:         GraphHost,
   queue:         Array<StateId>,
   links:         OrderedMap<StateId, OrderedSet<StateId>>,
   scanner_links: OrderedMap<StateId, u64>,
@@ -1323,8 +1329,8 @@ pub struct ReversedGraph<'db> {
   empty_hash:    OrderedSet<StateId>,
 }
 
-impl<'db> ReversedGraph<'db> {
-  pub fn new(graph: GraphHost<'db>) -> Self {
+impl ReversedGraph {
+  pub fn new(graph: GraphHost) -> Self {
     let (used_states, links) = graph
       .get_leaf_states()
       .iter()
@@ -1371,20 +1377,20 @@ impl<'db> ReversedGraph<'db> {
     }
   }
 
-  pub fn iter<'a>(&'a self) -> GraphIterator<'a, 'db> {
+  pub fn iter<'a>(&'a self) -> GraphIterator<'a> {
     GraphIterator { internal: self, cursor: -1 }
   }
 
-  fn create_scanner_data<'a>(
+  fn create_scanner_data(
     links: &OrderedMap<StateId, OrderedSet<StateId>>,
-    graph: &GraphHost<'a>,
+    graph: &GraphHost,
   ) -> (OrderedMap<u64, ScannerData>, OrderedMap<StateId, u64>) {
     let mut scanners = OrderedMap::new();
     let mut scanner_links = OrderedMap::new();
 
     for (state_id, successors) in links {
       let graph = graph;
-      let db = graph.db;
+      let db = &graph.db;
       let state = graph[*state_id].as_ref(graph);
       if successors.iter().any(|s| {
         matches!(&graph[*s].as_ref(&graph).get_symbol().sym(), SymbolId::DBToken { .. } | SymbolId::DBNonTerminalToken { .. })
@@ -1393,9 +1399,9 @@ impl<'db> ReversedGraph<'db> {
 
         // get a collection of skipped symbols.
         let skipped = if let Some(test) = state.get_peek_resolve_items() {
-          test.map(|(_, PeekGroup { items, .. })| items).flatten().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
+          test.map(|(_, PeekGroup { items, .. })| items).flatten().filter_map(|i| i.get_skipped(db)).flatten().collect::<Vec<_>>()
         } else {
-          state.get_kernel_items().iter().filter_map(|i| i.get_skipped()).flatten().collect::<Vec<_>>()
+          state.get_kernel_items().iter().filter_map(|i| i.get_skipped(db)).flatten().collect::<Vec<_>>()
         }
         .into_iter()
         .filter_map(|s| {
@@ -1410,12 +1416,12 @@ impl<'db> ReversedGraph<'db> {
           let state = &graph[*state].as_ref(&graph);
           match state.get_type() {
             // Do not add symbol from non-terminal shifts.
-            StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop => {}
+            StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop | StateType::ShiftFrom(_) => {}
             _ => {
               let sym = state.get_symbol();
               // The default symbol need be included.
-              if !sym.sym().is_default() {
-                symbols.insert(PrecedentDBTerm::from(sym, db, false));
+              if !matches!(sym.sym(), SymbolId::Undefined | SymbolId::Default) {
+                symbols.insert(PrecedentDBTerm::from(sym, &graph.db, false));
               }
             }
           }
@@ -1449,13 +1455,13 @@ impl<'db> ReversedGraph<'db> {
   }
 }
 
-pub struct GraphIterator<'reversed, 'db: 'reversed> {
-  internal: &'reversed ReversedGraph<'db>,
+pub struct GraphIterator<'reversed> {
+  internal: &'reversed ReversedGraph,
   cursor:   isize,
 }
 
-impl<'reversed, 'db: 'reversed> GraphIterator<'reversed, 'db> {
-  fn get_result(&self) -> (GraphStateRef<'reversed, 'db>, Option<&'reversed ScannerData>, Vec<GraphStateRef<'reversed, 'db>>) {
+impl<'reversed> GraphIterator<'reversed> {
+  fn get_result(&self) -> (GraphStateRef<'reversed>, Option<&'reversed ScannerData>, Vec<GraphStateRef<'reversed>>) {
     let state = self.internal.queue[self.cursor as usize];
     let reveresed = self.internal;
     let graph = &reveresed.graph;
@@ -1467,8 +1473,8 @@ impl<'reversed, 'db: 'reversed> GraphIterator<'reversed, 'db> {
   }
 }
 
-impl<'reversed, 'db: 'reversed> Iterator for GraphIterator<'reversed, 'db> {
-  type Item = (GraphStateRef<'reversed, 'db>, Option<&'reversed ScannerData>, Vec<GraphStateRef<'reversed, 'db>>);
+impl<'reversed: 'reversed> Iterator for GraphIterator<'reversed> {
+  type Item = (GraphStateRef<'reversed>, Option<&'reversed ScannerData>, Vec<GraphStateRef<'reversed>>);
 
   fn next(&mut self) -> Option<Self::Item> {
     self.cursor += 1;

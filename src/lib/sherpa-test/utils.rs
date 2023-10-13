@@ -76,7 +76,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
         ));
 
         parser.set_debugger(file_debugger(
-          db.to_owned(),
+          db.as_ref().clone(),
           PrintConfig {
             display_scanner_output: true,
             display_instruction: true,

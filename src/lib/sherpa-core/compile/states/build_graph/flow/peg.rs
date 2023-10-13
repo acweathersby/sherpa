@@ -6,11 +6,11 @@ use std::collections::BTreeSet;
 
 use GraphBuildState::*;
 
-pub(crate) fn handle_peg_complete_groups<'db>(
-  gb: &mut GraphBuilder<'db>,
-  groups: &mut GroupedFirsts<'db>,
+pub(crate) fn handle_peg_complete_groups(
+  gb: &mut GraphBuilder,
+  groups: &mut GroupedFirsts,
   prec_sym: PrecedentSymbol,
-  follow_pairs: Lookaheads<'db>,
+  follow_pairs: Lookaheads,
 ) -> SherpaResult<()> {
   Ok(())
 }

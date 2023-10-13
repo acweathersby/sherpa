@@ -30,8 +30,8 @@ pub(super) fn _create_reduce_reduce_error(_gb: &GraphBuilder, _end_items: ItemSe
 }
 
 /// Produces errors that result from the banning of LR states.
-pub(super) fn lr_disabled_error<'db>(gb: &GraphBuilder, lr_items: Items) -> SherpaResult<()> {
-  let db = gb.graph().get_db();
+pub(super) fn lr_disabled_error(gb: &GraphBuilder, lr_items: Items) -> SherpaResult<()> {
+  let db = gb.db();
 
   let s_store = db.string_store();
 
@@ -39,10 +39,10 @@ pub(super) fn lr_disabled_error<'db>(gb: &GraphBuilder, lr_items: Items) -> Sher
 
   if nonterms.len() == 1 {
     let first = nonterms.first().unwrap();
-    if first.rule_is_left_recursive(gb.get_mode()) {
+    if first.rule_is_left_recursive(gb.get_mode(), db) {
       return Err(SherpaError::SourceError {
-        loc:        first.rule().tok.clone(),
-        path:       first.rule().g_id.path.to_path(s_store),
+        loc:        first.rule(db).tok.clone(),
+        path:       first.rule(db).g_id.path.to_path(s_store),
         id:         (ForbiddenLR, 0, "left-recursion-forbidden").into(),
         msg:        "Could not construct parse graph without LR states, this rule is left recursive".into(),
         inline_msg: "".into(),
@@ -71,12 +71,9 @@ pub(super) fn lr_disabled_error<'db>(gb: &GraphBuilder, lr_items: Items) -> Sher
   });
 }
 
-pub(crate) fn conflicting_symbols_error<'db>(
-  gb: &GraphBuilder<'db>,
-  groups: OrderedMap<(u16, SymbolId), Lookaheads<'db>>,
-) -> SherpaError {
+pub(crate) fn conflicting_symbols_error(gb: &GraphBuilder, groups: OrderedMap<(u16, SymbolId), Lookaheads>) -> SherpaError {
   let graph = gb.graph();
-  let db = graph.get_db();
+  let d = graph.get_db();
   SherpaError::SourcesError {
     id:       (GraphConstruction, 0, "conflicting-symbols").into(),
     msg:      "Found ".to_string() + &groups.len().to_string() + " conflicting tokens. This grammar has an ambiguous scanner",
@@ -87,7 +84,7 @@ pub(crate) fn conflicting_symbols_error<'db>(
       .map(|(_sym, follows)| {
         follows
           .iter()
-          .map(|p| (p.kernel.rule().tok.clone(), p.kernel.rule().g_id.path.to_path(db.string_store()), Default::default()))
+          .map(|p| (p.kernel.rule(d).tok.clone(), p.kernel.rule(d).g_id.path.to_path(d.string_store()), Default::default()))
       })
       .flatten()
       .collect(),
@@ -95,19 +92,19 @@ pub(crate) fn conflicting_symbols_error<'db>(
 }
 
 pub(crate) fn peek_not_allowed_error<'db, T>(
-  gb: &GraphBuilder<'db>,
-  conflicting_groups: &[Vec<TransitionPair<'db>>],
+  gb: &GraphBuilder,
+  conflicting_groups: &[Vec<TransitionPair>],
   submessage: &str,
 ) -> SherpaResult<T> {
   Err(peek_not_allowed_error_internal(gb, conflicting_groups, submessage))
 }
 
-fn peek_not_allowed_error_internal<'db>(
-  gb: &GraphBuilder<'db>,
-  conflicting_groups: &[Vec<TransitionPair<'db>>],
+fn peek_not_allowed_error_internal(
+  gb: &GraphBuilder,
+  conflicting_groups: &[Vec<TransitionPair>],
   submessage: &str,
 ) -> SherpaError {
-  let db = gb.db;
+  let d = gb.db();
   SherpaError::SourcesError {
     id:       (ForbiddenPeek, 0, "disabled-peeking").into(),
     msg:      "The following items cannot be resolved within k=1 lookahead when peeking is disabled".into(),
@@ -119,15 +116,15 @@ fn peek_not_allowed_error_internal<'db>(
       .map(|p| {
         let i = p.kernel;
         (
-          if !i.is_complete() { i.rule().symbols[i.sym_index() as usize].loc.clone() } else { i.rule().tok.clone() },
-          i.rule().g_id.path.to_path(db.string_store()),
+          if !i.is_complete() { i.rule(d).symbols[i.sym_index() as usize].loc.clone() } else { i.rule(d).tok.clone() },
+          i.rule(d).g_id.path.to_path(d.string_store()),
           if i.is_complete() {
             "Reduce to [".to_string()
-              + &db.nonterm_friendly_name_string(i.nonterm_index())
+              + &d.nonterm_friendly_name_string(i.nonterm_index(d))
               + "]? | "
-              + &i.to_canonical()._debug_string_()
+              + &i.to_canonical()._debug_string_w_db_(d)
           } else {
-            "Continue shifting? | ".to_string() + &i.to_canonical()._debug_string_()
+            "Continue shifting? | ".to_string() + &i.to_canonical()._debug_string_w_db_(d)
           },
         )
       })

@@ -4,13 +4,13 @@ use std::collections::{BTreeSet, VecDeque};
 
 use GraphBuildState::*;
 
-pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db>) -> SherpaResult<bool> {
+pub(crate) fn handle_nonterminal_shift(gb: &mut GraphBuilder) -> SherpaResult<bool> {
   if gb.is_scanner() || !gb.config.ALLOW_LR || gb.current_state().get_type().currently_peeking() {
     return Ok(false);
   };
 
   let mode = gb.get_mode();
-  let db = gb.db;
+  let db = &gb.db_rc();
   let kernel_base: ItemSet = gb.current_state().get_kernel_items().iter().inscope_items();
 
   let indices = if gb.current_state_id().is_root() { kernel_base.iter().indices() } else { Default::default() };
@@ -19,12 +19,12 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
   let state_id = gb.current_state_id();
   let origin = Origin::Goto(state_id);
 
-  let mut nterm_items = kernel_base.iter().nonterm_items::<ItemSet>(mode);
+  let mut nterm_items = kernel_base.iter().nonterm_items::<ItemSet>(mode, db);
   nterm_items.extend(kernel_base.iter().filter(|i| !i.is_complete()).flat_map(|i| {
     let basis = i.to_origin(origin).to_origin_state(state_id);
     let closure = i
-      .closure_iter_align_with_lane_split(basis)
-      .filter(move |i| i.is_nonterm(mode) && !indices.contains(&i.index()))
+      .closure_iter_align_with_lane_split(basis, db)
+      .filter(move |i| i.is_nonterm(mode, db) && !indices.contains(&i.index()))
       .enumerate()
       .map(|(index, i)| (index > 0).then_some(i.as_goto_origin()).unwrap_or(i));
     closure
@@ -35,7 +35,7 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
   let parent_id = gb.current_state_id();
   let is_at_root = parent_id.is_root();
 
-  let out_items: ItemSet<'db> = if false && parent_id.is_root() {
+  let out_items: ItemSet = if false && parent_id.is_root() {
     out_items
   } else {
     out_items.into_iter().filter(|i| i.origin_state == parent_id && (!kernel_base.contains(i) || i.is_initial())).collect()
@@ -46,8 +46,8 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
   }
 
   // Get all the nonterminal symbols that are shifted in the kernel
-  let mut kernel_nterm_ids = kernel_base.iter().nonterm_items::<ItemSet>(mode).iter().nonterm_ids_at_index(mode);
-  kernel_nterm_ids.extend(kernel_base.iter().nonterm_items::<ItemSet>(mode).iter().rule_nonterm_ids());
+  let mut kernel_nterm_ids = kernel_base.iter().nonterm_items::<ItemSet>(mode, db).iter().nonterm_ids_at_index(mode, db);
+  kernel_nterm_ids.extend(kernel_base.iter().nonterm_items::<ItemSet>(mode, db).iter().rule_nonterm_ids(db));
 
   // NonTerms that appear in to the the right side of the specifier in
   // used_nonterm_items.
@@ -62,10 +62,10 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
 
   gb.current_state_mut().set_nonterm_items(&used_nterm_items);
 
-  let used_nterm_groups = hash_group_btreemap(used_nterm_items, |_, t| t.nonterm_index_at_sym(mode).unwrap_or_default());
+  let used_nterm_groups = hash_group_btreemap(used_nterm_items, |_, t| t.nonterm_index_at_sym(mode, db).unwrap_or_default());
 
   for (target_nonterm, items) in &used_nterm_groups {
-    let are_shifting_a_goal_nonterm = is_at_root && gb.graph().goal_items().iter().rule_nonterm_ids().contains(&target_nonterm);
+    let are_shifting_a_goal_nonterm = is_at_root && gb.graph().goal_items().iter().rule_nonterm_ids(db).contains(&target_nonterm);
     let contains_completed_kernel_items = items.iter().any(|i| kernel_base.contains(i) && i.is_penultimate());
     let contains_completed_items = items.iter().any(|i| i.is_penultimate());
 
@@ -73,14 +73,14 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
     let nterm_shift_type = StateType::NonTerminalShiftLoop;
 
     let should_include_oos = {
-      let contains_left_recursive_items = items.iter().any(|i| i.rule_is_left_recursive(mode));
+      let contains_left_recursive_items = items.iter().any(|i| i.rule_is_left_recursive(mode, db));
       kernel_nterm_ids.remove(&target_nonterm) && is_at_root && contains_left_recursive_items && !contains_completed_items
     };
 
     // if there is a path to complete a kernel item, then we need to inject oos
     // lookahead items to ensure that we are not ignoring local ambiguity
     if should_include_oos {
-      let local_nonterms = incremented_items.iter().nonterm_ids_at_index(mode);
+      let local_nonterms = incremented_items.iter().nonterm_ids_at_index(mode, db);
       // This state completes this NonTerminal, but there is also one or more items
       // that transitions on the goal non-terminal. The trick is determining
       // whether we should complete the non-terminal or allow further processing the
@@ -98,9 +98,9 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
         db.nonterm_follow_items(*target_nonterm)
           .filter_map(|i| i.increment())
           .filter(|i| {
-            i.nonterm_index_at_sym(mode) == Some(*target_nonterm)
-              && i.nonterm_index() != *target_nonterm
-              && !local_nonterms.contains(&i.nonterm_index())
+            i.nonterm_index_at_sym(mode, db) == Some(*target_nonterm)
+              && i.nonterm_index(db) != *target_nonterm
+              && !local_nonterms.contains(&i.nonterm_index(db))
               && !incremented_indices.contains(&i.index)
           })
           .map(|i| i.to_origin(Origin::GoalCompleteOOS).to_origin_state(parent_id)),
@@ -147,23 +147,23 @@ pub(crate) fn handle_nonterminal_shift<'a, 'db: 'a>(gb: &'a mut GraphBuilder<'db
   SherpaResult::Ok(true)
 }
 
-fn get_used_nonterms<'db>(
-  gb: &GraphBuilder<'db>,
-  out_items: BTreeSet<Item<'db>>,
-  nterm_items: BTreeSet<Item<'db>>,
-  kernel_base: &BTreeSet<Item<'db>>,
-) -> BTreeSet<Item<'db>> {
+fn get_used_nonterms(
+  gb: &GraphBuilder,
+  out_items: BTreeSet<Item>,
+  nterm_items: BTreeSet<Item>,
+  kernel_base: &BTreeSet<Item>,
+) -> BTreeSet<Item> {
+  let db = gb.db();
   let mut used_nterm_items = ItemSet::new();
-
   let mut seen = OrderedSet::new();
-  let mut queue = VecDeque::from_iter(out_items.iter().map(|i| i.nonterm_index()));
+  let mut queue = VecDeque::from_iter(out_items.iter().map(|i| i.nonterm_index(db)));
 
   while let Some(nterm) = queue.pop_front() {
     if seen.insert(nterm) {
-      for item in nterm_items.iter().filter(|i| i.nonterm_index_at_sym(gb.get_mode()).unwrap() == nterm) {
+      for item in nterm_items.iter().filter(|i| i.nonterm_index_at_sym(gb.get_mode(), db).unwrap() == nterm) {
         used_nterm_items.insert(*item);
         if !kernel_base.contains(item) || item.is_initial() {
-          queue.push_back(item.nonterm_index());
+          queue.push_back(item.nonterm_index(db));
         }
       }
     }

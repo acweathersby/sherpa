@@ -14,8 +14,8 @@ use crate::{types::*, utils::hash_group_btree_iter};
 
 use GraphBuildState::*;
 
-pub(crate) type TransitionGroup<'db> = (u16, Vec<TransitionPair<'db>>);
-pub(crate) type GroupedFirsts<'db> = OrderedMap<SymbolId, TransitionGroup<'db>>;
+pub(crate) type TransitionGroup = (u16, Vec<TransitionPair>);
+pub(crate) type GroupedFirsts = OrderedMap<SymbolId, TransitionGroup>;
 
 pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
   let mut groups = get_firsts(gb)?;
@@ -47,16 +47,17 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
   Ok(())
 }
 
-fn handle_cst_actions(gb: &mut GraphBuilder<'_>) {
+fn handle_cst_actions(gb: &mut GraphBuilder) {
   if gb.config.ALLOW_CST_NONTERM_SHIFT && gb.current_state().build_state() == GraphBuildState::Normal {
+    let d = &gb.db_rc();
     let state = gb.current_state();
     let items = state.get_kernel_items().clone();
     let mode = gb.get_mode();
-    for nonterm in items.iter().filter(|i| i.is_nonterm(mode)) {
+    for nonterm in items.iter().filter(|i| i.is_nonterm(mode, d)) {
       gb.create_state(
         Normal,
-        (nonterm.sym_id(), 0).into(),
-        StateType::CSTNodeAccept(nonterm.nonterm_index_at_sym(gb.get_mode()).unwrap()),
+        (nonterm.sym_id(d), 0).into(),
+        StateType::CSTNodeAccept(nonterm.nonterm_index_at_sym(gb.get_mode(), d).unwrap()),
         Some([nonterm.try_increment()].into_iter()),
       )
       .to_enqueued();
@@ -67,29 +68,26 @@ fn handle_cst_actions(gb: &mut GraphBuilder<'_>) {
 // Iterate over each item's closure and collect the terminal transition symbols
 // of each item. The item's are then catagorized by these nonterminal symbols.
 // Completed items are catagorized by the default symbol.
-fn get_firsts<'db>(gb: &mut GraphBuilder<'db>) -> SherpaResult<GroupedFirsts<'db>> {
+fn get_firsts(gb: &mut GraphBuilder) -> SherpaResult<GroupedFirsts> {
+  let db = gb.db();
   let state = gb.current_state();
   let iter = state.get_kernel_items().iter().flat_map(|k_i| {
     let basis = k_i.to_origin_state(gb.current_state_id());
     k_i
-      .closure_iter_align_with_lane_split(basis)
-      .term_items_iter(gb.is_scanner())
-      .map(|t_item| -> TransitionPair { (*k_i, t_item, gb.get_mode()).into() })
+      .closure_iter_align_with_lane_split(basis, db)
+      .term_items_iter(gb.is_scanner(), db)
+      .map(|t_item| -> TransitionPair { (*k_i, t_item, gb.get_mode(), db).into() })
   });
 
   let groups = hash_group_btree_iter::<Vec<_>, _, _, _, _>(iter, |_, first| first.sym);
 
-  let groups: OrderedMap<SymbolId, (u16, Vec<TransitionPair<'db>>)> =
+  let groups: OrderedMap<SymbolId, (u16, Vec<TransitionPair>)> =
     groups.into_iter().map(|(s, g)| (s, (g.iter().map(|f| f.prec).max().unwrap_or_default(), g))).collect();
 
   SherpaResult::Ok(groups)
 }
 
-fn handle_scanner_items<'db>(
-  max_precedence: u16,
-  gb: &GraphBuilder<'db>,
-  mut groups: GroupedFirsts<'db>,
-) -> SherpaResult<GroupedFirsts<'db>> {
+fn handle_scanner_items(max_precedence: u16, gb: &GraphBuilder, mut groups: GroupedFirsts) -> SherpaResult<GroupedFirsts> {
   if gb.is_scanner() {
     if max_precedence > CUSTOM_TOKEN_PRECEDENCE_BASELINE {
       groups = groups
@@ -116,7 +114,7 @@ fn handle_scanner_items<'db>(
   Ok(groups)
 }
 
-fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(gb: &mut GraphBuilder<'db>, groups: GroupedFirsts<'db>) -> SherpaResult<()> {
+fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(gb: &mut GraphBuilder, groups: GroupedFirsts) -> SherpaResult<()> {
   for (sym, group) in groups {
     let ____is_scan____ = gb.is_scanner();
     let prec_sym: PrecedentSymbol = (sym, group.0).into();
@@ -129,7 +127,7 @@ fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(gb: &mut GraphBuilder<'db>, gr
   Ok(())
 }
 
-fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedFirsts<'db>) -> SherpaResult<u16> {
+fn handle_completed_items(gb: &mut GraphBuilder, groups: &mut GroupedFirsts) -> SherpaResult<u16> {
   let ____is_scan____ = gb.is_scanner();
   let mut max_precedence = 0;
 
@@ -141,7 +139,7 @@ fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedF
     if !lookahead_pairs.is_empty() {
       // Create reduce states for follow items that have not already been covered.
       let mut completed_groups: OrderedMap<SymbolId, Vec<TransitionPair>> =
-        hash_group_btree_iter(lookahead_pairs.iter(), |_, fp| match fp.next.get_type() {
+        hash_group_btree_iter(lookahead_pairs.iter(), |_, fp| match fp.next.get_type(gb.db()) {
           //ItemType::Completed(_) => {
           //  unreachable!("Should be handled outside this path")
           //}
@@ -180,11 +178,11 @@ fn handle_completed_items<'db>(gb: &mut GraphBuilder<'db>, groups: &mut GroupedF
   SherpaResult::Ok(max_precedence)
 }
 
-pub(crate) fn handle_completed_groups<'db>(
-  gb: &mut GraphBuilder<'db>,
-  groups: &mut GroupedFirsts<'db>,
+pub(crate) fn handle_completed_groups(
+  gb: &mut GraphBuilder,
+  groups: &mut GroupedFirsts,
   sym: SymbolId,
-  follow_pairs: Lookaheads<'db>,
+  follow_pairs: Lookaheads,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
   let prec_sym: PrecedentSymbol = (sym, follow_pairs.iter().max_precedence()).into();

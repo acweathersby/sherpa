@@ -20,8 +20,8 @@ use sherpa_rust_runtime::types::BytecodeParserDB;
 pub fn build_rust(mut j: Journal, db: &SherpaDatabase) -> SherpaResult<String> {
   j.set_active_report("Rust AST Compile", sherpa_core::ReportType::Any);
 
-  let store = AScriptStore::new(j.transfer(), db.get_db())?;
-  let u = create_rust_writer_utils(&store, db.get_db());
+  let store = AScriptStore::new(j.transfer(), db.get_internal())?;
+  let u = create_rust_writer_utils(&store, db.get_internal());
   let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
 
   let writer = write_rust_ast2(w)?;

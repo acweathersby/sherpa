@@ -40,7 +40,7 @@ pub fn build_ir_from_graph(graph: &SherpaGraph) -> SherpaResult<(ParserClassific
   }
 
   // Build parser_states
-  for state in parsers {
+  for state in parsers.iter() {
     debug_assert!(state.graph.is_some());
 
     classification |= state.classification;
@@ -51,11 +51,32 @@ pub fn build_ir_from_graph(graph: &SherpaGraph) -> SherpaResult<(ParserClassific
   }
 
   // Build scanner_states
-  for state in scanners {
+  for state in scanners.iter() {
     debug_assert!(state.graph.is_some());
 
     if let Some(graph) = state.graph.as_ref() {
       states.extend(build_ir(&mut j, graph, state.name)?.into_iter().map(|s| (s.hash_name, s)));
+    }
+  }
+
+  // Build custom states
+  for i in 0..db.nonterms_len() {
+    let nonterm_key = DBNonTermKey::from(i);
+    if let Some(custom_state) = db.custom_state(nonterm_key) {
+      let name = db.nonterm_guid_name(nonterm_key);
+
+      let state = ParseState {
+        hash_name:     name,
+        name:          name,
+        comment:       "Custom State".into(),
+        code:          custom_state.tok.to_string(),
+        ast:           Some(Box::new(custom_state.clone())),
+        compile_error: None,
+        scanner:       None,
+        root:          true,
+        precedence:    0,
+      };
+      states.insert(name, Box::new(state));
     }
   }
 
@@ -67,14 +88,14 @@ pub fn build_ir_from_graph(graph: &SherpaGraph) -> SherpaResult<(ParserClassific
   SherpaResult::Ok((classification, states))
 }
 
-pub(crate) fn build_entry_ir<'db>(
+pub(crate) fn build_entry_ir(
   DBEntryPoint {
     nonterm_name: nterm_name,
     nonterm_entry_name: nterm_entry_name,
     nonterm_exit_name: nterm_exit_name,
     ..
   }: &DBEntryPoint,
-  db: &'db ParserDatabase,
+  db: &ParserDatabase,
 ) -> SherpaResult<Array<Box<ParseState>>> {
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
 
@@ -96,11 +117,7 @@ pub(crate) fn build_entry_ir<'db>(
   SherpaResult::Ok(Array::from_iter([Box::new(entry_state), Box::new(exit_state)]))
 }
 
-pub(crate) fn build_ir<'db>(
-  j: &mut Journal,
-  graph: &ReversedGraph<'db>,
-  entry_name: IString,
-) -> SherpaResult<Array<Box<ParseState>>> {
+pub(crate) fn build_ir(j: &mut Journal, graph: &ReversedGraph, entry_name: IString) -> SherpaResult<Array<Box<ParseState>>> {
   debug_assert!(entry_name.as_u64() != 0);
 
   let mut output = OrderedMap::<StateId, Box<ParseState>>::new();
@@ -135,10 +152,10 @@ enum SType {
 
 const GRAPH_STATE_NONE: Option<GraphStateRef> = None;
 
-fn convert_nonterm_shift_state_to_ir<'graph, 'db: 'graph>(
+fn convert_nonterm_shift_state_to_ir<'graph: 'graph>(
   _j: &mut Journal,
-  state: GotoGraphStateRef<'graph, 'db>,
-  successors: &Vec<GraphStateRef<'graph, 'db>>,
+  state: GotoGraphStateRef<'graph>,
+  successors: &Vec<GraphStateRef<'graph>>,
 ) -> SherpaResult<(StateId, Box<ParseState>)> {
   let db = state.graph.get_db();
 
@@ -186,11 +203,11 @@ fn convert_nonterm_shift_state_to_ir<'graph, 'db: 'graph>(
   SherpaResult::Ok((state.get_id(), goto))
 }
 
-fn convert_state_to_ir<'graph, 'db: 'graph>(
+fn convert_state_to_ir<'graph: 'graph>(
   _j: &mut Journal,
-  state: GraphStateRef<'graph, 'db>,
+  state: GraphStateRef<'graph>,
   scanner_data: Option<&ScannerData>,
-  successors: &Vec<GraphStateRef<'graph, 'db>>,
+  successors: &Vec<GraphStateRef<'graph>>,
   entry_name: IString,
   goto_state_id: Option<IString>,
 ) -> SherpaResult<Vec<(StateId, Box<ParseState>)>> {
@@ -241,7 +258,7 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
 
       add_tok_expr(state, successors, &mut w);
 
-      let mut classes = classify_successors(successors, db);
+      let mut classes = classify_successors(successors);
 
       add_match_expr(&mut w, state, scanner_data, &mut classes, &gotos);
 
@@ -326,9 +343,9 @@ fn convert_state_to_ir<'graph, 'db: 'graph>(
   }
 }
 
-fn add_tok_expr<'graph, 'db: 'graph>(
-  state: GraphStateRef<'graph, 'db>,
-  successors: &Vec<GraphStateRef<'graph, 'db>>,
+fn add_tok_expr<'graph: 'graph>(
+  state: GraphStateRef<'graph>,
+  successors: &Vec<GraphStateRef<'graph>>,
   w: &mut CodeWriter<Vec<u8>>,
 ) {
   let db = state.graph.get_db();
@@ -343,10 +360,9 @@ fn add_tok_expr<'graph, 'db: 'graph>(
   }
 }
 
-fn classify_successors<'graph, 'db: 'graph>(
-  successors: &Vec<GraphStateRef<'graph, 'db>>,
-  _db: &'db ParserDatabase,
-) -> Queue<((u32, MatchInputType), Vec<GraphStateRef<'graph, 'db>>)> {
+fn classify_successors<'graph: 'graph>(
+  successors: &Vec<GraphStateRef<'graph>>,
+) -> Queue<((u32, MatchInputType), Vec<GraphStateRef<'graph>>)> {
   Queue::from_iter(
     hash_group_btree_iter(successors.iter().filter(|i| !matches!(i.get_type(), StateType::ShiftFrom(_))), |_, s| {
       if matches!(s.get_type(), StateType::CSTNodeAccept(_)) {
@@ -373,11 +389,11 @@ fn classify_successors<'graph, 'db: 'graph>(
   )
 }
 
-fn add_match_expr<'graph, 'db: 'graph>(
+fn add_match_expr<'graph: 'graph>(
   mut w: &mut CodeWriter<Vec<u8>>,
-  state: GraphStateRef<'graph, 'db>,
+  state: GraphStateRef<'graph>,
   scanner_data: Option<&ScannerData>,
-  branches: &mut Queue<((u32, MatchInputType), Vec<GraphStateRef<'graph, 'db>>)>,
+  branches: &mut Queue<((u32, MatchInputType), Vec<GraphStateRef<'graph>>)>,
   goto_state_id: &OrderedMap<StateId, IString>,
 ) {
   let db = state.graph.get_db();
@@ -441,9 +457,9 @@ fn add_match_expr<'graph, 'db: 'graph>(
   }
 }
 
-fn build_body<'graph, 'db: 'graph>(
-  state: GraphStateRef<'graph, 'db>,
-  successor: GraphStateRef<'graph, 'db>,
+fn build_body<'graph: 'graph>(
+  state: GraphStateRef<'graph>,
+  successor: GraphStateRef<'graph>,
   goto_state_id: &OrderedMap<StateId, IString>,
 ) -> Vec<String> {
   let graph = state.graph;
@@ -545,9 +561,9 @@ fn create_rule_reduction(rule_id: DBRuleKey, db: &ParserDatabase) -> String {
   w.to_string()
 }
 
-pub(super) fn create_ir_state_name<'graph, 'db: 'graph>(
-  origin_state: Option<impl GraphStateReference<'graph, 'db>>,
-  target_state: &'graph impl GraphStateReference<'graph, 'db>,
+pub(super) fn create_ir_state_name<'graph: 'graph>(
+  origin_state: Option<impl GraphStateReference<'graph>>,
+  target_state: &'graph impl GraphStateReference<'graph>,
 ) -> String {
   let graph = target_state.graph();
   if origin_state.is_some_and(|s| s.get_id() == target_state.get_id()) {
@@ -561,9 +577,9 @@ pub(super) fn create_ir_state_name<'graph, 'db: 'graph>(
   }
 }
 
-pub(super) fn create_ir_state<'graph, 'db: 'graph>(
+pub(super) fn create_ir_state<'graph: 'graph>(
   w: CodeWriter<Vec<u8>>,
-  state: &'graph impl GraphStateReference<'graph, 'db>,
+  state: &'graph impl GraphStateReference<'graph>,
   scanner: Option<ScannerData>,
 ) -> SherpaResult<ParseState> {
   let ir_state = ParseState {

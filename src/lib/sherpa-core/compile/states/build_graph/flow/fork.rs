@@ -13,11 +13,11 @@ use std::collections::{BTreeSet, HashSet};
 
 use GraphBuildState::*;
 
-pub(crate) fn create_fork<'graph_iter, 'db: 'graph_iter, 'follow, I: Iterator<Item = Item<'db>>>(
-  gb: &'graph_iter mut GraphBuilder<'db>,
+pub(crate) fn create_fork<'graph_iter, 'follow, I: Iterator<Item = Item>>(
+  gb: &'graph_iter mut GraphBuilder,
   sym: PrecedentSymbol,
   items: I,
-) -> SherpaResult<StateBuilder<'graph_iter, 'db>> {
+) -> SherpaResult<StateBuilder<'graph_iter>> {
   debug_assert!(
     gb.config.ALLOW_PEEKING && gb.config.max_k > 1,
     "Peek states should not be created when peeking is not allowed or k=1"
@@ -28,7 +28,7 @@ pub(crate) fn create_fork<'graph_iter, 'db: 'graph_iter, 'follow, I: Iterator<It
   Ok(gb.create_state(Normal, sym, StateType::ForkInitiator, Some(items)))
 }
 
-pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut GraphBuilder<'db>) -> bool {
+pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut GraphBuilder) -> bool {
   if matches!(gb.current_state().get_type(), StateType::ForkInitiator) {
     for kernel_item in gb.current_state().get_kernel_items().clone() {
       let mut state =
@@ -41,7 +41,7 @@ pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut GraphBuilder<'db>) -> bool {
   }
 }
 
-pub(crate) fn convert_peek_root_state_to_fork(gb: &mut GraphBuilder<'_>) -> Result<(), SherpaError> {
+pub(crate) fn convert_peek_root_state_to_fork(gb: &mut GraphBuilder) -> Result<(), SherpaError> {
   gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
   let mut state_id = gb.current_state_id();
   Ok(loop {

@@ -12,18 +12,18 @@ use super::build_states::StateConstructionError;
 pub(crate) fn build<'follow, 'db: 'follow>(
   name: IString,
   graph_type: GraphType,
-  kernel_items: ItemSet<'db>,
-  db: &'db ParserDatabase,
+  kernel_items: ItemSet,
+  db: &SharedParserDatabase,
   config: ParserConfig,
-) -> Result<(ParserClassification, GraphHost<'db>), StateConstructionError<()>> {
-  let mut gb = GraphBuilder::new(db, name, graph_type, config, kernel_items);
+) -> Result<(ParserClassification, GraphHost), StateConstructionError<()>> {
+  let mut gb = GraphBuilder::new(db.clone(), name, graph_type, config, kernel_items);
 
   gb.run();
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
   if !gb.is_scanner() {
     crate::test::utils::write_debug_file(
-      db,
+      &db,
       "parse_graph.tmp",
       "----------------------------------------------\n".to_string()
         + &gb.get_classification().get_type()
@@ -33,7 +33,7 @@ pub(crate) fn build<'follow, 'db: 'follow>(
     )
     .unwrap();
   } else {
-    crate::test::utils::write_debug_file(db, "scanner_graph.tmp", gb.graph()._debug_string_(), true).unwrap();
+    crate::test::utils::write_debug_file(&db, "scanner_graph.tmp", gb.graph()._debug_string_(), true).unwrap();
   }
 
   let (class, graph, errors, have_non_deterministic_peek) = gb.into_inner();

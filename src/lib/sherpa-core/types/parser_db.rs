@@ -2,8 +2,10 @@ use super::*;
 use crate::{compile::states::build_graph::graph::GraphType, parser, CachedString, SherpaResult};
 use std::collections::VecDeque;
 
-/// Data used for the compilation of parse states. contains
-/// additional metadata for compilation of LLVM and Bytecode
+pub type SharedParserDatabase = std::sync::Arc<ParserDatabase>;
+
+/// The internal data type used for the compilation and analysis of grammars and
+/// parsers. contains additional metadata for compilation of LLVM and Bytecode
 /// parsers.
 #[derive(Clone, Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
@@ -112,10 +114,10 @@ impl ParserDatabase {
       }
       out
     }) {
-      let is_scanner = matches!(self.nonterm_sym(item.nonterm_index()), SymbolId::DBNonTerminalToken { .. });
+      let is_scanner = matches!(self.nonterm_sym(item.nonterm_index(db)), SymbolId::DBNonTerminalToken { .. });
       let mode = if is_scanner { GraphType::Scanner } else { GraphType::Parser };
 
-      match item.get_type() {
+      match item.get_type(db) {
         ItemType::TokenNonTerminal(nonterm, _) if is_scanner => follow_items_base[nonterm.0 as usize].push(item.index),
         ItemType::NonTerminal(nonterm) => follow_items_base[nonterm.0 as usize].push(item.index),
         _ => {}
@@ -124,12 +126,12 @@ impl ParserDatabase {
       //-------------------------------------------------------------------------------------------
       // Use completed items to file out the reduce types table.
       if item.is_complete() {
-        reduce_types[item.rule_id().0 as usize] = if item.rule_is_left_recursive(mode) {
+        reduce_types[item.rule_id().0 as usize] = if item.rule_is_left_recursive(mode, db) {
           ReductionType::LeftRecursive
-        } else if item.rule().ast.as_ref().is_some_and(|a| matches!(a, ASTToken::Defined(..))) {
+        } else if item.rule(db).ast.as_ref().is_some_and(|a| matches!(a, ASTToken::Defined(..))) {
           ReductionType::SemanticAction
         } else if item.sym_len() == 1 {
-          match item.to_initial().is_term(mode) {
+          match item.to_initial().is_term(mode, db) {
             true => ReductionType::SingleTerminal,
             false => ReductionType::SingleNonTerminal,
           }
@@ -140,8 +142,8 @@ impl ParserDatabase {
 
       //-------------------------------------------------------------------------------------------
       // Calculate closures for uncompleted items.
-      fn create_closure<'db>(value: Item, db: &'db ParserDatabase, mode: GraphType) -> Items<'db> {
-        if let Some(nterm) = value.nonterm_index_at_sym(mode) {
+      fn create_closure(value: Item, db: &ParserDatabase, mode: GraphType) -> Items {
+        if let Some(nterm) = value.nonterm_index_at_sym(mode, db) {
           if let Ok(rules) = db.nonterm_rules(nterm) {
             rules.iter().map(|r| Item::from((*r, db))).collect()
           } else {
@@ -152,14 +154,14 @@ impl ParserDatabase {
         }
       }
 
-      let root_nonterm = item.nonterm_index();
+      let root_nonterm = item.nonterm_index(db);
       let mut recursion_encountered = false;
       let mut closure = ItemSet::from_iter([]);
       let mut queue = VecDeque::from_iter([item]);
 
       while let Some(kernel_item) = queue.pop_front() {
         if closure.insert(kernel_item) {
-          match kernel_item.get_type() {
+          match kernel_item.get_type(db) {
             ItemType::TokenNonTerminal(nonterm, _) => {
               if is_scanner {
                 for item in create_closure(kernel_item, &self, mode) {
@@ -214,7 +216,7 @@ impl ParserDatabase {
             follow_items_final[base_id].push(*static_item);
             let item = Item::from((*static_item, db));
             if item.is_penultimate() {
-              nonterm_ids.push_back(item.nonterm_index().0 as usize)
+              nonterm_ids.push_back(item.nonterm_index(db).0 as usize)
             }
           }
         }
@@ -407,12 +409,12 @@ impl ParserDatabase {
   }
 
   /// Returns a reference to the [IStringStore]
-  pub fn string_store<'db>(&'db self) -> &'db IStringStore {
+  pub fn string_store(&self) -> &IStringStore {
     &self.string_store
   }
 
   /// Returns a reference to the [IStringStore]
-  pub fn get_reduce_type<'db>(&'db self, rule_id: DBRuleKey) -> ReductionType {
+  pub fn get_reduce_type(&self, rule_id: DBRuleKey) -> ReductionType {
     self.reduction_types[rule_id.0 as usize]
   }
 
@@ -428,7 +430,7 @@ impl ParserDatabase {
   /// Returns the closure of the item.
   /// > note: The closure does not include the item used as the seed for the
   /// > closure.
-  pub fn get_closure<'db>(&'db self, item: &Item<'db>) -> impl ItemContainerIter {
+  pub fn get_closure<'db>(&'db self, item: &Item) -> impl ItemContainerIter + 'db {
     let item = *item;
     self.item_closures[item.rule_id().0 as usize][item.sym_index() as usize].iter().map(move |s| {
       let item = Item::from((*s, self)).as_from(item);
@@ -438,7 +440,7 @@ impl ParserDatabase {
   }
 
   /// Returns all regular (non token) nonterminals.
-  pub fn parser_nonterms<'db>(&'db self) -> Array<DBNonTermKey> {
+  pub fn parser_nonterms(&self) -> Array<DBNonTermKey> {
     self
       .nonterms()
       .iter()
@@ -454,7 +456,7 @@ impl ParserDatabase {
   /// [DBNonTermKey] `A`, or in other words this returns the list of items that
   /// would shift over the [DBNonTermKey] `A`. If an item is `B = ...•A`, then
   /// this also returns items that are `_ = ...•Ba`
-  pub fn nonterm_follow_items<'db>(&'db self, nonterm: DBNonTermKey) -> impl Iterator<Item = Item<'db>> + Clone {
+  pub fn nonterm_follow_items<'db>(&'db self, nonterm: DBNonTermKey) -> impl Iterator<Item = Item> + Clone + 'db {
     self.follow_items[nonterm.0 as usize].iter().map(move |i| Item::from((*i, self)))
   }
 }

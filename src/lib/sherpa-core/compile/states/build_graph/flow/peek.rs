@@ -22,8 +22,8 @@ const INITIAL_PEEK_K: u32 = 2;
 /// Peek needs --- collection nonterminal and terminal symbols to complete, and
 /// a set of follow items for each kernel item
 
-pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair<'db>> + Clone>(
-  gb: &mut GraphBuilder<'db>,
+pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair> + Clone>(
+  gb: &mut GraphBuilder,
   sym: PrecedentSymbol,
   incomplete_items: Pairs,
   completed_pairs: Option<Pairs>,
@@ -41,7 +41,7 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
   let mut state = gb.create_state::<DefaultIter>(Normal, sym, StateType::Peek(INITIAL_PEEK_K), None);
 
   if let Some(completed_pairs) = completed_pairs {
-    let pairs: BTreeSet<TransitionPair<'_>> = completed_pairs.into_iter().cloned().collect::<BTreeSet<_>>();
+    let pairs: BTreeSet<TransitionPair> = completed_pairs.into_iter().cloned().collect::<BTreeSet<_>>();
 
     // All items here complete the same nonterminal, so we group them all into one
     // goal index.
@@ -86,8 +86,8 @@ pub(crate) fn create_peek<'a, 'db: 'a, 'follow, Pairs: Iterator<Item = &'a Trans
   Ok(state.to_state())
 }
 
-fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>>>(
-  gb: &mut GraphBuilder<'db>,
+fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair>>(
+  gb: &mut GraphBuilder,
   mut resolved: T,
   sym: PrecedentSymbol,
 ) -> SherpaResult<()> {
@@ -102,9 +102,9 @@ fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>>>(
 }
 
 pub(crate) fn get_kernel_items_from_peek_origin<'graph, 'db: 'graph>(
-  gb: &'graph GraphBuilder<'db>,
+  gb: &'graph GraphBuilder,
   peek_origin: Origin,
-) -> (u32, &'graph PeekGroup<'db>) {
+) -> (u32, &'graph PeekGroup) {
   let Origin::Peek(peek_index) = peek_origin else {
     unreachable!("Invalid peek origin");
   };
@@ -113,9 +113,9 @@ pub(crate) fn get_kernel_items_from_peek_origin<'graph, 'db: 'graph>(
 }
 
 pub(crate) fn get_kernel_items_from_peek_item<'graph, 'db: 'graph>(
-  gb: &'graph GraphBuilder<'db>,
-  peek_item: &Item<'db>,
-) -> &'graph PeekGroup<'db> {
+  gb: &'graph GraphBuilder,
+  peek_item: &Item,
+) -> &'graph PeekGroup {
   let Origin::Peek(peek_index) = peek_item.origin else {
     unreachable!("Invalid peek origin");
   };
@@ -130,10 +130,10 @@ enum PeekOriginType {
 }
 
 pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
-  gb: &'graph mut GraphBuilder<'db>,
-  groups: &mut GroupedFirsts<'db>,
+  gb: &'graph mut GraphBuilder,
+  groups: &mut GroupedFirsts,
   prec_sym: PrecedentSymbol,
-  follows: Lookaheads<'db>,
+  follows: Lookaheads,
   level: u32,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
@@ -246,9 +246,9 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
 }
 
 pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
-  gb: &mut GraphBuilder<'db>,
+  gb: &mut GraphBuilder,
   prec_sym: PrecedentSymbol,
-  (prec, group): TransitionGroup<'db>,
+  (prec, group): TransitionGroup,
   level: u32,
 ) -> SherpaResult<()> {
   if peek_items_are_from_same_origin(gb, &group) {
@@ -260,7 +260,7 @@ pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
   SherpaResult::Ok(())
 }
 
-fn peek_items_are_from_oos<'db>(gb: &GraphBuilder<'db>, follows: &Lookaheads<'db>) -> bool {
+fn peek_items_are_from_oos(gb: &GraphBuilder, follows: &Lookaheads) -> bool {
   follows
     .iter()
     .to_kernel()
@@ -271,6 +271,6 @@ fn peek_items_are_from_oos<'db>(gb: &GraphBuilder<'db>, follows: &Lookaheads<'db
     .all(|group| group.is_some_and(|i| i.is_oos))
 }
 
-fn peek_items_are_from_same_origin<'db>(gb: &GraphBuilder<'db>, follows: &Lookaheads<'db>) -> bool {
+fn peek_items_are_from_same_origin(gb: &GraphBuilder, follows: &Lookaheads) -> bool {
   follows.iter().to_kernel().map(|i| i.origin).collect::<Set<_>>().len() == 1
 }

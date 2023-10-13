@@ -1,5 +1,5 @@
 use super::super::types::*;
-use crate::compile::states::build_graph::graph::*;
+use crate::{compile::states::build_graph::graph::*, SherpaDatabase};
 use std::hash::Hash;
 
 pub enum ItemType {
@@ -15,14 +15,14 @@ pub struct ItemHeritage {
   from:  ItemIndex,
 }
 
-impl<'db> From<Item<'db>> for ItemHeritage {
-  fn from(value: Item<'db>) -> Self {
+impl From<Item> for ItemHeritage {
+  fn from(value: Item) -> Self {
     Self { from: value.from, index: value.index }
   }
 }
 
-impl<'db> From<&Item<'db>> for ItemHeritage {
-  fn from(value: &Item<'db>) -> Self {
+impl From<&Item> for ItemHeritage {
+  fn from(value: &Item) -> Self {
     Self { from: value.from, index: value.index }
   }
 }
@@ -57,7 +57,7 @@ impl ItemIndex {
   }
 }
 
-impl<'db> From<(u32, u32)> for ItemIndex {
+impl From<(u32, u32)> for ItemIndex {
   #[inline(always)]
   fn from((rule_id, sym_id): (u32, u32)) -> Self {
     debug_assert!(rule_id < (1 << (32 - ItemIndex::RULE_SHIFT)), "Rule index is too high to store in this form");
@@ -66,7 +66,7 @@ impl<'db> From<(u32, u32)> for ItemIndex {
   }
 }
 
-impl<'db> From<(DBRuleKey, u16)> for ItemIndex {
+impl From<(DBRuleKey, u16)> for ItemIndex {
   #[inline(always)]
   fn from((rule_id, sym_id): (DBRuleKey, u16)) -> Self {
     let val: (u32, u32) = (rule_id.into(), sym_id as u32);
@@ -74,9 +74,9 @@ impl<'db> From<(DBRuleKey, u16)> for ItemIndex {
   }
 }
 
-impl<'db> From<Item<'db>> for ItemIndex {
+impl From<Item> for ItemIndex {
   #[inline(always)]
-  fn from(i: Item<'db>) -> Self {
+  fn from(i: Item) -> Self {
     i.index
   }
 }
@@ -110,8 +110,7 @@ pub struct ItemLane {
 }
 
 #[derive(Clone, Copy)]
-pub struct Item<'db> {
-  db: &'db ParserDatabase,
+pub struct Item {
   /// The non-terminal or token that the item directly or
   /// indirectly resolves to
   pub origin: Origin,
@@ -124,13 +123,13 @@ pub struct Item<'db> {
   pub from_goto_origin: bool,
 }
 
-impl<'db> Hash for Item<'db> {
+impl Hash for Item {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.index, self.from, self.origin, self.origin_state, self.token_precedence(), self.symbol_precedence()).hash(state)
+    (self.index, self.from, self.origin, self.origin_state).hash(state)
   }
 }
 
-impl<'a> PartialEq for Item<'a> {
+impl PartialEq for Item {
   fn eq(&self, other: &Self) -> bool {
     let a = (self.index, self.origin, self.from, self.origin_state);
     let b = (other.index, other.origin, other.from, other.origin_state);
@@ -138,9 +137,9 @@ impl<'a> PartialEq for Item<'a> {
   }
 }
 
-impl<'a> Eq for Item<'a> {}
+impl Eq for Item {}
 
-impl<'a> PartialOrd for Item<'a> {
+impl PartialOrd for Item {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     let a = (self.origin, self.index, self.from, self.origin_state);
     let b = (other.origin, other.index, other.from, other.origin_state);
@@ -148,17 +147,16 @@ impl<'a> PartialOrd for Item<'a> {
   }
 }
 
-impl<'a> Ord for Item<'a> {
+impl Ord for Item {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
     self.partial_cmp(other).unwrap()
   }
 }
 
-impl<'db> From<(ItemIndex, &'db ParserDatabase)> for Item<'db> {
+impl From<(ItemIndex, &ParserDatabase)> for Item {
   /// Creates an item from an [ItemIndex] and its corresponding [ParserDatabase]
-  fn from((index, db): (ItemIndex, &'db ParserDatabase)) -> Self {
+  fn from((index, db): (ItemIndex, &ParserDatabase)) -> Self {
     let mut item = Self {
-      db,
       origin: Default::default(),
       origin_state: StateId::default(),
       index,
@@ -167,21 +165,28 @@ impl<'db> From<(ItemIndex, &'db ParserDatabase)> for Item<'db> {
       goto_distance: 0,
       from_goto_origin: false,
     };
-    item.len = item.rule().symbols.len() as u16;
+    item.len = item.rule(db).symbols.len() as u16;
     item
   }
 }
 
-impl<'db> From<(DBRuleKey, &'db ParserDatabase)> for Item<'db> {
+impl From<(DBRuleKey, &ParserDatabase)> for Item {
   /// Creates an initial item from a [DBRuleKey] and its [ParserDatabase]
-  fn from((rule_id, db): (DBRuleKey, &'db ParserDatabase)) -> Self {
+  fn from((rule_id, db): (DBRuleKey, &ParserDatabase)) -> Self {
     let index: ItemIndex = (rule_id, 0).into();
     (index, db).into()
   }
 }
 
+impl From<(DBRuleKey, &SherpaDatabase)> for Item {
+  /// Creates an initial item from a [DBRuleKey] and its [ParserDatabase]
+  fn from((rule_id, db): (DBRuleKey, &SherpaDatabase)) -> Self {
+    let index: ItemIndex = (rule_id, 0).into();
+    (index, db.get_internal()).into()
+  }
+}
 #[cfg(debug_assertions)]
-impl<'db> std::fmt::Debug for Item<'db> {
+impl std::fmt::Debug for Item {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut s = f.debug_struct("ItemRef");
     s.field("val", &self._debug_string_());
@@ -190,7 +195,7 @@ impl<'db> std::fmt::Debug for Item<'db> {
 }
 
 #[allow(unused)]
-impl<'db> Item<'db> {
+impl Item {
   /// If true, `self` is an item that was derived from `other`, or
   /// the `from` ancestor of `other`.
   pub fn is_successor_of(&self, other: &Self) -> bool {
@@ -236,9 +241,9 @@ impl<'db> Item<'db> {
   }
 
   /// Return `true` if the item is from a left recursive rule.
-  pub fn rule_is_left_recursive(&self, mode: GraphType) -> bool {
-    let p = self.nonterm_index();
-    p == self.to_initial().nonterm_index_at_sym(mode).unwrap_or_default()
+  pub fn rule_is_left_recursive(&self, mode: GraphType, db: &ParserDatabase) -> bool {
+    let p = self.nonterm_index(db);
+    p == self.to_initial().nonterm_index_at_sym(mode, db).unwrap_or_default()
   }
 
   #[inline]
@@ -249,19 +254,19 @@ impl<'db> Item<'db> {
 
   #[inline]
   /// Returns the reduce type of the item.
-  pub fn reduction_type(&self) -> ReductionType {
-    self.db.get_reduce_type(self.rule_id())
+  pub fn reduction_type(&self, db: &ParserDatabase) -> ReductionType {
+    db.get_reduce_type(self.rule_id())
   }
 
   #[inline]
   /// Returns the [Rule] this item was derived from.
-  pub fn db_rule(&self) -> &'db DBRule {
-    &self.db.db_rule(self.index.get_parts().0)
+  pub fn db_rule<'db>(&self, db: &'db ParserDatabase) -> &'db DBRule {
+    &db.db_rule(self.index.get_parts().0)
   }
 
   #[inline]
-  pub fn rule(&self) -> &'db Rule {
-    &self.db_rule().rule
+  pub fn rule<'db>(&self, db: &'db ParserDatabase) -> &'db Rule {
+    &self.db_rule(db).rule
   }
 
   #[inline]
@@ -283,20 +288,20 @@ impl<'db> Item<'db> {
   /// Returns true if the rule of this item has some form of direct
   /// or indirect recursion.
   #[inline]
-  pub fn rule_is_recursive(&self) -> bool {
-    match self.db.nonterm_recursion_type(self.nonterm_index()) {
+  pub fn rule_is_recursive(&self, db: &ParserDatabase) -> bool {
+    match db.nonterm_recursion_type(self.nonterm_index(db)) {
       RecursionType::None => false,
       _ => true,
     }
   }
 
   /// Returns the type of item based on the active symbol.
-  pub fn get_type(&self) -> ItemType {
+  pub fn get_type(&self, db: &ParserDatabase) -> ItemType {
     use ItemType::*;
     if self.is_complete() {
-      Completed(self.nonterm_index())
+      Completed(self.nonterm_index(db))
     } else {
-      match self.sym_id() {
+      match self.sym_id(db) {
         SymbolId::DBNonTerminal { key: index } => NonTerminal(index),
         sym_id @ SymbolId::DBNonTerminalToken { nonterm_key: index, .. } => TokenNonTerminal(index, sym_id),
         sym => Terminal(sym),
@@ -307,11 +312,11 @@ impl<'db> Item<'db> {
   #[inline]
   /// Returns a list of terminal symbols that are skipped at this item's
   /// position.
-  pub fn get_skipped(&self) -> Option<&'db Vec<SymbolId>> {
+  pub fn get_skipped<'db>(&self, db: &'db ParserDatabase) -> Option<&'db Vec<SymbolId>> {
     if self.is_complete() {
       None
     } else {
-      let rule = self.rule();
+      let rule = self.rule(db);
       Some(&rule.skipped)
     }
   }
@@ -326,28 +331,28 @@ impl<'db> Item<'db> {
   #[inline]
   /// Returns the symbols at the current position of the item, or None if the
   /// item is in the final position
-  pub fn sym_id(&self) -> SymbolId {
+  pub fn sym_id(&self, db: &ParserDatabase) -> SymbolId {
     if self.is_complete() {
       SymbolId::Default
     } else {
-      self.rule().symbols[self.sym_index() as usize].id
+      self.rule(db).symbols[self.sym_index() as usize].id
     }
   }
 
   #[inline]
-  pub fn sym(&self) -> Option<&'db SymbolRef> {
+  pub fn sym<'db>(&self, db: &'db ParserDatabase) -> Option<&'db SymbolRef> {
     if self.is_complete() {
       None
     } else {
-      Some(&self.rule().symbols[self.sym_index() as usize])
+      Some(&self.rule(db).symbols[self.sym_index() as usize])
     }
   }
 
   /// Get the precedence appropriate for the graph mode
-  pub fn precedence(&self, mode: GraphType) -> u16 {
+  pub fn precedence(&self, mode: GraphType, db: &ParserDatabase) -> u16 {
     match mode {
-      GraphType::Parser => self.symbol_precedence(),
-      GraphType::Scanner => self.token_precedence(),
+      GraphType::Parser => self.symbol_precedence(db),
+      GraphType::Scanner => self.token_precedence(db),
     }
   }
 
@@ -360,32 +365,32 @@ impl<'db> Item<'db> {
     }
   }
 
-  pub fn token_precedence(&self) -> u16 {
+  pub fn token_precedence(&self, db: &ParserDatabase) -> u16 {
     if self.is_null() {
       0
     } else {
-      match self.sym() {
+      match self.sym(db) {
         Some(sym) => sym.token_precedence,
-        None => unsafe { self.decrement().unwrap_unchecked().token_precedence() },
+        None => unsafe { self.decrement().unwrap_unchecked().token_precedence(db) },
       }
     }
   }
 
-  pub fn symbol_precedence(&self) -> u16 {
+  pub fn symbol_precedence(&self, db: &ParserDatabase) -> u16 {
     if self.is_null() {
       0
     } else {
-      match self.sym() {
+      match self.sym(db) {
         Some(sym) => sym.symbol_precedence,
-        None => unsafe { self.decrement().unwrap_unchecked().token_precedence() },
+        None => unsafe { self.decrement().unwrap_unchecked().token_precedence(db) },
       }
     }
   }
 
   /// Returns `true` if the symbol at the items position is a non-terminal,
   /// otherwise returns `false`
-  pub fn is_nonterm(&self, mode: GraphType) -> bool {
-    match self.sym_id() {
+  pub fn is_nonterm(&self, mode: GraphType, db: &ParserDatabase) -> bool {
+    match self.sym_id(db) {
       SymbolId::DBNonTerminalToken { .. } if mode == GraphType::Scanner => true,
       SymbolId::DBNonTerminal { .. } => true,
       _ => false,
@@ -394,26 +399,26 @@ impl<'db> Item<'db> {
 
   /// Returns `true` if the symbol at the items position is a terminal,
   /// otherwise returns `false`
-  pub fn is_term(&self, mode: GraphType) -> bool {
+  pub fn is_term(&self, mode: GraphType, db: &ParserDatabase) -> bool {
     if self.is_complete() {
       false
     } else {
-      !self.is_nonterm(mode)
+      !self.is_nonterm(mode, db)
     }
   }
 
   /// Returns the [IndexedProdId] of the active symbol if the symbol
   /// is a NonTerm, or return `None`
-  pub fn nonterm_index_at_sym(&self, mode: GraphType) -> Option<DBNonTermKey> {
-    match self.sym_id() {
+  pub fn nonterm_index_at_sym(&self, mode: GraphType, db: &ParserDatabase) -> Option<DBNonTermKey> {
+    match self.sym_id(db) {
       SymbolId::DBNonTerminalToken { nonterm_key: index, .. } if mode == GraphType::Scanner => Some(index),
       SymbolId::DBNonTerminal { key: index } => Some(index),
       _ => None,
     }
   }
 
-  pub fn term_index_at_sym(&self, mode: GraphType) -> Option<DBTermKey> {
-    match self.sym_id() {
+  pub fn term_index_at_sym(&self, mode: GraphType, db: &ParserDatabase) -> Option<DBTermKey> {
+    match self.sym_id(db) {
       SymbolId::DBNonTerminalToken { sym_key, .. } if mode == GraphType::Parser => sym_key,
       SymbolId::DBToken { key: index } => Some(index),
       _ => None,
@@ -421,14 +426,9 @@ impl<'db> Item<'db> {
   }
 
   #[inline]
-  pub fn db(&self) -> &ParserDatabase {
-    self.db
-  }
-
-  #[inline]
   /// The non-terminal the rule reduces to
-  pub fn nonterm_index(&self) -> DBNonTermKey {
-    self.db_rule().nonterm
+  pub fn nonterm_index(&self, db: &ParserDatabase) -> DBNonTermKey {
+    self.db_rule(db).nonterm
   }
 
   // --------------- ITEM TRANSFORMATION METHODS
@@ -519,7 +519,7 @@ impl<'db> Item<'db> {
   #[inline]
   /// Creates a new [ItemRef] with the same rule info as the original, but
   /// with the meta info of `other`. Resets goto metadata
-  pub fn align<'a>(&self, other: &'a Item<'db>) -> Self {
+  pub fn align(&self, other: &Item) -> Self {
     Self { index: self.index, len: self.len, ..other.clone() }
   }
 
@@ -548,53 +548,51 @@ impl<'db> Item<'db> {
   /// Returns an iterator over this item's closure.
   /// > note: The closure will be over canonical items, except fo the kernel
   /// > item `self`
-  pub fn closure_iter<'a>(&self) -> impl ItemContainerIter<'db> {
-    [*self].into_iter().chain(self.db.get_closure(self))
+  pub fn closure_iter<'db>(&self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
+    [*self].into_iter().chain(db.get_closure(self))
   }
 
   /// Same as `Item::closure_iter`, except takes an extra `Item` as an
   /// argument, from which the meta attributes will be assigned to the closure
   /// items (note: the kernel item `self` is left untouched.)
-  pub fn closure_iter_align<'a>(&self, other: Self) -> impl ItemContainerIter<'db> {
-    [*self].into_iter().chain(self.db.get_closure(self).map(move |i| i.align(&other)))
+  pub fn closure_iter_align<'db>(&self, other: Self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
+    [*self].into_iter().chain(db.get_closure(self).map(move |i| i.align(&other)))
   }
 
-  pub fn closure_iter_align_with_lane_split<'a>(&self, other: Self) -> impl ItemContainerIter<'db> {
+  pub fn closure_iter_align_with_lane_split<'db>(&self, other: Self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
     let from = self.index;
-    [*self].into_iter().chain(self.db.get_closure(self).map(move |i| i.align(&other).as_from_index(from)))
+    [*self].into_iter().chain(db.get_closure(self).map(move |i| i.align(&other).as_from_index(from)))
   }
 
   // --------------- DEBUGGING ORIENTED METHODS
   // --------------------------------------------------
 
   #[inline]
-  pub fn nonterm_name(&self) -> IString {
-    self.db.nonterm_friendly_name(self.nonterm_index())
+  pub fn nonterm_name(&self, db: &ParserDatabase) -> IString {
+    db.nonterm_friendly_name(self.nonterm_index(db))
   }
 
   #[inline]
-  pub fn nonterm_name_str(&self) -> GuardedStr<'db> {
-    let name = self.db.nonterm_friendly_name(self.nonterm_index());
-    name.to_str(self.db.string_store())
+  pub fn nonterm_name_str<'db>(&self, db: &'db ParserDatabase) -> GuardedStr<'db> {
+    let name = db.nonterm_friendly_name(self.nonterm_index(db));
+    name.to_str(db.string_store())
   }
 
   #[cfg(debug_assertions)]
-  pub fn _debug_print_(&self) {
-    println!("{}", self._debug_string_())
+  pub fn _debug_print_(&self, db: &ParserDatabase) {
+    println!("{}", self._debug_string_w_db_(db))
   }
 
   pub fn _debug_string_(&self) -> String {
     if self.is_null() {
       "null".to_string()
     } else {
-      let s_store = self.db.string_store();
-
       #[cfg(debug_assertions)]
       let mut string = self
         .origin
         .is_none()
         .then_some(String::new())
-        .unwrap_or_else(|| format!("<[{}-{:?}]  ", self.origin._debug_string_(self.db), self.origin_state));
+        .unwrap_or_else(|| format!("<[{}-{:?}]  ", self.origin._debug_string_(), self.origin_state));
       #[cfg(not(debug_assertions))]
       let mut string = String::new();
 
@@ -614,7 +612,19 @@ impl<'db> Item<'db> {
         }
       }
 
-      string += &self.nonterm_name().to_string(s_store);
+      string.replace("\n", "\\n")
+    }
+  }
+
+  pub fn _debug_string_w_db_(&self, db: &ParserDatabase) -> String {
+    if self.is_null() {
+      "null".to_string()
+    } else {
+      let mut string = self._debug_string_();
+
+      let s_store = db.string_store();
+
+      string += &self.nonterm_name(db).to_string(s_store);
 
       string += " >";
 
@@ -631,10 +641,10 @@ impl<'db> Item<'db> {
 
         string += " ";
 
-        string += &i.sym_id().debug_string(self.db);
+        string += &i.sym_id(db).debug_string(db);
 
         if !self.is_canonical() {
-          string += &match (i.symbol_precedence(), i.token_precedence()) {
+          string += &match (i.symbol_precedence(db), i.token_precedence(db)) {
             (0, 0) => String::default(),
             (sym, 0) => "{".to_string() + &sym.to_string() + "}",
             (0, tok) => "{:".to_string() + &tok.to_string() + "}",
@@ -701,7 +711,7 @@ fn item_attributes() -> SherpaResult<()> {
 
   let item: Item = (DBRuleKey::from(0 as u32), &db).into();
 
-  assert_eq!(item.nonterm_name_str().as_str(), "A");
+  assert_eq!(item.nonterm_name_str(db.get_internal()).as_str(), "A");
 
   assert_eq!(item.sym_len(), 3);
 
@@ -724,17 +734,17 @@ fn item_attributes() -> SherpaResult<()> {
 /// is incomplete or not.
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TransitionPair<'db> {
-  pub kernel: Item<'db>,
-  pub next:   Item<'db>,
+pub struct TransitionPair {
+  pub kernel: Item,
+  pub next:   Item,
   pub sym:    SymbolId,
   pub prec:   u16,
 }
 
-pub type Lookahead<'db> = TransitionPair<'db>;
-pub type Lookaheads<'db> = Array<Lookahead<'db>>;
+pub type Lookahead = TransitionPair;
+pub type Lookaheads = Array<Lookahead>;
 
-impl<'db> TransitionPair<'db> {
+impl TransitionPair {
   pub fn is_kernel_terminal(&self) -> bool {
     !self.is_eoi_complete() && self.kernel.index == self.next.index
   }
@@ -751,53 +761,53 @@ impl<'db> TransitionPair<'db> {
   }
 
   #[cfg(debug_assertions)]
-  pub fn _debug_string_(&self) -> String {
+  pub fn _debug_string_(&self, db: &ParserDatabase) -> String {
     format!(
       "\nsym {}{{{}}} oos:{}\n  base: {}\n  next: {}",
-      self.sym.debug_string(self.kernel.db),
+      self.sym.debug_string(db),
       self.prec,
       self.is_out_of_scope(),
-      self.kernel._debug_string_(),
-      self.next._debug_string_()
+      self.kernel._debug_string_w_db_(db),
+      self.next._debug_string_w_db_(db)
     )
   }
 }
 
-impl<'db> From<(Item<'db>, Item<'db>, GraphType)> for TransitionPair<'db> {
-  fn from((root, next, mode): (Item<'db>, Item<'db>, GraphType)) -> Self {
+impl From<(Item, Item, GraphType, &ParserDatabase)> for TransitionPair {
+  fn from((root, next, mode, db): (Item, Item, GraphType, &ParserDatabase)) -> Self {
     Self {
       kernel: root,
       next,
-      sym: if next.is_complete() { SymbolId::Default } else { next.sym_id() },
-      prec: next.precedence(mode),
+      sym: if next.is_complete() { SymbolId::Default } else { next.sym_id(db) },
+      prec: next.precedence(mode, db),
     }
   }
 }
 
-impl<'db> From<(&Item<'db>, &Item<'db>, GraphType)> for TransitionPair<'db> {
-  fn from((root, next, mode): (&Item<'db>, &Item<'db>, GraphType)) -> Self {
-    (*root, *next, mode).into()
+impl From<(&Item, &Item, GraphType, &ParserDatabase)> for TransitionPair {
+  fn from((root, next, mode, db): (&Item, &Item, GraphType, &ParserDatabase)) -> Self {
+    (*root, *next, mode, db).into()
   }
 }
 
-pub trait TransitionPairIter<'db>: Iterator<Item = TransitionPair<'db>> + Sized + Clone {
-  fn to_next(self) -> impl ItemContainerIter<'db> {
+pub trait TransitionPairIter: Iterator<Item = TransitionPair> + Sized + Clone {
+  fn to_next(self) -> impl ItemContainerIter {
     self.map(|i| i.next)
   }
 
-  fn to_root(self) -> impl ItemContainerIter<'db> {
+  fn to_root(self) -> impl ItemContainerIter {
     self.map(|i| i.kernel)
   }
 }
 
-impl<'db, T: Iterator<Item = TransitionPair<'db>> + Sized + Clone> TransitionPairIter<'db> for T {}
+impl<'db, T: Iterator<Item = TransitionPair> + Sized + Clone> TransitionPairIter for T {}
 
-pub trait TransitionPairRefIter<'a, 'db: 'a>: Iterator<Item = &'a TransitionPair<'db>> + Sized + Clone {
-  fn to_next(self) -> impl ItemRefContainerIter<'a, 'db> {
+pub trait TransitionPairRefIter<'a>: Iterator<Item = &'a TransitionPair> + Sized + Clone {
+  fn to_next(self) -> impl ItemRefContainerIter<'a> {
     self.map(|i| &i.next)
   }
 
-  fn to_kernel(self) -> impl ItemRefContainerIter<'a, 'db> {
+  fn to_kernel(self) -> impl ItemRefContainerIter<'a> {
     self.map(|i| &i.kernel)
   }
 
@@ -805,46 +815,46 @@ pub trait TransitionPairRefIter<'a, 'db: 'a>: Iterator<Item = &'a TransitionPair
     self.map(|i| i.prec).max().unwrap_or_default()
   }
 
-  fn in_scope(self) -> impl TransitionPairRefIter<'a, 'db> {
+  fn in_scope(self) -> impl TransitionPairRefIter<'a> {
     self.filter(|i| !i.is_out_of_scope())
   }
 
-  fn out_scope(self) -> impl TransitionPairRefIter<'a, 'db> {
+  fn out_scope(self) -> impl TransitionPairRefIter<'a> {
     self.filter(|i| i.is_out_of_scope())
   }
 
-  fn kernel_nonterm_sym(self, mode: GraphType) -> OrderedSet<Option<DBNonTermKey>> {
-    self.map(|p| p.kernel.nonterm_index_at_sym(mode)).collect()
+  fn kernel_nonterm_sym(self, mode: GraphType, db: &ParserDatabase) -> OrderedSet<Option<DBNonTermKey>> {
+    self.map(|p| p.kernel.nonterm_index_at_sym(mode, db)).collect()
   }
 
   #[cfg(debug_assertions)]
-  fn _debug_print_(self, message: &str) {
-    println!("=====> {}\n{}\n=====<\n", message, self._debug_string_())
+  fn _debug_print_(self, db: &ParserDatabase, message: &str) {
+    println!("=====> {}\n{}\n=====<\n", message, self._debug_string_(db))
   }
 
   #[cfg(debug_assertions)]
-  fn _debug_string_(self) -> String {
-    format!("{}", self.map(|i| i._debug_string_()).collect::<Vec<_>>().join("\n"))
+  fn _debug_string_(self, db: &ParserDatabase) -> String {
+    format!("{}", self.map(|i| i._debug_string_(db)).collect::<Vec<_>>().join("\n"))
   }
 }
 
-impl<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair<'db>> + Sized + Clone> TransitionPairRefIter<'a, 'db> for T {}
+impl<'a: 'a, T: Iterator<Item = &'a TransitionPair> + Sized + Clone> TransitionPairRefIter<'a> for T {}
 
-pub type ItemSet<'db> = OrderedSet<Item<'db>>;
-pub type Items<'db> = Array<Item<'db>>;
+pub type ItemSet = OrderedSet<Item>;
+pub type Items = Array<Item>;
 
-impl<'db> ItemContainer<'db> for ItemSet<'db> {}
-impl<'db> ItemContainer<'db> for Items<'db> {}
+impl ItemContainer for ItemSet {}
+impl ItemContainer for Items {}
 
-impl<'a, 'db: 'a, T: Clone + Iterator<Item = &'a Item<'db>>> ItemRefContainerIter<'a, 'db> for T {}
-impl<'db, T: Clone + Iterator<Item = Item<'db>>> ItemContainerIter<'db> for T {}
+impl<'a: 'a, T: Clone + Iterator<Item = &'a Item>> ItemRefContainerIter<'a> for T {}
+impl<'db, T: Clone + Iterator<Item = Item>> ItemContainerIter for T {}
 
 macro_rules! common_iter_functions {
   () => {
-    fn get_max_precedence(self, mode: GraphType) -> u16 {
+    fn get_max_precedence(self, mode: GraphType, db: &ParserDatabase) -> u16 {
       match mode {
-        GraphType::Parser => self.get_max_symbol_precedence(),
-        GraphType::Scanner => self.get_max_token_precedence(),
+        GraphType::Parser => self.get_max_symbol_precedence(db),
+        GraphType::Scanner => self.get_max_token_precedence(db),
       }
     }
 
@@ -852,12 +862,12 @@ macro_rules! common_iter_functions {
       self.map(|i| i.origin_precedence()).max().unwrap_or_default()
     }
 
-    fn get_max_token_precedence(self) -> u16 {
-      self.map(|i| i.token_precedence()).max().unwrap_or_default()
+    fn get_max_token_precedence(self, db: &ParserDatabase) -> u16 {
+      self.map(|i| i.token_precedence(db)).max().unwrap_or_default()
     }
 
-    fn get_max_symbol_precedence(self) -> u16 {
-      self.map(|i| i.symbol_precedence()).max().unwrap_or_default()
+    fn get_max_symbol_precedence(self, db: &ParserDatabase) -> u16 {
+      self.map(|i| i.symbol_precedence(db)).max().unwrap_or_default()
     }
 
     fn intersects(&mut self, set: &ItemSet) -> bool {
@@ -876,13 +886,13 @@ macro_rules! common_iter_functions {
 
     /// Returns the [DBNonTermKey] of the symbol in non-terminal items. Items that
     /// do not have a nonterm as the active symbol are skipped.
-    fn nonterm_ids_at_index(self, mode: GraphType) -> OrderedSet<DBNonTermKey> {
-      self.filter_map(move |i| i.nonterm_index_at_sym(mode)).collect()
+    fn nonterm_ids_at_index(self, mode: GraphType, db: &ParserDatabase) -> OrderedSet<DBNonTermKey> {
+      self.filter_map(move |i| i.nonterm_index_at_sym(mode, db)).collect()
     }
 
     /// Returns a set of all non-terminal ids the items reduce to.
-    fn rule_nonterm_ids(&mut self) -> OrderedSet<DBNonTermKey> {
-      self.map(|i| i.nonterm_index()).collect()
+    fn rule_nonterm_ids(&mut self, db: &ParserDatabase) -> OrderedSet<DBNonTermKey> {
+      self.map(|i| i.nonterm_index(db)).collect()
     }
 
     fn peek_is_resolved(&mut self) -> bool {
@@ -919,35 +929,35 @@ macro_rules! common_iter_functions {
       return true;
     }
 
-    fn nonterm_items<T: ItemContainer<'db>>(self, mode: GraphType) -> T {
-      self.filter_map(|i| i.is_nonterm(mode).then(|| i.clone())).collect()
+    fn nonterm_items<T: ItemContainer>(self, mode: GraphType, db: &ParserDatabase) -> T {
+      self.filter_map(|i| i.is_nonterm(mode, db).then(|| i.clone())).collect()
     }
 
-    fn term_items<T: ItemContainer<'db>>(self, mode: GraphType) -> T {
-      self.filter_map(|i| i.is_term(mode).then(|| i.clone())).collect()
+    fn term_items<T: ItemContainer>(self, mode: GraphType, db: &ParserDatabase) -> T {
+      self.filter_map(|i| i.is_term(mode, db).then(|| i.clone())).collect()
     }
 
-    fn null_items<T: ItemContainer<'db>>(self) -> T {
+    fn null_items<T: ItemContainer>(self) -> T {
       self.filter_map(|i| i.is_null().then(|| i.clone())).collect()
     }
 
-    fn incomplete_items<T: ItemContainer<'db>>(self) -> T {
+    fn incomplete_items<T: ItemContainer>(self) -> T {
       self.filter_map(|i| (!i.is_complete()).then(|| i.clone())).collect()
     }
 
-    fn completed_items<T: ItemContainer<'db>>(self) -> T {
+    fn completed_items<T: ItemContainer>(self) -> T {
       self.filter_map(|i| (i.is_complete()).then(|| i.clone())).collect()
     }
 
-    fn inscope_items<T: ItemContainer<'db>>(self) -> T {
+    fn inscope_items<T: ItemContainer>(self) -> T {
       self.filter_map(|i| (!i.is_oos()).then(|| i.clone())).collect()
     }
 
-    fn outscope_items<T: ItemContainer<'db>>(self) -> T {
+    fn outscope_items<T: ItemContainer>(self) -> T {
       self.filter_map(|i| (!i.is_oos()).then(|| i.clone())).collect()
     }
 
-    fn to_canonical<T: ItemContainer<'db>>(self) -> T {
+    fn to_canonical<T: ItemContainer>(self) -> T {
       self.map(|i| i.to_canonical()).collect()
     }
 
@@ -959,45 +969,45 @@ macro_rules! common_iter_functions {
       self.map(|i| i.into()).collect()
     }
 
-    fn to_origin<T: ItemContainer<'db>>(self, origin: Origin) -> T {
+    fn to_origin<T: ItemContainer>(self, origin: Origin) -> T {
       self.map(|i| i.to_origin(origin)).collect()
     }
 
     #[inline(always)]
-    fn try_increment(self) -> Items<'db> {
+    fn try_increment(self) -> Items {
       self.map(|i| i.try_increment()).collect()
     }
 
     #[inline(always)]
-    fn try_decrement(self) -> Items<'db> {
+    fn try_decrement(self) -> Items {
       self.map(|i| if i.sym_index() > 0 { i.decrement().unwrap() } else { i.clone() }).collect()
     }
 
-    fn terminals(self, mode: GraphType) -> OrderedSet<SymbolId> {
-      self.filter_map(|i| (!i.is_nonterm(mode)).then_some(i.sym_id())).collect()
+    fn terminals(self, mode: GraphType, db: &ParserDatabase) -> OrderedSet<SymbolId> {
+      self.filter_map(|i| (!i.is_nonterm(mode, db)).then_some(i.sym_id(db))).collect()
     }
   };
 }
 
-pub trait ItemContainerIter<'db>: Iterator<Item = Item<'db>> + Sized + Clone {
-  fn to_set(self) -> ItemSet<'db> {
+pub trait ItemContainerIter: Iterator<Item = Item> + Sized + Clone {
+  fn to_set(self) -> ItemSet {
     self.collect()
   }
 
-  fn to_vec(self) -> Items<'db> {
+  fn to_vec(self) -> Items {
     self.collect()
   }
 
-  fn to_origin_state_iter(self, state_id: StateId) -> impl ItemContainerIter<'db> {
+  fn to_origin_state_iter(self, state_id: StateId) -> impl ItemContainerIter {
     self.map(move |i| i.to_origin_state(state_id))
   }
 
-  fn align_iter(self, a: &'db Item<'db>) -> impl ItemContainerIter<'db> {
+  fn align_iter(self, a: &Item) -> impl ItemContainerIter {
     self.map(|i| i.align(a))
   }
 
-  fn term_items_iter(self, is_scanner: bool) -> impl ItemContainerIter<'db> {
-    self.filter(move |i| match i.get_type() {
+  fn term_items_iter(self, is_scanner: bool, db: &ParserDatabase) -> impl ItemContainerIter {
+    self.filter(move |i| match i.get_type(db) {
       ItemType::Completed(_) | ItemType::Terminal(_) => true,
       ItemType::TokenNonTerminal(..) if !is_scanner => true,
       _ => false,
@@ -1007,32 +1017,32 @@ pub trait ItemContainerIter<'db>: Iterator<Item = Item<'db>> + Sized + Clone {
   common_iter_functions!();
 }
 
-pub trait ItemRefContainerIter<'a, 'db: 'a>: Iterator<Item = &'a Item<'db>> + Sized + Clone {
-  fn to_set(self) -> ItemSet<'db> {
+pub trait ItemRefContainerIter<'a: 'a>: Iterator<Item = &'a Item> + Sized + Clone {
+  fn to_set(self) -> ItemSet {
     self.cloned().collect()
   }
 
-  fn to_vec(self) -> Items<'db> {
+  fn to_vec(self) -> Items {
     self.cloned().collect()
   }
 
   common_iter_functions!();
 }
 
-pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromIterator<Item<'db>> {
+pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> {
   /// Given a [CompileDatabase] and [DBProdId] returns the initial
   /// items of the non-terminal.
-  fn start_items(nterm: DBNonTermKey, db: &'db ParserDatabase) -> Self {
+  fn start_items(nterm: DBNonTermKey, db: &ParserDatabase) -> Self {
     let Ok(rules) = db.nonterm_rules(nterm) else { panic!("Could not get rules {:?}", nterm) };
     rules.iter().map(|r| Item::from((*r, db))).collect()
   }
 
-  fn nonterm_items(self, mode: GraphType) -> Self {
-    self.into_iter().filter(|i| i.is_nonterm(mode)).collect()
+  fn nonterm_items(self, mode: GraphType, db: &ParserDatabase) -> Self {
+    self.into_iter().filter(|i| i.is_nonterm(mode, db)).collect()
   }
 
-  fn term_items(self, mode: GraphType) -> Self {
-    self.into_iter().filter(|i| i.is_term(mode)).collect()
+  fn term_items(self, mode: GraphType, db: &ParserDatabase) -> Self {
+    self.into_iter().filter(|i| i.is_term(mode, db)).collect()
   }
 
   fn null_items(self) -> Self {
@@ -1068,47 +1078,47 @@ pub trait ItemContainer<'db>: Clone + IntoIterator<Item = Item<'db>> + FromItera
   }
 
   #[inline(always)]
-  fn try_increment(&self) -> Items<'db> {
+  fn try_increment(&self) -> Items {
     self.clone().to_vec().into_iter().map(|i| i.try_increment()).collect()
   }
 
   #[inline(always)]
-  fn try_decrement(&self) -> Items<'db> {
+  fn try_decrement(&self) -> Items {
     self.clone().to_vec().into_iter().map(|i| if i.sym_index() > 0 { i.decrement().unwrap() } else { i }).collect()
   }
 
   #[cfg(debug_assertions)]
-  fn _debug_print_(&self, _comment: &str) {
-    debug_items(_comment, self.clone());
+  fn _debug_print_(&self, db: &ParserDatabase, _comment: &str) {
+    debug_items(_comment, self.clone(), db);
   }
 
   #[cfg(debug_assertions)]
-  fn to_debug_string(&self, sep: &str) -> String {
-    self.clone().to_vec().iter().map(|i| i._debug_string_()).collect::<Vec<_>>().join(sep)
+  fn to_debug_string(&self, db: &ParserDatabase, sep: &str) -> String {
+    self.clone().to_vec().iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join(sep)
   }
 
-  fn to_set(self) -> ItemSet<'db> {
+  fn to_set(self) -> ItemSet {
     self.into_iter().collect()
   }
 
-  fn to_vec(self) -> Items<'db> {
+  fn to_vec(self) -> Items {
     self.into_iter().collect()
   }
 }
 
 #[allow(unused)]
 #[cfg(debug_assertions)]
-fn debug_items<'db, T: IntoIterator<Item = Item<'db>>>(comment: &str, items: T) {
+fn debug_items<'db, T: IntoIterator<Item = Item>>(comment: &str, items: T, db: &ParserDatabase) {
   println!("\n {} --> ", comment);
 
   for item in items {
-    println!("    {}", item._debug_string_());
+    println!("    {}", item._debug_string_w_db_(db));
   }
 }
 
-pub struct CompletedItemArtifacts<'db> {
-  pub lookahead_pairs: OrderedSet<TransitionPair<'db>>,
+pub struct CompletedItemArtifacts {
+  pub lookahead_pairs: OrderedSet<TransitionPair>,
   /// Items that completed a nonterminal that did not lead to a transition
   /// in the root closure.
-  pub default_only:    ItemSet<'db>,
+  pub default_only:    ItemSet,
 }

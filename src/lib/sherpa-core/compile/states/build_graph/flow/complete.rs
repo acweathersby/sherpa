@@ -8,9 +8,9 @@ use crate::{
 
 use GraphBuildState::*;
 
-pub(crate) fn handle_completed_item<'db, 'follow>(
-  gb: &mut GraphBuilder<'db>,
-  completed: Lookaheads<'db>,
+pub(crate) fn handle_completed_item<'follow>(
+  gb: &mut GraphBuilder,
+  completed: Lookaheads,
   sym: PrecedentSymbol,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
@@ -28,7 +28,7 @@ pub(crate) fn handle_completed_item<'db, 'follow>(
   SherpaResult::Ok(())
 }
 
-fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuilder<'db>, sym: PrecedentSymbol) {
+fn complete_regular(completed: Vec<TransitionPair>, gb: &mut GraphBuilder, sym: PrecedentSymbol) {
   let root_item = completed[0].kernel;
   let ____is_scan____ = gb.is_scanner();
   let ____allow_rd____: bool = gb.config.ALLOW_CALLS || ____is_scan____;
@@ -50,12 +50,7 @@ fn complete_regular<'db>(completed: Vec<TransitionPair<'db>>, gb: &mut GraphBuil
   //  }
 }
 
-fn complete_scan<'db>(
-  completed: Vec<TransitionPair<'db>>,
-  gb: &mut GraphBuilder<'db>,
-  sym: PrecedentSymbol,
-  first: TransitionPair<'db>,
-) {
+fn complete_scan(completed: Vec<TransitionPair>, gb: &mut GraphBuilder, sym: PrecedentSymbol, first: TransitionPair) {
   let (follow, completed_items): (Vec<Items>, Vec<Items>) =
     completed.iter().into_iter().map(|i| get_follow_internal(gb, i.kernel, FollowType::ScannerCompleted)).unzip();
 

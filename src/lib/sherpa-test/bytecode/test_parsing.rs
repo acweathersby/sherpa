@@ -542,7 +542,7 @@ IGNORE { c:sp c:nl }
 <> tok_identifier > ( c:id | c:num )(+)
 "##],
     &[("default", "<i -t: a>", true), ("default", "<i -test : soLongMySwanSong - store { test } <i> <i>>", true)],
-    Default::default(),
+    ParserConfig::default().enable_fork(true),
   )
 }
 
@@ -554,7 +554,7 @@ IGNORE { c:sp c:nl }
 
 <> script > block(+)
 
-<> block > "DECLARE" tk:name "{" declare_content(+) "}"
+<> block > "DECLARE" tk:name "{" declare_content "}"
 
 <> declare_content > execute_content(+)
 

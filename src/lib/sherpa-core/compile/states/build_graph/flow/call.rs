@@ -4,14 +4,14 @@ use crate::types::*;
 use GraphBuildState::*;
 use StateType::*;
 
-pub struct CreateCallResult<'db> {
+pub struct CreateCallResult {
   /// `true` if the state is a KernelCall
   pub is_kernel:         bool,
   /// The new state that will perform the call
   pub state_id:          StateId,
   /// A list of items from the parent closure that transition on the called
   /// non-terminal.
-  pub _transition_items: Items<'db>,
+  pub _transition_items: Items,
 }
 
 /// Attempts to make a "call" states, which jumps to the root of another
@@ -19,11 +19,12 @@ pub struct CreateCallResult<'db> {
 /// (
 ///   is_ker
 /// )
-pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &mut GraphBuilder<'db>,
+pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
+  gb: &mut GraphBuilder,
   group: T,
   sym: PrecedentSymbol,
-) -> Option<CreateCallResult<'db>> {
+) -> Option<CreateCallResult> {
+  let db = gb.db();
   let ____is_scan____ = gb.is_scanner();
   let ____allow_rd____: bool = gb.config.ALLOW_CALLS || ____is_scan____;
   let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
@@ -37,11 +38,11 @@ pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone
   // if all kernels are on same nonterminal symbol then we can do a call, provided
   // the nonterminal is not left recursive.
 
-  let kernel_symbol = group.clone().kernel_nonterm_sym(gb.get_mode());
+  let kernel_symbol = group.clone().kernel_nonterm_sym(gb.get_mode(), db);
 
   if kernel_symbol.len() == 1 {
     if let Some(Some(nonterm)) = kernel_symbol.first() {
-      match gb.db.nonterm_recursion_type(*nonterm) {
+      match db.nonterm_recursion_type(*nonterm) {
         RecursionType::LeftRecursive | RecursionType::LeftRightRecursive => {
           // Can't make a call on a left recursive non-terminal.
         }
@@ -83,14 +84,14 @@ pub(crate) fn create_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone
   }
 }
 
-fn climb_nonterms<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &mut GraphBuilder<'db>,
+fn climb_nonterms<'a, T: TransitionPairRefIter<'a> + Clone>(
+  gb: &mut GraphBuilder,
   group: T,
-) -> Option<(DBNonTermKey, Vec<Item<'db>>)> {
-  let db = gb.graph().get_db();
+) -> Option<(DBNonTermKey, Vec<Item>)> {
+  let db = gb.db();
 
-  if all_items_come_from_same_nonterminal_call(group.clone()) {
-    let nterm = unsafe { group.clone().next().unwrap_unchecked() }.next.nonterm_index();
+  if all_items_come_from_same_nonterminal_call(group.clone(), db) {
+    let nterm = unsafe { group.clone().next().unwrap_unchecked() }.next.nonterm_index(db);
 
     if matches!(db.nonterm_recursion_type(nterm), RecursionType::LeftRecursive | RecursionType::LeftRightRecursive) {
       return None;
@@ -100,12 +101,12 @@ fn climb_nonterms<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
       .clone()
       .flat_map(|p| {
         p.kernel
-          .closure_iter()
-          .filter(|i| match i.nonterm_index_at_sym(gb.get_mode()) {
-            Some(id) => id == nterm && i.nonterm_index() != nterm,
+          .closure_iter(db)
+          .filter(|i| match i.nonterm_index_at_sym(gb.get_mode(), db) {
+            Some(id) => id == nterm && i.nonterm_index(db) != nterm,
             _ => false,
           })
-          .map(|i| -> TransitionPair { (p.kernel, i.align(&p.next), gb.get_mode()).into() })
+          .map(|i| -> TransitionPair { (p.kernel, i.align(&p.next), gb.get_mode(), db).into() })
       })
       .collect::<Vec<_>>();
 
@@ -120,8 +121,9 @@ fn climb_nonterms<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
   }
 }
 
-pub(super) fn all_items_come_from_same_nonterminal_call<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
+pub(super) fn all_items_come_from_same_nonterminal_call<'a, T: TransitionPairRefIter<'a> + Clone>(
   group: T,
+  db: &ParserDatabase,
 ) -> bool {
-  group.clone().all(|i| i.next.is_initial()) && group.map(|i| i.next.nonterm_index()).collect::<Set<_>>().len() == 1
+  group.clone().all(|i| i.next.is_initial()) && group.map(|i| i.next.nonterm_index(db)).collect::<Set<_>>().len() == 1
 }

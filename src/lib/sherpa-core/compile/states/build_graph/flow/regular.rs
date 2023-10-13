@@ -29,8 +29,8 @@ use crate::{
 
 use GraphBuildState::*;
 
-fn create_out_of_scope_complete_state<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
-  gb: &mut GraphBuilder<'db>,
+fn create_out_of_scope_complete_state<'a, T: TransitionPairRefIter<'a> + Clone>(
+  gb: &mut GraphBuilder,
   out_of_scope: T,
   sym: PrecedentSymbol,
 ) {
@@ -43,16 +43,17 @@ fn create_out_of_scope_complete_state<'a, 'db: 'a, T: TransitionPairRefIter<'a, 
   }
 }
 
-pub(crate) fn handle_regular_incomplete_items<'db>(
-  gb: &mut GraphBuilder<'db>,
+pub(crate) fn handle_regular_incomplete_items(
+  gb: &mut GraphBuilder,
   prec_sym: PrecedentSymbol,
-  (prec, group): TransitionGroup<'db>,
+  (prec, group): TransitionGroup,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
   let ____allow_rd____: bool = gb.config.ALLOW_CALLS || ____is_scan____;
   let ____allow_lr____: bool = gb.config.ALLOW_LR || ____is_scan____;
   let ____allow_fork____: bool = gb.config.ALLOW_CONTEXT_SPLITTING && false;
   let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
+  let db = &gb.db_rc();
 
   let out_of_scope = group.iter().out_scope();
   let in_scope = group.iter().in_scope();
@@ -94,15 +95,15 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
           let kernel_item = in_scope.clone().to_kernel().next().unwrap();
 
           if !____allow_lr____ {
-            if let Some(non_term) = kernel_item.nonterm_index_at_sym(gb.get_mode()) {
+            if let Some(non_term) = kernel_item.nonterm_index_at_sym(gb.get_mode(), db) {
               // Check for left recursion. If present, the grammar is not LL
-              if gb.db.nonterm_recursion_type(non_term).is_left_recursive() {
+              if gb.db().nonterm_recursion_type(non_term).is_left_recursive() {
                 return lr_disabled_error(gb, in_scope.to_kernel().cloned().collect());
               } else {
                 let state = gb.create_state(Normal, prec_sym, StateType::Shift, Some(items.into_iter())).to_enqueued().unwrap();
                 let mut nterm_shift_state = gb.create_state(
                   Normal,
-                  (kernel_item.sym_id(), 0).into(),
+                  (kernel_item.sym_id(db), 0).into(),
                   StateType::ShiftFrom(state),
                   Some([kernel_item.try_increment()].into_iter()),
                 );
@@ -141,14 +142,15 @@ pub(crate) fn handle_regular_incomplete_items<'db>(
   Ok(())
 }
 
-fn single_shift_allowed<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(in_scope: &T, gb: &mut GraphBuilder<'_>) -> bool {
+fn single_shift_allowed<'a, T: TransitionPairRefIter<'a> + Clone>(in_scope: &T, gb: &mut GraphBuilder) -> bool {
   let ____allow_lr____: bool = gb.config.ALLOW_LR || gb.is_scanner();
 
   if ____allow_lr____ {
     gb.set_classification(ParserClassification { bottom_up: true, ..Default::default() });
-  } else if let Some(non_term) = in_scope.clone().to_kernel().next().and_then(|i| i.nonterm_index_at_sym(gb.get_mode())) {
+  } else if let Some(non_term) = in_scope.clone().to_kernel().next().and_then(|i| i.nonterm_index_at_sym(gb.get_mode(), gb.db()))
+  {
     // Check for left recursion. If present, the grammar is not LL
-    if gb.db.nonterm_recursion_type(non_term).is_left_recursive() {
+    if gb.db().nonterm_recursion_type(non_term).is_left_recursive() {
       return false;
     }
   }
@@ -156,11 +158,11 @@ fn single_shift_allowed<'a, 'db: 'a, T: TransitionPairRefIter<'a, 'db> + Clone>(
   true
 }
 
-pub(crate) fn handle_regular_complete_groups<'db>(
-  gb: &mut GraphBuilder<'db>,
-  shift_groups: &mut GroupedFirsts<'db>,
+pub(crate) fn handle_regular_complete_groups(
+  gb: &mut GraphBuilder,
+  shift_groups: &mut GroupedFirsts,
   prec_sym: PrecedentSymbol,
-  mut lookahead_pairs: Lookaheads<'db>,
+  mut lookahead_pairs: Lookaheads,
 ) -> SherpaResult<()> {
   let ____is_scan____ = gb.is_scanner();
   let ____allow_peek____ = gb.config.ALLOW_PEEKING;
@@ -190,8 +192,8 @@ pub(crate) fn handle_regular_complete_groups<'db>(
         // of the origins. This is a valid outcome.
         handle_completed_item(gb, lookahead_pairs, prec_sym)?;
       } else if lookahead_pairs.iter().all(|p| p.is_out_of_scope()) {
-        let item: Item<'_> = *o_to_r(cmpl.first(), "Item list is empty")?;
-        handle_completed_item(gb, vec![(item, item, gb.get_mode()).into()], prec_sym)?;
+        let item: Item = *o_to_r(cmpl.first(), "Item list is empty")?;
+        handle_completed_item(gb, vec![(item, item, gb.get_mode(), gb.db()).into()], prec_sym)?;
       } else {
         match resolve_reduce_reduce_conflict(gb, prec_sym, lookahead_pairs)? {
           ReduceReduceConflictResolution::Nothing => {}
@@ -212,7 +214,7 @@ pub(crate) fn handle_regular_complete_groups<'db>(
       gb.set_classification(ParserClassification { max_k: 1, ..Default::default() });
 
       if ____is_scan____ {
-        let item: Item<'_> = cmpl[0];
+        let item: Item = cmpl[0];
         lookahead_pairs.extend(group);
         handle_completed_item(gb, lookahead_pairs, prec_sym)?;
       } else if group.iter().all(|i| i.is_out_of_scope()) && lookahead_pairs.iter().all(|i| i.is_out_of_scope()) {
@@ -241,8 +243,8 @@ pub(crate) fn handle_regular_complete_groups<'db>(
       unimplemented!(
         "\nNot Implemented: {:?} len:{_len} collide:{_collide:?} sym:{} \n[ {} ]\n\n{}",
         gb.current_state().build_state(),
-        sym.debug_string(gb.db),
-        cmpl.to_debug_string("\n"),
+        sym.debug_string(gb.db()),
+        cmpl.to_debug_string(gb.db(), "\n"),
         gb.graph()._debug_string_()
       );
       #[cfg(not(debug_assertions))]

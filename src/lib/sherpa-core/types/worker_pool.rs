@@ -3,24 +3,26 @@ use crate::{SherpaError, SherpaResult};
 use std::{num::NonZeroUsize, sync::mpsc::Receiver, thread::JoinHandle};
 
 enum Task {
-  Job(Box<dyn FnOnce() -> SherpaResult<()> + Send>),
+  Job(Box<dyn FnOnce(usize) -> SherpaResult<()> + Send>),
   Stop,
 }
 
 struct Worker {
   thread:  JoinHandle<()>,
   channel: std::sync::mpsc::Sender<Task>,
+  id:      usize,
 }
 
 impl Worker {
   fn inner_loop(
     receiver: std::sync::mpsc::Receiver<Task>,
     response: std::sync::mpsc::Sender<Result<(), SherpaError>>,
+    id: usize,
   ) -> impl FnOnce() {
     move || {
       while let Ok(task) = receiver.recv() {
         match task {
-          Task::Job(job) => match response.send((job)()) {
+          Task::Job(job) => match response.send((job)(id)) {
             Err(_) => {
               break;
             }
@@ -36,26 +38,27 @@ impl Worker {
 }
 
 // A basic, multi-threaded worker pool.
-struct StandardPool {
+pub(crate) struct StandardPool {
   size:     usize,
   workers:  Vec<Worker>,
   c_signal: Receiver<Result<(), SherpaError>>,
 }
 
 impl StandardPool {
-  pub fn new(size: NonZeroUsize) -> Result<Self, SherpaError> {
-    let size = size.min(std::thread::available_parallelism()?).get();
+  pub fn new(size: usize) -> Result<Self, SherpaError> {
+    let size = size.max(1).min(std::thread::available_parallelism()?.get());
     let (c_sender, receiver) = std::sync::mpsc::channel();
 
     Ok(Self {
       size,
       workers: (0..size)
         .into_iter()
-        .map(|_| {
+        .map(|id| {
           let (sender, receiver) = std::sync::mpsc::channel::<Task>();
           Worker {
             channel: sender,
-            thread:  std::thread::spawn(Worker::inner_loop(receiver, c_sender.clone())),
+            thread: std::thread::spawn(Worker::inner_loop(receiver, c_sender.clone(), id)),
+            id,
           }
         })
         .collect(),
@@ -69,10 +72,7 @@ impl Drop for StandardPool {
     for worker in self.workers.drain(..) {
       match worker.channel.send(Task::Stop) {
         Ok(_) => match worker.thread.join() {
-          Ok(_) => {
-            #[cfg(debug_assertions)]
-            eprintln!("Worker thread joined");
-          }
+          Ok(_) => {}
           Err(_) => {}
         },
         Err(e) => {
@@ -84,11 +84,17 @@ impl Drop for StandardPool {
 }
 
 // A worker pool that runs Jobs on the main thread.
-struct SingleThreadPool {}
+pub(crate) struct SingleThreadPool {}
 
-trait WorkerPool {
-  /// Runs a closure as a job distributed to all workers in the pool. This
-  /// blocks until all worker have returned from their closure.
+pub trait WorkerPool {
+  /// Runs a closure as a job creator for the number of available workers. For
+  /// each worker, the job creator closure should return a job closure which
+  /// will run within that worker's thread. The total number of workers
+  /// available in the pool is passed as the sole argument to the job creator
+  /// closure.
+  ///
+  /// This blocks until all worker have returned from their closure.
+  ///
   /// # Example
   /// ```
   ///  let pool = StandardPool::new(std::num::NonZeroUsize::new(200).unwrap())?;
@@ -117,22 +123,22 @@ trait WorkerPool {
   ///
   ///  Ok(())
   /// ```
-  fn run<T: FnOnce() -> SherpaResult<()> + Send + 'static>(&self, job_creator: impl Fn() -> T) -> SherpaResult<()>;
+  fn run<T: FnOnce(usize) -> SherpaResult<()> + Send + 'static>(&self, job_creator: impl Fn(usize) -> T) -> SherpaResult<()>;
 }
 
 impl WorkerPool for SingleThreadPool {
-  fn run<T: FnOnce() -> SherpaResult<()> + Send + 'static>(&self, job_creator: impl Fn() -> T) -> SherpaResult<()> {
+  fn run<T: FnOnce(usize) -> SherpaResult<()> + Send + 'static>(&self, job_creator: impl Fn(usize) -> T) -> SherpaResult<()> {
     // Simply create the job and run it
-    job_creator()()
+    job_creator(1)(0)
   }
 }
 
 impl WorkerPool for StandardPool {
-  fn run<T: FnOnce() -> SherpaResult<()> + Send + 'static>(&self, job_creator: impl Fn() -> T) -> SherpaResult<()> {
+  fn run<T: FnOnce(usize) -> SherpaResult<()> + Send + 'static>(&self, job_creator: impl Fn(usize) -> T) -> SherpaResult<()> {
     let mut errors = vec![];
 
     for worker in &self.workers {
-      let t = job_creator();
+      let t = job_creator(self.size);
       let t = Box::new(t);
       match worker.channel.send(Task::Job(t)) {
         Ok(()) => {}
@@ -147,7 +153,7 @@ impl WorkerPool for StandardPool {
     let mut count = 0;
 
     loop {
-      match self.c_signal.recv() {
+      match self.c_signal.recv_timeout(std::time::Duration::from_nanos(1000)) {
         Ok(response) => {
           count += 1;
 
@@ -159,8 +165,15 @@ impl WorkerPool for StandardPool {
             break;
           }
         }
-        Err(_) => {
-          todo!("Handle working dying.")
+        err @ Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+          todo!("Handle worker dying. {err:?}");
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+      }
+
+      for (v, worker) in self.workers.iter().enumerate() {
+        if worker.thread.is_finished() {
+          panic!("Worker [{v}] Died");
         }
       }
     }
@@ -175,13 +188,15 @@ impl WorkerPool for StandardPool {
 
 #[test]
 fn worker_pool() -> SherpaResult<()> {
-  let pool = StandardPool::new(std::num::NonZeroUsize::new(200).unwrap())?;
+  let pool = StandardPool::new(200)?;
 
   let data = std::sync::Arc::new(std::sync::RwLock::new(0));
 
-  let job_creator = || {
+  let job_creator = |number_of_threads| {
     let data = data.clone();
-    move || {
+    println!("Number of workers: {number_of_threads}");
+    move |id| {
+      println!("job on worker {id} launched");
       match data.write() {
         Ok(mut data) => {
           (*data) += 1;

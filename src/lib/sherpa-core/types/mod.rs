@@ -9,7 +9,7 @@ mod parser_db;
 pub mod proxy;
 mod result;
 mod symbol;
-mod worker_pool;
+pub(crate) mod worker_pool;
 
 pub use error::*;
 pub use grammar::*;
