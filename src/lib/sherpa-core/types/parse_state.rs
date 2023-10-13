@@ -4,7 +4,6 @@ use super::*;
 use crate::{
   compile::states::{build_graph::graph::ScannerData, build_states::get_scanner_name},
   parser::{self, ASTNode, State},
-  utils::create_u64_hash,
   writer::code_writer::CodeWriter,
 };
 
@@ -14,14 +13,16 @@ pub type ParseStatesMap = OrderedMap<IString, Box<ParseState>>;
 #[allow(unused)]
 #[cfg(debug_assertions)]
 use std::fmt::Debug;
-use std::io::Write;
+use std::{
+  hash::{Hash, Hasher},
+  io::Write,
+};
 
 #[derive(Default, Clone)]
 
 /// The intermediate representation of a sherpa parser
 pub struct ParseState {
-  pub hash_name: IString,
-  pub name: IString,
+  pub guid_name: IString,
   pub precedence: u32,
   pub comment: String,
   pub code: String,
@@ -62,8 +63,26 @@ impl<'db> ParseState {
 
   /// Returns the hash of the body of the state, ignore the state declaration
   /// header.
-  pub fn get_canonical_hash(&self, db: &ParserDatabase) -> SherpaResult<u64> {
-    Ok(create_u64_hash(self.print(db, false)?))
+  ///
+  /// # Args
+  ///
+  /// - db - the parser ParserDatabase this state was derived from.
+  /// - ignore_self_recursion - If true, self recursive gotos do not contribute
+  ///   to
+  /// the hash.
+  pub fn get_canonical_hash(&self, db: &ParserDatabase, ignore_self_recursion: bool) -> SherpaResult<u64> {
+    let ast = self.get_ast()?;
+
+    let mut s = StandardHasher::new();
+
+    if ignore_self_recursion {
+      let name = self.guid_name.to_str(db.string_store());
+      canonical_hash(name.as_str(), &mut s, &ASTNode::State(ast.clone()))?;
+    } else {
+      canonical_hash("", &mut s, &ASTNode::State(ast.clone()))?;
+    }
+
+    Ok(s.finish())
   }
 
   /// Builds and returns a reference to the AST.
@@ -72,8 +91,6 @@ impl<'db> ParseState {
   pub fn build_ast(&mut self, db: &ParserDatabase) -> SherpaResult<&Box<State>> {
     if self.ast.is_none() {
       let code = String::from_utf8(self.source(db))?;
-
-      //println!("{code}");
 
       match parser::ast::ir_from((&code).into()) {
         Ok(ast) => self.ast = Some(ast),
@@ -86,7 +103,7 @@ impl<'db> ParseState {
 
   pub fn source(&self, db: &ParserDatabase) -> Vec<u8> {
     let mut w = CodeWriter::new(vec![]);
-    let name = self.hash_name.to_string(db.string_store());
+    let name = self.guid_name.to_string(db.string_store());
 
     let _ = &mut w + name.clone() + " =>\n" + self.code.as_str().replace("%%%%", name.as_str());
 
@@ -115,7 +132,7 @@ impl<'db> ParseState {
     SherpaResult::Ok(Self {
       scanner: self.scanner.clone(),
       code: self.print(db, false)?,
-      hash_name: self.hash_name,
+      guid_name: self.guid_name,
       ..Default::default()
     })
   }
@@ -131,7 +148,7 @@ impl ParseState {
   ast: {:#?}
   scanner: {:?}
 }}",
-      self.hash_name.to_string(db.string_store()),
+      self.guid_name.to_string(db.string_store()),
       &self.code.split("\n").collect::<Vec<_>>().join("\n    "),
       &self.get_ast(),
       self.scanner.as_ref().map(|scanner| { get_scanner_name(scanner, db) })
@@ -355,4 +372,77 @@ pub fn print_IR(node: &ASTNode, db: &ParserDatabase) -> SherpaResult<String> {
   render_IR(db, &mut cw, node, false, MatchInputType::Default)?;
 
   unsafe { SherpaResult::Ok(String::from_utf8_unchecked(cw.into_output())) }
+}
+
+/// Renders a string from an IR AST
+fn canonical_hash<T: Hasher>(state_name: &str, hasher: &mut T, node: &ASTNode) -> SherpaResult<()> {
+  match node {
+    ASTNode::State(box parser::State { statement, .. }) => {
+      canonical_hash(state_name, hasher, &ASTNode::Statement(statement.clone()))?;
+    }
+    ASTNode::Statement(box parser::Statement { branch, non_branch, transitive, pop }) => {
+      if let Some(transitive) = transitive {
+        canonical_hash(state_name, hasher, transitive)?;
+      }
+
+      for stmt in non_branch {
+        canonical_hash(state_name, hasher, stmt)?;
+      }
+
+      let pop = pop.as_ref().map(|p| ASTNode::Pop(p.clone()));
+      if let Some(pop) = pop.as_ref() {
+        canonical_hash(state_name, hasher, pop)?;
+      }
+
+      if let Some(branch) = branch {
+        canonical_hash(state_name, hasher, branch)?;
+      }
+    }
+    ASTNode::Matches(box parser::Matches { matches, scanner, mode, .. }) => {
+      mode.hash(hasher);
+      scanner.hash(hasher);
+
+      let mut matches = matches.iter().collect::<Vec<_>>();
+
+      matches.sort_by(|a, b| (a.to_string().cmp(&b.to_string())));
+
+      for m in matches {
+        canonical_hash(state_name, hasher, m)?;
+      }
+    }
+
+    ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
+      "default".hash(hasher);
+      canonical_hash(state_name, hasher, &ASTNode::Statement(statement.clone()))?;
+    }
+
+    ASTNode::IntMatch(box parser::IntMatch { vals, statement, .. }) => {
+      vals.hash(hasher);
+      canonical_hash(state_name, hasher, &ASTNode::Statement(statement.clone()))?;
+    }
+    ASTNode::Gotos(box parser::Gotos { goto, pushes, fork }) => {
+      if let Some(goto) = goto {
+        if goto.name != state_name {
+          goto.name.hash(hasher)
+        }
+      }
+
+      for push in pushes {
+        if push.name != state_name {
+          push.name.hash(hasher)
+        }
+      }
+
+      if let Some(fork) = fork {
+        for goto in &fork.paths {
+          if goto.name != state_name {
+            goto.name.hash(hasher)
+          }
+        }
+      }
+    }
+    node => node.hash(hasher),
+  };
+
+  SherpaResult::Ok(())
 }

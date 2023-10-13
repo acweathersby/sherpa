@@ -7,6 +7,7 @@ pub type OrderedMap<K, V> = ::std::collections::BTreeMap<K, V>;
 pub type OrderedSet<K> = std::collections::BTreeSet<K>;
 pub type Array<V> = ::std::vec::Vec<V>;
 pub type Queue<V> = ::std::collections::VecDeque<V>;
+pub type StandardHasher = ::std::collections::hash_map::DefaultHasher;
 
 pub(crate) trait DeduplicateIterator<T: std::hash::Hash + Clone>: Iterator<Item = T> + Sized + Clone {
   fn dedup<U: FromIterator<T>>(self) -> U {

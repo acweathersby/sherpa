@@ -2,19 +2,18 @@ use std::sync::Arc;
 
 use crate::{
   compile::{
-    ir::{build_ir_from_graph, optimize},
+    ir::{build_ir_from_graph, optimize, sweep},
     states::build_states::{compile_parser_states, NonTermGraph, ScannerGraph},
   },
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut},
   o_to_r,
   proxy::{Array, DeduplicateIterator, Queue, Set},
-  types::{ErrorContainerIter, ParserConfig, SharedParserDatabase},
+  types::*,
   GrammarIdentities,
   GrammarSoup,
   IString,
   Journal,
   ParseState,
-  ParseStatesMap,
   ParseStatesVec,
   ParserClassification,
   ParserDatabase,
@@ -289,7 +288,11 @@ impl SherpaGraph {
         let mut j = self.j.transfer();
         j.flush_reports();
 
-        let states = if opt { optimize(db, config, ir_states, optimize_for_debugging)? } else { ir_states };
+        let (states, report): (Vec<_>, _) = if opt {
+          optimize(db, config, ir_states, optimize_for_debugging)?
+        } else {
+          sweep(db, config, ir_states, optimize_for_debugging)?
+        };
 
         Ok(SherpaIRParser {
           classification,
@@ -297,6 +300,7 @@ impl SherpaGraph {
           db: db.clone(),
           states,
           is_optimized: opt,
+          report,
           j,
         })
       }
@@ -328,9 +332,10 @@ pub struct SherpaIRParser {
   j: Journal,
   db: SharedParserDatabase,
   config: ParserConfig,
-  states: ParseStatesMap,
+  states: ParseStatesVec,
   classification: ParserClassification,
   is_optimized: bool,
+  pub report: OptimizationReport,
 }
 
 impl JournalReporter for SherpaIRParser {
@@ -340,6 +345,10 @@ impl JournalReporter for SherpaIRParser {
 }
 
 impl ParserStore for SherpaIRParser {
+  fn report(&self) -> OptimizationReport {
+    self.report
+  }
+
   fn get_config(&self) -> &ParserConfig {
     &self.config
   }
@@ -371,10 +380,6 @@ impl SherpaIRParser {
   pub fn get_states(&self) -> impl Iterator<Item = (IString, &ParseState)> {
     self.states.iter().map(|(a, b)| (*a, b.as_ref()))
   }
-
-  pub fn get_unoptimized_states(&self) -> &ParseStatesMap {
-    &self.states
-  }
 }
 
 // ----------------------------------------------------------------------------------------
@@ -389,9 +394,11 @@ pub fn empty_source_path() -> SherpaResult<()> {
 
 pub struct TestPackage {
   pub journal: Journal,
-  pub states:  ParseStatesVec,
-  pub db:      SharedParserDatabase,
-  pub config:  ParserConfig,
+  pub states: ParseStatesVec,
+  pub db: SharedParserDatabase,
+  pub config: ParserConfig,
+  pub report: OptimizationReport,
+  pub classification: ParserClassification,
 }
 
 impl JournalReporter for TestPackage {
@@ -401,6 +408,10 @@ impl JournalReporter for TestPackage {
 }
 
 impl ParserStore for TestPackage {
+  fn report(&self) -> OptimizationReport {
+    self.report
+  }
+
   fn get_config(&self) -> &ParserConfig {
     &self.config
   }
@@ -418,17 +429,19 @@ impl ParserStore for TestPackage {
   }
 
   fn get_classification(&self) -> ParserClassification {
-    Default::default()
+    self.classification
   }
 }
 
 impl From<SherpaIRParser> for TestPackage {
   fn from(value: SherpaIRParser) -> Self {
     TestPackage {
-      config:  value.config,
+      config: value.config,
       journal: value.j.transfer(),
-      states:  value.states.into_iter().collect(),
-      db:      value.db,
+      states: value.states.into_iter().collect(),
+      db: value.db,
+      report: value.report,
+      classification: value.classification,
     }
   }
 }
@@ -510,6 +523,7 @@ pub trait ParserStore: JournalReporter {
   fn get_classification(&self) -> ParserClassification;
   fn get_is_optimized(&self) -> bool;
   fn get_config(&self) -> &ParserConfig;
+  fn report(&self) -> OptimizationReport;
 
   fn get_meterics(&self) -> ParserMetrics {
     ParserMetrics {

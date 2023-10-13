@@ -61,7 +61,7 @@ IMPORT ./token as token
 
 <> add > 
 
-    add "+" expression
+    add "+"{1} expression{0}
 
         :ast { t_AST_Add, left: $1, right: $3, tok }
 

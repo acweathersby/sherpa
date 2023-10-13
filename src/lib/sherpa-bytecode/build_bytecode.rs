@@ -65,7 +65,7 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> S
   let proxy_to_address = state_name_to_proxy
     .into_iter()
     .map(|(name, proxy_address)| {
-      (proxy_address as u32, *pkg.state_name_to_address.get(&name.to_string(db.string_store())).unwrap())
+      (proxy_address as u32, pkg.state_name_to_address.get(&name.to_string(db.string_store())).cloned().unwrap_or_default())
     })
     .collect::<OrderedMap<_, _>>()
     .into_values()

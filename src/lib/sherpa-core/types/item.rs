@@ -1033,7 +1033,7 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> 
   /// Given a [CompileDatabase] and [DBProdId] returns the initial
   /// items of the non-terminal.
   fn start_items(nterm: DBNonTermKey, db: &ParserDatabase) -> Self {
-    let Ok(rules) = db.nonterm_rules(nterm) else { panic!("Could not get rules {:?}", nterm) };
+    let Ok(rules) = db.nonterm_rules(nterm) else { panic!("Could not get rules") };
     rules.iter().map(|r| Item::from((*r, db))).collect()
   }
 

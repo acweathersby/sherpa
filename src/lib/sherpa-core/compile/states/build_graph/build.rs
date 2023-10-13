@@ -1,4 +1,5 @@
 use super::{
+  errors::peek_not_allowed_error,
   flow::{
     handle_fork,
     handle_nonterminal_shift,
@@ -35,11 +36,11 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
   handle_nonterminal_shift(gb)?;
 
   if gb.process_successors() == 0 {
+    let peek_level = gb.current_state().get_type().peek_level();
     if gb.current_state().get_type().peek_level() > 0 {
       if gb.get_child_count() == 0 {
-        println!("Leafless path {}", gb.get_child_count());
-        gb._print_state_();
-        //panic!("Peeking has an empty path ")
+        gb.declare_recursive_peek_error();
+        return peek_not_allowed_error(gb, &[], &format!("This is undeterministic at k>={peek_level}"));
       }
     }
   }

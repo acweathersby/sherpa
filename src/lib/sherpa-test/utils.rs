@@ -5,11 +5,12 @@ use sherpa_rust_runtime::{
   kernel::{disassemble_bytecode, ByteCodeParserNew},
   types::{AstObjectNew, BytecodeParserDB, ParserInput, ParserProducer, ReducerNew, RuntimeDatabase, StringInput},
 };
+use std::fmt::format;
 
 pub type TestParser = ByteCodeParserNew;
 
 /// Writes to a debug file for testing
-pub fn write_debug_file<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
+pub fn _write_debug_file_<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
   db: &ParserDatabase,
   file_name: FileName,
   data: Data,
@@ -35,9 +36,29 @@ pub fn _write_states_to_temp_file_(builder: &impl ParserStore) -> SherpaResult<(
   #[cfg(all(debug_assertions))]
   {
     let db = builder.get_db();
+    _write_debug_file_(
+      db,
+      "ir_states.tmp",
+      format!(
+        "
+===============================================================================
+{}
+{}  
+===============================================================================
+\n\n",
+        builder.get_classification().to_string(),
+        builder.report().to_string()
+      ),
+      false,
+    )?;
 
     for (i, state) in builder.get_states().enumerate() {
-      write_debug_file(db, "ir_states.tmp", state.1.print(db, true)? + "\n", i > 0)?;
+      _write_debug_file_(
+        db,
+        "ir_states.tmp",
+        format!("{i:0>5}: [{:X}] \n\n {}", state.1.get_canonical_hash(db, true)?, state.1.print(db, true)? + "\n"),
+        true,
+      )?;
     }
   }
 
@@ -48,7 +69,7 @@ pub fn _write_states_to_temp_file_(builder: &impl ParserStore) -> SherpaResult<(
 pub fn _write_disassembly_to_temp_file_(pkg: &BytecodeParserDB, db: &ParserDatabase) -> SherpaResult<()> {
   #[cfg(all(debug_assertions))]
   {
-    write_debug_file(db, "bc_disassembly.tmp", disassemble_bytecode(&pkg.bytecode), false)?;
+    _write_debug_file_(db, "bc_disassembly.tmp", disassemble_bytecode(&pkg.bytecode), false)?;
   }
   Ok(())
 }

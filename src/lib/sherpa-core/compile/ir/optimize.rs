@@ -24,6 +24,18 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 type Map<A, B> = BTreeMap<A, B>;
 type Set<A> = BTreeSet<A>;
 
+/// Uses a garbage collection sweep to remove states that have no path to entry
+/// states. No optimizations are performed.
+pub(crate) fn sweep<'db, R: FromIterator<(IString, Box<ParseState>)>>(
+  db: &'db ParserDatabase,
+  config: &ParserConfig,
+  parse_states: ParseStatesMap,
+  optimize_for_debugging: bool,
+) -> SherpaResult<(R, OptimizationReport)> {
+  let start = ComplexityMarker::from_map_iter(db, parse_states.iter());
+  finish(optimize_for_debugging, parse_states, db, config, OptimizationReport { start, ..Default::default() })
+}
+
 /// Performance various transformation on the parse state graph
 /// to reduce the number of steps between transient actions, and to
 /// reduce the number of parse states overall.
@@ -32,18 +44,21 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   config: &ParserConfig,
   parse_states: ParseStatesMap,
   optimize_for_debugging: bool,
-) -> SherpaResult<R> {
-  let start_complexity = ComplexityMarker::new(db, parse_states.iter());
+) -> SherpaResult<(R, OptimizationReport)> {
+  let mut report = OptimizationReport {
+    start: ComplexityMarker::from_map_iter(db, parse_states.iter()),
+    ..Default::default()
+  };
 
-  let parse_states = garbage_collect(db, config, parse_states, "initial purge")?;
+  let parse_states = garbage_collect(db, config, parse_states, None)?.0;
 
-  let parse_states = canonicalize_states(db, config, parse_states, None)?.0;
+  let parse_states = canonicalize_states(db, config, parse_states, false)?.0;
 
   let parse_states = merge_branches(db, parse_states)?;
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
-  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?.0;
+  let parse_states = canonicalize_states(db, config, parse_states, false)?.0;
 
   let parse_states = inline_states(db, config, parse_states)?;
 
@@ -55,34 +70,64 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 
   let parse_states = remove_redundant_defaults(db, config, parse_states)?;
 
-  let parse_states = canonicalize_states(db, config, parse_states, Some("state combine"))?.0;
+  let parse_states = canonicalize_states(db, config, parse_states, false)?.0;
 
   let parse_states = combine_state_branches(db, parse_states)?;
 
   // Perform final rounds of canonicalization, removing as many redundant states
   // as possible.
   let parse_states = {
+    report.canonical_rounds += 3;
     let mut states = parse_states;
+
+    let mut remove_self_recursive = false;
     loop {
-      match canonicalize_states(db, config, states, Some("state combine"))? {
+      match canonicalize_states(db, config, states, remove_self_recursive)? {
         (s, true) => {
+          report.canonical_rounds += 1;
           states = s;
         }
-        (s, false) => break s,
+        (s, false) => {
+          if !remove_self_recursive {
+            // Perform a rounds of canonicalization that merge states that are
+            // identical but are also self-recursive
+            remove_self_recursive = true;
+
+            states = s;
+          } else {
+            break s;
+          }
+        }
       }
     }
   };
 
-  //
-  // let parse_states = inline_matches(db, parse_states)?;
+  if cfg!(debug_assertions) {
+    // Ensure all states are unique at this point
+    let mut hashes = Set::new();
+    for (_, state) in parse_states.iter() {
+      let hash = state.get_canonical_hash(db, true).unwrap();
+      debug_assert!(
+        hashes.insert(hash),
+        "State {} does not have a unique hash: [{hash}]",
+        state.guid_name.to_string(db.string_store())
+      )
+    }
+  }
 
   let parse_states: ParseStatesMap = parse_states;
 
-  start_complexity.print_comparison(&ComplexityMarker::new(db, parse_states.iter()), "Total optimization result");
+  finish(optimize_for_debugging, parse_states, db, config, report)
+}
 
+fn finish<'db, R: FromIterator<(IString, Box<ParseState>)>>(
+  optimize_for_debugging: bool,
+  parse_states: BTreeMap<IString, Box<ParseState>>,
+  db: &ParserDatabase,
+  config: &ParserConfig,
+  report: OptimizationReport,
+) -> SherpaResult<(R, OptimizationReport)> {
   if optimize_for_debugging {
-    // Can only do this once we can map scanner ids back to match statements
-    // otherwise scanner states will be dropped.
     let parse_states = parse_states.into_iter().map(|(name, state)| {
       let mut state = state.remap_source(db).unwrap_or(Default::default());
       if let Err(err) = state.build_ast(db) {
@@ -91,35 +136,9 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
       (name, Box::new(state))
     });
 
-    garbage_collect(db, config, parse_states.collect(), "debug-cleanup")
+    garbage_collect(db, config, parse_states.collect(), Some(report))
   } else {
-    garbage_collect(db, config, parse_states, "cleanup")
-  }
-}
-
-struct ComplexityMarker {
-  num_of_states:   usize,
-  code_complexity: f64,
-}
-
-impl ComplexityMarker {
-  pub fn new<'i, I: Iterator<Item = (&'i IString, &'i Box<ParseState>)>>(db: &ParserDatabase, states: I) -> Self {
-    let (num_of_states, code_complexity) = states
-      .enumerate()
-      .map(|(i, (_, s))| (i, s.print(db, false).unwrap_or_default().len()))
-      .fold((0, 0), |(a, c), (b, d)| (a.max(b), c + d));
-    Self { num_of_states, code_complexity: code_complexity as f64 }
-  }
-
-  pub fn print_comparison(&self, other: &Self, label: &str) {
-    eprintln!(
-      "Opt {} ---- {} -> {} State Reduction: {}% Complexity Reduction: {}%",
-      label,
-      self.num_of_states,
-      other.num_of_states,
-      ((1.0 - other.num_of_states as f64 / self.num_of_states as f64) * 100.0).round(),
-      ((1.0 - other.code_complexity / self.code_complexity) * 100.0).round()
-    );
+    garbage_collect(db, config, parse_states, Some(report))
   }
 }
 
@@ -149,7 +168,7 @@ fn _inline_matches<'db>(
   config: &ParserConfig,
   parse_states: ParseStatesMap,
 ) -> SherpaResult<ParseStatesMap> {
-  garbage_collect(db, config, parse_states, "byte-chains")
+  Ok(garbage_collect(db, config, parse_states, None)?.0)
 }
 
 /// Remove default branches that transition to match states that are identical
@@ -252,7 +271,7 @@ fn remove_redundant_defaults<'db>(
     }
   }
 
-  garbage_collect(db, config, parse_states, "redundant-defaults")
+  Ok(garbage_collect(db, config, parse_states, None)?.0)
 }
 
 /// Create chained matching scanners that can scan sequences of
@@ -341,7 +360,7 @@ fn create_byte_sequences<'db>(
     }
   }
 
-  garbage_collect(db, config, parse_states, "byte-sequences")
+  Ok(garbage_collect(db, config, parse_states, None)?.0)
 }
 
 /// Inline trivial scanners.
@@ -438,7 +457,7 @@ fn inline_scanners<'db>(
     }
   }
 
-  garbage_collect(db, config, parse_states, "inline-scanners")
+  Ok(garbage_collect(db, config, parse_states, None)?.0)
 }
 
 /// Inline statements of states that don't have transitive actions or matches.
@@ -579,7 +598,7 @@ fn inline_states<'db>(
     }
   }
 
-  garbage_collect(db, config, parse_states, "inline")
+  Ok(garbage_collect(db, config, parse_states, None)?.0)
 }
 
 /// Merges matching branches of states that only consist of goto/push
@@ -771,38 +790,45 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
 
 /// Create canonical states by aliasing states that  generate the same canonical
 /// hash, e.i: states that differ in name only.
-fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
+fn canonicalize_states<
+  'db,
+  R: FromIterator<(IString, Box<ParseState>)> + Clone + IntoIterator<Item = (IString, Box<ParseState>)>,
+>(
   db: &'db ParserDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
-  gc_label: Option<&str>,
+  merge_self_recursive: bool,
 ) -> SherpaResult<(R, bool)> {
   let mut has_changed = false;
   let mut state_name_to_canonical_state_name = Map::new();
   let mut hash_to_name_set = Map::new();
 
   // Prefer root names.
-  for (name, state) in &parse_states {
+  for (n, state) in &parse_states {
+    #[cfg(debug_assertions)]
+    debug_assert_eq!(*n, state.guid_name, "");
+    let name = state.guid_name;
     if state.root {
-      let hash = state.get_canonical_hash(db)?;
-      let canonical_name = hash_to_name_set.entry(hash).or_insert(*name).clone();
-      state_name_to_canonical_state_name.insert(*name, canonical_name);
+      let hash: u64 = state.get_canonical_hash(db, merge_self_recursive)?;
+      let canonical_name = *hash_to_name_set.entry(hash).or_insert(name);
+      state_name_to_canonical_state_name.insert(name, canonical_name);
     }
   }
 
-  for (name, state) in &parse_states {
+  for (n, state) in &parse_states {
+    #[cfg(debug_assertions)]
+    debug_assert_eq!(*n, state.guid_name, "");
+    let name = state.guid_name;
     if !state.root {
-      let hash = state.get_canonical_hash(db)?;
-      let canonical_name = hash_to_name_set.entry(hash).or_insert(*name).clone();
-      state_name_to_canonical_state_name.insert(*name, canonical_name);
+      let hash = state.get_canonical_hash(db, merge_self_recursive)?;
+      let canonical_name = *hash_to_name_set.entry(hash).or_insert(name);
+      state_name_to_canonical_state_name.insert(name, canonical_name);
     }
   }
 
   fn canonicalize_goto_name(db: &ParserDatabase, name: &str, name_lu: &Map<IString, IString>) -> Option<String> {
     let iname = name.to_token();
-    let canonical_name =
-      *name_lu.get(&iname).expect(&("State name should exist: ".to_string() + &iname.to_string(db.string_store())));
-
+    let canonical_name = *name_lu.get(&iname).expect(&("State name should exist: ".to_string() + &name));
     (iname != canonical_name).then(|| canonical_name.to_string(db.string_store()))
   }
 
@@ -813,6 +839,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   ) -> SherpaResult<bool> {
     let parser::Statement { branch, .. } = statement;
     let mut has_changed = false;
+
     if let Some(branch) = branch.as_mut() {
       match branch {
         ASTNode::Gotos(gt) => {
@@ -837,7 +864,14 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
             }
           }
         }
-        ASTNode::Matches(box parser::Matches { matches, .. }) => {
+        ASTNode::Matches(box parser::Matches { scanner, matches, .. }) => {
+          if !scanner.is_empty() {
+            if let Some(name) = canonicalize_goto_name(db, &scanner, name_lu) {
+              *scanner = name;
+              has_changed = true
+            }
+          }
+
           for m in matches {
             match m {
               ASTNode::TermMatch(..) | ASTNode::DefaultMatch(..) | ASTNode::IntMatch(..) | ASTNode::NonTermMatch(..) => {
@@ -861,7 +895,7 @@ fn canonicalize_states<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   }
 
   if has_changed {
-    garbage_collect(db, config, parse_states, gc_label.unwrap_or("conanicalize")).map(|v| (v, true))
+    Ok((garbage_collect(db, config, parse_states, None)?.0, true))
   } else {
     Ok((parse_states.into_iter().collect(), false))
   }
@@ -873,8 +907,8 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   db: &'db ParserDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
-  _reason: &str,
-) -> SherpaResult<R> {
+  report: Option<OptimizationReport>,
+) -> SherpaResult<(R, OptimizationReport)> {
   // let start_complexity = ComplexityMarker::new(db, parse_states.iter());
 
   let mut out = Array::new();
@@ -898,7 +932,12 @@ pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
     out.push((name, state));
   }
 
-  SherpaResult::Ok(R::from_iter(out))
+  if let Some(mut report) = report {
+    report.end = ComplexityMarker::from_vec_iter(db, out.iter());
+    SherpaResult::Ok((R::from_iter(out), report))
+  } else {
+    SherpaResult::Ok((R::from_iter(out), Default::default()))
+  }
 }
 
 fn traverse_statement<'db>(

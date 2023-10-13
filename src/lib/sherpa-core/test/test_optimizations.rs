@@ -35,8 +35,8 @@ fn basic_optimize_unknown() -> R<()> {
 
       println!("AFTER -------------------");
 
-      for state in states {
-        println!("B: {} {:#}\n", state.1.get_canonical_hash(&db)?, state.1.print(&db, true)?)
+      for state in states.0 {
+        println!("B: {} {:#}\n", state.1.get_canonical_hash(&db, false)?, state.1.print(&db, true)?)
       }
 
       R::Ok(())

@@ -256,7 +256,17 @@ impl std::ops::Add for &ParserClassification {
 }
 
 impl ParserClassification {
-  pub fn get_type(&self) -> String {
+  /// Returns the classification as algorithm acronym string.
+  ///
+  /// This can be one of `LL | LR | RD | RAD | GLL | GLR | GRD | GRAD`.
+  ///
+  /// The string may also be postfixed with the maximum level of token
+  /// lookahead, k, required to parse an input.
+  ///
+  /// # Example
+  ///
+  /// `RAD(2)` - Recursive Ascent & Descent with 2 levels of look ahead.
+  pub fn to_string(&self) -> String {
     let base = if self.calls_present {
       if self.bottom_up {
         "RAD"
@@ -273,7 +283,15 @@ impl ParserClassification {
 
     let g = if self.forks_present { "G" } else { "" };
 
-    let k = if self.max_k > 32 { "(k>32)".to_string() } else { "(".to_string() + &self.max_k.to_string() + ")" };
+    let k = if !self.forks_present {
+      if self.max_k > 64 {
+        "(*)".to_string()
+      } else {
+        "(".to_string() + &self.max_k.to_string() + ")"
+      }
+    } else {
+      Default::default()
+    };
 
     g.to_string() + base + &k
   }

@@ -30,44 +30,37 @@ pub fn build_ir_from_graph(graph: &SherpaGraph) -> SherpaResult<(ParserClassific
 
   let mut states = States::default();
 
-  // Build entry states
+  // Build entry states -------------------------------------------------------
   for entry in db.entry_points().iter().filter(|i| config.EXPORT_ALL_NONTERMS || i.is_export) {
     let ir = build_entry_ir(entry, db)?;
-
     for state in ir {
-      states.insert(state.hash_name, state);
+      states.insert(state.guid_name, state);
     }
   }
 
-  // Build parser_states
+  // Build parser_states ------------------------------------------------------
   for state in parsers.iter() {
-    debug_assert!(state.graph.is_some());
-
     classification |= state.classification;
-
     if let Some(graph) = state.graph.as_ref() {
-      states.extend(build_ir(&mut j, graph, state.name)?.into_iter().map(|s| (s.hash_name, s)));
+      states.extend(build_ir(&mut j, graph, state.name)?.into_iter().map(|s| (s.guid_name, s)));
     }
   }
 
-  // Build scanner_states
+  // Build scanner_states -----------------------------------------------------
   for state in scanners.iter() {
-    debug_assert!(state.graph.is_some());
-
     if let Some(graph) = state.graph.as_ref() {
-      states.extend(build_ir(&mut j, graph, state.name)?.into_iter().map(|s| (s.hash_name, s)));
+      states.extend(build_ir(&mut j, graph, state.name)?.into_iter().map(|s| (s.guid_name, s)));
     }
   }
 
-  // Build custom states
+  // Build custom states ------------------------------------------------------
   for i in 0..db.nonterms_len() {
     let nonterm_key = DBNonTermKey::from(i);
     if let Some(custom_state) = db.custom_state(nonterm_key) {
       let name = db.nonterm_guid_name(nonterm_key);
 
       let state = ParseState {
-        hash_name:     name,
-        name:          name,
+        guid_name:     name,
         comment:       "Custom State".into(),
         code:          custom_state.tok.to_string(),
         ast:           Some(Box::new(custom_state.clone())),
@@ -84,7 +77,6 @@ pub fn build_ir_from_graph(graph: &SherpaGraph) -> SherpaResult<(ParserClassific
     state.build_ast(db)?;
   }
 
-  println!("{}", classification.get_type());
   SherpaResult::Ok((classification, states))
 }
 
@@ -104,7 +96,7 @@ pub(crate) fn build_entry_ir(
 
   let entry_state = ParseState {
     code: w.to_string(),
-    hash_name: *nterm_entry_name,
+    guid_name: *nterm_entry_name,
     ..Default::default()
   };
 
@@ -112,7 +104,7 @@ pub(crate) fn build_entry_ir(
 
   let _ = (&mut w) + "accept";
 
-  let exit_state = ParseState { code: w.to_string(), hash_name: *nterm_exit_name, ..Default::default() };
+  let exit_state = ParseState { code: w.to_string(), guid_name: *nterm_exit_name, ..Default::default() };
 
   SherpaResult::Ok(Array::from_iter([Box::new(entry_state), Box::new(exit_state)]))
 }
@@ -127,7 +119,7 @@ pub(crate) fn build_ir(j: &mut Journal, graph: &ReversedGraph, entry_name: IStri
   while let Some((state, scanner, successors)) = iter.next() {
     let goto_name = if let Some(goto) = state.get_goto_state() {
       let goto_pair = convert_nonterm_shift_state_to_ir(j, goto, &successors)?;
-      let out = Some(goto_pair.1.hash_name.clone());
+      let out = Some(goto_pair.1.guid_name.clone());
       output.insert(goto_pair.0, goto_pair.1);
       out
     } else {
@@ -198,7 +190,7 @@ fn convert_nonterm_shift_state_to_ir<'graph: 'graph>(
 
   let mut goto = Box::new(create_ir_state(w, &state, None)?);
 
-  goto.hash_name = create_ir_state_name(GRAPH_STATE_NONE, &state).intern(db.string_store());
+  goto.guid_name = create_ir_state_name(GRAPH_STATE_NONE, &state).intern(db.string_store());
 
   SherpaResult::Ok((state.get_id(), goto))
 }
@@ -297,12 +289,12 @@ fn convert_state_to_ir<'graph: 'graph>(
 
       if let Some(mut base_state) = base_state {
         if state_id.is_root() {
-          base_state.hash_name = (entry_name.to_string(s_store) + "_then").intern(s_store);
+          base_state.guid_name = (entry_name.to_string(s_store) + "_then").intern(s_store);
         } else {
-          base_state.hash_name = (base_state.hash_name.to_string(s_store) + "_then").intern(s_store);
+          base_state.guid_name = (base_state.guid_name.to_string(s_store) + "_then").intern(s_store);
         }
 
-        w.w(" then goto ")?.w(&base_state.hash_name.to_string(s_store))?;
+        w.w(" then goto ")?.w(&base_state.guid_name.to_string(s_store))?;
 
         out.push((state_id.to_post_reduce(), base_state));
       }
@@ -310,14 +302,14 @@ fn convert_state_to_ir<'graph: 'graph>(
       let mut ir_state = create_ir_state(w, &state, None)?;
 
       if state_id.is_root() {
-        ir_state.hash_name = entry_name;
+        ir_state.guid_name = entry_name;
         ir_state.root = true;
       }
 
       out.push((state_id, Box::new(ir_state)));
     } else if let Some(mut base_state) = base_state {
       if state_id.is_root() {
-        base_state.hash_name = entry_name;
+        base_state.guid_name = entry_name;
       }
 
       out.push((state_id, base_state));
@@ -568,8 +560,6 @@ pub(super) fn create_ir_state_name<'graph: 'graph>(
   let graph = target_state.graph();
   if origin_state.is_some_and(|s| s.get_id() == target_state.get_id()) {
     "%%%%".to_string()
-  } else if false {
-    graph.get_state_name(target_state.get_id())
   } else if target_state.get_id().is_goto() {
     "g_".to_string() + &target_state.get_hash().to_string()
   } else {
@@ -584,7 +574,7 @@ pub(super) fn create_ir_state<'graph: 'graph>(
 ) -> SherpaResult<ParseState> {
   let ir_state = ParseState {
     code: w.to_string(),
-    hash_name: create_ir_state_name(GRAPH_STATE_NONE, state).intern(state.graph().get_db().string_store()),
+    guid_name: create_ir_state_name(GRAPH_STATE_NONE, state).intern(state.graph().get_db().string_store()),
     scanner,
     ..Default::default()
   };

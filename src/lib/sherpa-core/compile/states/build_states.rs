@@ -62,6 +62,12 @@ pub(crate) fn compile_parser_states(
 ) -> SherpaResult<(Arc<Vec<Box<NonTermGraph>>>, Arc<Vec<Box<ScannerGraph>>>)> {
   j.set_active_report("States Compile", crate::ReportType::AnyNonTermCompile);
 
+  #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
+  crate::test::utils::write_debug_file(&db, "parse_graph.tmp", "", false)?;
+
+  #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
+  crate::test::utils::write_debug_file(&db, "scanner_graph.tmp", "", false)?;
+
   let entry_points = db.entry_nterm_map();
   let (nonterm_job_board, nonterm_results) = db
     .nonterms()
@@ -88,7 +94,7 @@ pub(crate) fn compile_parser_states(
           if !config.ALLOW_CALLS {
             // If we can't make calls to another non-terminal parse graph then it
             // doesn't make sense to create parse graphs for non-terminals
-            // that are not exported by the grammar, as the root of those graphs
+            // that are not exported by the grammar, as the root of thos e graphs
             // will be unreachable.
             if db.entry_nterm_keys().contains(&id) {
               (NonTermGraphJobEntry(Some(std::sync::RwLock::new(result))), Default::default())
@@ -152,10 +158,7 @@ pub(crate) fn compile_parser_states(
                 ));
               };
 
-              if let Some(NonTermGraphJob {
-                nonterm_id, lr_only, is_root_entry: is_root_goal, valid, is_scanner, ..
-              }) = pending_job
-              {
+              if let Some(NonTermGraphJob { nonterm_id, lr_only, is_root_entry: is_root_goal, is_scanner, .. }) = pending_job {
                 if !is_scanner {
                   let graph = Box::new(NonTermGraph {
                     name: db_ref.nonterm_guid_name(nonterm_id),
@@ -194,13 +197,33 @@ pub(crate) fn compile_parser_states(
                     }
 
                     Err(StateConstructionError::NonDeterministicPeek(work, errors)) => {
-                      // Stop the world, find all non-terms that include this
-                      //#[cfg(debug_assertions)]
-                      //eprintln!(
-                      //  "\nCould not create peek states for: {}.\nThis will effect parser extensions
-                      // that require random non-terminal entries\n",
-                      //  db_ref.nonterm_friendly_name_string(nonterm_id)
-                      //);
+                      //-----------------------------------------------------------------------------------
+                      // This non-terminal is invalid. If this is a root entry state then we can't
+                      // construct a parser for it. Otherwise, we can mark the parser for this
+                      // non-term as invalid, And then proceed to "collapse" the general parser, if
+                      // LR parsing is enabled.
+                      //
+                      // This involves the following:
+
+                      // let A = the non-terminal whose peek has failed.
+                      //
+                      // Dropping all the states of A; this will results in a parser that is not
+                      // enterable at A. Then, mark all exported non-terminals which contains at least
+                      // one rule that, directly or indirectly, references an A in the right side as
+                      // "LR only", preventing states with call type transitions from being created.
+                      // Rebuild the states of the effected non-terminals. Repeat this process for any
+                      // non-terminal, marked as "LR only", that fails to
+                      // generate states due to undeterministic peek.
+                      //
+                      // If during this iterative process a non-terminal is encountered that is "LR
+                      // only", is non-deterministic during peeking, and is a root
+                      // entry point for the parser, then we have failed to generate a minimum
+                      // acceptable parser for this grammar configuration. Report parser as failed
+                      // and produce relevant diagnostic messages.
+                      //
+                      // If LR style parsing is disabled, then we cannot perform this process. Report
+                      // parser as failed and produce relevant diagnostic messages.
+                      //-----------------------------------------------------------------------------------
 
                       // Invalidate the job we currently have.
                       if let NonTermGraphJobEntry(Some(job_flyer)) = &job_board[job_index] {

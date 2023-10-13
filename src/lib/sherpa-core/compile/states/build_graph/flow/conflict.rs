@@ -30,7 +30,8 @@ pub(super) enum ShiftReduceConflictResolution {
   Fork,
 }
 
-const MAX_EVAL_K: usize = 8;
+const MAX_EVAL_K_RR: usize = 8;
+const MAX_EVAL_K_SR: usize = 64;
 
 pub(super) enum ReduceReduceConflictResolution {
   Reduce(Item),
@@ -47,9 +48,9 @@ pub(super) fn resolve_reduce_reduce_conflict(
   if prec_sym.sym().is_default() {
     Ok(ReduceReduceConflictResolution::Nothing)
   } else {
-    match calculate_k_multi(gb, follow_pairs.iter().map(|i| [i].into_iter()).collect(), MAX_EVAL_K) {
+    match calculate_k_multi(gb, follow_pairs.iter().map(|i| [i].into_iter()).collect(), MAX_EVAL_K_RR) {
       KCalcResults::K(k) => {
-        if !gb.config.ALLOW_PEEKING || k >= MAX_EVAL_K {
+        if !gb.config.ALLOW_PEEKING || k >= MAX_EVAL_K_RR {
           if gb.config.ALLOW_CONTEXT_SPLITTING {
             return Ok(ReduceReduceConflictResolution::Fork(follow_pairs));
           }
@@ -136,7 +137,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
   /// This conflict requires some form of lookahead or fork to disambiguate,
   /// prefer peeking unless k is too large or the ambiguity is resolved outside
   /// the goal non-terminal
-  match calculate_k(gb, reduces.clone(), shifts.clone(), MAX_EVAL_K) {
+  match calculate_k(gb, reduces.clone(), shifts.clone(), MAX_EVAL_K_SR) {
     KCalcResults::K(k) => {
       gb.set_classification(ParserClassification { peeks_present: true, max_k: k as u16, ..Default::default() });
       if !gb.config.ALLOW_PEEKING {
@@ -160,30 +161,6 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
       if gb.config.ALLOW_CONTEXT_SPLITTING {
         Ok(ShiftReduceConflictResolution::Fork)
       } else {
-        // Non-term is invalid. If this is a root entry state then we can't construct a
-        // parser for it. Otherwise, we can mark the parser for this non-term as
-        // invalid, And then proceed to "collapse" our overall parser, if the LR parsing
-        // is enabled.
-        //
-        // This involves the following:
-        // let A = the non-terminal whose peek has failed.
-        //
-        // Dropping all the states of A; this will results in a parser that is not
-        // enterable at A. Then, mark all exported non-terminals whose root
-        // rules contains an A in the right side as "LR only", preventing states
-        // with call type transitions from being created. Rebuild the states for
-        // effected non-terminals. Repeat this process for any non-terminal, marked as
-        // "LR only", that fails to generate states due to undeterministic peek.
-        //
-        // If during this iterative process a non-terminal is encountered that is "LR
-        // only", is non-deterministic during peeking, and is a root
-        // entry point for the parser, then we have failed to generate a minimum
-        // acceptable parser for this grammar configuration. Report parser as failed
-        // and produce relevant diagnostic messages.
-        //
-        // If LR style parsing is disabled, then we cannot perform this process. Report
-        // parser as failed and produce relevant diagnostic messages.
-        //
         gb.declare_recursive_peek_error();
         peek_not_allowed_error(
           gb,

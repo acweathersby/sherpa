@@ -22,7 +22,7 @@ pub(crate) fn build<'follow, 'db: 'follow>(
 
   #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
   if !gb.is_scanner() {
-    crate::test::utils::write_debug_file(
+    /*     crate::test::utils::write_debug_file(
       &db,
       "parse_graph.tmp",
       "----------------------------------------------\n".to_string()
@@ -31,9 +31,10 @@ pub(crate) fn build<'follow, 'db: 'follow>(
         + &gb.graph()._debug_string_(),
       true,
     )
-    .unwrap();
+    .unwrap(); */
   } else {
-    crate::test::utils::write_debug_file(&db, "scanner_graph.tmp", gb.graph()._debug_string_(), true).unwrap();
+    // crate::test::utils::write_debug_file(&db, "scanner_graph.tmp",
+    // gb.graph()._debug_string_(), true).unwrap();
   }
 
   let (class, graph, errors, have_non_deterministic_peek) = gb.into_inner();

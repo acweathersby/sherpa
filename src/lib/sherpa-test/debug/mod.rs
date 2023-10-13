@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use sherpa_core::ParserDatabase;
 use sherpa_rust_runtime::types::{bytecode::Opcode, DebugEventNew, ParserInput};
 
-use crate::utils::write_debug_file;
+use crate::utils::_write_debug_file_;
 #[derive(Debug, Clone, Copy)]
 pub struct PrintConfig {
   pub display_scanner_output: bool,
@@ -61,15 +61,15 @@ pub fn file_debugger(
   print_config: PrintConfig,
   state_lu: HashMap<u32, String>,
 ) -> Option<Box<sherpa_rust_runtime::types::DebugFnNew>> {
-  use sherpa_core::{proxy::Map, ParserDatabase};
+  use sherpa_core::proxy::Map;
 
   let mut stack = vec![];
-  write_debug_file(&db, "parser_output.tmp", "    ", false).unwrap();
+  _write_debug_file_(&db, "parser_output.tmp", "    ", false).unwrap();
   Some(Box::new(move |event, ctx| {
     let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
-      write_debug_file(&db, "parser_output.tmp", string, true).unwrap();
+      _write_debug_file_(&db, "parser_output.tmp", string, true).unwrap();
     }
   }))
 }
@@ -79,8 +79,6 @@ pub fn console_debugger(
   print_config: PrintConfig,
   state_lu: HashMap<u32, String>,
 ) -> Option<Box<sherpa_rust_runtime::types::DebugFnNew>> {
-  use sherpa_core::ParserDatabase;
-
   let mut stack = vec![];
   Some(Box::new(move |event, ctx| {
     let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);

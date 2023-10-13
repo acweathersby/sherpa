@@ -129,7 +129,7 @@ fn build_parser(
     panic!("Failed To parse due to the above errors")
   }
 
-  let parser = db.build_states(config)?.optimize(false)?;
+  let parser = db.build_states(config)?.build_ir_parser(true, false)?;
 
   if parser.dump_errors() {
     panic!("Failed To parse due to the above errors")
