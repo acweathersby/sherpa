@@ -61,23 +61,27 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
         ParseAction::Skip { byte_offset: token_byte_offset, byte_length: token_byte_length, .. } => {
           skips.push(input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize));
         }
-        ParseAction::Shift { byte_length: token_byte_length, byte_offset: token_byte_offset, .. } => {
+        ParseAction::Shift {
+          byte_length: token_byte_length,
+          byte_offset: token_byte_offset,
+          token_id,
+          ..
+        } => {
           let offset_start = token_byte_offset as usize;
           let offset_end = (token_byte_offset + token_byte_length) as usize;
 
-          //#[cfg(debug_assertions)]
-          //if let Some(debug) = debug {
-          //  debug(&DebugEvent::ActionShift { offset_start, offset_end, token_id },
-          // self.get_ctx());
-          //}
+          #[cfg(debug_assertions)]
+          if let Some(debug) = self.get_debugger() {
+            //debug(&DebugEventNew::ActionShift { offset_start, offset_end,
+            // token_id }, input);
+          }
           shifts.push(input.string_range(offset_start..offset_end));
         }
         ParseAction::Reduce { rule_id: _rule_id, .. } => {
-          //#[cfg(debug_assertions)]
-          //if let Some(debug) = debug {
-          //  debug(&DebugEvent::ActionReduce { rule_id: _rule_id },
-          // self.get_ctx());
-          //}
+          #[cfg(debug_assertions)]
+          if let Some(debug) = self.get_debugger() {
+            // debug(&DebugEventNew::ActionReduce { rule_id: _rule_id }, input);
+          }
         }
         _ => panic!("Unexpected Action!"),
       }

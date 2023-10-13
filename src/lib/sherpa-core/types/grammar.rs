@@ -238,7 +238,7 @@ pub struct NonTerminalTemplate {
 
   /// A list of non-terminal symbol names that are to be replaced by template
   /// args
-  pub templates: Array<String>,
+  pub templates: Array<ASTNode>,
 
   pub tok: Token,
 }

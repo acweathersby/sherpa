@@ -9,14 +9,14 @@ path ="./lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-js-sys = "0.3.63"
+js-sys = "0.3.64"
 
 
-serde = { version = "1.0.163", features = ["derive"] }
+serde = { version = "1.0.188", features = ["derive"] }
 
-serde-wasm-bindgen = "0.5.0"
+serde-wasm-bindgen = "0.6.0"
 
-wasm-bindgen = "0.2.86"
+wasm-bindgen = "0.2.87"
 
 # `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
 # compared to the default allocator's ~10K. It is slower than the default
@@ -31,7 +31,7 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.36"
+wasm-bindgen-test = "0.3.37"
 
 [dependencies.sherpa_core]
 path = "../../lib/sherpa-core"
@@ -53,7 +53,7 @@ path = "../../lib/sherpa-bytecode"
 opt-level = "s"
 
 [dependencies.web-sys]
-version = "0.3.63"
+version = "0.3.64"
 features = [
   'Document',
   'Element',

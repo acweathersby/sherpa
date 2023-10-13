@@ -235,9 +235,9 @@ impl<'a> AscriptWriterUtils<'a> {
           path:       PathBuf::from(rule.g_id.path.to_string(self.db.string_store())),
           id:         (ascript_error_class(), 0, "ascript-writer-utils-unhandled-ast-node").into(),
           msg:        format!("An unhandled ast node has been encountered"),
-          inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler", ast.get_type()),
+          inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler {ast:?}", ast.get_type()),
           ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler".into(),
-          severity:   SherpaErrorSeverity::Warning,
+          severity:   SherpaErrorSeverity::Critical,
         })
       }
       #[cfg(not(debug_assertions))]
@@ -248,7 +248,7 @@ impl<'a> AscriptWriterUtils<'a> {
         msg:        format!("An unhandled ast node has been encountered"),
         inline_msg: format!("Node type lacks an ASTExprHandler"),
         ps_msg:     "Add an ASTExprHandler for this type using AscriptWriterUtils::add_ast_handler".into(),
-        severity:   SherpaErrorSeverity::Warning,
+        severity:   SherpaErrorSeverity::Critical,
       })
     }
   }

@@ -1,6 +1,6 @@
 use clap::{arg, value_parser, ArgMatches, Command};
 use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{JournalReporter, SherpaError, SherpaGrammar, SherpaResult};
+use sherpa_core::{JournalReporter, ParserStore, SherpaError, SherpaGrammar, SherpaResult};
 use sherpa_rust_build::compile_rust_bytecode_parser;
 use std::{fs::File, io::Write, path::PathBuf};
 
@@ -129,11 +129,17 @@ fn build_parser(
     panic!("Failed To parse due to the above errors")
   }
 
-  let parser = db.build_states(config)?.build_ir_parser(true, false)?;
+  let states = db.build_states(config)?;
+
+  let parser = states.build_ir_parser(true, false)?;
+
+  eprint!("Created a {} parser", parser.get_classification().to_string());
 
   if parser.dump_errors() {
     panic!("Failed To parse due to the above errors")
   }
+
+  eprint!("{}", parser.report.to_string());
 
   let output = match parser_type {
     ParserType::LLVM => {
@@ -143,7 +149,7 @@ fn build_parser(
         sherpa_rust_build::compile_rust_llvm_parser(&parser, &name, &name)
       }
       #[cfg(not(feature = "llvm"))]
-      SherpaResult::Err("LLVM based compilation not supported not supported".into())
+      SherpaResult::Err("Compilation not supported".into())
     }
     _ => {
       let pkg = compile_bytecode(&parser, false)?;
@@ -153,8 +159,11 @@ fn build_parser(
 
   let output = output?;
 
+  //Ensure out directory exists
+  std::fs::create_dir_all(&out_dir)?;
+
   //Write to file
-  let out_filepath = out_dir.join(name.unwrap() + ".rs");
+  let out_filepath = out_dir.join(name.unwrap_or(db.get_internal().friendly_name_string()) + ".rs");
 
   let mut file = File::create(out_filepath)?;
 

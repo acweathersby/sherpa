@@ -33,6 +33,7 @@ use sherpa_ascript::{
     AScriptTypeValU32,
     AScriptTypeValU64,
     AScriptTypeValU8,
+    StructuredFloat,
     TaggedType,
   },
 };
@@ -1080,8 +1081,8 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
 
   u.add_ast_handler(ASTNodeType::AST_STRING, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_STRING(box AST_STRING { value, .. }) => {
-        match value {
+      ASTNode::AST_STRING(box AST_STRING { initializer, .. }) => {
+        match initializer {
           None => Some(SlotRef::ast_obj(
             SlotIndex::Sym(u.bump_ref_index(ref_index)),
             type_slot,
@@ -1208,6 +1209,19 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
       _ => None,
     },
   });
+
+  u.add_ast_handler(ASTNodeType::AST_NUMBER, ASTExprHandler {
+    expr: &|u, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_NUMBER(box AST_NUMBER { value }) => Some(SlotRef::ast_obj(
+        SlotIndex::Sym(u.bump_ref_index(ref_index)),
+        type_slot,
+        value.to_string() + ".0",
+        AScriptTypeVal::F64(Some(StructuredFloat(*value))),
+      )),
+      _ => None,
+    },
+  });
+
   u.add_ast_handler(ASTNodeType::AST_Struct, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
       ASTNode::AST_Struct(ast_struct) => {

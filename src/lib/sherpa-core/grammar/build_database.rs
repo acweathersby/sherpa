@@ -485,7 +485,7 @@ pub(crate) fn build_compile_db<'a>(
     .collect::<Array<_>>();
 
   let db = ParserDatabase::new(
-    root_grammar.identity.guid_name,
+    root_grammar.identity,
     nterm_lu,
     nterm_name_lu_owned,
     p_r_map_owned,

@@ -31,14 +31,122 @@ pub fn group_inline() -> SherpaResult<()> {
 }
 
 #[test]
+pub fn temp() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+  
+    <> dd > "test" newLine? $
+      
+    <> newLine > tk:( c:nl+ )
+
+    <> badRule > dd "}" 
+    
+    "#],
+    &[("default", "test\n", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn form() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r###"
+
+NAME ascript_formatter
+
+IGNORE { c:sp c:nl }
+
+<> ascript_form > script_statement+
+
+<> script_statement > text | function | format | call | for | object | block::<script_statement>
+
+<> function_statement > text | format | call | match | object | for | block::<function_statement+>
+
+<> function > fn_name params '{' function_statement+ "}"{kw}
+
+<> params > id ( ":" id )?
+
+<> call > fn_name args
+
+<> args > "(" ( object | text )(*) ")"
+
+<> format > "#++" | "#--" | "_" 
+
+<> text > tk:( ( c:id | c:num | c:sym )+ ) | id
+
+ <Content> block >
+        "[" Content? "]" 
+    |   "(" Content? ")" 
+    |   "{" Content? "}"
+ 
+ <> match > "#match" object "{"  match_arm*  "}"
+
+ <> match_arm > id "->" ( function_statement )+
+
+ <> for > "#for" id ":" object ( "(" function_statement+ ")" )? "{" function_statement+ "}"
+ 
+ <> fn_name > tk:( "#" id )
+
+ <> id > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )
+
+ <> object > id ("." id)+
+
+  "###],
+    &[(
+      "default",
+      r#"
+    
+#test test {
+  #++
+
+  struct { #++ test:_ test #-- }
+
+  #--
+}
+    
+  "#,
+      true,
+    )],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn any_symbol() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    <> A > c:any "d" $
+
+  "#],
+    &[("default", "$d", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn group_token() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+
+    IGNORE { c:sp }
+
+    <> A > tk:( "t" "est" )
+
+  "#],
+    &[("default", "test", true), ("default", "t est", false)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn templates() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
 
-    <> A > block::<"test">
+    <> A > block::<t_Chaco, "test">
 
-    <Content> block >
-        wrapped::<"[", Content, "]">
+    <t_T:ast, Content> block >
+        wrapped::<"[", Content, "]"> :ast { t_T }
       | wrapped::<"(", Content, ")">
       | wrapped::<"{", Content, "}">
 
@@ -197,17 +305,37 @@ pub fn expr_term() -> SherpaResult<()> {
 }
 
 #[test]
+pub fn precedence_temp() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    IGNORE { tk:space }
+
+    <> expr > expr "+"{1} expr{1}
+            | expr "*"{3} expr{3}
+            | expr "/"{2} expr{2}
+            | expr "-"{1} expr{1}
+            | (c:num(+))
+
+    <> space > c:sp(+)
+
+"#],
+    &[("default", "11 + 2 * 2 + 2 * 2 + 1 + 1", true)],
+    Default::default(),
+  )
+}
+
+#[test]
 pub fn precedence() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"
     IGNORE { tk:space }
 
     <> expr > expr "+"{1} expr{1}
-    | expr "^"{4} expr{4}
-    | expr "*"{3} expr{3}
-    | expr "/"{2} expr{2}
-    | expr "-"{1} expr{1}
-    | (c:num(+))
+            | expr "^"{4} expr{4}
+            | expr "*"{3} expr{3}
+            | expr "/"{2} expr{2}
+            | expr "-"{1} expr{1}
+            | (c:num(+))
 
     <> space > c:sp(+)
 

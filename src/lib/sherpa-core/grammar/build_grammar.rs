@@ -15,7 +15,7 @@ use crate::{
 #[cfg(debug_assertions)]
 use parser::GetASTNodeType;
 use sherpa_rust_runtime::types::{bytecode::MatchInputType, Token};
-use std::{hash::Hash, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, hash::Hash, path::PathBuf, sync::Arc};
 
 /// Temporary structure to host rule data during
 /// construction.
@@ -599,7 +599,53 @@ fn process_rule_symbols(
             let id = NonTermId::from((g_data.id.guid, name.as_str()));
 
             if resolved.get(&id).is_none() {
-              let symbol_lookup = Map::from_iter(template.templates.iter().cloned().zip(template_sym.template_args.iter()));
+              // There are two types of params in Template nodes:
+              // - TemplateASTType params are used to set the names of ast struct definitions
+              //   to keep AScripT happy.
+              // - TemplateSym params replace ANY nonterminal symbol in the rule bodies that
+              //   match the same name.
+
+              // We first need to check whether the template instance arg signature is
+              // compatible with our Template param signature
+              let param_sig = template
+                .templates
+                .iter()
+                .map(|t| match t {
+                  ASTNode::TemplateASTType(..) => 1,
+                  ASTNode::TemplateSym(..) => 2,
+                  _ => unreachable!(),
+                })
+                .collect::<Vec<_>>();
+
+              let arg_sig = template_sym
+                .template_args
+                .iter()
+                .map(|t| match t {
+                  ASTNode::AST_STRUCT_TEMPLATE_NAME(..) => 1,
+                  _ => 2,
+                })
+                .collect::<Vec<_>>();
+
+              if param_sig != arg_sig {
+                todo!("Create error for incompatible template signatures {param_sig:?} | {arg_sig:?}")
+              }
+
+              // We use two different lookup tables to modify our templates rules.
+
+              let (symbol_lookup, ast_struct_lookup) = Map::from_iter(
+                template
+                  .templates
+                  .iter()
+                  .map(|d| match d {
+                    ASTNode::TemplateASTType(d) => d.val.clone(),
+                    ASTNode::TemplateSym(d) => d.val.clone(),
+                    _ => unreachable!(),
+                  })
+                  .zip(template_sym.template_args.iter()),
+              )
+              .into_iter()
+              .partition::<HashMap<_, _>, _>(|((_, a))| !matches!(a, ASTNode::AST_STRUCT_TEMPLATE_NAME(..)));
+
               resolved.insert(id, None);
 
               let node = ASTNode::CFRules(Box::new(crate::parser::CFRules::new(
@@ -610,6 +656,7 @@ fn process_rule_symbols(
                   .map(|r| {
                     let mut rule = r.clone();
                     rule.symbols = rule.symbols.iter().cloned().map(|s| replace_template_symbol(s, &symbol_lookup)).collect();
+                    rule.ast = replace_template_ast(rule.ast, &ast_struct_lookup);
                     rule
                   })
                   .collect(),
@@ -766,6 +813,27 @@ fn process_rule_symbols(
   p_data.rules.append(&mut rules);
 
   SherpaResult::Ok(())
+}
+
+fn replace_template_ast(s: Option<Box<parser::Ascript>>, symbol_lookup: &Map<String, &ASTNode>) -> Option<Box<parser::Ascript>> {
+  match &s {
+    Some(s) => {
+      let mut output = s.clone();
+      match &mut output.ast {
+        ASTNode::AST_Struct(s) => {
+          if let Some(new_type) = symbol_lookup.get(&s.typ) {
+            if let ASTNode::AST_STRUCT_TEMPLATE_NAME(d) = new_type {
+              s.typ = d.typ.clone();
+            }
+          }
+        }
+        _ => {}
+      }
+
+      Some(output)
+    }
+    None => None,
+  }
 }
 
 fn replace_template_symbol(s: ASTNode, symbol_lookup: &Map<String, &ASTNode>) -> ASTNode {

@@ -10,9 +10,7 @@ pub type SharedParserDatabase = std::sync::Arc<ParserDatabase>;
 #[derive(Clone, Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ParserDatabase {
-  /// The name of the parser as defined by the `NAME <name>` preamble in
-  /// the root grammar, or by the filename stem of of the root grammar's path.
-  pub name: IString,
+  pub root_grammar_id: GrammarIdentities,
   /// Table of symbols.
   nonterm_symbols: Array<SymbolId>,
   /// Maps a non-terminal to all other non-terminals that reference it, directly
@@ -58,7 +56,7 @@ pub struct ParserDatabase {
 
 impl ParserDatabase {
   pub fn new(
-    name: IString,
+    root_grammar_id: GrammarIdentities,
     nonterm_symbols: Array<SymbolId>,
     nonterm_names: Array<(IString, IString)>,
     nonterm_nterm_rules: Array<Array<DBRuleKey>>,
@@ -70,7 +68,7 @@ impl ParserDatabase {
     valid: bool,
   ) -> Self {
     Self {
-      name,
+      root_grammar_id,
       nonterm_symbols,
       nonterm_names,
       nonterm_nterm_rules,
@@ -285,9 +283,13 @@ impl ParserDatabase {
       .unwrap_or_default()
   }
 
-  /// Returns the name of the database as a string.
+  /// Returns the guid name of the database as a string.
   pub fn name_string(&self) -> String {
-    self.name.to_string(&self.string_store)
+    self.root_grammar_id.guid_name.to_string(&self.string_store)
+  }
+
+  pub fn friendly_name_string(&self) -> String {
+    self.root_grammar_id.name.to_string(&self.string_store)
   }
 
   /// Given a [DBNonTermKey] returns the SymbolId representing the non-terminal,

@@ -136,6 +136,33 @@ impl Into<AScriptStructId> for TaggedType {
   }
 }
 
+#[derive(Clone, Copy)]
+pub struct StructuredFloat(pub f64);
+
+impl Hash for StructuredFloat {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.0.to_string().hash(state)
+  }
+}
+
+impl PartialEq for StructuredFloat {
+  fn eq(&self, other: &Self) -> bool {
+    self.0.to_string() == other.0.to_string()
+  }
+}
+impl Eq for StructuredFloat {}
+
+impl PartialOrd for StructuredFloat {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    self.0.to_string().partial_cmp(&other.0.to_string())
+  }
+}
+impl Ord for StructuredFloat {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    self.partial_cmp(other).unwrap()
+  }
+}
+
 #[derive(PartialEq, Clone, Hash, Eq, PartialOrd, Ord)]
 pub enum AScriptTypeVal {
   TokenVec,
@@ -148,8 +175,8 @@ pub enum AScriptTypeVal {
   Struct(AScriptStructId),
   String(Option<String>),
   Bool(Option<bool>),
-  F64(Option<u64>),
-  F32(Option<u64>),
+  F64(Option<StructuredFloat>),
+  F32(Option<StructuredFloat>),
   I64(Option<i64>),
   I32(Option<i32>),
   I16(Option<i16>),
@@ -488,10 +515,75 @@ macro_rules! num_type {
     }
   };
 }
+pub struct AScriptTypeValF64;
+impl AScriptNumericType for AScriptTypeValF64 {
+  type Type = f64;
 
-num_type!(AScriptTypeValF64, F64, f64, u64);
+  #[inline(always)]
+  fn none() -> AScriptTypeVal {
+    AScriptTypeVal::F64(None)
+  }
 
-num_type!(AScriptTypeValF32, F32, f32, u64);
+  #[inline(always)]
+  fn from_f64(val: f64) -> AScriptTypeVal {
+    AScriptTypeVal::F64(Some(StructuredFloat(val)))
+  }
+
+  #[inline(always)]
+  fn string_from_f64(val: f64) -> String {
+    (val as Self::Type).to_string()
+  }
+
+  #[inline(always)]
+  fn prim_type_name() -> &'static str {
+    stringify!($type)
+  }
+
+  #[inline(always)]
+  fn to_fn_name() -> String {
+    "to_".to_string() + stringify!($type)
+  }
+
+  #[inline(always)]
+  fn from_tok_range_name() -> String {
+    format!("parse::<{}>", stringify!($type))
+  }
+}
+
+pub struct AScriptTypeValF32;
+impl AScriptNumericType for AScriptTypeValF32 {
+  type Type = f64;
+
+  #[inline(always)]
+  fn none() -> AScriptTypeVal {
+    AScriptTypeVal::F64(None)
+  }
+
+  #[inline(always)]
+  fn from_f64(val: f64) -> AScriptTypeVal {
+    AScriptTypeVal::F32(Some(StructuredFloat(val)))
+  }
+
+  #[inline(always)]
+  fn string_from_f64(val: f64) -> String {
+    (val as Self::Type).to_string()
+  }
+
+  #[inline(always)]
+  fn prim_type_name() -> &'static str {
+    stringify!($type)
+  }
+
+  #[inline(always)]
+  fn to_fn_name() -> String {
+    "to_".to_string() + stringify!($type)
+  }
+
+  #[inline(always)]
+  fn from_tok_range_name() -> String {
+    format!("parse::<{}>", stringify!($type))
+  }
+}
 
 num_type!(AScriptTypeValU64, U64, u64, u64);
 
