@@ -8,45 +8,84 @@ IGNORE { c:sp c:nl }
 
 <> function_statement > text | format | call | match | object | for | block::<t_FBlock, function_statement+>
 
-<> function > fn_name param+ '{' function_statement+ "}"{kw}
+<> function > fn_name param* '{' function_statement* "}"{kw}
                                     
                                     :ast { t_Funct, name: str($1), params:$2, content: $4 }
 
-<> param > id ( ":" id )?           :ast { t_Param, name: str($1), type: str($2) }
+<> param > id ":" type              
+                                    :ast { t_Param, name: str($1), ty: str($3) }
 
-<> call > fn_name args              :ast { t_Call, name: str($1), args: $2 }
+<> type 
+    > "obj"                         :ast { t_ObjType }
+    | "num"                         :ast { t_NumType }
+    | "int"                         :ast { t_IntType }
+    | "str"                         :ast { t_StringType }    
 
-<> args > "(" ( object | text )(*) ")" 
-                                    :ast { $2 }
+<> call > fn_name args              :ast { t_Call, name: str($1), args: $2, tok }
+
+<> args > "(" expr(*",") ")" 
+                                    :ast { [$2] }
 
 <> format 
-    > "#++"                         :ast { t_Indent }
-    | "#--"                         :ast { t_Dedent }
-    | "_"                           :ast { t_Space }
+    > tk:( "@" "+"{:9999})          :ast { t_Indent }
+    | tk:( "@" "-"{:9999})          :ast { t_Dedent }
+    | "@" tk:(c:num+)               :ast { t_Space, count: u32($2) }
+    | tk:( "\\" " "{:9999})         :ast { t_Space }
+    | tk:( "\\" "n"{:9999})         :ast { t_NewLine }
 
 <> text 
-    > tk:( ( c:id | c:num | c:sym )+ ) 
+    > ( tk:(c:id+) | c:sym ) 
                                     :ast { t_Text, val: str(tok) }
-    | id                            :ast { t_Id, val: str(tok) }
+
+    | tk:( "\\" "match" ) 
+                                    :ast { t_Text, val: str(tok<1>) }
+    | num
+
+    | literal
+
+    | expression
+    
+<> expression 
+    > "[["  expr  "]]"              :ast { t_Expression, val: $2 }
+
+<> expr 
+    > expr "+"{1} expr{1}           :ast { t_Add, l:$1, r:$3 }
+    | expr "-"{1} expr{1}           :ast { t_Sub, l:$1, r:$3 }
+    | expr "*"{3} expr{3}           :ast { t_Mul, l:$1, r:$3 }
+    | expr "/"{2} expr{2}           :ast { t_Div, l:$1, r:$3 }
+    | num
+    | object
+    | literal
+
+<> num > tk:( c:num+ ) 
+                                    :ast { t_Num, val: str(tok) }
+
+<> literal > "{{"  c:any+  "}}"     :ast { t_Literal, val: str($2) }
 
 <t_T:ast, Content:sym> block 
-    >   "[" Content? "]"            :ast { t_T, type: 1, content: $2 }
-    |   "(" Content? ")"            :ast { t_T, type: 2, content: $2 }
-    |   "{" Content? "}"            :ast { t_T, type: 3, content: $2 }
+    >   "[" Content? "]"            :ast { t_T, ty: str($1), content: $2 }
+    |   "(" Content? ")"            :ast { t_T, ty: str($1), content: $2 }
+    |   "{" Content? "}"            :ast { t_T, ty: str($1), content: $2 }
     
-<> match > "#match" object "{"  match_arm*  "}" 
+<> match > "match" object "{"  match_arm*  "}" 
                                     :ast { t_Match, obj: $2, matches:$4 }
 
-<> match_arm > id "->" ( function_statement )+
-                                    :ast { t_MatchArm, matches: $1, content: $2 }
+<> match_arm 
+    
+    > expr "{" ( function_statement )+{2} "}"
+                                    :ast { t_MatchArm, match_expr: $1, content: $3 }
 
-<> for > "#for" id ":" object /* ( "(" function_statement+ ")" )? */ "{" function_statement+ "}"
+    | "{" ( function_statement )+{2} ";"? "}"
+                                    :ast { t_MatchArm, default: true, content: $2 }
+
+<> for > "#for" id ":" object "{" function_statement+ "}"
                                     :ast { t_For, local: $2, object: $4, content: $6 }
  
-
-<> object > id ("." id :ast str($2) )+            
+<> object > id ("." var :ast str($2) )*            
                                     :ast { t_Obj, name: str($1), path:$2 }
     
-<> id > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )  
+<> id > tk:( "@" ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )  
 
-<> fn_name > tk:( "#" id )
+<> var > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )  
+
+<> fn_name > tk:( "#" ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )  

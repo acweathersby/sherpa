@@ -1079,6 +1079,31 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
     },
   });
 
+  u.add_ast_handler(ASTNodeType::AST_Token, ASTExprHandler {
+    expr: &|u, ast, _, _, type_slot| {
+      if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
+        let ref_ = SlotRef::node_range(u, type_slot);
+        if let Some(box parser::Range { start_trim, end_trim }) = range {
+          Some(ref_.to(format!("%%.trim({start_trim}, {end_trim})"), AScriptTypeVal::AdjustedTokenRange))
+        } else {
+          match ref_.ast_type {
+            AScriptTypeVal::TokenRange | AScriptTypeVal::AdjustedTokenRange => {
+              Some(ref_.to_range(u).to("%%.to_token(unsafe{&mut *_ctx_}.get_reader_mut())".to_string(), AScriptTypeVal::Token))
+            }
+            AScriptTypeVal::TokenVec => {
+              // Merge the last and first token together
+              // get the string value from the resulting span of the union
+              Some(ref_.to("(%%.first().unwrap() + %%.last().unwrap())".to_string(), AScriptTypeVal::Token))
+            }
+            AScriptTypeVal::Token => Some(ref_),
+            _ => None,
+          }
+        }
+      } else {
+        None
+      }
+    },
+  });
   u.add_ast_handler(ASTNodeType::AST_STRING, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
       ASTNode::AST_STRING(box AST_STRING { initializer, .. }) => {
@@ -1280,21 +1305,6 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
           }
 
           Some(vector_ref)
-        }
-      } else {
-        None
-      }
-    },
-  });
-  u.add_ast_handler(ASTNodeType::AST_Token, ASTExprHandler {
-    expr: &|u, ast, _, _, type_slot| {
-      if let ASTNode::AST_Token(box AST_Token { range, .. }) = ast {
-        let ref_ = SlotRef::node_range(u, type_slot);
-        if let Some(box parser::Range { start_trim, end_trim }) = range {
-          let trimed_ref = ref_.to(format!("%%.trim({start_trim}, {end_trim})"), AScriptTypeVal::AdjustedTokenRange);
-          Some(trimed_ref)
-        } else {
-          Some(ref_)
         }
       } else {
         None
