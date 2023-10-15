@@ -562,16 +562,6 @@ impl<'follow: 'follow> GraphHost {
     self.kernel_items.get(&StateId::root()).as_ref().unwrap()
   }
 
-  pub fn get_state_name(&self, state: StateId) -> String {
-    if state.is_goto() {
-      format!("{}__S{:0>4}_gt", self.name.to_string(self.get_db().string_store()), state.index())
-    } else if state.is_post_reduce() {
-      format!("{}__S{:0>4}_pr", self.name.to_string(self.get_db().string_store()), state.index())
-    } else {
-      format!("{}__S{:0>4}", self.name.to_string(self.get_db().string_store()), state.index())
-    }
-  }
-
   #[cfg(debug_assertions)]
   pub fn _debug_string_(&self) -> String {
     let mut string = String::new();

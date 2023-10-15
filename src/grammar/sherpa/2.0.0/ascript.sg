@@ -122,12 +122,19 @@ IMPORT ./token as token
     | "f64" convert_initializer?
         :ast { t_AST_F64, initializer: $2, tok  }
 
+<> numeric_initializer > 
+
+    | convert_initializer
+
+   '(' token::int ")"       
+        :ast { t_NumInit, expression: { t_AST_NUMBER, value:f64($2) } }
+
 <> convert_initializer > 
 
     '(' init_objects ")"       
         :ast { t_Init, expression: $2 }
 
-<> init_objects > member | token 
+<> init_objects > member | token
 
 <> literal > 
 

@@ -31,6 +31,21 @@ pub fn group_inline() -> SherpaResult<()> {
 }
 
 #[test]
+pub fn symbol_occlusion() -> SherpaResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+
+    <> A > B | C 
+    <> B > tk:('@' "+")
+    <> C > ( c:id | c:num | c:sym )+
+
+  "#],
+    &[("default", "@+ddf", false)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn temp() -> SherpaResult<()> {
   compile_and_run_grammars(
     &[r#"

@@ -10,7 +10,7 @@ members = [
     "./sherpa-x86",
     "./sherpa-rust-runtime",
     "./sherpa-test",
-    "./sherpa-coder",
+    "./sherpa-formatter",
 ]
 
 resolver = "2"
