@@ -19,7 +19,8 @@ cargo run \
     --release \
     -- build -t bytecode\
      -a \
+     -d \
      -l rust \
      --libout $ROOT_DIR/src/lib/sherpa-core/lib/ \
-     -o $ROOT_DIR/src/lib/sherpa-coder/parser/ \
+     -o $ROOT_DIR/src/lib/sherpa-formatter/parser/ \
       $ROOT_DIR/src/grammar/sherpa/2.0.0/ascript_form.sg

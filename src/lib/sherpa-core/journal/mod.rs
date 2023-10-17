@@ -34,6 +34,12 @@ pub struct Journal {
   create_time: Instant,
 }
 
+impl Clone for Journal {
+  fn clone(&self) -> Self {
+    self.transfer()
+  }
+}
+
 impl Journal {
   /// Creates a Journal instance.
   pub fn new() -> Journal {

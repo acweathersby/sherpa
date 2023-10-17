@@ -1,4 +1,9 @@
-use std::sync::Arc;
+use std::{
+  fs::OpenOptions,
+  io::Write,
+  path::{Path, PathBuf},
+  sync::Arc,
+};
 
 use crate::{
   compile::{
@@ -71,12 +76,12 @@ impl SherpaGrammar {
     Self { j: Journal::new(), soup: GrammarSoup::new() }
   }
 
-  pub fn path_to_id(&self, path: &std::path::Path) -> GrammarIdentities {
-    GrammarIdentities::from_path(path, &self.soup.string_store)
+  pub fn path_to_id<T: Into<PathBuf>>(&self, path: T) -> GrammarIdentities {
+    GrammarIdentities::from_path(&path.into(), &self.soup.string_store)
   }
 
   /// Adds a grammar source to the soup
-  pub fn add_source(&mut self, path: &std::path::Path) -> SherpaResult<&mut Self> {
+  pub fn add_source<T: Into<PathBuf>>(&mut self, path: T) -> SherpaResult<&mut Self> {
     let id = self.path_to_id(path);
 
     let SherpaGrammar { soup, j } = self;
@@ -110,8 +115,9 @@ impl SherpaGrammar {
   }
 
   /// Adds a grammar to the soup from a source string
-  pub fn add_source_from_string_with_imports(&mut self, source: &str, path: &std::path::Path) -> SherpaResult<()> {
-    let id = self.path_to_id(path);
+  pub fn add_source_from_string_with_imports<T: Into<PathBuf>>(&mut self, source: &str, grammar_path: T) -> SherpaResult<()> {
+    let path: PathBuf = grammar_path.into();
+    let id = self.path_to_id(&path);
 
     let SherpaGrammar { soup, j } = self;
 
@@ -152,8 +158,14 @@ impl SherpaGrammar {
     j.report_mut().wrap_ok_or_return_errors(())
   }
 
-  pub fn add_source_from_string(&mut self, source: &str, path: &std::path::Path, replace: bool) -> SherpaResult<&mut Self> {
-    let id = self.path_to_id(path);
+  pub fn add_source_from_string<T: Into<PathBuf>>(
+    &mut self,
+    source: &str,
+    grammar_path: T,
+    replace: bool,
+  ) -> SherpaResult<&mut Self> {
+    let path: PathBuf = grammar_path.into();
+    let id = self.path_to_id(&path);
 
     let SherpaGrammar { soup, j } = self;
 
@@ -177,8 +189,9 @@ impl SherpaGrammar {
     j.report_mut().wrap_ok_or_return_errors(self)
   }
 
-  pub fn remove_grammar(self, root_grammar: &std::path::Path) -> SherpaResult<SherpaGrammar> {
-    let id = self.path_to_id(root_grammar);
+  pub fn remove_grammar<T: Into<PathBuf>>(self, root_grammar: T) -> SherpaResult<SherpaGrammar> {
+    let path: PathBuf = root_grammar.into();
+    let id = self.path_to_id(&path);
 
     let SherpaGrammar { soup, j } = self;
 
@@ -189,12 +202,13 @@ impl SherpaGrammar {
     Ok(Self { j, soup: std::sync::Arc::new(soup) })
   }
 
-  pub fn build_db(&self, root_grammar: &std::path::Path, config: &ParserConfig) -> SherpaResult<SherpaDatabase> {
+  pub fn build_db<T: Into<PathBuf>>(&self, root_grammar: T, config: ParserConfig) -> SherpaResult<SherpaDatabase> {
     let SherpaGrammar { soup, j } = self;
+    let path: PathBuf = root_grammar.into();
 
-    let id = GrammarIdentities::from_path(root_grammar, &soup.string_store);
+    let id = GrammarIdentities::from_path(&path, &soup.string_store);
 
-    let db = build_compile_db(j.transfer(), id, soup, config)?;
+    let db = build_compile_db(j.transfer(), id, soup, &config)?;
 
     if !db.is_valid() {
       let mut j = j.transfer();
@@ -213,6 +227,7 @@ impl SherpaGrammar {
 // ----------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------
 
+#[derive(Clone)]
 pub struct SherpaDatabase {
   j:  Journal,
   db: SharedParserDatabase,
@@ -312,6 +327,22 @@ impl SherpaGraph {
         }
       }
     }
+  }
+
+  pub fn write_debug_file(&self, output_path: &Path) -> SherpaResult<()> {
+    let file_path = output_path.join("parser_states.debug.txt");
+
+    let mut file = OpenOptions::new().truncate(true).write(true).create(true).open(file_path)?;
+
+    for parser_state in self.parsers.iter() {
+      if let Some(graph) = &parser_state.graph {
+        file.write_all(graph.internal()._debug_string_().as_str().as_bytes())?;
+      }
+    }
+
+    file.flush()?;
+
+    Ok(())
   }
 
   pub fn build_parse_table(&self) {
@@ -472,7 +503,7 @@ pub fn source_path_to_default_file() -> SherpaResult<()> {
 pub fn build_db() -> SherpaResult<()> {
   let grammar_source_path =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
-  assert!(SherpaGrammar::new().add_source(&grammar_source_path)?.build_db(&grammar_source_path, &Default::default()).is_ok());
+  assert!(SherpaGrammar::new().add_source(&grammar_source_path)?.build_db(grammar_source_path, Default::default()).is_ok());
   Ok(())
 }
 
@@ -482,7 +513,7 @@ pub fn build_states() -> SherpaResult<()> {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   assert!(SherpaGrammar::new()
     .add_source(&grammar_source_path)?
-    .build_db(&grammar_source_path, &Default::default())?
+    .build_db(grammar_source_path, Default::default())?
     .build_states(Default::default())
     .is_ok());
   Ok(())
@@ -494,7 +525,7 @@ pub fn build_with_optimized_states() -> SherpaResult<()> {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   SherpaGrammar::new()
     .add_source(&grammar_source_path)?
-    .build_db(&grammar_source_path, &Default::default())?
+    .build_db(grammar_source_path, Default::default())?
     .build_states(Default::default())?
     .build_ir_parser(true, false)?;
   Ok(())

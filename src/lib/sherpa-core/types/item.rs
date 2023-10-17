@@ -879,7 +879,6 @@ macro_rules! common_iter_functions {
       println!("------>{} \n {}", _comment, self.to_debug_string("\n\n"));
     }
 
-    #[cfg(debug_assertions)]
     fn to_debug_string(self, sep: &str) -> String {
       self.map(|i| i._debug_string_()).collect::<Vec<_>>().join(sep)
     }

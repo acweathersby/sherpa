@@ -57,6 +57,22 @@ pub struct ParserConfig {
   pub ALLOW_BYTE_SEQUENCES: bool,
 }
 
+pub struct GrammarConfig {
+  /// An anonymous non-terminal, aka grouped rules `e.g ( symA symB | symC | ..
+  /// )`, may be inlined into the body of its host rule if none of the grouped
+  /// rules contain semantic actions, such as `:ast` definitions.  
+  ///
+  /// Parsers created with this type of optimization tend to perform poorly when
+  /// used for error correcting.
+  pub ALLOW_ANONYMOUS_NONTERM_INLINING: bool,
+}
+
+pub struct OptimizeConfig {
+  /// Enables using wide data types ( u16 | u32 | u64 | u128+ ) to recognize a
+  /// sequence of bytes.
+  pub ALLOW_BYTE_SEQUENCES: bool,
+}
+
 impl Default for ParserConfig {
   fn default() -> Self {
     Self {

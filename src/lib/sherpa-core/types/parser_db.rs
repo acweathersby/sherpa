@@ -504,15 +504,13 @@ macro_rules! indexed_id_implementations {
 }
 
 /// An opaque key used for the access of a rule in a [CompileDatabase]
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
 pub struct DBRuleKey(u32);
 indexed_id_implementations!(DBRuleKey);
 
 /// Used as a lookup key for non-terminal data stored within a
 /// [CompileDatabase]
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
 pub struct DBNonTermKey(u32);
 indexed_id_implementations!(DBNonTermKey);
 
@@ -530,8 +528,7 @@ impl DBNonTermKey {
 
 /// Used as a lookup key for a symbol data within a
 /// [CompileDatabase]
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Debug)]
 pub struct DBTermKey(u32);
 indexed_id_implementations!(DBTermKey);
 

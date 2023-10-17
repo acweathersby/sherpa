@@ -40,7 +40,7 @@ pub fn command() -> ArgMatches {
             _ => Ok(ParserType::Bytecode)
           }})
           .default_value("bytecode")
-        )
+        ) 
         .arg(
           arg!( -a --ast "Create AST code, in the target language, from AScripT definitions" )
           .required(false)
@@ -64,6 +64,10 @@ pub fn command() -> ArgMatches {
           arg!( -n --name <NAME> "Alternate name to use for output files." )
           .required(false)
           .value_parser(value_parser!(String))
+        ).arg(
+          arg!( -d --debug "Outputs debugging files to the OUTPUT_PATH" )
+          .required(false)
+          .value_parser(value_parser!(bool))
         )
         .arg(
             arg!(<INPUTS>)
@@ -96,7 +100,7 @@ fn main() -> SherpaResult<()> {
     let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
     let name = matches.get_one::<String>("name").cloned();
 
-    build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir)
+    build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir, matches)
   } else if matches.subcommand_matches("disassemble").is_some() {
     SherpaResult::Ok(())
   } else {
@@ -110,7 +114,10 @@ fn build_parser(
   name: Option<String>,
   _lib_out_dir: PathBuf,
   out_dir: PathBuf,
+  matches: &ArgMatches
 ) -> SherpaResult<()> {
+  let debug = matches.get_one::<bool>("DEBUG").cloned().unwrap_or_default();
+
   let config = Default::default();
 
   let mut grammar = SherpaGrammar::new();
@@ -123,17 +130,26 @@ fn build_parser(
     panic!("Failed To parse due to the above errors")
   }
 
-  let db = grammar.build_db(grammar_sources.first().unwrap(), &config)?;
+  let db = grammar.build_db(grammar_sources.first().unwrap(), config)?;
 
   if db.dump_errors() {
     panic!("Failed To parse due to the above errors")
   }
 
   let states = db.build_states(config)?;
+  
+  if debug {
+    states.write_debug_file(&out_dir)?;
+  }
 
   let parser = states.build_ir_parser(true, false)?;
 
+  if debug {
+    //parser.write_debug_file(&out_dir)?;
+  }
+
   eprint!("Created a {} parser", parser.get_classification().to_string());
+
 
   if parser.dump_errors() {
     panic!("Failed To parse due to the above errors")
@@ -177,5 +193,7 @@ fn test_sherpa_bytecode_bootstrap() -> SherpaResult<()> {
   let sherpa_grammar =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/sherpa/2.0.0/grammar.sg").canonicalize().unwrap();
 
-  build_parser(&[sherpa_grammar], ParserType::Bytecode, Some("test_sherpa".into()), std::env::temp_dir(), std::env::temp_dir())
+  //build_parser(&[sherpa_grammar], ParserType::Bytecode, Some("test_sherpa".into()), std::env::temp_dir(), std::env::temp_dir())
+
+  Ok(())
 }

@@ -1,6 +1,7 @@
 use crate::{hash_id_value_u64, types::*};
 use std::{
   collections::{hash_map::DefaultHasher, BTreeSet, VecDeque},
+  default,
   fmt::Debug,
   hash::Hash,
   ops::{Index, IndexMut},
@@ -97,8 +98,7 @@ impl Origin {
 
 // Transtion Type ----------------------------------------------------
 
-#[derive(Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Debug)]
 pub enum StateType {
   Undefined,
   Start,
@@ -169,7 +169,6 @@ impl StateType {
     }
   }
 
-  #[cfg(debug_assertions)]
   fn debug_string(&self, db: &ParserDatabase) -> String {
     match self {
       Self::KernelCall(nterm) => {
@@ -311,7 +310,6 @@ pub trait GraphStateReference<'graph> {
     println!("{}", self._debug_string_());
   }
 
-  #[cfg(debug_assertions)]
   fn _debug_string_(&'graph self) -> String {
     let db = &self.graph().db;
     let state = self.internal();
@@ -342,13 +340,15 @@ pub trait GraphStateReference<'graph> {
       for (index, PeekGroup { items, .. }) in peek_items_sets {
         string += &format!("\n  Peek Resolve: {}", index);
 
-        string += &format!("\n   - {}", items.to_debug_string(db, "\n     "));
+        for item in items.iter() {
+          string += &format!("\n   - {}", item._debug_string_w_db_(db));
+        }
       }
     }
 
     if let Some(item) = &self.get_reduce_item() {
       string += &format!("\n  Reduce:");
-      string += &format!("\n   - {}", item._debug_string_w_db_(db));
+      string += &("\n   - {}".to_string() + &item._debug_string_w_db_(db));
     }
 
     string += "\n-- kernel-items:";
@@ -474,10 +474,11 @@ pub enum GraphBuildState {
   Leaf,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum GraphType {
   /// Classic Recursive Descent Ascent with unlimited lookahead.
+  #[default]
   Parser,
   // Scanner mode for creating tokens, analogous to regular expressions.
   Scanner,
@@ -562,7 +563,6 @@ impl<'follow: 'follow> GraphHost {
     self.kernel_items.get(&StateId::root()).as_ref().unwrap()
   }
 
-  #[cfg(debug_assertions)]
   pub fn _debug_string_(&self) -> String {
     let mut string = String::new();
 
@@ -626,8 +626,7 @@ impl Index<usize> for GraphHost {
 }
 
 // STATE ID -------------------------------------------------------------
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum GraphIdSubType {
   Root    = 0,
   Regular,
@@ -655,7 +654,6 @@ impl IndexMut<StateId> for GraphHost {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StateId(pub u32);
 
-#[cfg(debug_assertions)]
 impl Debug for StateId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut t = f.debug_tuple("StateId");
@@ -1442,6 +1440,10 @@ impl ReversedGraph {
 
   pub fn iter_scanners(&self) -> impl Iterator<Item = &ScannerData> {
     self.scanners.values()
+  }
+
+  pub fn internal(&self) -> &GraphHost {
+    &self.graph
   }
 }
 

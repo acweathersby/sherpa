@@ -50,7 +50,7 @@ EXPORT dt::escaped_string as escaped
 
 <> ignore_clause >
 
-    "IGNORE" "{"  sym::terminal(+) "}"
+    "IGNORE" "{"  sym::terminal(*) "}"
 
         :ast { t_Ignore, symbols: $3 }
 
@@ -130,3 +130,7 @@ EXPORT dt::escaped_string as escaped
     "[" sym::annotated_symbol(+)^s ']' "!"?^o
 
         :ast { t_NotEmptySet, unordered: bool($o), symbols:$s, tok }
+
+<> ignore_scope > 
+      
+    ignore_clause "{"  "}"

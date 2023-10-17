@@ -11,6 +11,7 @@ members = [
     "./sherpa-rust-runtime",
     "./sherpa-test",
     "./sherpa-formatter",
+    "./sherpa-ascript-beta",
 ]
 
 resolver = "2"

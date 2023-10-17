@@ -6,28 +6,7 @@ IMPORT ./token as token
 
 <> body >
 
-    struct
-
-    | expression
-        :ast { t_AST_Statements, statements:[$1], tok }
-
-    | "{" expression(*";") '}'
-        :ast { t_AST_Statements, statements:$2, tok }
-
-<> expression > 
-
-    string_convert
-
-    | numeric_convert
-
-    | bool_convert
-
-    | literal
-
-    | vector
-
-    | token
-
+    structprop
     | add
 
     | map 

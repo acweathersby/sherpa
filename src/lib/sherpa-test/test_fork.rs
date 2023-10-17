@@ -34,7 +34,7 @@ pub fn construct_forking_parser_glr() -> SherpaResult<()> {
 
   let config = ParserConfig::default().cst_editor().enable_fork(true);
 
-  let parser_data = grammar.build_db(&root_path, &config)?.build_states(config)?.build_ir_parser(false, false)?;
+  let parser_data = grammar.build_db(&root_path, config)?.build_states(config)?.build_ir_parser(false, false)?;
 
   _write_states_to_temp_file_(&parser_data)?;
 

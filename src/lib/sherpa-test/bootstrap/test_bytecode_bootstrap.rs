@@ -21,7 +21,7 @@ fn test_full_grammar() -> SherpaResult<()> {
   let sherpa_grammar = grammar_folder.join("grammar.sg");
   let mut grammar = SherpaGrammar::new();
   let config = ParserConfig::new().hybrid().enable_fork(false);
-  let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar, &config)?;
+  let database = grammar.add_source(&sherpa_grammar)?.build_db(&sherpa_grammar, config)?;
   let parser_builder = database.build_states(config)?.build_ir_parser(true, false)?;
   let pkg = compile_bytecode(&parser_builder, true)?;
 
