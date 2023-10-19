@@ -8,7 +8,7 @@ IGNORE { c:sp c:nl }
 
 <> function_statement > text | assignment | format | call | match | literal_space | object | block::<t_SBlock, function_statement*>
 
-<> function > fn_name param* '{' function_statement* "}"{1}
+<> function > fn_name param* '{' ( function_statement | function )* "}"{1}
                                     
                                     :ast { t_Funct, name: str($1), params:$2, content: $4, tok }
 
@@ -26,7 +26,6 @@ IGNORE { c:sp c:nl }
 
 <> args > "(" expr(*",") ")" 
                                     :ast { [$2] }
-
 <> format 
     > tk:( "@" "+"{:9999})          :ast { t_Indent, tok }
     | tk:( "@" "-"{:9999})          :ast { t_Dedent, tok }
@@ -45,7 +44,6 @@ IGNORE { c:sp c:nl }
 <> text 
     > ( c:sym ) 
                                     :ast { t_Text, val: str(tok), tok }
-
     | tk:( "\\" c:any ) 
                                     :ast { t_Text, val: str(tok<1>), tok }
     | num
@@ -84,20 +82,28 @@ IGNORE { c:sp c:nl }
     |   "(" Content? ")"{1}            :ast { t_T, ty: str($1), content: $2, tok }
     |   "{" Content? "}"{1}            :ast { t_T, ty: str($1), content: $2, tok }
     
-<> match > "match" (expr | tuple) "{"  match_arm*  "}" 
+<> match > "match" tuple "{"  match_arm*  "}" 
                                     :ast { t_Match, expr: $2, matches:$4, tok }
 
 <> match_arm 
     
-    > (expr | tuple) "{" ( function_statement )*{2} "}"
+    > tuple "{" ( function_statement )*{2} "}"
                                     :ast { t_MatchArm, match_expr: $1, content: $3, tok }
 
     | "{" ( function_statement )*{2} ";"? "}"
                                     :ast { t_MatchArm, default: true, content: $2, tok }
 
 <> tuple 
-    > "(" ( expr | "_" :ast { t_Ignore } )(+",") ")" 
+    > "(" tuple_ele(+",") ")" 
                                     :ast { t_ExprTuple, expressions: $2 }
+    | tuple_ele
+                                    :ast { t_ExprTuple, expressions: [$1] }
+
+<> tuple_ele 
+  > expr 
+  | "_"                             :ast { t_Ignore }
+  | "Some"                          :ast { t_NotNone }
+  | "&"                             :ast { t_NotNone }
 
 <> assignment 
     > binding_id "={"{:9999} expr "}"
@@ -108,8 +114,12 @@ IGNORE { c:sp c:nl }
                                     :ast { t_Obj, id: $1, path:$2, tok }
 
 <> object_accessor 
-    > "." id                        :ast { t_Prop, name: str($2), tok }
-    | ".[" expr "]"                 :ast { t_Index, expr: $2, tok }
+    > '.' id                        :ast { t_Prop, name: str($2), tok }
+    | tk:( '.' "[") expr "]"        :ast { t_Index, expr: $2, tok }
+    | tk:( '.' "(") expr(*",") ")"  :ast { t_TypeCall, expressions: $2, tok }
+    | tk:( ".#type")                :ast { t_Type, tok }
+    | tk:( ".#keys")                :ast { t_Keys, tok }
+    | tk:( ".#len")                 :ast { t_Length, tok }
 
 <> id 
     > binding_id | non_binding_id

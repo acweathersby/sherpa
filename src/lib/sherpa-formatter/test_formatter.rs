@@ -22,7 +22,7 @@ fn construct_formatter_interpreter() -> SherpaResult<()> {
 fn construct_and_interpret_trivial_script() -> SherpaResult<()> {
   match "test".into() {
     FormatterResult::Ok(formatter) => {
-      let mut context = FormatterContext::new();
+      let mut context = FormatterContext::new(IStringStore::default());
       assert_eq!("test", formatter.write_to_string(&mut context, 1024)?);
       Ok(())
     }
@@ -34,7 +34,7 @@ fn construct_and_interpret_trivial_script() -> SherpaResult<()> {
 fn construct_and_interpret_trivial_script_indent_spaces() -> SherpaResult<()> {
   match r#"test@+\ntest@+\ntest@-\ntest\n@-@-@-"#.into() {
     FormatterResult::Ok(formatter) => {
-      let mut context = FormatterContext::new();
+      let mut context = FormatterContext::new(IStringStore::default());
       assert_eq!(
         "test
   test
@@ -62,7 +62,7 @@ fn construct_and_interpret_trivial_function() -> SherpaResult<()> {
     .into()
   {
     FormatterResult::Ok(formatter) => {
-      let mut context = FormatterContext::new();
+      let mut context = FormatterContext::new(IStringStore::default());
       assert_eq!(
         "This is a complex string that comes up frequently.\nThis is a complex string that comes up frequently.",
         formatter.write_to_string(&mut context, 1024)?
@@ -95,7 +95,7 @@ fn construct_and_interpret_function_with_match_statement() -> SherpaResult<()> {
     .into()
   {
     FormatterResult::Ok(formatter) => {
-      let mut context = FormatterContext::new();
+      let mut context = FormatterContext::new(IStringStore::default());
       assert_eq!("one two  3   4    zero", formatter.write_to_string(&mut context, 1024)?);
       Ok(())
     }
@@ -107,8 +107,8 @@ fn construct_and_interpret_function_with_match_statement() -> SherpaResult<()> {
 fn construct_and_use_a_type_function_for_map() -> SherpaResult<()> {
   match r###"
 
-#type_obj @t:obj { 
-    @t.name
+#type_obj { 
+    @self.name
 }
 
 @test
@@ -121,11 +121,10 @@ fn construct_and_use_a_type_function_for_map() -> SherpaResult<()> {
       let mut test_obj = HashMap::new();
       test_obj.insert("name".to_string(), Value::Str("test_printer".intern(&s_store)));
 
-      let mut values = HashMap::new();
-      values.insert("test".to_string(), Value::Obj(&test_obj));
+      let mut ctx = FormatterContext::new(s_store);
+      ctx.set_val("test", Value::Obj(&test_obj));
 
-      let mut context = FormatterContext::new_with_values(&values, s_store);
-      assert_eq!("test_printer", formatter.write_to_string(&mut context, 1024)?);
+      assert_eq!("test_printer", formatter.write_to_string(&mut ctx, 1024)?);
       Ok(())
     }
     FormatterResult::Err(err) => SherpaResult::Err(err),
@@ -144,7 +143,7 @@ fn construct_and_use_a_type_function_for_list() -> SherpaResult<()> {
   }
 }
 
-#type_list @u:obj { #read_list(@u, 0) }
+#type_list { #read_list(self, 0) }
 
 @test
 
@@ -159,11 +158,10 @@ fn construct_and_use_a_type_function_for_list() -> SherpaResult<()> {
       }
       let s_store = IStringStore::default();
 
-      let mut values = HashMap::new();
-      values.insert("test".to_string(), Value::Obj(&list));
+      let mut ctx = FormatterContext::new(s_store);
+      ctx.set_val("test", Value::Obj(&list));
 
-      let mut context = FormatterContext::new_with_values(&values, s_store);
-      assert_eq!("1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20", formatter.write_to_string(&mut context, 1024)?);
+      assert_eq!("1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20", formatter.write_to_string(&mut ctx, 1024)?);
       Ok(())
     }
     FormatterResult::Err(err) => SherpaResult::Err(err),
@@ -182,7 +180,7 @@ fn construct_and_use_a_type_function_for_list_with_tail_call_optimization() -> S
   }
 }
 
-#type_list @u:obj { #read_list(@u, 0) }
+#type_list { #read_list(self, 0) }
 
 @test
 
@@ -199,10 +197,10 @@ fn construct_and_use_a_type_function_for_list_with_tail_call_optimization() -> S
       }
       let s_store = IStringStore::default();
 
-      let mut values = HashMap::new();
-      values.insert("test".to_string(), Value::Obj(&list));
+      let mut ctx = FormatterContext::new(s_store);
+      ctx.set_val("test", Value::Obj(&list));
 
-      assert_eq!(string.join(" "), formatter.write_to_string(&mut FormatterContext::new_with_values(&values, s_store), 1 << 20)?);
+      assert_eq!(string.join(" "), formatter.write_to_string(&mut ctx, 1 << 20)?);
       Ok(())
     }
     FormatterResult::Err(err) => SherpaResult::Err(err),
@@ -216,16 +214,15 @@ fn construct_length_limited_block() -> SherpaResult<()> {
 #read_list t:obj i:int {
   match t.len - i {
     t.len   { @t.[i] @; #read_list( @t, @i + 1 ) }
-            { @2 @t.[i] @; #read_list( @t, @i + 1 ) }
-    1       { @2 @t.[i] }
+            { @t.[i] @; #read_list( @t, @i + 1 ) }
+    1       { @t.[i] }
   }
 }
 
-#type_list @u:obj { #read_list(@u, 0) }
-
+#type_list { #read_list(self, 0) }
 
 \n@+
-{ @+ { @+ @test @- } @- }
+{ { @test  } }
 @-
 
 "###
@@ -239,13 +236,11 @@ fn construct_length_limited_block() -> SherpaResult<()> {
         list.push(Value::Int(i));
         string.push(i.to_string());
       }
-      let s_store = IStringStore::default();
 
-      let mut values = HashMap::new();
-      values.insert("test".to_string(), Value::Obj(&list));
-
-      let mut fm = FormatterContext::new_with_values(&values, s_store);
+      let mut fm = FormatterContext::new(IStringStore::default());
       fm.max_width = 4;
+      fm.tab_size = 2;
+      fm.set_val("test", Value::Obj(&list));
 
       assert_eq!(
         "
@@ -263,6 +258,8 @@ fn construct_length_limited_block() -> SherpaResult<()> {
       10
     }
   }",
+        formatter.write_to_string(&mut fm, 1 << 20)?,
+        "{}",
         formatter.write_to_string(&mut fm, 1 << 20)?
       );
       Ok(())
@@ -276,35 +273,28 @@ fn construct_length_limited_block() -> SherpaResult<()> {
 fn playground() -> SherpaResult<()> {
   match r###"
 
-#fn b:flt p:flt l:int sep:str { 
-  @j={ b ^ p } 
-  @{- @b^@p = @j@sep\n}
-  match p {
-    l {}
-    { #fn(b, p + 1, l, sep) }
+#fn val:int {
+  #fn val:int {
+    test__@val
   }
+
+  #fn(val)
 }
 
-@num={ 8 }
-
-@{
-Powers of 2 from 1 to @num 
-
-> Note: this includes all numbers that are transient
-```rust
-#fn(2, 1, num, ";")
-```
-
-Powers of 2 from 16 to 2 ^ 8
-```rust
-#fn(2, 16, 2 ^ 8, ".")
-```
+#type_list i:int {
+  match i { { Rock[@self.#len] } 1 { List[@self.#len] } }
 }
+
+#fn(1)
+\n
+@test.(11)
+
 
 "###
     .into()
   {
     FormatterResult::Ok(formatter) => {
+      formatter._debug_print_();
       let mut list = vec![];
       let mut string = vec![];
 
@@ -314,10 +304,10 @@ Powers of 2 from 16 to 2 ^ 8
       }
       let s_store = IStringStore::default();
 
-      let mut values = HashMap::new();
-      values.insert("test".to_string(), Value::Obj(&list));
+      let mut ctx = FormatterContext::new(s_store);
+      ctx.set_val("test", Value::Obj(&list));
 
-      println!("{}", formatter.write_to_string(&mut FormatterContext::new_with_values(&values, s_store), 1024)?);
+      println!("{}", formatter.write_to_string(&mut ctx, 1024)?);
 
       Ok(())
     }

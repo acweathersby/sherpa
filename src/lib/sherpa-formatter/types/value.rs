@@ -1,5 +1,5 @@
 use sherpa_core::{proxy::OrderedMap, IString, IStringStore};
-use std::{collections::HashMap, fmt::Debug, hash::Hash};
+use std::{cmp::Ordering, collections::HashMap, fmt::Debug, hash::Hash};
 
 #[derive(Default, Clone, Copy, Debug)]
 pub enum Value<'scope> {
@@ -27,6 +27,10 @@ pub trait ValueObj: Debug {
 
   fn get_type<'scope>(&'scope self) -> &str {
     "undefined"
+  }
+
+  fn get_keys<'scope>(&'scope self) -> &'static [&'static str] {
+    &["type", "len"]
   }
 
   fn get_len<'scope>(&'scope self) -> usize {
@@ -130,7 +134,7 @@ impl<'a, V: ValueObj> ValueObj for Vec<V> {
   }
 
   fn get_type<'scope>(&'scope self) -> &str {
-    "obj"
+    "list"
   }
 
   fn get_len<'scope>(&'scope self) -> usize {
@@ -148,7 +152,7 @@ impl<'a, V: ValueObj> ValueObj for &[V] {
   }
 
   fn get_type<'scope>(&'scope self) -> &str {
-    "obj"
+    "list"
   }
 
   fn get_len<'scope>(&'scope self) -> usize {
@@ -166,7 +170,7 @@ impl<'a> ValueObj for Vec<Value<'a>> {
   }
 
   fn get_type<'scope>(&'scope self) -> &str {
-    "obj"
+    "list"
   }
 
   fn get_len<'scope>(&'scope self) -> usize {
@@ -184,7 +188,7 @@ impl<'a> ValueObj for &[Value<'a>] {
   }
 
   fn get_type<'scope>(&'scope self) -> &str {
-    "obj"
+    "list"
   }
 
   fn get_len<'scope>(&'scope self) -> usize {
@@ -194,8 +198,8 @@ impl<'a> ValueObj for &[Value<'a>] {
 
 #[macro_export]
 macro_rules! formatted_typed_vector {
-  ($name: ident, $element_type:ty, $type_name:literal) => {
-    #[derive(Debug, Default)]
+  ($name: ident, $element_type:ty, $type_name:literal, $attr:meta) => {
+    #[$attr]
     pub struct $name(pub(crate) Vec<$element_type>);
 
     impl std::ops::Deref for $name {
@@ -243,6 +247,9 @@ macro_rules! formatted_typed_vector {
         self.0.get_val(key, s_store)
       }
     }
+  };
+  ($name: ident, $element_type:ty, $type_name:literal) => {
+    formatted_typed_vector!($name, $element_type, $type_name, derive(Debug, Default));
   };
 }
 

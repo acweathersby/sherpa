@@ -1,4 +1,4 @@
-use std::ops::IndexMut;
+use std::{io::Write, ops::IndexMut, sync::Arc};
 
 use super::{AscriptType, GraphNode, PendingType};
 use crate::build_db;
@@ -7,8 +7,10 @@ use sherpa_core::{
   proxy::OrderedMap,
   CachedString,
   IString,
+  ParserDatabase,
   SherpaDatabase,
   SherpaError,
+  SherpaResult,
 };
 use sherpa_formatter::*;
 use sherpa_rust_runtime::types::Token;
@@ -22,6 +24,27 @@ pub struct AscriptDatabase {
   pub(crate) errors:  Vec<SherpaError>,
 
   pub(crate) rules: AscriptRules,
+
+  pub(crate) db: Arc<ParserDatabase>,
+}
+
+impl AscriptDatabase {
+  /// Format and print this database to a string using the a formatting
+  /// script.
+  pub fn format_string(&self, script: &str) -> SherpaResult<String> {
+    unsafe { Ok(String::from_utf8_unchecked(self.format(script, Vec::with_capacity(1024))?)) }
+  }
+
+  /// Format and print this database to the given buffer using a formatting
+  /// script.
+  pub fn format<W: Write>(&self, script: &str, writer: W) -> SherpaResult<W> {
+    let mut ctx: FormatterContext = FormatterContext::new(self.db.string_store().clone());
+    ctx.set_val("structs", Value::Obj(&self.structs));
+    ctx.set_val("rules", Value::Obj(&self.rules));
+    ctx.max_width = 20;
+    let f: Formatter = FormatterResult::from(script).into_result()?;
+    f.write_to_output(&mut ctx, writer)
+  }
 }
 
 impl ValueObj for AscriptDatabase {
@@ -35,10 +58,7 @@ impl ValueObj for AscriptDatabase {
     }
   }
 
-  fn vals<'scope>(&'scope self, funct: &mut dyn FnMut(String, Value<'scope>)) {
-    funct("structs".to_string(), Value::Obj(&self.structs));
-    funct("rules".to_string(), Value::Obj(&self.rules));
-  }
+  fn vals<'scope>(&'scope self, funct: &mut dyn FnMut(String, Value<'scope>)) {}
 }
 
 formatted_typed_vector!(AscriptRules, AscriptRule, "rules");
@@ -56,7 +76,7 @@ impl From<SherpaDatabase> for AscriptDatabase {
   }
 }
 
-#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Debug)]
 pub struct StringId(IString);
 
 impl Into<IString> for StringId {
@@ -131,27 +151,91 @@ impl ValueObj for AScriptProp {
 
 #[derive(Debug)]
 pub enum AscriptRule {
-  Struct(StructInitializer),
-  Expression(Initializer),
-  ListInitial(Initializer),
-  ListContinue(Initializer),
-  LastSymbol(Initializer),
-  Invalid,
+  Struct(usize, StructInitializer),
+  Expression(usize, Initializer),
+  ListInitial(usize, Initializer),
+  ListContinue(usize, Initializer),
+  LastSymbol(usize, Initializer),
+  Invalid(usize),
 }
-
-impl ValueObj for AscriptRule {}
 
 #[derive(Debug)]
 /// Intializes a value derived from a rule.
 pub struct Initializer {
   // The type created by this initializer
   pub(crate) ty:           AscriptType,
+  pub(crate) name:         StringId,
   pub(crate) output_graph: Option<GraphNode>,
   pub(crate) ast:          Option<ASTNode>,
 }
 
+impl ValueObj for Initializer {
+  fn get_val<'scope>(&'scope self, key: &str, _: &sherpa_core::IStringStore) -> Value<'scope> {
+    match key {
+      "name" => Value::Str(self.name.0),
+      "node" => {
+        if let Some(node) = &self.output_graph {
+          Value::Obj(node)
+        } else {
+          Value::None
+        }
+      }
+      _ => Value::None,
+    }
+  }
+}
+
 #[derive(Debug)]
 pub struct StructInitializer {
-  pub(crate) ty:    StringId,
-  pub(crate) props: OrderedMap<StringId, Initializer>,
+  pub(crate) name:  StringId,
+  pub(crate) props: AscriptStructInitProps,
+}
+
+formatted_typed_ordered_map!(AscriptStructInitProps, StringId, Initializer, "AscriptStructInitProps");
+
+impl ValueObj for StructInitializer {
+  fn get_val<'scope>(&'scope self, key: &str, _: &sherpa_core::IStringStore) -> Value<'scope> {
+    match key {
+      "props" => Value::Obj(&self.props),
+      "name" => Value::Str(self.name.0),
+      _ => Value::None,
+    }
+  }
+}
+
+impl ValueObj for AscriptRule {
+  fn get_type<'scope>(&'scope self) -> &str {
+    use AscriptRule::*;
+    match self {
+      Struct(..) => "StructRule",
+      Expression(..) => "ExpressionRule",
+      ListInitial(..) => "ListInitialRule",
+      ListContinue(..) => "ListContinueRule",
+      LastSymbol(..) => "LastSymbolRule",
+      Invalid(..) => "InvalidRule",
+    }
+  }
+
+  fn get_val<'scope>(&'scope self, key: &str, _: &sherpa_core::IStringStore) -> Value<'scope> {
+    use AscriptRule::*;
+    match key {
+      "init" => match self {
+        Struct(_, init) => Value::Obj(init),
+        Expression(_, init) => Value::Obj(init),
+        ListInitial(_, init) => Value::Obj(init),
+        ListContinue(_, init) => Value::Obj(init),
+        LastSymbol(_, init) => Value::Obj(init),
+        Invalid(..) => Value::None,
+      },
+      "id" => match self {
+        Struct(id, ..)
+        | Expression(id, ..)
+        | ListInitial(id, ..)
+        | ListContinue(id, ..)
+        | LastSymbol(id, ..)
+        | Invalid(id, ..) => Value::Int(*id as isize),
+      },
+      _ => Value::None,
+    }
+  }
 }

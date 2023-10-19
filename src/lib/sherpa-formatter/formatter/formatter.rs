@@ -1,5 +1,5 @@
 use crate::{
-  parser::{self, Call, Funct, Match},
+  parser::{self, ASTNode, Call, Funct, Match},
   types::*,
 };
 use sherpa_core::{CachedString, ErrorClass, IString, IStringStore, SherpaError, SherpaResult};
@@ -41,7 +41,12 @@ use std::{collections::HashMap, io::Write, vec};
 /// # Example 2
 pub struct Formatter {
   script:    Vec<parser::ASTNode>,
-  functions: HashMap<IString, Box<Funct>>,
+  functions: HashMap<IString, Box<FunctionContext>>,
+}
+#[derive(Debug)]
+pub struct FunctionContext {
+  f:         Box<Funct>,
+  functions: HashMap<IString, Box<FunctionContext>>,
 }
 
 pub enum FormatterResult {
@@ -53,6 +58,13 @@ impl FormatterResult {
   pub fn into_result(self) -> SherpaResult<Formatter> {
     self.into()
   }
+}
+
+pub(crate) type Functions = HashMap<IString, Box<FunctionContext>>;
+
+enum ObjectEvalResult<'ctx: 'fn_scope, 'fn_scope> {
+  Value(Value<'ctx>),
+  TypeCall(&'ctx dyn ValueObj, &'fn_scope [parser::ASTNode]),
 }
 
 impl From<&str> for FormatterResult {
@@ -75,53 +87,74 @@ impl Into<SherpaResult<Formatter>> for FormatterResult {
 
 impl Formatter {
   pub fn new(script: Vec<parser::ASTNode>) -> Self {
-    Self {
-      functions: script
-        .iter()
-        .filter_map(|n| {
-          use parser::ASTNode::*;
-          match n {
-            Funct(funct) => Some((funct.name.to_token(), funct.clone())),
-            _ => None,
-          }
-        })
-        .collect(),
-      script,
-    }
+    Self { functions: Self::get_functions(&script), script }
   }
 
-  pub fn write_to_string(&self, ctx: &mut FormatterContext, capacity: usize) -> SherpaResult<String> {
+  pub fn get_functions(nodes: &[ASTNode]) -> HashMap<IString, Box<FunctionContext>> {
+    let mut map = HashMap::default();
+    use parser::ASTNode::*;
+    for n in nodes.iter() {
+      match n {
+        Funct(funct) => {
+          let functions = Self::get_functions(&funct.content);
+
+          let sig_name = funct.name.clone()
+            + &funct
+              .params
+              .iter()
+              .map(|p| match p.ty.as_str() {
+                "num" | "int" | "flt" => "_num".to_string(),
+                _ => "_".to_string() + &p.ty,
+              })
+              .collect::<Vec<_>>()
+              .join("");
+
+          let name = sig_name.to_token();
+          map.insert(name, Box::new(FunctionContext { f: funct.clone(), functions }));
+        }
+        _ => {}
+      }
+    }
+    map
+  }
+
+  #[cfg(debug_assertions)]
+  pub fn _debug_print_(&self) {
+    println!("{:#?}", self.script)
+  }
+
+  pub fn write_to_string<'a>(&'a self, ctx: &mut FormatterContext<'_, 'a>, capacity: usize) -> SherpaResult<String> {
     unsafe { Ok(String::from_utf8_unchecked(self.write_to_output(ctx, Vec::with_capacity(capacity))?)) }
   }
 
-  pub fn write_to_output<W: Write>(&self, ctx: &mut FormatterContext, mut output: W) -> SherpaResult<W> {
-    let sequence = &self.script;
-    let functions = &self.functions;
-    Self::write_to_output_internal(sequence, ctx, functions, output)
+  pub fn write_to_output<'a, W: Write>(&'a self, ctx: &mut FormatterContext<'_, 'a>, output: W) -> SherpaResult<W> {
+    let sequence: &Vec<parser::ASTNode> = &self.script;
+    ctx.functs = Some(&self.functions);
+    let result = Self::write_to_output_internal(sequence, ctx, output);
+    ctx.functs = None;
+    result
   }
 
-  fn write_to_output_internal<W: Write>(
-    sequence: &Vec<parser::ASTNode>,
-    ctx: &mut FormatterContext<'_>,
-    functions: &HashMap<IString, Box<Funct>>,
+  fn write_to_output_internal<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    sequence: &'fn_scope Vec<parser::ASTNode>,
+    ctx: &mut FormatterContext<'ctx, 'fn_scope>,
     mut output: W,
   ) -> Result<W, SherpaError> {
-    match Self::interpret_sequence(sequence, ctx, functions, &mut output)? {
+    match Self::interpret_sequence(sequence, ctx, &mut output)? {
       None => (),
-      Some((tail_call, funct)) => {
-        Self::interpret_function_call(tail_call, funct, ctx, functions, &mut output)?;
+      Some(tail_call) => {
+        Self::interpret_function_call(tail_call, ctx, &mut output)?;
       }
     }
     output.flush()?;
     Ok(output)
   }
 
-  fn interpret_sequence<'call, W: Write>(
-    seq: &'call [parser::ASTNode],
-    ctx: &mut FormatterContext,
-    functions: &'call HashMap<IString, Box<Funct>>,
+  fn interpret_sequence<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    seq: &'fn_scope [parser::ASTNode],
+    ctx: &mut FormatterContext<'ctx, 'fn_scope>,
     w: &mut W,
-  ) -> SherpaResult<Option<TailCall<'call>>> {
+  ) -> SherpaResult<Option<TailCall<'fn_scope>>> {
     use parser::*;
 
     let mut iter = seq.iter().peekable();
@@ -129,8 +162,8 @@ impl Formatter {
     let mut tail_call = None;
 
     while let Some(node) = iter.next() {
-      if let Some((call, funct)) = tail_call.take() {
-        Self::interpret_function_call(call, funct, ctx, functions, w)?
+      if let Some(call) = tail_call.take() {
+        Self::interpret_function_call(call, ctx, w)?
       }
 
       if node.as_NewLine().is_some() {
@@ -138,9 +171,9 @@ impl Formatter {
         while let Some(la) = iter.peek() {
           match la {
             ASTNode::Indent(_) | ASTNode::Dedent(_) => {
-              match Self::interpret_node_mut_ctx(la, ctx, functions, w)? {
+              match Self::interpret_node_mut_ctx(la, ctx, w)? {
                 None => {}
-                _ => unreachable!(), // Some((call, funct)) => Self::interpret_function_call(call, funct, ctx, functions, w)?,
+                _ => unreachable!(),
               }
               iter.next();
             }
@@ -152,14 +185,9 @@ impl Formatter {
       }
 
       if node.as_Call().is_some() && iter.peek().is_none() {
-        let call = node.as_Call().unwrap();
-        let call_name = &call.name;
-        match functions.get(&call_name.to_token()) {
-          Some(funct) => tail_call = Some((call, funct.as_ref())),
-          _ => return create_missing_function_error(call),
-        }
+        tail_call = Some(node.as_Call().unwrap())
       } else {
-        match Self::interpret_node_mut_ctx(node, ctx, functions, w)? {
+        match Self::interpret_node_mut_ctx(node, ctx, w)? {
           None => (),
           new_tail_call => {
             tail_call = new_tail_call;
@@ -175,7 +203,6 @@ impl Formatter {
   fn interpret_node_imut_ctx<'call, W: Write>(
     node: &'call parser::ASTNode,
     ctx: &FormatterContext,
-    functions: &'call HashMap<IString, Box<Funct>>,
     w: &mut W,
   ) -> SherpaResult<Option<TailCall<'call>>> {
     use parser::ASTNode::*;
@@ -201,51 +228,47 @@ impl Formatter {
       Num(num) => {
         w.write(num.val.as_bytes())?;
       }
-      obj @ Obj(o) => match o.id.at {
-        true => {
-          let val: Value<'_> = Self::eval_expression(&obj, ctx)?;
-          Self::print_value(val, ctx, functions, w)?;
-        }
+      Obj(o) => match o.id.at {
+        true => match Self::eval_obj(&o, ctx)? {
+          ObjectEvalResult::Value(val) => {
+            Self::print_value(val, ctx, w)?;
+          }
+          ObjectEvalResult::TypeCall(obj, args) => {
+            if !Self::interpret_type_function(obj.get_type(), args, ctx, Value::Obj(obj), w)? {
+              w.write(o.tok.to_string().as_bytes())?;
+            }
+          }
+        },
         false => {
           w.write(o.tok.to_string().as_bytes())?;
         }
       },
       Expression(expr) => {
         let val = Self::eval_expression(&expr.val, ctx)?;
-        Self::print_value(val, ctx, functions, w)?;
+        Self::print_value(val, ctx, w)?;
       }
-      Funct(_) => {}
       node => todo!("Handle the interpretation of: {node:#?}"),
     };
     Ok(None)
   }
 
   /// Prints nodes that may or may not modify the calling context.
-  fn interpret_node_mut_ctx<'call, W: Write>(
-    node: &'call parser::ASTNode,
-    ctx: &mut FormatterContext,
-    functions: &'call HashMap<IString, Box<Funct>>,
+  fn interpret_node_mut_ctx<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    node: &'fn_scope parser::ASTNode,
+    ctx: &mut FormatterContext<'ctx, 'fn_scope>,
     w: &mut W,
-  ) -> SherpaResult<Option<TailCall<'call>>> {
+  ) -> SherpaResult<Option<TailCall<'fn_scope>>> {
     use parser::ASTNode::*;
     match node {
-      Call(call) => {
-        let call_name = &call.name;
-        match functions.get(&call_name.to_token()) {
-          Some(funct) => {
-            Self::interpret_function_call(call, funct, ctx, functions, w)?;
-          }
-          _ => return create_missing_function_error(call),
-        }
-      }
-      Match(m) => return Self::interpret_match(m, ctx, functions, w),
+      Call(call) => Self::interpret_function_call(call, ctx, w)?,
+      Match(m) => return Self::interpret_match(m, ctx, w),
       Dedent(_) => {
         ctx.dedent();
       }
       Indent(_) => {
         ctx.indent();
       }
-      LiteralSpace(l_space) => return Self::interpret_sequence(&l_space.content, ctx, functions, w),
+      LiteralSpace(l_space) => return Self::interpret_sequence(&l_space.content, ctx, w),
       SBlock(block) => {
         let (left_sentinal, right_sentinal) = match block.ty.as_str() {
           "{" => ('{', '}'),
@@ -259,7 +282,7 @@ impl Formatter {
         let tab_count = ctx.indent_level() + ctx.block_level();
 
         ctx.block_open();
-        Self::write_to_output_internal(&block.content, ctx, functions, &mut writer)?;
+        Self::write_to_output_internal(&block.content, ctx, &mut writer)?;
         ctx.block_close();
 
         let should_break = writer.len > ctx.max_width();
@@ -279,21 +302,15 @@ impl Formatter {
         w.write(&[right_sentinal as u8])?;
       }
       Assign(assign) => {
-        let name = assign.id.name.as_str();
         let expr = Self::eval_expression(&assign.expr, ctx)?;
         ctx.set(Self::get_id_val(&assign.id).to_token(), expr);
       }
-      node => return Self::interpret_node_imut_ctx(node, ctx, functions, w),
+      node => return Self::interpret_node_imut_ctx(node, ctx, w),
     };
     Ok(None)
   }
 
-  fn print_value<W: Write>(
-    val: Value,
-    ctx: &FormatterContext,
-    functions: &HashMap<IString, Box<Funct>>,
-    w: &mut W,
-  ) -> SherpaResult<()> {
+  fn print_value<W: Write>(val: Value, ctx: &FormatterContext, w: &mut W) -> SherpaResult<()> {
     match val {
       Value::Int(int) => {
         w.write(int.to_string().as_bytes())?;
@@ -306,9 +323,7 @@ impl Formatter {
       }
       obj_val @ Value::Obj(map) => {
         let type_name = map.get_type();
-        let type_function_name = ("#type_".to_string() + type_name).to_token();
-        if let Some(funct) = functions.get(&type_function_name) {
-          Self::interpret_type_function(funct, ctx, functions, obj_val, w)?;
+        if Self::interpret_type_function(type_name, &[], ctx, obj_val, w)? {
         } else {
           w.write(type_name.as_bytes())?;
         }
@@ -318,145 +333,165 @@ impl Formatter {
     Ok(())
   }
 
-  fn interpret_type_function<W: Write>(
-    funct: &Funct,
-    ctx: &FormatterContext,
-    functions: &HashMap<IString, Box<Funct>>,
-    obj_val: Value,
+  /// Returns `true` if a call was made to function with a matching signature.
+  fn interpret_type_function<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    type_name: &str,
+    args: &'fn_scope [ASTNode],
+    ctx: &FormatterContext<'ctx, 'fn_scope>,
+    obj_val: Value<'fn_scope>,
     w: &mut W,
-  ) -> SherpaResult<()> {
-    if funct.params.len() != 1 {
-      panic!("A type function should only have on param")
-    }
-
-    if funct.params[0].ty != "obj" {
-      panic!("A type function param should have type 'obj'")
-    }
-
-    let ctx = &ctx;
-    let mut ctx = FormatterContext::create_scope(ctx);
-    ctx.set(Self::get_id_val(&funct.params[0].name).to_token(), obj_val);
-    let result = Self::interpret_sequence(&funct.content, &mut ctx, functions, w)?;
-    match result {
-      None => Ok(()),
-      Some((tail_call, funct)) => {
-        Self::interpret_tail_call(tail_call, funct, &mut ctx, functions, w)?;
-        Ok(())
-      }
-    }
-  }
-
-  fn interpret_function_call<'call, W: Write>(
-    call: &'call Call,
-    funct: &'call Funct,
-    root_ctx: &mut FormatterContext,
-    functions: &'call HashMap<IString, Box<Funct>>,
-    w: &mut W,
-  ) -> SherpaResult<()> {
-    if call.args.len() != funct.params.len() {
-      panic!("Args miss match")
-    }
-
-    let mut vals = Self::process_call_params(call, funct, root_ctx)?;
-
-    let result = {
-      let ctx = &root_ctx;
+  ) -> SherpaResult<bool> {
+    let (name_sig, args) = Self::create_function_sig(&("#type_".to_string() + type_name), &args, ctx)?;
+    if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, ctx) {
+      let ctx = &ctx;
       let mut ctx = FormatterContext::create_scope(ctx);
-
-      for (key, val) in vals.drain(..) {
-        ctx.set(key, val)
-      }
-
-      match Self::interpret_sequence(&funct.content, &mut ctx, functions, w)? {
-        None => {}
-        Some((tail_call, funct)) => {
-          Self::interpret_tail_call(tail_call, funct, &mut ctx, functions, w)?;
+      ctx.functs = Some(&funct_ctx.functions);
+      ctx.set("self".to_token(), obj_val);
+      Self::set_funct_variables(funct_ctx, args, &mut ctx);
+      let result = Self::interpret_sequence(&funct_ctx.f.content, &mut ctx, w)?;
+      match result {
+        None => Ok(true),
+        Some(tail_call) => {
+          Self::interpret_tail_call(tail_call, &mut ctx, w)?;
+          Ok(true)
         }
       }
-    };
-    Ok(result)
-  }
-
-  fn interpret_tail_call<'call, W: Write>(
-    call: &'call Call,
-    mut funct: &'call Funct,
-    root_ctx: &mut FormatterContext,
-    functions: &'call HashMap<IString, Box<Funct>>,
-    w: &mut W,
-  ) -> SherpaResult<()> {
-    if call.args.len() != funct.params.len() {
-      panic!("Args miss match")
+    } else {
+      Ok(false)
     }
-
-    let mut vals = Self::process_call_params(call, funct, root_ctx)?;
-
-    let result = loop {
-      for (key, val) in vals.drain(..) {
-        root_ctx.set(key, val)
-      }
-      match Self::interpret_sequence(&funct.content, root_ctx, functions, w)? {
-        None => {
-          break;
-        }
-        Some((tail_call, tail_funct)) => {
-          vals = Self::process_call_params(tail_call, tail_funct, root_ctx)?;
-          funct = tail_funct;
-        }
-      }
-    };
-    Ok(result)
   }
 
-  fn process_call_params<'b, 'a: 'b, 'scope: 'a + 'b>(
-    call: &'a Call,
-    funct: &'a Funct,
-    ctx: &'b mut FormatterContext<'scope>,
-  ) -> Result<Vec<(IString, Value<'scope>)>, SherpaError> {
-    let mut vals = vec![];
+  fn resolve_function_call_target<'call: 'fn_scope, 'fn_scope>(
+    call_name: IString,
+    root_ctx: &FormatterContext<'call, 'fn_scope>,
+  ) -> Option<&'fn_scope FunctionContext> {
+    if let Some(functions) = root_ctx.functs {
+      match functions.get(&call_name) {
+        Some(funct) => Some(&funct),
+        _ => {
+          if let Some(parent) = root_ctx.parent {
+            Self::resolve_function_call_target(call_name, parent)
+          } else {
+            None
+          }
+        }
+      }
+    } else {
+      None
+    }
+  }
 
-    for (arg, param) in call.args.iter().zip(funct.params.iter()) {
-      let param_name = Self::get_id_val(&param.name);
+  fn create_function_sig<'ctx: 'fn_scope, 'fn_scope>(
+    name: &str,
+    call_args: &'fn_scope [ASTNode],
+    ctx: &FormatterContext<'ctx, 'fn_scope>,
+  ) -> SherpaResult<(IString, Vec<Value<'ctx>>)> {
+    let mut name = name.to_string();
+    let mut vals = vec![];
+    for arg in call_args.iter() {
       match Self::eval_expression(arg, ctx)? {
-        num @ Value::Num(val) => match param.ty.as_str() {
-          "flt" | "num" => {
-            vals.push((param_name.intern(&ctx.s_store), num));
-          }
-          "int" => {
-            vals.push((
-              param_name.intern(&ctx.s_store),
-              Value::Int(val.round().min(100000000000000.0).max(-1000000000000000.0) as isize),
-            ));
-          }
-          _ => panic!("Numeric Value miss match param: {param_name}-{} val: num -{}", &param.ty, val),
-        },
-        int @ Value::Int(val) => match param.ty.as_str() {
-          "num" | "flt" => {
-            vals.push((param_name.intern(&ctx.s_store), Value::Num(val as f64)));
-          }
-          "int" => {
-            vals.push((param_name.intern(&ctx.s_store), int));
-          }
-          val => panic!("Numeric Value miss match param: {param_name}-{} val: num -{}", &param.ty, val),
-        },
-        str @ Value::Str(_) => match param.ty.as_str() {
-          "str" => {
-            vals.push((param_name.intern(&ctx.s_store), str));
-          }
-          obj => {
-            panic!("String Value miss match param: {param_name}-{} val: non-str -{:?}", &param.ty, obj)
-          }
-        },
-        obj @ Value::Obj(_) => match param.ty.as_str() {
-          "obj" => {
-            vals.push((param_name.intern(&ctx.s_store), obj));
-          }
-          obj => panic!("Object type miss match param: \n  {param_name}-{} val: \n  non-obj -{:?}", &param.ty, obj),
-        },
+        num @ Value::Num(_) => {
+          name += "_num";
+          vals.push(num);
+        }
+        int @ Value::Int(_) => {
+          name += "_num";
+          vals.push(int);
+        }
+        str @ Value::Str(_) => {
+          name += "_str";
+          vals.push(str);
+        }
+        obj @ Value::Obj(_) => {
+          name += "_obj";
+          vals.push(obj);
+        }
         node => todo!("Handle the interpretation of arg type: {node:#?}"),
       }
     }
 
-    Ok(vals)
+    Ok((name.intern(&ctx.s_store), vals))
+  }
+
+  fn set_funct_variables<'ctx: 'fn_scope, 'fn_scope>(
+    funct_ctx: &FunctionContext,
+    args: Vec<Value<'ctx>>,
+    root_ctx: &mut FormatterContext<'ctx, 'fn_scope>,
+  ) {
+    for (param, arg) in funct_ctx.f.params.iter().zip(args.into_iter()) {
+      let key = Self::get_id_val(&param.name).intern(&root_ctx.s_store);
+      let val = match arg {
+        num @ Value::Num(val) => match param.ty.as_str() {
+          "flt" | "num" => num,
+          "int" => Value::Int(val.round().min(100000000000000.0).max(-1000000000000000.0) as isize),
+          _ => unreachable!(),
+        },
+        int @ Value::Int(val) => match param.ty.as_str() {
+          "num" | "flt" => Value::Num(val as f64),
+          "int" => int,
+          _ => unreachable!(),
+        },
+        v => v,
+      };
+      root_ctx.set(key, val)
+    }
+  }
+
+  fn interpret_function_call<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    call: &'fn_scope Call,
+    root_ctx: &mut FormatterContext<'ctx, 'fn_scope>,
+    w: &mut W,
+  ) -> SherpaResult<()> {
+    let (name_sig, args) = Self::create_function_sig(&call.name, &call.args, root_ctx)?;
+    if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, root_ctx) {
+      let result = {
+        let ctx = &root_ctx;
+        let mut ctx = FormatterContext::create_scope(ctx);
+        ctx.functs = Some(&funct_ctx.functions);
+
+        Self::set_funct_variables(funct_ctx, args, &mut ctx);
+
+        match Self::interpret_sequence(&funct_ctx.f.content, &mut ctx, w)? {
+          None => {}
+          Some(tail_call) => {
+            Self::interpret_tail_call(tail_call, &mut ctx, w)?;
+          }
+        }
+      };
+
+      Ok(result)
+    } else {
+      Err(SherpaError::StaticText("Function not defined on context"))
+    }
+  }
+
+  fn interpret_tail_call<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    call: &'fn_scope Call,
+    root_ctx: &mut FormatterContext<'ctx, 'fn_scope>,
+    w: &mut W,
+  ) -> SherpaResult<()> {
+    let mut call = call;
+    loop {
+      let (name_sig, args) = Self::create_function_sig(&call.name, &call.args, root_ctx)?;
+      if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, root_ctx) {
+        if call.args.len() != funct_ctx.f.params.len() {
+          panic!("Args miss match")
+        }
+
+        Self::set_funct_variables(funct_ctx, args, root_ctx);
+
+        match Self::interpret_sequence(&funct_ctx.f.content, root_ctx, w)? {
+          None => {
+            return Ok(());
+          }
+          Some(tail_call) => {
+            call = tail_call;
+          }
+        }
+      } else {
+        return Err(SherpaError::StaticText("Function not defined on context"));
+      }
+    }
   }
 
   fn get_prop<'a>(obj: &'a dyn ValueObj, prop: &str, s_store: &IStringStore) -> Value<'a> {
@@ -466,68 +501,87 @@ impl Formatter {
     }
   }
 
-  fn eval_expression<'a, 'scope: 'a>(expr: &parser::ASTNode, ctx: &'a FormatterContext<'scope>) -> SherpaResult<Value<'scope>> {
+  fn eval_obj<'ctx: 'fn_scope, 'fn_scope>(
+    obj: &'fn_scope parser::Obj,
+    ctx: &FormatterContext<'ctx, 'fn_scope>,
+  ) -> Result<ObjectEvalResult<'ctx, 'fn_scope>, SherpaError> {
     use parser::ASTNode::*;
-    let val = match expr {
-      Obj(obj) => {
-        let val = ctx.get(&Self::get_id_val(&obj.id).to_token());
-        let val = match val {
-          obj_val @ Value::Obj(obj_map) => {
-            if obj.path.is_empty() {
-              obj_val
-            } else {
-              let s_store = &ctx.s_store;
-              let mut obj_map = Some(obj_map);
-              let mut obj_val = Value::None;
-              for (index, path) in obj.path.iter().enumerate() {
-                if let Some(obj_map_unwrapped) = &obj_map {
-                  match match path {
-                    Prop(prop) => match prop.name.as_str() {
-                      "len" => Value::Int(obj_map.unwrap().get_len() as isize),
-                      prop_name => Self::get_prop(*obj_map_unwrapped, prop_name, s_store),
-                    },
-                    Index(idx) => match Self::eval_expression(&idx.expr, ctx)? {
-                      Value::Num(i) => obj_map_unwrapped.get_index(i.min(0.0) as usize, s_store),
-                      Value::Int(i) => obj_map_unwrapped.get_index(i as usize, s_store),
-                      Value::Str(str) => Self::get_prop(*obj_map_unwrapped, &str.to_string(s_store), s_store),
-                      _ => panic!("invalid property expression"),
-                    },
-                    _ => Value::None,
-                  } {
-                    o_v @ Value::Obj(obj) => {
-                      obj_map = Some(obj);
-                      obj_val = o_v;
-                    }
-                    Value::None => {
-                      eprintln!(
-                        "{}{} value is not an object {val:#?}",
-                        Self::get_id_val(&obj.id),
-                        obj.path[..=index].iter().map(|a| a.to_string()).collect::<Vec<_>>().join("")
-                      );
-                      obj_val = Value::None;
-                      obj_map = None;
-                    }
-                    val => {
-                      obj_val = val;
-                      obj_map = None;
-                    }
-                  }
-                } else {
-                  panic!(
-                    "property {}.{} is undefined",
+    let val = ctx.get(&Self::get_id_val(&obj.id).to_token());
+    let val = match val {
+      obj_val @ Value::Obj(obj_map) => {
+        if obj.path.is_empty() {
+          obj_val
+        } else {
+          let s_store = &ctx.s_store;
+          let mut obj_map = Some(obj_map);
+          let mut obj_val = Value::None;
+          for (index, path) in obj.path.iter().enumerate() {
+            if let Some(obj_map_unwrapped) = &obj_map {
+              match match path {
+                TypeCall(tc) => {
+                  return Ok(ObjectEvalResult::TypeCall(*obj_map_unwrapped, &tc.expressions));
+                }
+                Type(_) => Value::Str(obj_map.unwrap().get_type().intern(&ctx.s_store)),
+                Length(_) => Value::Int(obj_map.unwrap().get_len() as isize),
+                Prop(prop) => Self::get_prop(*obj_map_unwrapped, prop.name.as_str(), s_store),
+                Index(idx) => match Self::eval_expression(&idx.expr, ctx)? {
+                  Value::Num(i) => obj_map_unwrapped.get_index(i.min(0.0) as usize, s_store),
+                  Value::Int(i) => obj_map_unwrapped.get_index(i as usize, s_store),
+                  Value::Str(str) => Self::get_prop(*obj_map_unwrapped, &str.to_string(s_store), s_store),
+                  _ => panic!("invalid property expression"),
+                },
+                _ => Value::None,
+              } {
+                o_v @ Value::Obj(obj) => {
+                  obj_map = Some(obj);
+                  obj_val = o_v;
+                }
+                Value::None => {
+                  eprintln!(
+                    "{}{} value is not an object {val:#?}",
                     Self::get_id_val(&obj.id),
                     obj.path[..=index].iter().map(|a| a.to_string()).collect::<Vec<_>>().join("")
-                  )
+                  );
+                  obj_val = Value::None;
+                  obj_map = None;
+                }
+                val => {
+                  obj_val = val;
+                  obj_map = None;
                 }
               }
-              obj_val
+            } else {
+              eprintln!(
+                "property {}.{} is undefined",
+                Self::get_id_val(&obj.id),
+                obj.path[..=index].iter().map(|a| a.to_string()).collect::<Vec<_>>().join("")
+              );
+              obj_val = Value::None;
+              break;
             }
           }
-          val => val,
-        };
-
-        val
+          obj_val
+        }
       }
+      val => val,
+    };
+    Ok(ObjectEvalResult::Value(val))
+  }
+
+  fn eval_expression<'ctx: 'fn_scope, 'fn_scope>(
+    expr: &'fn_scope parser::ASTNode,
+    ctx: &FormatterContext<'ctx, 'fn_scope>,
+  ) -> SherpaResult<Value<'ctx>> {
+    use parser::ASTNode::*;
+    let val = match expr {
+      Obj(obj) => match Self::eval_obj(obj, ctx)? {
+        ObjectEvalResult::Value(val) => val,
+        ObjectEvalResult::TypeCall(obj, args) => {
+          let mut writer = Vec::with_capacity(1024);
+          Self::interpret_type_function(obj.get_type(), args, ctx, Value::Obj(obj), &mut writer)?;
+          Value::Str(unsafe { String::from_utf8_unchecked(writer) }.intern(&ctx.s_store))
+        }
+      },
       Num(num) => {
         if num.val == "0" {
           Value::Num(0.0)
@@ -648,7 +702,7 @@ impl Formatter {
       },
       literal @ Literal(_) => {
         let mut vec = Vec::with_capacity(512);
-        Self::interpret_node_imut_ctx(literal, ctx, &Default::default(), &mut vec)?;
+        Self::interpret_node_imut_ctx(literal, ctx, &mut vec)?;
         let string = unsafe { String::from_utf8_unchecked(vec) };
         Value::Str(string.intern(&ctx.s_store))
       }
@@ -665,22 +719,16 @@ impl Formatter {
     }
   }
 
-  fn interpret_match<'call, W: Write>(
-    m: &'call Match,
-    ctx: &mut FormatterContext,
-    functions: &'call HashMap<IString, Box<Funct>>,
+  fn interpret_match<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    m: &'fn_scope Match,
+    ctx: &mut FormatterContext<'ctx, 'fn_scope>,
     writer: &mut W,
-  ) -> SherpaResult<Option<TailCall<'call>>> {
+  ) -> SherpaResult<Option<TailCall<'fn_scope>>> {
     let mut expressions = Vec::with_capacity(4);
 
-    match &m.expr {
-      parser::ASTNode::ExprTuple(tuple) => {
-        for expr in &tuple.expressions {
-          expressions.push(Self::eval_expression(expr, ctx)?)
-        }
-      }
-      expr => expressions.push(Self::eval_expression(expr, ctx)?),
-    };
+    for expr in &m.expr.expressions {
+      expressions.push(Self::eval_expression(expr, ctx)?)
+    }
 
     let (default, matches) = m.matches.iter().partition::<Vec<_>, _>(|f| f.default);
 
@@ -708,31 +756,33 @@ impl Formatter {
 
       for m in matches {
         if match &m.match_expr {
-          Some(parser::ASTNode::ExprTuple(exprs)) => {
+          Some(exprs) => {
             expressions.len() == exprs.expressions.len() && {
               let mut i = 0;
               loop {
                 if i == expressions.len() {
                   break true;
-                } else if !exprs.expressions[i].as_Ignore().is_some()
-                  && !compare_vals(&expressions[i], &Self::eval_expression(&exprs.expressions[i], ctx)?)
-                {
+                } else if exprs.expressions[i].as_Ignore().is_some() {
+                } else if exprs.expressions[i].as_NotNone().is_some() {
+                  if !matches!(expressions[i], Value::None) {
+                    break false;
+                  }
+                } else if !compare_vals(&expressions[i], &Self::eval_expression(&exprs.expressions[i], ctx)?) {
                   break false;
                 }
                 i += 1;
               }
             }
           }
-          Some(expr) => !(expressions.len() > 1 || !compare_vals(&expressions[0], &Self::eval_expression(expr, ctx)?)),
           _ => false,
         } {
-          return Self::interpret_sequence(&m.content, ctx, functions, writer);
+          return Self::interpret_sequence(&m.content, ctx, writer);
         }
       }
     }
 
     for d in default {
-      return Self::interpret_sequence(&d.content, ctx, functions, writer);
+      return Self::interpret_sequence(&d.content, ctx, writer);
     }
 
     Ok(None)
@@ -776,7 +826,7 @@ fn create_missing_function_error<T>(call: &parser::Call) -> Result<T, SherpaErro
 }
 
 /// A call made at the end of execution sequence.
-type TailCall<'call> = (&'call Call, &'call Funct);
+type TailCall<'call> = &'call Call;
 
 #[derive(Default)]
 struct BlockFormatter {
@@ -804,8 +854,6 @@ impl BlockFormatter {
     let tab_size = ctx.tab_size();
     let tab_count = ctx.indent_level();
     let nesting_depth = ctx.block_level();
-
-    println!("nesting_depth:{nesting_depth}");
 
     let num_of_spaces = tab_size * tab_count + tab_size * nesting_depth;
 

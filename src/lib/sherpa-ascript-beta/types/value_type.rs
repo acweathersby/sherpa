@@ -24,11 +24,12 @@ impl ValueObj for AscriptPropType {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum AscriptType {
   Scalar(AscriptScalarType),
   Aggregate(AscriptAggregateType),
   NonTerminalVal(DBNonTermKey),
+  #[default]
   Undefined,
 }
 
@@ -74,6 +75,7 @@ impl ValueObj for AscriptType {
         AscriptScalarType::Token => Value::Str("tok".intern(s_store)),
         AscriptScalarType::TokenRange => Value::Str("tok_range".intern(s_store)),
         AscriptScalarType::String(_) => Value::Str("str".intern(s_store)),
+        AscriptScalarType::Undefined => Value::None,
       }
     }
 
@@ -100,6 +102,24 @@ impl ValueObj for AscriptType {
         AscriptType::Scalar(scaler) => scalar_type(scaler, s_store),
         _ => Value::None,
       },
+      "base_val" => match self {
+        AscriptType::Scalar(scaler) => match scaler {
+          AscriptScalarType::Bool(val) => Value::Str(val.to_string().intern(s_store)),
+          AscriptScalarType::U8(val) => Value::Int(val.unwrap_or_default() as isize),
+          AscriptScalarType::U16(val) => Value::Int(val.unwrap_or_default() as isize),
+          AscriptScalarType::U32(val) => Value::Int(val.unwrap_or_default() as isize),
+          AscriptScalarType::U64(val) => Value::Int(val.unwrap_or_default() as isize),
+          AscriptScalarType::I8(val) => Value::Int(val.unwrap_or_default() as isize),
+          AscriptScalarType::I16(val) => Value::Int(val.unwrap_or_default() as isize),
+          AscriptScalarType::I32(val) => Value::Int(val.unwrap_or_default() as isize),
+          AscriptScalarType::I64(val) => Value::Int(val.unwrap_or_default() as isize),
+          AscriptScalarType::F32(val) => Value::Num(val.unwrap_or_default() as f64),
+          AscriptScalarType::F64(val) => Value::Num(val.unwrap_or_default() as f64),
+          AscriptScalarType::String(val) => Value::Str(val.unwrap_or_default()),
+          _ => Value::None,
+        },
+        _ => Value::None,
+      },
       _ => Value::None,
     }
   }
@@ -112,7 +132,7 @@ impl ValueObj for AscriptType {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum AscriptScalarType {
   U8(Option<usize>),
   U16(Option<usize>),
@@ -129,6 +149,8 @@ pub enum AscriptScalarType {
   Struct(StringId),
   Token,
   TokenRange,
+  #[default]
+  Undefined,
 }
 
 #[derive(Debug, Clone)]
@@ -138,33 +160,97 @@ pub enum GraphNode {
   Mul(Rc<GraphNode>, Rc<GraphNode>, AscriptType),
   Div(Rc<GraphNode>, Rc<GraphNode>, AscriptType),
   Map(Rc<GraphNode>, Rc<GraphNode>, AscriptType),
-  Vec(Rc<GraphNode>, AscriptType),
-  Str(Option<Rc<GraphNode>>),
-  Bool(Option<Rc<GraphNode>>),
+  Vec(GraphNodeVecInits, AscriptType),
+  Str(Option<Rc<GraphNode>>, AscriptType),
+  Bool(Option<Rc<GraphNode>>, AscriptType),
   Num(Option<Rc<GraphNode>>, AscriptType),
-  Tok(Rc<GraphNode>),
+  Tok(Rc<GraphNode>, AscriptType),
   Sym(usize, AscriptType),
-  TokSym(usize),
-  TokRule,
-  Undefined,
+  TokSym(usize, AscriptType),
+  TokRule(AscriptType),
+  Undefined(AscriptType),
 }
 
+formatted_typed_vector!(GraphNodeVecInits, GraphNode, "nodes", derive(Clone, Debug));
+
 impl GraphNode {
-  pub fn get_type(&self) -> AscriptType {
+  pub fn get_type(&self) -> &AscriptType {
     use GraphNode::*;
     match self {
-      Add(.., ty) => *ty,
-      Sub(.., ty) => *ty,
-      Mul(.., ty) => *ty,
-      Div(.., ty) => *ty,
-      Map(.., ty) => *ty,
-      Vec(.., ty) => *ty,
-      Sym(.., ty) => *ty,
-      Num(.., ty) => *ty,
-      Str(..) => AscriptType::Scalar(AscriptScalarType::String(None)),
-      Bool(..) => AscriptType::Scalar(AscriptScalarType::Bool(false)),
-      TokRule | TokSym(..) | Tok(..) => AscriptType::Scalar(AscriptScalarType::Token),
-      Undefined => AscriptType::Undefined,
+      Add(.., ty)
+      | Sub(.., ty)
+      | Mul(.., ty)
+      | Div(.., ty)
+      | Map(.., ty)
+      | Vec(.., ty)
+      | Sym(.., ty)
+      | Num(.., ty)
+      | Str(.., ty)
+      | Bool(.., ty)
+      | TokRule(ty)
+      | TokSym(.., ty)
+      | Tok(.., ty)
+      | Undefined(ty) => ty,
+    }
+  }
+}
+
+impl ValueObj for GraphNode {
+  fn get_type<'scope>(&'scope self) -> &str {
+    use GraphNode::*;
+    match self {
+      Add(..) => "AddNode",
+      Sub(..) => "SubNode",
+      Mul(..) => "MulNode",
+      Div(..) => "DivNode",
+      Map(..) => "MapNode",
+      Vec(..) => "VecNode",
+      Sym(..) => "SymNode",
+      Num(..) => "NumNode",
+      Str(..) => "StrNode",
+      Bool(..) => "BoolNode",
+      TokRule(..) | TokSym(..) | Tok(..) => "TokNode",
+      Undefined(..) => "UndefinedNode",
+    }
+  }
+
+  fn get_keys<'scope>(&'scope self) -> &'static [&'static str] {
+    &["left", "right", "key", "index", "val"]
+  }
+
+  fn get_val<'scope>(&'scope self, key: &str, core: &sherpa_core::IStringStore) -> Value<'scope> {
+    use GraphNode::*;
+    match key {
+      "left" => match self {
+        Add(left, ..) => Value::Obj(left.as_ref()),
+        Sub(left, ..) => Value::Obj(left.as_ref()),
+        Mul(left, ..) => Value::Obj(left.as_ref()),
+        Div(left, ..) => Value::Obj(left.as_ref()),
+        _ => Value::None,
+      },
+      "right" => match self {
+        Add(_, right, ..) => Value::Obj(right.as_ref()),
+        Sub(_, right, ..) => Value::Obj(right.as_ref()),
+        Mul(_, right, ..) => Value::Obj(right.as_ref()),
+        Div(_, right, ..) => Value::Obj(right.as_ref()),
+        _ => Value::None,
+      },
+      "key" => match self {
+        Map(key, ..) => Value::Obj(key.as_ref()),
+        _ => Value::None,
+      },
+      "index" => match self {
+        Sym(index, ..) => Value::Int(*index as isize),
+        _ => Value::None,
+      },
+      "val" => match self {
+        Map(_, val, ..) => Value::Obj(val.as_ref()),
+        Vec(val, ..) => Value::Obj(val),
+        Str(val, ..) => val.as_ref().map(|v| Value::Obj(v.as_ref())).unwrap_or(Value::None),
+        Bool(val, ..) => val.as_ref().map(|v| Value::Obj(v.as_ref())).unwrap_or(Value::None),
+        _ => Value::None,
+      },
+      _ => GraphNode::get_type(self).get_val(key, core),
     }
   }
 }

@@ -227,6 +227,8 @@ impl SherpaGrammar {
 // ----------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------
 
+/// A wrapper around a ParserDatabase, providing methods to convert a database
+/// into parsers
 #[derive(Clone)]
 pub struct SherpaDatabase {
   j:  Journal,
@@ -243,6 +245,11 @@ impl SherpaDatabase {
   /// Returns a reference to the underlying [ParserDatabase].
   pub fn get_internal(&self) -> &ParserDatabase {
     &self.db
+  }
+
+  /// Returns the internal ParserDatabase, consuming the wrapper in the process.
+  pub fn into_internal(self) -> SharedParserDatabase {
+    self.db
   }
 
   /// Constructs parser and scanner graphs for this variant of the grammar.

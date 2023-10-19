@@ -1,0 +1,127 @@
+@{
+/// ### `sherpa` Rust Parser
+///
+/// - **GENERATOR**: sherpa 1.0.0-beta2
+/// - **SOURCE**: /home/work/projects/lib_sherpa/src/grammar/v2_0_0/grammar.sg
+///
+/// #### WARNING:
+///
+/// This is a generated file. Any changes to this file may be **overwritten
+/// without notice**.
+///
+/// #### License:
+/// Copyright (c) 2023 Anthony Weathersby
+///
+/// Permission is hereby granted, free of charge, to any person obtaining a copy
+/// of this software and associated documentation files (the 'Software'), to
+/// deal in the Software without restriction, including without limitation the
+/// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+/// sell copies of the Software, and to permit persons to whom the Software is
+/// furnished to do so, subject to the following conditions:
+///
+/// The above copyright notice and this permission notice shall be included in
+/// all copies or substantial portions of the Software
+///
+/// THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+/// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+/// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+/// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+/// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+/// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+/// IN THE SOFTWARE
+
+@structs
+  
+@rules
+
+}
+
+impl<R: Reader + UTF8Reader, M, const UP: bool> ReduceFunctions<R, M, UP>{
+  pub\ const\ fn\ new ()->\ Self\ {@;\npub\ const\ rule_lu: [RuleFN;@rules.len] = [ #print_rule_lookup(rules, 0) ];
+}}
+@{
+
+const BYTES: &'static str = include_str!("script.bc");
+}
+
+#print_props props:obj i:int {
+  @p={ props.[i] } @i={ i + 1 }
+
+  @p.name match @p.optional { 1 {?} } : \ #print_type(@p.type);
+
+  match i { 
+    { @; \  #print_props(props, i) }
+    props.len {  }
+  }
+}
+
+
+#print_structs structs:obj i:int {
+  @s={ structs.[i] } @i={ i + 1 }
+  
+  class\ @s.name\ { 
+    #print_props(@s.props, 0) 
+  }
+
+  match i { 
+    { #print_structs(structs, i) }
+    structs.len { }
+  }
+}
+
+#type_structs structs:obj {
+  #print_structs(structs, 0)
+}
+
+#print_rules rules:obj i:int {
+  @r={ rules.[i] } @i={ i + 1 }
+
+  fn\ rule_@r.id\ (\ ctx: &ParserContext\ )\ {
+    match @r.type { 
+      "Struct" { return\ struct { } }
+      "ListInitial" { return\ [ ctx.symbols.last() ]; }
+      { [ @r.type ] }
+    }
+  }
+
+  match i { 
+    {\n #print_rules(rules, i) }
+    rules.len { }
+  }
+}
+
+#type_rules rules:obj {
+  #print_rules(rules, 0)
+}
+
+#print_rule_lookup rules:obj i:int {
+  @r={ rules.[i] } @i={ i + 1 }
+
+  rule_@r.id _test
+
+  match i { 
+    {, @; #print_rule_lookup(rules, i) }
+    rules.len { }
+  }
+}
+
+#print_type type:obj { 
+  match type.agg_type {
+    "vec" { 
+      match type.base_type {
+        "str"  { string }
+        "tok"  { Token[] }
+        { @"[TODO: Map Type ]" }
+      }
+    }
+    "map" { @"[TODO: Map Type ]" }
+    {
+      match type.base_type {
+        "tok"    { Token }
+        "str"    { string } 
+        "bool"   { boolean }
+        { [UNDEFINED\ @type.base_type] }
+      }
+    }
+  }
+}
