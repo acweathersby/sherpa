@@ -30,11 +30,8 @@ pub struct ParserConfig {
   /// likely to report terminal conflicts.
   pub CONTEXT_FREE: bool,
   /// Creates states that directly handle transitions on terminals, allowing the
-  /// creation of parsers that can patch existing CST structures.
+  /// creation of parsers that can patch existing CST data structures.
   pub AllOW_CST_MERGING: bool,
-  /// Creates states that handle erroneous inputs, allowing a parser to recover
-  /// from unexpected or missing tokens and continune parsing an input.
-  pub AllOW_ERROR_RECOVERY: bool,
   /// Export all non-terminals as entry points in to the parser. This implies
   /// an RD or RAD parser.
   pub EXPORT_ALL_NONTERMS: bool,
@@ -82,7 +79,6 @@ impl Default for ParserConfig {
       ALLOW_PEEKING: true,
       ALLOW_CONTEXT_SPLITTING: false,
       AllOW_CST_MERGING: false,
-      AllOW_ERROR_RECOVERY: false,
       CONTEXT_FREE: false,
       EXPORT_ALL_NONTERMS: false,
       ALLOW_CST_NONTERM_SHIFT: false,

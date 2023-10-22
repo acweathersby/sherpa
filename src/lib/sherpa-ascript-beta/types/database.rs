@@ -1,9 +1,9 @@
-use std::{io::Write, ops::IndexMut, sync::Arc};
+use std::{fmt::Debug, io::Write, sync::Arc};
 
-use super::{AscriptType, GraphNode, PendingType};
+use super::{AscriptType, GraphNode};
 use crate::build_db;
 use sherpa_core::{
-  parser::{ASTNode, Rule},
+  parser::ASTNode,
   proxy::OrderedMap,
   CachedString,
   IString,
@@ -15,11 +15,13 @@ use sherpa_core::{
 use sherpa_formatter::*;
 use sherpa_rust_runtime::types::Token;
 
-#[derive(Debug)]
+/// Stores resolved type and construction information used to create
+/// AST constructors based on `:ast` expressions extracted from a
+/// grammar.
 pub struct AscriptDatabase {
   pub(crate) structs: AscriptStructs,
   /// If errors are present then it is likely that the
-  /// database is in an incomplate state and SHOULD not be
+  /// database is in an incomplete state and SHOULD not be
   /// used to construct parser outputs.
   pub(crate) errors:  Vec<SherpaError>,
 
@@ -28,20 +30,29 @@ pub struct AscriptDatabase {
   pub(crate) db: Arc<ParserDatabase>,
 }
 
+impl Debug for AscriptDatabase {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut s = f.debug_struct("AscriptDatabase");
+    s.field("rules", &self.rules);
+    s.field("structs", &self.structs);
+    s.finish()
+  }
+}
+
 impl AscriptDatabase {
   /// Format and print this database to a string using the a formatting
   /// script.
-  pub fn format_string(&self, script: &str) -> SherpaResult<String> {
-    unsafe { Ok(String::from_utf8_unchecked(self.format(script, Vec::with_capacity(1024))?)) }
+  pub fn format_string(&self, script: &str, max_width: usize) -> SherpaResult<String> {
+    unsafe { Ok(String::from_utf8_unchecked(self.format(script, Vec::with_capacity(1024), max_width)?)) }
   }
 
   /// Format and print this database to the given buffer using a formatting
   /// script.
-  pub fn format<W: Write>(&self, script: &str, writer: W) -> SherpaResult<W> {
+  pub fn format<W: Write>(&self, script: &str, writer: W, max_width: usize) -> SherpaResult<W> {
     let mut ctx: FormatterContext = FormatterContext::new(self.db.string_store().clone());
     ctx.set_val("structs", Value::Obj(&self.structs));
     ctx.set_val("rules", Value::Obj(&self.rules));
-    ctx.max_width = 20;
+    ctx.max_width = max_width;
     let f: Formatter = FormatterResult::from(script).into_result()?;
     f.write_to_output(&mut ctx, writer)
   }
@@ -79,6 +90,12 @@ impl From<SherpaDatabase> for AscriptDatabase {
 #[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Debug)]
 pub struct StringId(IString);
 
+impl ToValue for StringId {
+  fn into_val<'scope>(&'scope self, s_store: &sherpa_core::IStringStore) -> Value<'scope> {
+    self.0.into_val(s_store)
+  }
+}
+
 impl Into<IString> for StringId {
   fn into(self) -> IString {
     self.0
@@ -104,7 +121,7 @@ pub struct AscriptStruct {
   pub(crate) properties: AscriptStructProps,
 }
 
-formatted_typed_ordered_map!(AscriptStructProps, StringId, AScriptProp, "AscriptStructProps");
+formatted_typed_ordered_map!(AscriptStructProps, StringId, AscriptProp, "AscriptStructProps");
 
 impl ValueObj for AscriptStruct {
   fn get_val<'scope>(&'scope self, key: &str, s_store: &sherpa_core::IStringStore) -> Value<'scope> {
@@ -121,14 +138,14 @@ impl ValueObj for AscriptStruct {
 }
 
 #[derive(Debug)]
-pub struct AScriptProp {
+pub struct AscriptProp {
   pub(crate) is_optional: bool,
   pub(crate) name:        String,
   pub(crate) ty:          AscriptType,
   pub(crate) tok:         Token,
 }
 
-impl ValueObj for AScriptProp {
+impl ValueObj for AscriptProp {
   fn get_val<'scope>(&'scope self, key: &str, s_store: &sherpa_core::IStringStore) -> Value<'scope> {
     match key {
       "name" => Value::Str(self.name.intern(s_store)),
@@ -157,50 +174,6 @@ pub enum AscriptRule {
   ListContinue(usize, Initializer),
   LastSymbol(usize, Initializer),
   Invalid(usize),
-}
-
-#[derive(Debug)]
-/// Intializes a value derived from a rule.
-pub struct Initializer {
-  // The type created by this initializer
-  pub(crate) ty:           AscriptType,
-  pub(crate) name:         StringId,
-  pub(crate) output_graph: Option<GraphNode>,
-  pub(crate) ast:          Option<ASTNode>,
-}
-
-impl ValueObj for Initializer {
-  fn get_val<'scope>(&'scope self, key: &str, _: &sherpa_core::IStringStore) -> Value<'scope> {
-    match key {
-      "name" => Value::Str(self.name.0),
-      "node" => {
-        if let Some(node) = &self.output_graph {
-          Value::Obj(node)
-        } else {
-          Value::None
-        }
-      }
-      _ => Value::None,
-    }
-  }
-}
-
-#[derive(Debug)]
-pub struct StructInitializer {
-  pub(crate) name:  StringId,
-  pub(crate) props: AscriptStructInitProps,
-}
-
-formatted_typed_ordered_map!(AscriptStructInitProps, StringId, Initializer, "AscriptStructInitProps");
-
-impl ValueObj for StructInitializer {
-  fn get_val<'scope>(&'scope self, key: &str, _: &sherpa_core::IStringStore) -> Value<'scope> {
-    match key {
-      "props" => Value::Obj(&self.props),
-      "name" => Value::Str(self.name.0),
-      _ => Value::None,
-    }
-  }
 }
 
 impl ValueObj for AscriptRule {
@@ -237,5 +210,66 @@ impl ValueObj for AscriptRule {
       },
       _ => Value::None,
     }
+  }
+}
+
+/// Intializes a value derived from a rule.
+pub struct Initializer {
+  // The type created by this initializer
+  pub(crate) ty:           AscriptType,
+  pub(crate) name:         StringId,
+  pub(crate) output_graph: Option<GraphNode>,
+  pub(crate) ast:          Option<ASTNode>,
+}
+
+impl Debug for Initializer {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut s = f.debug_struct("Initializer");
+    s.field("ty", &self.ty);
+    s.field("name", &self.name);
+    s.field("output_graph", &self.output_graph);
+    s.finish()
+  }
+}
+
+impl ValueObj for Initializer {
+  fn get_val<'scope>(&'scope self, key: &str, _: &sherpa_core::IStringStore) -> Value<'scope> {
+    match key {
+      "name" => Value::Str(self.name.0),
+      "node" => {
+        if let Some(node) = &self.output_graph {
+          Value::Obj(node)
+        } else {
+          Value::None
+        }
+      }
+      _ => Value::None,
+    }
+  }
+
+  fn get_type<'scope>(&'scope self) -> &str {
+    "Initializer"
+  }
+}
+
+#[derive(Debug)]
+pub struct StructInitializer {
+  pub(crate) name:  StringId,
+  pub(crate) props: AscriptStructInitProps,
+}
+
+formatted_typed_ordered_map!(AscriptStructInitProps, StringId, Initializer, "AscriptStructInitProps");
+
+impl ValueObj for StructInitializer {
+  fn get_val<'scope>(&'scope self, key: &str, _: &sherpa_core::IStringStore) -> Value<'scope> {
+    match key {
+      "props" => Value::Obj(&self.props),
+      "name" => Value::Str(self.name.0),
+      _ => Value::None,
+    }
+  }
+
+  fn get_type<'scope>(&'scope self) -> &str {
+    "StructInitializer"
   }
 }

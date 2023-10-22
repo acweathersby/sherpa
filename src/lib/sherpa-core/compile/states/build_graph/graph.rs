@@ -1,7 +1,6 @@
 use crate::{hash_id_value_u64, types::*};
 use std::{
   collections::{hash_map::DefaultHasher, BTreeSet, VecDeque},
-  default,
   fmt::Debug,
   hash::Hash,
   ops::{Index, IndexMut},

@@ -56,20 +56,15 @@ pub(crate) fn write_rust_ast2<W: Write>(mut w: AscriptWriter<W>) -> SherpaResult
     let ast_type_name = w.store.ast_type_name.clone();
 
     // Struct declaration
-    w.block(
-      &("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\npub struct ".to_string() + &s.name),
-      "{",
-      "}",
-      &|w| {
-        let prop_declarations =
-          s.props.iter().map(|StructProp { name, type_string, .. }| "pub ".to_string() + name + ":" + type_string);
-        w.list(
-          ", ",
-          prop_declarations.chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into()))).collect(),
-        )?;
-        SherpaResult::Ok(())
-      },
-    )?;
+    w.block(&("#[derive(Clone, Debug)]\npub struct ".to_string() + &s.name), "{", "}", &|w| {
+      let prop_declarations =
+        s.props.iter().map(|StructProp { name, type_string, .. }| "pub ".to_string() + name + ":" + type_string);
+      w.list(
+        ", ",
+        prop_declarations.chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into()))).collect(),
+      )?;
+      SherpaResult::Ok(())
+    })?;
 
     // Struct implementation
     w.block(&("impl ".to_string() + &s.name), "{", "}", &|w| {
@@ -324,64 +319,52 @@ macro_rules! to_numeric {{
 
   // --------------------------------------------------------------------------
   // ASTNode Enum
-  w.block(
-    &format!("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\n#[repr(C, u32)]\npub enum {}", node_type),
-    "{",
-    "}",
-    &|w| {
-      let structs: Vec<_> = w.store.structs.values().map(|s| format!("{0}(Box<{0}>)", s.type_name)).collect();
-      w.list(
-        ",",
-        vec![
-          "NONE",
-          format!("NODES(Vec<{}>)", node_type).as_str(),
-          "STRING(String)",
-          "STRINGS(Vec<String>)",
-          "F64(f64)",
-          "F32(f32)",
-          "I64(i64)",
-          "I32(i32)",
-          "I16(i16)",
-          "I8(i8)",
-          "U64(u64)",
-          "U32(u32)",
-          "U16(u16)",
-          "U8(u8)",
-          "BOOL(bool)",
-          "F32Vec(Vec<f32>)",
-          "F64Vec(Vec<f64>)",
-          "I64Vec(Vec<i64>)",
-          "I32Vec(Vec<i32>)",
-          "I16Vec(Vec<i16>)",
-          "I8Vec(Vec<i8>)",
-          "U64Vec(Vec<u64>)",
-          "U32Vec(Vec<u32>)",
-          "U16Vec(Vec<u16>)",
-          "U8Vec(Vec<u8>)",
-          "TOKEN(Token)",
-          "TOKENS(Vec<Token>)",
-        ]
-        .into_iter()
-        .chain(structs.iter().map(|s| s.as_str()))
-        .collect::<Vec<_>>(),
-      )
-    },
-  )?;
+  w.block(&format!("#[derive(Clone, Debug)]\n#[repr(C, u32)]\npub enum {}", node_type), "{", "}", &|w| {
+    let structs: Vec<_> = w.store.structs.values().map(|s| format!("{0}(Box<{0}>)", s.type_name)).collect();
+    w.list(
+      ",",
+      vec![
+        "NONE",
+        format!("NODES(Vec<{}>)", node_type).as_str(),
+        "STRING(String)",
+        "STRINGS(Vec<String>)",
+        "F64(f64)",
+        "F32(f32)",
+        "I64(i64)",
+        "I32(i32)",
+        "I16(i16)",
+        "I8(i8)",
+        "U64(u64)",
+        "U32(u32)",
+        "U16(u16)",
+        "U8(u8)",
+        "BOOL(bool)",
+        "F32Vec(Vec<f32>)",
+        "F64Vec(Vec<f64>)",
+        "I64Vec(Vec<i64>)",
+        "I32Vec(Vec<i32>)",
+        "I16Vec(Vec<i16>)",
+        "I8Vec(Vec<i8>)",
+        "U64Vec(Vec<u64>)",
+        "U32Vec(Vec<u32>)",
+        "U16Vec(Vec<u16>)",
+        "U8Vec(Vec<u8>)",
+        "TOKEN(Token)",
+        "TOKENS(Vec<Token>)",
+      ]
+      .into_iter()
+      .chain(structs.iter().map(|s| s.as_str()))
+      .collect::<Vec<_>>(),
+    )
+  })?;
 
   // --------------------------------------------------------------------------
   // ASTNodeType Enum
-  w.block(
-    &format!(
-      "#[derive(Eq, PartialEq, Clone, Copy, Hash)]\n #[cfg_attr(debug_assertions, derive(Debug))]\npub enum {node_type}Type"
-    ),
-    "{",
-    "}",
-    &|w| {
-      w.list(",", DEFAULT_AST_TYPE_NAMES.to_vec())?;
-      // Write Struct Types
-      w.write_struct_data(&|w, s| w.stmt(format!("{},", s.name)))
-    },
-  )?;
+  w.block(&format!("#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]\npub enum {node_type}Type"), "{", "}", &|w| {
+    w.list(",", DEFAULT_AST_TYPE_NAMES.to_vec())?;
+    // Write Struct Types
+    w.write_struct_data(&|w, s| w.stmt(format!("{},", s.name)))
+  })?;
 
   // --------------------------------------------------------------------------
   // AstType Implementation
@@ -551,20 +534,15 @@ to_numeric!(to_f64, f64);",
     let ast_type_name = w.store.ast_type_name.clone();
 
     // Struct declaration
-    w.block(
-      &("#[derive(Clone)]\n#[cfg_attr(debug_assertions, derive(Debug))]\npub struct ".to_string() + &s.name),
-      "{",
-      "}",
-      &|w| {
-        let prop_declarations =
-          s.props.iter().map(|StructProp { name, type_string, .. }| "pub ".to_string() + name + ":" + type_string);
-        w.list(
-          ", ",
-          prop_declarations.chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into()))).collect(),
-        )?;
-        SherpaResult::Ok(())
-      },
-    )?;
+    w.block(&("#[derive(Clone, Debug)]\npub struct ".to_string() + &s.name), "{", "}", &|w| {
+      let prop_declarations =
+        s.props.iter().map(|StructProp { name, type_string, .. }| "pub ".to_string() + name + ":" + type_string);
+      w.list(
+        ", ",
+        prop_declarations.chain(vec![s.tokenized].into_iter().filter_map(|v| v.then_some("pub tok: Token".into()))).collect(),
+      )?;
+      SherpaResult::Ok(())
+    })?;
 
     // Struct implementation
     w.block(&("impl ".to_string() + &s.name), "{", "}", &|w| {

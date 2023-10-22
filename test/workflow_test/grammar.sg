@@ -1,0 +1,4 @@
+IGNORE { c:sp c:nl }
+
+<> A >  "Hello" "World" :ast { t_Test, t:str($2) }
+

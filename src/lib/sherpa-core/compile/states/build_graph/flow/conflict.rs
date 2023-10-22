@@ -94,8 +94,6 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
     return Ok(ShiftReduceConflictResolution::Reduce);
   };
 
-  let oos = reduces.clone().any(|r| r.next.is_oos());
-
   // If all the shift items reduce to the same nterm and all completed items where
   // completed after shifting the same nterm, then the precedence of the shift
   // items determines whether we should shift first or reduce.
@@ -157,7 +155,6 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
       }
     }
     KCalcResults::RecursiveAt(k) => {
-      gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
       if gb.config.ALLOW_CONTEXT_SPLITTING {
         Ok(ShiftReduceConflictResolution::Fork)
       } else {

@@ -1,5 +1,5 @@
-use sherpa_core::{proxy::OrderedMap, IString, IStringStore};
-use std::{cmp::Ordering, collections::HashMap, fmt::Debug, hash::Hash};
+use sherpa_core::{proxy::OrderedMap, CachedString, IString, IStringStore};
+use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 #[derive(Default, Clone, Copy, Debug)]
 pub enum Value<'scope> {
@@ -9,6 +9,64 @@ pub enum Value<'scope> {
   Str(IString),
   #[default]
   None,
+}
+
+impl<'a> ToValue for Value<'a> {
+  fn into_val<'scope>(&'scope self, s_store: &IStringStore) -> Value<'scope> {
+    *self
+  }
+}
+
+macro_rules! integer_value {
+  ($val:ty) => {
+    impl<'scope> From<$val> for Value<'scope> {
+      fn from(value: $val) -> Self {
+        Value::Int(value as isize)
+      }
+    }
+
+    impl ToValue for $val {
+      fn into_val<'scope>(&'scope self, _: &IStringStore) -> Value<'scope> {
+        (*self).into()
+      }
+    }
+  };
+}
+
+macro_rules! float_value {
+  ($val:ty) => {
+    impl<'scope> From<$val> for Value<'scope> {
+      fn from(value: $val) -> Self {
+        Value::Num(value as f64)
+      }
+    }
+
+    impl ToValue for $val {
+      fn into_val<'scope>(&'scope self, _: &IStringStore) -> Value<'scope> {
+        (*self).into()
+      }
+    }
+  };
+}
+integer_value!(u8);
+integer_value!(u16);
+integer_value!(u32);
+integer_value!(u64);
+integer_value!(usize);
+
+integer_value!(i8);
+integer_value!(i16);
+integer_value!(i32);
+integer_value!(i64);
+integer_value!(isize);
+
+float_value!(f32);
+float_value!(f64);
+
+impl<'scope> From<IString> for Value<'scope> {
+  fn from(value: IString) -> Self {
+    Value::Str(value)
+  }
 }
 
 pub trait ValueObj: Debug {
@@ -33,17 +91,61 @@ pub trait ValueObj: Debug {
     &["type", "len"]
   }
 
+  fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+    Default::default()
+  }
+
   fn get_len<'scope>(&'scope self) -> usize {
     1
   }
 }
 
-impl<'a, K: From<String> + Eq + PartialEq + Hash + Ord + Debug, V: ValueObj> ValueObj for HashMap<K, V> {
-  fn get_val<'scope>(&'scope self, key: &str, _: &IStringStore) -> Value<'scope> {
+impl<T: ValueObj> ToValue for T {
+  fn into_val<'scope>(&'scope self, s_store: &IStringStore) -> Value<'scope> {
+    Value::Obj(self)
+  }
+}
+
+pub trait ToValue {
+  fn into_val<'scope>(&'scope self, s_store: &IStringStore) -> Value<'scope>;
+}
+
+impl ToValue for String {
+  fn into_val<'scope>(&'scope self, s_store: &IStringStore) -> Value<'scope> {
+    Value::Str(self.intern(s_store))
+  }
+}
+
+impl ToValue for &String {
+  fn into_val<'scope>(&'scope self, s_store: &IStringStore) -> Value<'scope> {
+    Value::Str(self.intern(s_store))
+  }
+}
+
+impl ToValue for &str {
+  fn into_val<'scope>(&'scope self, s_store: &IStringStore) -> Value<'scope> {
+    Value::Str(self.intern(s_store))
+  }
+}
+
+impl ToValue for IString {
+  fn into_val<'scope>(&'scope self, _: &IStringStore) -> Value<'scope> {
+    Value::Str(*self)
+  }
+}
+
+impl ToValue for &IString {
+  fn into_val<'scope>(&'scope self, _: &IStringStore) -> Value<'scope> {
+    Value::Str(**self)
+  }
+}
+
+impl<'a, K: ToValue + From<String> + Eq + PartialEq + Hash + Ord + Debug, T: ToValue + Debug> ValueObj for HashMap<K, T> {
+  fn get_val<'scope>(&'scope self, key: &str, s_store: &IStringStore) -> Value<'scope> {
     let v = key.to_string().into();
     match self.get(&v) {
       None => Value::None,
-      Some(val) => Value::Obj(val),
+      Some(val) => val.into_val(s_store),
     }
   }
 
@@ -54,14 +156,25 @@ impl<'a, K: From<String> + Eq + PartialEq + Hash + Ord + Debug, V: ValueObj> Val
   fn get_len<'scope>(&'scope self) -> usize {
     self.len()
   }
+
+  fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+    self.iter().map(|(k, v)| (k.into_val(s_store), v.into_val(s_store))).collect()
+  }
 }
 
-impl<'a, K: From<String> + Eq + PartialEq + Hash + Ord + Debug> ValueObj for HashMap<K, Value<'a>> {
-  fn get_val<'scope>(&'scope self, key: &str, _: &IStringStore) -> Value<'scope> {
+impl<'a, K: ToValue + From<String> + Debug + Ord, T: ToValue + Debug> ValueObj for OrderedMap<K, T> {
+  fn get_val<'scope>(&'scope self, key: &str, s_store: &IStringStore) -> Value<'scope> {
     let v = key.to_string().into();
     match self.get(&v) {
       None => Value::None,
-      Some(val) => *val,
+      Some(val) => val.into_val(s_store),
+    }
+  }
+
+  fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
+    match self.iter().enumerate().find(|(i, s_store)| *i == index) {
+      None => Value::None,
+      Some((_, (_, val))) => val.into_val(s_store),
     }
   }
 
@@ -72,62 +185,16 @@ impl<'a, K: From<String> + Eq + PartialEq + Hash + Ord + Debug> ValueObj for Has
   fn get_len<'scope>(&'scope self) -> usize {
     self.len()
   }
-}
 
-impl<'a, K: From<String> + Debug + Ord> ValueObj for OrderedMap<K, Value<'a>> {
-  fn get_val<'scope>(&'scope self, key: &str, _: &IStringStore) -> Value<'scope> {
-    let v = key.to_string().into();
-    match self.get(&v) {
-      None => Value::None,
-      Some(val) => *val,
-    }
-  }
-
-  fn get_index<'scope>(&'scope self, index: usize, _: &IStringStore) -> Value<'scope> {
-    match self.iter().enumerate().find(|(i, _)| *i == index) {
-      None => Value::None,
-      Some((_, (_, val))) => *val,
-    }
-  }
-
-  fn get_type<'scope>(&'scope self) -> &str {
-    "obj"
-  }
-
-  fn get_len<'scope>(&'scope self) -> usize {
-    self.len()
+  fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+    self.iter().map(|(k, v)| (k.into_val(s_store), v.into_val(s_store))).collect()
   }
 }
 
-impl<'a, K: From<String> + Copy + Debug + Ord, V: ValueObj> ValueObj for OrderedMap<K, V> {
-  fn get_val<'scope>(&'scope self, key: &str, _: &IStringStore) -> Value<'scope> {
-    let v = key.to_string().into();
-    match self.get(&v) {
-      None => Value::None,
-      Some(val) => Value::Obj(val),
-    }
-  }
-
-  fn get_index<'scope>(&'scope self, index: usize, _: &IStringStore) -> Value<'scope> {
-    match self.iter().enumerate().find(|(i, _)| *i == index) {
-      None => Value::None,
-      Some((_, (_, val))) => Value::Obj(val),
-    }
-  }
-
-  fn get_type<'scope>(&'scope self) -> &str {
-    "obj"
-  }
-
-  fn get_len<'scope>(&'scope self) -> usize {
-    self.len()
-  }
-}
-
-impl<'a, V: ValueObj> ValueObj for Vec<V> {
-  fn get_index<'scope>(&'scope self, index: usize, _: &IStringStore) -> Value<'scope> {
+impl<'a, T: ToValue + Debug> ValueObj for Vec<T> {
+  fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
     if index < self.len() {
-      Value::Obj(&self[index])
+      self[index].into_val(s_store)
     } else {
       Value::None
     }
@@ -140,12 +207,16 @@ impl<'a, V: ValueObj> ValueObj for Vec<V> {
   fn get_len<'scope>(&'scope self) -> usize {
     self.len()
   }
+
+  fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+    self.iter().enumerate().map(|(i, v)| (Value::Int(i as isize), v.into_val(s_store))).collect()
+  }
 }
 
-impl<'a, V: ValueObj> ValueObj for &[V] {
-  fn get_index<'scope>(&'scope self, index: usize, _: &IStringStore) -> Value<'scope> {
+impl<'a, T: ToValue + Debug> ValueObj for &[T] {
+  fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
     if index < self.len() {
-      Value::Obj(&self[index])
+      self[index].into_val(s_store)
     } else {
       Value::None
     }
@@ -158,41 +229,9 @@ impl<'a, V: ValueObj> ValueObj for &[V] {
   fn get_len<'scope>(&'scope self) -> usize {
     self.len()
   }
-}
 
-impl<'a> ValueObj for Vec<Value<'a>> {
-  fn get_index<'scope>(&'scope self, index: usize, _: &IStringStore) -> Value<'scope> {
-    if index < self.len() {
-      self[index]
-    } else {
-      Value::None
-    }
-  }
-
-  fn get_type<'scope>(&'scope self) -> &str {
-    "list"
-  }
-
-  fn get_len<'scope>(&'scope self) -> usize {
-    self.len()
-  }
-}
-
-impl<'a> ValueObj for &[Value<'a>] {
-  fn get_index<'scope>(&'scope self, index: usize, _: &IStringStore) -> Value<'scope> {
-    if index < self.len() {
-      self[index]
-    } else {
-      Value::None
-    }
-  }
-
-  fn get_type<'scope>(&'scope self) -> &str {
-    "list"
-  }
-
-  fn get_len<'scope>(&'scope self) -> usize {
-    self.len()
+  fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+    self.iter().enumerate().map(|(i, v)| (Value::Int(i as isize), v.into_val(s_store))).collect()
   }
 }
 
@@ -246,6 +285,10 @@ macro_rules! formatted_typed_vector {
       fn get_val<'scope>(&'scope self, key: &str, s_store: &sherpa_core::IStringStore) -> Value<'scope> {
         self.0.get_val(key, s_store)
       }
+
+      fn get_iter<'scope>(&'scope self, s_store: &sherpa_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+        self.0.get_iter(s_store)
+      }
     }
   };
   ($name: ident, $element_type:ty, $type_name:literal) => {
@@ -289,6 +332,10 @@ macro_rules! formatted_typed_hash_map {
       fn get_val<'scope>(&'scope self, key: &str, s_store: &sherpa_core::IStringStore) -> Value<'scope> {
         self.0.get_val(key, s_store)
       }
+
+      fn get_iter<'scope>(&'scope self, s_store: &sherpa_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+        self.0.get_iter(s_store)
+      }
     }
   };
 }
@@ -328,6 +375,10 @@ macro_rules! formatted_typed_ordered_map {
 
       fn get_val<'scope>(&'scope self, key: &str, s_store: &sherpa_core::IStringStore) -> Value<'scope> {
         self.0.get_val(key, s_store)
+      }
+
+      fn get_iter<'scope>(&'scope self, s_store: &sherpa_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+        self.0.get_iter(s_store)
       }
     }
   };

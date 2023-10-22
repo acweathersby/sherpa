@@ -3,7 +3,8 @@
 members = [
     "./sherpa",
     "./sherpa-rust-build",
-    "./sherpa-core",
+    "./sherpa-build",
+    "./sherpa-core", 
     "./sherpa-ascript",
     "./sherpa-bytecode",
     "./sherpa-x86",

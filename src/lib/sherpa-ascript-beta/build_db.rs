@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, error::Error, rc::Rc, sync::Arc};
+use std::{
+  collections::{HashSet, VecDeque},
+  rc::Rc,
+};
 
 use sherpa_core::{
   parser::{ASTNode, AST_Struct},
@@ -88,11 +91,20 @@ pub fn process_struct(adb: &mut AscriptDatabase, strct: &AST_Struct) -> SherpaRe
   let struct_id = StringId::from(name);
   let mut initializer = StructInitializer { name: struct_id, props: Default::default() };
   let mut seen = OrderedSet::new();
+  let mut existing_struct = true;
+  let ast_struct = adb.structs.entry(struct_id).or_insert_with(|| {
+    existing_struct = false;
+    AscriptStruct {
+      id:         struct_id,
+      name:       name.to_string(),
+      properties: Default::default(),
+    }
+  });
 
   for prop in &strct.props {
     if let Some(prop) = prop.as_AST_Property() {
       let prop_name: StringId = prop.id.as_str().into();
-      let mut ast_prop = AScriptProp {
+      let mut ast_prop = AscriptProp {
         is_optional: false,
         name:        prop.id.to_string(),
         tok:         prop.tok.clone(),
@@ -101,25 +113,13 @@ pub fn process_struct(adb: &mut AscriptDatabase, strct: &AST_Struct) -> SherpaRe
 
       seen.insert(prop_name);
 
-      {
-        let mut existing_struct = true;
-        let ast_struct = adb.structs.entry(struct_id).or_insert_with(|| {
-          existing_struct = false;
-          AscriptStruct {
-            id:         struct_id,
-            name:       name.to_string(),
-            properties: Default::default(),
+      match ast_struct.properties.get_mut(&prop_name) {
+        Some(..) => {}
+        None => {
+          if existing_struct {
+            ast_prop.is_optional = true;
           }
-        });
-
-        match ast_struct.properties.get_mut(&prop_name) {
-          Some(..) => {}
-          None => {
-            if existing_struct {
-              ast_prop.is_optional = true;
-            }
-            ast_struct.properties.insert(prop_name, ast_prop);
-          }
+          ast_struct.properties.insert(prop_name, ast_prop);
         }
       }
 
@@ -297,19 +297,21 @@ fn resolve_expressions(db: &ParserDatabase, adb: &mut AscriptDatabase, nonterm_t
 
   for (index, ast_rule) in rules.iter_mut().enumerate() {
     let item = Item::from((DBRuleKey::from(index), db));
+    let mut selected_indices = HashSet::new();
+    let selected_indices = &mut selected_indices;
     match ast_rule {
       AscriptRule::Expression(_, init) => {
         let Initializer { ast, output_graph, .. } = init;
 
         if let Some(node) = &ast {
-          *output_graph = Some(resolve_node(db, node, item, &nonterm_types));
+          *output_graph = Some(resolve_node(db, node, item, &nonterm_types, selected_indices));
         }
       }
       AscriptRule::ListInitial(_, init) => {
         let Initializer { output_graph, ty, .. } = init;
 
         let last = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
-          Some(item) => graph_node_from_item(item, db, &nonterm_types),
+          Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices),
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
 
@@ -322,11 +324,11 @@ fn resolve_expressions(db: &ParserDatabase, adb: &mut AscriptDatabase, nonterm_t
       AscriptRule::ListContinue(_, init) => {
         let Initializer { output_graph, ty, .. } = init;
         let first = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
-          Some(item) => graph_node_from_item(item, db, &nonterm_types),
+          Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices),
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
         let last = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
-          Some(item) => graph_node_from_item(item, db, &nonterm_types),
+          Some(item) => graph_node_from_item(item, db, &nonterm_types,selected_indices),
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
 
@@ -340,7 +342,7 @@ fn resolve_expressions(db: &ParserDatabase, adb: &mut AscriptDatabase, nonterm_t
         let Initializer { output_graph, ty, .. } = init;
 
         let graph_node = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
-          Some(item) => graph_node_from_item(item, db, &nonterm_types),
+          Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices),
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
 
@@ -349,9 +351,9 @@ fn resolve_expressions(db: &ParserDatabase, adb: &mut AscriptDatabase, nonterm_t
       }
       AscriptRule::Struct(_, strct) => {
         let id: StringId = strct.name;
-        for (name, init) in strct.props.iter_mut() {
+        for (name, init) in strct.props.iter_mut().rev() {
           if let Some(node) = &init.ast {
-            let node = resolve_node(db, node, item, &nonterm_types);
+            let node = resolve_node(db, node, item, &nonterm_types, selected_indices);
             if let Some(strct) = structs.get_mut(&id) {
               if let Some(prop) = strct.properties.get_mut(name) {
                 prop.ty = *node.get_type();
@@ -362,7 +364,7 @@ fn resolve_expressions(db: &ParserDatabase, adb: &mut AscriptDatabase, nonterm_t
           }
         }
       }
-      r => todo!("handle rule {r:?}"),
+      r => todo!("handle rule {{r:?}}"),
     }
   }
 }
@@ -381,12 +383,15 @@ fn graph_node_from_item(
   item: Item,
   db: &ParserDatabase,
   nonterm_types: &std::collections::BTreeMap<DBNonTermKey, AscriptType>,
+  selected_indices: &mut HashSet<usize>,
 ) -> GraphNode {
+  let index = item.sym_index() as usize;
   if let Some(nonterm_id) = item.nonterm_index_at_sym(Default::default(), db) {
     let ty = nonterm_types.get(&nonterm_id).unwrap();
-    GraphNode::Sym(item.sym_index() as usize, *ty)
+
+    GraphNode::Sym(index, selected_indices.insert(index), *ty)
   } else {
-    GraphNode::TokSym(item.sym_index() as usize, AscriptType::Scalar(AscriptScalarType::Token))
+    GraphNode::TokSym(index, selected_indices.insert(index), AscriptType::Scalar(AscriptScalarType::Token))
   }
 }
 
@@ -395,30 +400,31 @@ fn resolve_node(
   node: &ASTNode,
   item: Item,
   nonterm_types: &OrderedMap<DBNonTermKey, AscriptType>,
+  selected_indices: &mut HashSet<usize>,
 ) -> GraphNode {
   match node {
     ASTNode::AST_Vector(vec) => {
       let mut ty = AscriptType::Undefined;
       let mut initializers = vec![];
-      for node in vec.initializer.iter().map(|t| resolve_node(db, t, item, nonterm_types)) {
+      for node in vec.initializer.iter().rev().map(|t| resolve_node(db, t, item, nonterm_types, selected_indices)).rev() {
         ty = get_resolved_type(node.get_type().clone(), ty).unwrap();
         initializers.push(node);
       }
       GraphNode::Vec(GraphNodeVecInits(initializers), ty)
     }
     ASTNode::AST_NamedReference(rf) => match get_item_at_sym_ref(item, db, |_, sym| sym.annotation == rf.value.to_token()) {
-      Some(item) => graph_node_from_item(item, db, nonterm_types),
+      Some(item) => graph_node_from_item(item, db, nonterm_types, selected_indices),
       None => GraphNode::Undefined(AscriptType::Undefined),
     },
     ASTNode::AST_IndexReference(rf) => {
       match get_item_at_sym_ref(item, db, |_, sym| sym.original_index as isize == (rf.value - 1) as isize) {
-        Some(item) => graph_node_from_item(item, db, nonterm_types),
+        Some(item) => graph_node_from_item(item, db, nonterm_types, selected_indices),
         None => GraphNode::Undefined(AscriptType::Undefined),
       }
     }
     ASTNode::AST_Add(add) => {
-      let l = resolve_node(db, &add.left, item, nonterm_types);
-      let r = resolve_node(db, &add.right, item, nonterm_types);
+      let l = resolve_node(db, &add.left, item, nonterm_types, selected_indices);
+      let r = resolve_node(db, &add.right, item, nonterm_types, selected_indices);
       match l.get_type() {
         AscriptType::Scalar(l_type) => match l_type {
           _ => todo!("resolve add of {l_type:?} {r:?}"),
@@ -431,7 +437,7 @@ fn resolve_node(
     }
     ASTNode::AST_STRING(str) => {
       if let Some(init) = &str.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types);
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
         GraphNode::Str(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::String(None)))
       } else {
         GraphNode::Str(None, AscriptType::Scalar(AscriptScalarType::String(None)))
@@ -439,13 +445,13 @@ fn resolve_node(
     }
     ASTNode::AST_BOOL(bool) => {
       if let Some(init) = &bool.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types);
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
         GraphNode::Bool(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::Bool(false)))
       } else {
         GraphNode::Bool(None, AscriptType::Scalar(AscriptScalarType::Bool(bool.value)))
       }
     }
-    node => todo!("handle graph resolve of node {node:#?}"),
+    node => todo!("handle graph resolve of node {{node:#?}}"),
   }
 }
 

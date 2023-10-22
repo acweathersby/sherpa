@@ -1,5 +1,0 @@
-IMPORT ./script_child as ast
-
-<> A > "hello"^hello c:sp "world"^world
-                                :ast { t_Main, hello:$hello, world:$world }
-   | ast::B

@@ -1,42 +1,45 @@
 {
 	"folders": [
-		{
-			"name": "Library Sources",
-			"path": "../src/lib"
-		},
-		{
-			"name": "CLI Source",
-			"path": "../src/app/cli"
-		},
-		{
-			"name": "Web Sources",
-			"path": "../src/web"
-		},
-		{
-			"name": "Scripts",
-			"path": "../scripts"
-		},
-		{
-			"name": "Releases",
-			"path": "../releases"
-		},
-		{
-			"name": "Web Public",
-			"path": "../public"
-		},
-		{
-			"name": "Tests",
-			"path": "../test"
-		},
-		{
-			"name": "Grammars",
-			"path": "../src/grammar"
-		},
-		{
-			"name": "lib_sherpa",
-			"path": ".."
-		}
-	],
+    {
+      "name": "Library Sources",
+      "path": "../src/lib"
+    },
+    {
+      "name": "CLI Source",
+      "path": "../src/app/cli"
+    },
+    {
+      "name": "Web Sources",
+      "path": "../src/web"
+    },
+    {
+      "name": "Scripts",
+      "path": "../scripts"
+    },
+    {
+      "name": "Releases",
+      "path": "../releases"
+    },
+    {
+      "name": "Web Public",
+      "path": "../public"
+    },
+    {
+      "name": "Tests",
+      "path": "../test"
+    },
+    {
+      "name": "Grammars",
+      "path": "../src/grammar"
+    },
+    {
+      "name": "lib_sherpa",
+      "path": ".."
+    },
+    {
+      "path": "../test/workflow_test"
+    }
+  ],
 	"settings": {
 		"lldb.dereferencePointers": false,
 		"lldb.consoleMode": "evaluate",

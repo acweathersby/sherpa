@@ -1,5 +1,0 @@
-IGNORE { c:sp }
-
-<> helloworld > "hello" "world"
-      
-      :ast { t_Hello_World, val:str(tok) }

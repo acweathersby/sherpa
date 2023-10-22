@@ -182,6 +182,7 @@ const rule_lu: [RuleFN;@rules.len] =  [ #print_rule_lookup(rules, 0) ];
 }
     
     "##,
+    120,
   )?;
 
   println!("{output}");

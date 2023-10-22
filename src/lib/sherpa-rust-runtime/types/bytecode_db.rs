@@ -2,6 +2,7 @@ use super::*;
 use crate::{kernel::ByteCodeParserNew, parsers::Parser};
 use std::{
   collections::{BTreeMap, HashMap},
+  io::Write,
   rc::Rc,
 };
 
@@ -15,6 +16,12 @@ pub struct BytecodeParserDB {
   pub nonterm_id_to_address: HashMap<u32, u32>,
   pub state_to_token_ids_map: HashMap<u32, Vec<u32>>,
   pub token_id_to_str: HashMap<u32, String>,
+}
+
+impl BytecodeParserDB {
+  pub fn write_binary<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+    w.write_all(&self.bytecode)
+  }
 }
 
 impl AsRef<[u8]> for BytecodeParserDB {

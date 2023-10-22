@@ -1,0 +1,17 @@
+[package]
+name = "e2e-basic-parser"
+version = "0.0.0"
+edition = "2021"
+
+build = "./build.rs"
+
+[[bin]]
+name = "json_test_parser"
+path = "./bin.rs"
+
+
+[dependencies.sherpa_rust_runtime]
+path = "../../src/lib/sherpa-rust-runtime"
+
+[build-dependencies.sherpa_build]
+path = "../../src/lib/sherpa-build"

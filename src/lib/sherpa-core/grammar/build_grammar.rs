@@ -644,7 +644,7 @@ fn process_rule_symbols(
                   .zip(template_sym.template_args.iter()),
               )
               .into_iter()
-              .partition::<HashMap<_, _>, _>(|((_, a))| !matches!(a, ASTNode::AST_STRUCT_TEMPLATE_NAME(..)));
+              .partition::<HashMap<_, _>, _>(|(_, a)| !matches!(a, ASTNode::AST_STRUCT_TEMPLATE_NAME(..)));
 
               resolved.insert(id, None);
 

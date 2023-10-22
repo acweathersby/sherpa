@@ -25,6 +25,7 @@ pub enum ErrorClass {
   ForbiddenPeek,
   ForbiddenFork,
   GraphConstruction,
+  Formatting,
   Extended(u32),
 }
 

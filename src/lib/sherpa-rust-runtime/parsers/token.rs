@@ -8,7 +8,7 @@ pub struct Tokens {
 }
 
 pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
-  fn collect_shifts_and_skips<'debug>(&mut self, input: &mut I, entry: EntryPoint) -> Result<Tokens, ParserError> {
+  fn collect_shifts_and_skips(&mut self, input: &mut I, entry: EntryPoint) -> Result<Tokens, ParserError> {
     let mut shifts = vec![];
     let mut skips = vec![];
 

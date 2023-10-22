@@ -165,8 +165,8 @@ pub enum GraphNode {
   Bool(Option<Rc<GraphNode>>, AscriptType),
   Num(Option<Rc<GraphNode>>, AscriptType),
   Tok(Rc<GraphNode>, AscriptType),
-  Sym(usize, AscriptType),
-  TokSym(usize, AscriptType),
+  Sym(usize, bool, AscriptType),
+  TokSym(usize, bool, AscriptType),
   TokRule(AscriptType),
   Undefined(AscriptType),
 }
@@ -241,6 +241,12 @@ impl ValueObj for GraphNode {
       },
       "index" => match self {
         Sym(index, ..) => Value::Int(*index as isize),
+        TokSym(index, ..) => Value::Int(*index as isize),
+        _ => Value::None,
+      },
+      "is_last_ref" => match self {
+        Sym(_, last_ref, ..) => Value::Int(*last_ref as isize),
+        TokSym(_, last_ref, ..) => Value::Int(*last_ref as isize),
         _ => Value::None,
       },
       "val" => match self {

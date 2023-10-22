@@ -65,6 +65,7 @@ pub(crate) type Functions = HashMap<IString, Box<FunctionContext>>;
 enum ObjectEvalResult<'ctx: 'fn_scope, 'fn_scope> {
   Value(Value<'ctx>),
   TypeCall(&'ctx dyn ValueObj, &'fn_scope [parser::ASTNode]),
+  Iter(&'ctx dyn ValueObj, &'fn_scope parser::Call),
 }
 
 impl From<&str> for FormatterResult {
@@ -234,10 +235,11 @@ impl Formatter {
             Self::print_value(val, ctx, w)?;
           }
           ObjectEvalResult::TypeCall(obj, args) => {
-            if !Self::interpret_type_function(obj.get_type(), args, ctx, Value::Obj(obj), w)? {
+            if !Self::interpret_type_call(obj.get_type(), args, ctx, Value::Obj(obj), w)? {
               w.write(o.tok.to_string().as_bytes())?;
             }
           }
+          ObjectEvalResult::Iter(obj, call) => Self::interpret_iterator_call(call, obj, ctx, w)?,
         },
         false => {
           w.write(o.tok.to_string().as_bytes())?;
@@ -249,7 +251,7 @@ impl Formatter {
       }
       node => todo!("Handle the interpretation of: {node:#?}"),
     };
-    Ok(None)
+    Ok(Option::None)
   }
 
   /// Prints nodes that may or may not modify the calling context.
@@ -307,7 +309,7 @@ impl Formatter {
       }
       node => return Self::interpret_node_imut_ctx(node, ctx, w),
     };
-    Ok(None)
+    Ok(Option::None)
   }
 
   fn print_value<W: Write>(val: Value, ctx: &FormatterContext, w: &mut W) -> SherpaResult<()> {
@@ -323,7 +325,7 @@ impl Formatter {
       }
       obj_val @ Value::Obj(map) => {
         let type_name = map.get_type();
-        if Self::interpret_type_function(type_name, &[], ctx, obj_val, w)? {
+        if Self::interpret_type_call(type_name, &[], ctx, obj_val, w)? {
         } else {
           w.write(type_name.as_bytes())?;
         }
@@ -331,34 +333,6 @@ impl Formatter {
       _ => Default::default(),
     }
     Ok(())
-  }
-
-  /// Returns `true` if a call was made to function with a matching signature.
-  fn interpret_type_function<'ctx: 'fn_scope, 'fn_scope, W: Write>(
-    type_name: &str,
-    args: &'fn_scope [ASTNode],
-    ctx: &FormatterContext<'ctx, 'fn_scope>,
-    obj_val: Value<'fn_scope>,
-    w: &mut W,
-  ) -> SherpaResult<bool> {
-    let (name_sig, args) = Self::create_function_sig(&("#type_".to_string() + type_name), &args, ctx)?;
-    if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, ctx) {
-      let ctx = &ctx;
-      let mut ctx = FormatterContext::create_scope(ctx);
-      ctx.functs = Some(&funct_ctx.functions);
-      ctx.set("self".to_token(), obj_val);
-      Self::set_funct_variables(funct_ctx, args, &mut ctx);
-      let result = Self::interpret_sequence(&funct_ctx.f.content, &mut ctx, w)?;
-      match result {
-        None => Ok(true),
-        Some(tail_call) => {
-          Self::interpret_tail_call(tail_call, &mut ctx, w)?;
-          Ok(true)
-        }
-      }
-    } else {
-      Ok(false)
-    }
   }
 
   fn resolve_function_call_target<'call: 'fn_scope, 'fn_scope>(
@@ -406,7 +380,9 @@ impl Formatter {
           name += "_obj";
           vals.push(obj);
         }
-        node => todo!("Handle the interpretation of arg type: {node:#?}"),
+        node => {
+          todo!("Handle the interpretation of arg type: \n{}", arg.to_token().blame(1, 1, "", Default::default()))
+        }
       }
     }
 
@@ -415,25 +391,96 @@ impl Formatter {
 
   fn set_funct_variables<'ctx: 'fn_scope, 'fn_scope>(
     funct_ctx: &FunctionContext,
-    args: Vec<Value<'ctx>>,
+    args: &Vec<Value<'ctx>>,
     root_ctx: &mut FormatterContext<'ctx, 'fn_scope>,
   ) {
-    for (param, arg) in funct_ctx.f.params.iter().zip(args.into_iter()) {
+    for (param, arg) in funct_ctx.f.params.iter().zip(args.iter()) {
       let key = Self::get_id_val(&param.name).intern(&root_ctx.s_store);
       let val = match arg {
         num @ Value::Num(val) => match param.ty.as_str() {
-          "flt" | "num" => num,
-          "int" => Value::Int(val.round().min(100000000000000.0).max(-1000000000000000.0) as isize),
+          "flt" | "num" => *num,
+          "int" => Value::Int((*val).round().min(100000000000000.0).max(-1000000000000000.0) as isize),
           _ => unreachable!(),
         },
         int @ Value::Int(val) => match param.ty.as_str() {
-          "num" | "flt" => Value::Num(val as f64),
-          "int" => int,
+          "num" | "flt" => Value::Num(*val as f64),
+          "int" => *int,
           _ => unreachable!(),
         },
-        v => v,
+        v => *v,
       };
       root_ctx.set(key, val)
+    }
+  }
+
+  /// Returns `true` if a call was made to function with a matching signature.
+  fn interpret_iterator_call<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    call: &'fn_scope Call,
+    obj_val: &'ctx dyn ValueObj,
+    root_ctx: &FormatterContext<'ctx, 'fn_scope>,
+    w: &mut W,
+  ) -> SherpaResult<()> {
+    let (name_sig, args) = Self::create_function_sig(&call.name, &call.args, root_ctx)?;
+    if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, root_ctx) {
+      let ctx = &root_ctx;
+      let mut ctx = FormatterContext::create_scope(ctx);
+      ctx.functs = Some(&funct_ctx.functions);
+      ctx.set("iter_first".to_token(), Value::Int(1));
+      let len = obj_val.get_len();
+
+      println!("{len} -------------------------------");
+
+      for (i, (key, val)) in obj_val.get_iter(&root_ctx.s_store).into_iter().enumerate() {
+        ctx.set("index".to_token(), Value::Int(i as isize));
+        ctx.set("key".to_token(), key);
+        ctx.set("self".to_token(), val);
+
+        if i + 1 >= len {
+          ctx.set("iter_last".to_token(), Value::Int(1));
+        }
+
+        Self::set_funct_variables(funct_ctx, &args, &mut ctx);
+
+        match Self::interpret_sequence(&funct_ctx.f.content, &mut ctx, w)? {
+          None => {}
+          Some(tail_call) => {
+            Self::interpret_tail_call(tail_call, &mut ctx, w)?;
+          }
+        }
+        ctx.set("iter_first".to_token(), Value::Int(0));
+      }
+
+      Ok(())
+    } else {
+      Err(SherpaError::StaticText("Function not defined on context"))
+    }
+  }
+
+  /// Returns `true` if a call was made to function with a matching signature.
+  fn interpret_type_call<'ctx: 'fn_scope, 'fn_scope, W: Write>(
+    type_name: &str,
+    args: &'fn_scope [ASTNode],
+    ctx: &FormatterContext<'ctx, 'fn_scope>,
+    obj_val: Value<'fn_scope>,
+    w: &mut W,
+  ) -> SherpaResult<bool> {
+    let (name_sig, args) = Self::create_function_sig(&("#type_".to_string() + type_name), &args, ctx)?;
+    if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, ctx) {
+      let ctx = &ctx;
+      let mut ctx = FormatterContext::create_scope(ctx);
+      ctx.functs = Some(&funct_ctx.functions);
+      ctx.set("self".to_token(), obj_val);
+      Self::set_funct_variables(funct_ctx, &args, &mut ctx);
+      let result = Self::interpret_sequence(&funct_ctx.f.content, &mut ctx, w)?;
+      match result {
+        None => Ok(true),
+        Some(tail_call) => {
+          Self::interpret_tail_call(tail_call, &mut ctx, w)?;
+          Ok(true)
+        }
+      }
+    } else {
+      Ok(false)
     }
   }
 
@@ -449,7 +496,7 @@ impl Formatter {
         let mut ctx = FormatterContext::create_scope(ctx);
         ctx.functs = Some(&funct_ctx.functions);
 
-        Self::set_funct_variables(funct_ctx, args, &mut ctx);
+        Self::set_funct_variables(funct_ctx, &args, &mut ctx);
 
         match Self::interpret_sequence(&funct_ctx.f.content, &mut ctx, w)? {
           None => {}
@@ -478,7 +525,9 @@ impl Formatter {
           panic!("Args miss match")
         }
 
-        Self::set_funct_variables(funct_ctx, args, root_ctx);
+        Self::set_funct_variables(funct_ctx, &args, root_ctx);
+
+        println!("{}", call.tok.blame(1, 1, "", Default::default()));
 
         match Self::interpret_sequence(&funct_ctx.f.content, root_ctx, w)? {
           None => {
@@ -521,6 +570,7 @@ impl Formatter {
                 TypeCall(tc) => {
                   return Ok(ObjectEvalResult::TypeCall(*obj_map_unwrapped, &tc.expressions));
                 }
+                Iterator(iter) => return Ok(ObjectEvalResult::Iter(*obj_map_unwrapped, &iter.call)),
                 Type(_) => Value::Str(obj_map.unwrap().get_type().intern(&ctx.s_store)),
                 Length(_) => Value::Int(obj_map.unwrap().get_len() as isize),
                 Prop(prop) => Self::get_prop(*obj_map_unwrapped, prop.name.as_str(), s_store),
@@ -528,7 +578,7 @@ impl Formatter {
                   Value::Num(i) => obj_map_unwrapped.get_index(i.min(0.0) as usize, s_store),
                   Value::Int(i) => obj_map_unwrapped.get_index(i as usize, s_store),
                   Value::Str(str) => Self::get_prop(*obj_map_unwrapped, &str.to_string(s_store), s_store),
-                  _ => panic!("invalid property expression"),
+                  _ => Value::None,
                 },
                 _ => Value::None,
               } {
@@ -537,25 +587,15 @@ impl Formatter {
                   obj_val = o_v;
                 }
                 Value::None => {
-                  eprintln!(
-                    "{}{} value is not an object {val:#?}",
-                    Self::get_id_val(&obj.id),
-                    obj.path[..=index].iter().map(|a| a.to_string()).collect::<Vec<_>>().join("")
-                  );
                   obj_val = Value::None;
-                  obj_map = None;
+                  obj_map = Option::None;
                 }
                 val => {
                   obj_val = val;
-                  obj_map = None;
+                  obj_map = Option::None;
                 }
               }
             } else {
-              eprintln!(
-                "property {}.{} is undefined",
-                Self::get_id_val(&obj.id),
-                obj.path[..=index].iter().map(|a| a.to_string()).collect::<Vec<_>>().join("")
-              );
               obj_val = Value::None;
               break;
             }
@@ -578,7 +618,12 @@ impl Formatter {
         ObjectEvalResult::Value(val) => val,
         ObjectEvalResult::TypeCall(obj, args) => {
           let mut writer = Vec::with_capacity(1024);
-          Self::interpret_type_function(obj.get_type(), args, ctx, Value::Obj(obj), &mut writer)?;
+          Self::interpret_type_call(obj.get_type(), args, ctx, Value::Obj(obj), &mut writer)?;
+          Value::Str(unsafe { String::from_utf8_unchecked(writer) }.intern(&ctx.s_store))
+        }
+        ObjectEvalResult::Iter(obj, call) => {
+          let mut writer = Vec::with_capacity(1024);
+          Self::interpret_iterator_call(call, obj, ctx, &mut writer)?;
           Value::Str(unsafe { String::from_utf8_unchecked(writer) }.intern(&ctx.s_store))
         }
       },
@@ -700,6 +745,8 @@ impl Formatter {
         },
         _ => panic!("Invalid div expression"),
       },
+      False(_) => Value::Int(0),
+      True(_) => Value::Int(1),
       literal @ Literal(_) => {
         let mut vec = Vec::with_capacity(512);
         Self::interpret_node_imut_ctx(literal, ctx, &mut vec)?;
@@ -727,7 +774,20 @@ impl Formatter {
     let mut expressions = Vec::with_capacity(4);
 
     for expr in &m.expr.expressions {
-      expressions.push(Self::eval_expression(expr, ctx)?)
+      match Self::eval_expression(expr, ctx) {
+        Ok(ok) => expressions.push(ok),
+        Err(err) => {
+          return Err(SherpaError::SourceError {
+            loc:        m.tok.clone(),
+            path:       Default::default(),
+            id:         (ErrorClass::Formatting, 10).into(),
+            msg:        "Error evaluating match expression".to_string(),
+            inline_msg: Default::default(),
+            ps_msg:     err.to_string(),
+            severity:   sherpa_core::SherpaErrorSeverity::Critical,
+          })
+        }
+      }
     }
 
     let (default, matches) = m.matches.iter().partition::<Vec<_>, _>(|f| f.default);
@@ -763,6 +823,25 @@ impl Formatter {
                 if i == expressions.len() {
                   break true;
                 } else if exprs.expressions[i].as_Ignore().is_some() {
+                } else if exprs.expressions[i].as_False().is_some() {
+                  if match expressions[i] {
+                    Value::Int(val) => val != 0,
+                    Value::Num(val) => val != 0.0,
+                    Value::Str(str) => str != Default::default(),
+                    _ => false,
+                  } {
+                    break false;
+                  }
+                } else if exprs.expressions[i].as_True().is_some() {
+                  if match expressions[i] {
+                    Value::Int(val) => val == 0,
+                    Value::Num(val) => val == 0.0,
+                    Value::Obj(_) => true,
+                    Value::Str(str) => str == Default::default(),
+                    _ => false,
+                  } {
+                    break false;
+                  }
                 } else if exprs.expressions[i].as_NotNone().is_some() {
                   if !matches!(expressions[i], Value::None) {
                     break false;
@@ -864,7 +943,13 @@ impl BlockFormatter {
       prefix.push(SPACE);
     }
 
-    for (add_prefix, line) in self.lines {
+    let len = self.lines.len();
+
+    for (index, (add_prefix, line)) in self.lines.into_iter().enumerate() {
+      if index + 1 == len && line.is_empty() {
+        break;
+      }
+
       if !join {
         if add_prefix {
           w.write(&prefix)?;

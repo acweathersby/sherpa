@@ -269,6 +269,61 @@ fn construct_length_limited_block() -> SherpaResult<()> {
 }
 
 #[test]
+fn iterator_syntax() -> SherpaResult<()> {
+  match r###"
+
+#read_list  {
+  @self.[i] match iter_last { false { @; } }
+}
+
+\n@+
+{ { @test.iter#read_list()  } }
+@-
+
+"###
+    .into()
+  {
+    FormatterResult::Ok(formatter) => {
+      let mut list = vec![];
+      let mut string = vec![];
+
+      for i in 1..=10 {
+        list.push(Value::Int(i));
+        string.push(i.to_string());
+      }
+
+      let mut fm = FormatterContext::new(IStringStore::default());
+      fm.max_width = 4;
+      fm.tab_size = 2;
+      fm.set_val("test", Value::Obj(&list));
+
+      assert_eq!(
+        "
+  {
+    {
+      1
+      2
+      3
+      4
+      5
+      6
+      7
+      8
+      9
+      10
+    }
+  }",
+        formatter.write_to_string(&mut fm, 1 << 20)?,
+        "{}",
+        formatter.write_to_string(&mut fm, 1 << 20)?
+      );
+      Ok(())
+    }
+    FormatterResult::Err(err) => SherpaResult::Err(err),
+  }
+}
+
+#[test]
 #[ignore = "not a real test"]
 fn playground() -> SherpaResult<()> {
   match r###"

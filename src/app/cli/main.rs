@@ -116,9 +116,11 @@ fn build_parser(
   out_dir: PathBuf,
   matches: &ArgMatches
 ) -> SherpaResult<()> {
-  let debug = matches.get_one::<bool>("DEBUG").cloned().unwrap_or_default();
+  let debug = matches.get_one::<bool>("debug").cloned().unwrap_or_default();
 
   let config = Default::default();
+
+  debug_assert_eq!(debug, true);
 
   let mut grammar = SherpaGrammar::new();
 

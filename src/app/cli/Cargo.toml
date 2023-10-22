@@ -7,10 +7,6 @@ edition = "2021"
 name = "sherpa"
 path = "./main.rs"
 
-[features]
-# Enable builds using llvm 
-llvm = ["dep:sherpa_llvm"]
-
 [dependencies]
 clap = { version="4.0.29" }
 
@@ -24,18 +20,14 @@ path = "../../lib/sherpa-ascript"
 [dependencies.sherpa_bytecode]
 path = "../../lib/sherpa-bytecode"
 
-[dependencies.sherpa_llvm]
-path = "../../lib/sherpa-llvm"
-optional = true
-
 [dependencies.sherpa_rust_build]
 path = "../../lib/sherpa-rust-build"
 
 [dependencies.sherpa_formatter]
 path = "../../lib/sherpa-formatter"
 
-
-
+[dependencies.sherpa_ascript_beta]
+path = "../../lib/sherpa-ascript-beta"
 
 [profile.release]
 opt-level=3

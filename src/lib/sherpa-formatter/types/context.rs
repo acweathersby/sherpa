@@ -1,8 +1,7 @@
-use crate::Functions;
-
 use super::*;
+use crate::Functions;
 use sherpa_core::{CachedString, IString, IStringStore};
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct FormatterContext<'scope: 'fn_scope, 'fn_scope> {

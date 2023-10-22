@@ -1,3 +1,0 @@
-IGNORE { c:sp c:nl }
-
-<> A > "hello" "," "world"

@@ -242,6 +242,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sherpa_build"
+version = "0.0.0"
+dependencies = [
+ "sherpa_ascript",
+ "sherpa_ascript_beta",
+ "sherpa_bytecode",
+ "sherpa_core",
+ "sherpa_formatter",
+ "sherpa_rust_runtime",
+]
+
+[[package]]
 name = "sherpa_bytecode"
 version = "1.0.0-beta1"
 dependencies = [

@@ -133,4 +133,6 @@ EXPORT dt::escaped_string as escaped
 
 <> ignore_scope > 
       
-    ignore_clause "{"  "}"
+    ignore_clause "{" ( cf_rules | peg_rules | append_rules | ir::state | template_rule )(+) "}"
+
+        :ast { t_Grammar, preamble:$1, rules:$2, tok }
