@@ -56,13 +56,12 @@ impl Node {
   }
 }
 
+#[allow(unused)]
 pub fn file_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,
   state_lu: HashMap<u32, String>,
 ) -> Option<Box<sherpa_rust_runtime::types::DebugFnNew>> {
-  use sherpa_core::proxy::Map;
-
   let mut stack = vec![];
   _write_debug_file_(&db, "parser_output.tmp", "    ", false).unwrap();
   Some(Box::new(move |event, ctx| {
@@ -74,6 +73,7 @@ pub fn file_debugger(
   }))
 }
 
+#[allow(unused)]
 pub fn console_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,

@@ -80,6 +80,8 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> S
     }
   }
 
+  pkg.address_to_state_name = pkg.state_name_to_address.iter().map(|(s, a)| (*a, s.clone())).collect();
+
   SherpaResult::Ok(pkg)
 }
 

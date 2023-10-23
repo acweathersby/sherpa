@@ -122,7 +122,7 @@ pub struct JSParserClassification {
 #[wasm_bindgen]
 impl JSParserClassification {
   pub fn get_type(&self) -> String {
-    Into::<ParserClassification>::into(*self).get_type()
+    Into::<ParserClassification>::into(*self).to_string()
   }
 }
 

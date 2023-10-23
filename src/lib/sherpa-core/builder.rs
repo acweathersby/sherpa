@@ -562,7 +562,7 @@ pub trait ParserStore: JournalReporter {
   fn get_config(&self) -> &ParserConfig;
   fn report(&self) -> OptimizationReport;
 
-  fn get_meterics(&self) -> ParserMetrics {
+  fn get_metrics(&self) -> ParserMetrics {
     ParserMetrics {
       classification: self.get_classification(),
       num_of_states:  self.get_states().count(),

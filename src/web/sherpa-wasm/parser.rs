@@ -1,11 +1,18 @@
-use crate::grammar::{JSBytecodePackage, JSParserDB};
+use crate::grammar::{JSBytecodeParserDB, JSParserDB};
+use js_sys::Array;
 use serde::{Deserialize, Serialize};
 use sherpa_core::parser;
-use sherpa_rust_runtime::types::*;
+use sherpa_rust_runtime::{
+  deprecate::{ByteCodeParser, SherpaParser},
+  parsers::Parser,
+  types::*,
+};
 
 use std::{
   borrow::BorrowMut,
   cell::RefCell,
+  collections::VecDeque,
+  default,
   rc::Rc,
   sync::{LockResult, RwLock},
 };
@@ -32,7 +39,7 @@ impl JSGrammarParser {
   }
 
   pub fn init(&mut self) {
-    self.bytecode_parser.init_parser(60)
+    self.bytecode_parser.init_parser(51363)
   }
 
   pub fn next(&mut self) -> JsValue {
@@ -57,88 +64,147 @@ impl JSGrammarParser {
 /// A step-able parser
 #[wasm_bindgen]
 pub struct JSByteCodeParser {
-  running:         bool,
-  _bytecode:       JSBytecodePackage,
-  _reader:         Rc<RefCell<string_reader::StringReader>>,
-  bytecode_parser: ByteCodeParser<string_reader::StringReader, u32, JSBytecodePackage>,
+  running: bool,
+  db: Rc<BytecodeParserDB>,
+  reader: StringInput,
+  bytecode_parser: Box<dyn Parser<StringInput>>,
+  ctx: ParserContext,
+  values: Rc<RwLock<VecDeque<JSDebugPacket>>>,
 }
 
 #[wasm_bindgen]
 impl JSByteCodeParser {
-  pub fn new(input: String, bytecode: &JSBytecodePackage) -> Self {
-    let mut reader = Rc::new(RefCell::new(string_reader::StringReader::new(input)));
-    let other_reader = reader.clone();
-    let reader_ptr = reader.borrow_mut();
+  pub fn new(input: String, bytecode: &JSBytecodeParserDB) -> Self {
     Self {
-      running:         false,
-      _reader:         other_reader,
-      _bytecode:       bytecode.clone(),
-      bytecode_parser: ByteCodeParser::new(unsafe { &mut *reader_ptr.as_ptr() }, bytecode.clone()),
+      running: false,
+      reader: StringInput::from(input),
+      bytecode_parser: bytecode.0.get_parser().unwrap(),
+      db: bytecode.0.clone(),
+      ctx: Default::default(),
+      values: Rc::new(RwLock::new(VecDeque::new())),
     }
   }
 
-  pub fn init(&mut self, entry_name: String, bytecode: &JSBytecodePackage, db: &JSParserDB) {
-    let db = db.0.as_ref().get_db();
+  pub fn init(&mut self, entry_name: String) {
+    let entry = self.db.get_entry_data_from_name(&entry_name).expect("Could not find entry point");
 
-    let offset = db.get_entry_offset(&entry_name, &bytecode.0.state_name_to_address).expect("Could not find entry point");
+    self.ctx = self.bytecode_parser.init(entry).expect("Could not create context");
 
-    self.bytecode_parser.init_parser(offset as u32);
+    let v = self.values.clone();
+    let debugger: Option<Box<DebugFnNew>> = Some(Box::new(move |e, ctx, i| {
+      if let LockResult::Ok(mut values) = v.write() {
+        match e {
+          DebugEventNew::ExecuteInstruction { instruction, is_scanner } => {
+            values.push_back(JSDebugPacket {
+              event: JSDebugEvent::ExecuteInstruction,
+              ctx: JSCTXState::from(&ctx),
+              instruction: instruction.address(),
+              is_scanner: *is_scanner,
+              ..Default::default()
+            });
+          }
+          DebugEventNew::ExecuteState { base_instruction, is_scanner } => {
+            values.push_back(JSDebugPacket {
+              event: JSDebugEvent::ExecuteState,
+              ctx: JSCTXState::from(&ctx),
+              instruction: base_instruction.address(),
+              is_scanner: *is_scanner,
+              ..Default::default()
+            });
+          }
+          _ => {}
+        }
+      }
+    }));
+
+    self.bytecode_parser.set_debugger(debugger);
 
     self.running = true;
   }
 
   pub fn next(&mut self) -> JsValue {
-    if !self.running {
-      return JsValue::UNDEFINED;
+    if let LockResult::Ok(mut values) = self.values.write() {
+      if let Some(debug_event) = values.pop_front() {
+        return debug_event.into();
+      }
+    };
+
+    if self.running {
+      self.next_internal();
+      self.next()
+    } else {
+      JsValue::UNDEFINED
     }
-    let values = Rc::new(RwLock::new(vec![]));
+  }
+
+  fn next_internal(&mut self) {
+    let values = self.values.clone();
 
     {
-      let v = values.clone();
-
-      let mut debugger: Option<Box<DebugFn<_, _>>> = Some(Box::new(move |e, ctx| {
-        if let LockResult::Ok(mut values) = v.write() {
-          values.push(JSDebugEvent::from((e, ctx)));
-        }
-      }));
-
-      match self.bytecode_parser.get_next_action(&mut debugger.as_deref_mut()) {
-        ParseAction::Accept { nonterminal_id, .. } => {
+      let Self { ctx, reader, bytecode_parser, .. } = self;
+      match bytecode_parser.next(reader, ctx) {
+        Some(ParseAction::Accept { nonterminal_id, .. }) => {
           self.running = false;
           if let LockResult::Ok(mut values) = values.write() {
-            values.push(JSDebugEvent::Complete { nonterminal_id, ctx: self.bytecode_parser.get_ctx().into() });
-          }
-        }
-        ParseAction::EndOfInput { .. } => {
-          if let LockResult::Ok(mut values) = values.write() {
-            values.push(JSDebugEvent::EndOfFile {});
-          }
-        }
-        ParseAction::Shift { byte_offset: token_byte_offset, byte_length: token_byte_length, .. } => {
-          if let LockResult::Ok(mut values) = values.write() {
-            values.push(JSDebugEvent::Shift {
-              offset_end:   (token_byte_offset + token_byte_length) as usize,
-              offset_start: token_byte_offset as usize,
+            values.push_back(JSDebugPacket {
+              event: JSDebugEvent::ExecuteInstruction,
+              ctx: JSCTXState::from(&ParserStackTrackers::from(&*ctx)),
+              nonterminal_id,
+              ..Default::default()
             });
           }
         }
-        ParseAction::Skip { byte_length: token_byte_length, byte_offset: token_byte_offset, .. } => {
+        Some(ParseAction::EndOfInput { .. }) => {
           if let LockResult::Ok(mut values) = values.write() {
-            values.push(JSDebugEvent::Skip {
-              offset_end:   (token_byte_offset + token_byte_length) as usize,
-              offset_start: token_byte_offset as usize,
+            values.push_back(JSDebugPacket {
+              event: JSDebugEvent::EndOfFile,
+              ctx: JSCTXState::from(&ParserStackTrackers::from(&*ctx)),
+              ..Default::default()
             });
           }
         }
-        ParseAction::Reduce { nonterminal_id, rule_id, symbol_count, .. } => {
+        Some(ParseAction::Shift { byte_offset: token_byte_offset, byte_length: token_byte_length, .. }) => {
           if let LockResult::Ok(mut values) = values.write() {
-            values.push(JSDebugEvent::Reduce { nonterminal_id, rule_id, symbol_count });
+            values.push_back(JSDebugPacket {
+              event: JSDebugEvent::Shift,
+              ctx: JSCTXState::from(&ParserStackTrackers::from(&*ctx)),
+              offset_end: (token_byte_offset + token_byte_length) as usize,
+              offset_start: token_byte_offset as usize,
+              ..Default::default()
+            });
           }
         }
-        ParseAction::Error { .. } => {
+        Some(ParseAction::Skip { byte_length: token_byte_length, byte_offset: token_byte_offset, .. }) => {
+          if let LockResult::Ok(mut values) = values.write() {
+            values.push_back(JSDebugPacket {
+              event: JSDebugEvent::Skip,
+              ctx: JSCTXState::from(&ParserStackTrackers::from(&*ctx)),
+              offset_end: (token_byte_offset + token_byte_length) as usize,
+              offset_start: token_byte_offset as usize,
+              ..Default::default()
+            });
+          }
+        }
+        Some(ParseAction::Reduce { nonterminal_id, rule_id, symbol_count, .. }) => {
+          if let LockResult::Ok(mut values) = values.write() {
+            values.push_back(JSDebugPacket {
+              event: JSDebugEvent::Reduce,
+              ctx: JSCTXState::from(&ParserStackTrackers::from(&*ctx)),
+              nonterminal_id,
+              rule_id,
+              symbol_count,
+              ..Default::default()
+            });
+          }
+        }
+        Some(ParseAction::Error { .. }) => {
           self.running = false;
           if let LockResult::Ok(mut values) = values.write() {
-            values.push(JSDebugEvent::Error {});
+            values.push_back(JSDebugPacket {
+              event: JSDebugEvent::Error,
+              ctx: JSCTXState::from(&ParserStackTrackers::from(&*ctx)),
+              ..Default::default()
+            });
           }
         }
         _ => {
@@ -146,10 +212,6 @@ impl JSByteCodeParser {
         }
       }
     };
-
-    let val = unsafe { Rc::try_unwrap(values).unwrap_unchecked().into_inner().expect("to work").into_iter().collect::<Vec<_>>() };
-
-    serde_wasm_bindgen::to_value(&val).unwrap()
   }
 }
 
@@ -158,7 +220,7 @@ pub fn get_codemirror_parse_tree(input: String) -> JsValue {
   let mut reader = string_reader::StringReader::new(input);
   let mut bytecode_parser: ByteCodeParser<string_reader::StringReader, u32, _> =
     ByteCodeParser::<_, u32, _>::new(&mut reader, parser::bytecode.as_slice());
-  bytecode_parser.init_parser(31287);
+  bytecode_parser.init_parser(51363);
 
   let mut output = vec![];
   let mut acc_stack: Vec<u32> = vec![];
@@ -230,7 +292,7 @@ pub enum JsonParseAction {
   Error,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Copy, Default)]
 #[wasm_bindgen]
 pub struct JSCTXState {
   pub is_scanner: bool,
@@ -244,49 +306,50 @@ pub struct JSCTXState {
   pub sym_len:    u32,
 }
 
-impl<R: ByteReader + UTF8Reader, M> From<&ParseContext<R, M>> for JSCTXState {
-  fn from(ctx: &ParseContext<R, M>) -> Self {
+impl From<&ParserStackTrackers> for JSCTXState {
+  fn from(ctx: &ParserStackTrackers) -> Self {
     Self {
       anchor_ptr: ctx.anchor_ptr,
-      base_ptr:   ctx.base_ptr,
+      base_ptr:   ctx.begin_ptr,
       end_ptr:    ctx.end_ptr,
       head_ptr:   ctx.sym_ptr,
-      is_scanner: ctx.is_scanner(),
-      scan_ptr:   ctx.tok_ptr,
-      sym_len:    ctx.sym_len,
+      is_scanner: false,
+      scan_ptr:   ctx.sym_ptr,
+      sym_len:    ctx.tok_byte_len,
       tok_id:     ctx.tok_id,
-      tok_len:    ctx.tok_len,
+      tok_len:    ctx.byte_len as usize,
     }
   }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[derive(Serialize, Deserialize, Clone, Copy, Default)]
+#[wasm_bindgen]
 pub enum JSDebugEvent {
-  ExecuteState { instruction: usize, ctx: JSCTXState },
-  ExecuteInstruction { instruction: u32, ctx: JSCTXState },
-  Skip { offset_start: usize, offset_end: usize },
-  Shift { offset_start: usize, offset_end: usize },
-  Reduce { nonterminal_id: u32, rule_id: u32, symbol_count: u32 },
-  Complete { nonterminal_id: u32, ctx: JSCTXState },
-  Error {},
+  ExecuteState,
+  ExecuteInstruction,
+  Skip,
+  Shift,
+  Reduce,
+  Complete,
+  Error,
   EndOfFile,
+  #[default]
   Undefined,
 }
 
-impl<'a, R: ByteReader + UTF8Reader, M> From<(&DebugEvent<'a>, &ParseContext<R, M>)> for JSDebugEvent {
-  fn from((value, ctx): (&DebugEvent<'a>, &ParseContext<R, M>)) -> Self {
-    match *value {
-      DebugEvent::ExecuteState { base_instruction } => {
-        JSDebugEvent::ExecuteState { instruction: base_instruction.address(), ctx: ctx.into() }
-      }
-      DebugEvent::ExecuteInstruction { instruction } => {
-        JSDebugEvent::ExecuteInstruction { instruction: instruction.address() as u32, ctx: ctx.into() }
-      }
-      DebugEvent::EndOfFile => JSDebugEvent::EndOfFile,
-      _ => JSDebugEvent::Undefined,
-    }
-  }
+#[derive(Serialize, Deserialize, Clone, Copy, Default)]
+#[wasm_bindgen]
+pub struct JSDebugPacket {
+  pub event: JSDebugEvent,
+  pub ctx: JSCTXState,
+  pub instruction: usize,
+  pub offset_start: usize,
+  pub offset_end: usize,
+  pub nonterminal_id: u32,
+  pub rule_id: u32,
+  pub symbol_count: u32,
+  pub complete: u32,
+  pub is_scanner: bool,
 }
 
 mod string_reader {

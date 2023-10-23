@@ -29,13 +29,6 @@ pub trait ParserIterator<T: ParserInput> {
 
 pub type TokenData = u32;
 
-pub struct TokenData2 {
-  /// The lexical id of this token.
-  id: u32,
-  /// The amount of entropy created by the addition of this token.
-  entropic_weight: u32,
-}
-
 /// Provides information on artifacts consumed and produced by a specific parser
 pub trait RuntimeDatabase {
   fn get_entry_data_from_name(&self, entry_name: &str) -> Result<EntryPoint, ParserError>;
@@ -99,6 +92,8 @@ pub struct ParserState {
 pub struct ParseStateRef(u32);
 
 impl ParserState {
+  /// This entry is created when a parser is first initialized with a start
+  /// state, or when a GOTO state is pushed to the state stack.
   pub fn state_entry(address: usize) -> Self {
     Self {
       address,
@@ -111,7 +106,12 @@ impl ParserState {
     }
   }
 
-  pub fn goto_entry(address: usize) -> Self {
+  /// This entry is created when an action is emitted within a given state,
+  /// forcing the parser to pause in-order to allow the parser host to handle
+  /// the action.
+  ///
+  /// Such actions include SHIFTS, REDUCES, FORKS, AND ERRORS.
+  pub fn yield_entry(address: usize) -> Self {
     Self {
       address,
       info: StateInfo {

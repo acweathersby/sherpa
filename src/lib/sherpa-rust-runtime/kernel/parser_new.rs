@@ -46,7 +46,7 @@ fn dispatch<'a, 'debug>(
       PeekReset => peek_reset(i, ctx),
       Reduce => reduce(i, ctx),
       Goto => goto(i),
-      PushGoto => push_goto(i, ctx),
+      PushGoto => push_state(i, ctx),
       PushExceptionHandler => push_exception_handler(i, ctx),
       PopGoto => pop_goto(i, ctx),
       AssignToken => assign_token(i, ctx),
@@ -344,7 +344,7 @@ fn fork<'a>(i: Instruction<'a>) -> OpResult<'a> {
 }
 
 /// Performs the [Opcode::PushGoto] operation
-fn push_goto<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
+fn push_state<'a, 'debug>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::PushGoto;
   let mut iter = i.iter();
   iter.next_u8().unwrap();
@@ -806,12 +806,12 @@ impl<T: ParserInput> ParserIterator<T> for ByteCodeParserNew {
             ctx.is_finished = true;
             break Some(ParseAction::Error {
               last_nonterminal: ctx.nonterm,
-              last_state:       ParserState::goto_entry(fail_address),
+              last_state:       ParserState::yield_entry(fail_address),
             });
           }
           (action, next_state, ..) => {
             if let Some(next_state) = next_state {
-              ctx.push_state(ParserState::goto_entry(next_state.address()));
+              ctx.push_state(ParserState::yield_entry(next_state.address()));
             }
             break Some(action);
           }
