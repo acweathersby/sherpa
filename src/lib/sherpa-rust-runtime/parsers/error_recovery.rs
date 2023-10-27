@@ -1,5 +1,8 @@
-use crate::{parsers::fork::fork_meta_kernel, types::*};
-use std::collections::VecDeque;
+use crate::{
+  parsers::fork::{fork_meta_kernel, CHAR_USAGE_SCORE},
+  types::*,
+};
+use std::{collections::VecDeque, rc::Rc};
 
 use super::{
   fork::{attempt_merge, create_merge_groups, create_token, insert_node, reduce_symbols},
@@ -15,14 +18,14 @@ pub trait ErrorRecoveringDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// Parse while attempting to recover from any errors encountered in the
   /// input.
   ///
-  /// This extends the fork parser by allowing recovery methods to be applied
+  /// This extends the fork parser by applying recovery methods
   /// when the base parser encounters input that prevent it from continuing. As
   /// several error recovery strategies are employed, the resulting parse
   /// forest may include several trees containing error corrections of varying
   /// quality. In this case, the tree containing the least number of error
   /// correction assumptions will be ordered in front of trees that employ more
   /// guesswork to recover parsing.
-  fn parse_with_recovery(&self, input: &mut I, entry: EntryPoint) -> Result<(), ParserError> {
+  fn parse_with_recovery(&self, input: &mut I, entry: EntryPoint) -> Result<Vec<Box<RecoverableContext>>, ParserError> {
     parse_with_recovery(input, entry, self)
   }
 }
@@ -33,22 +36,24 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   input: &mut I,
   entry: EntryPoint,
   db: &DB,
-) -> Result<(), ParserError> {
+) -> Result<Vec<Box<RecoverableContext>>, ParserError> {
   let mut parser = db.get_parser()?;
 
   let mut pending = ContextQueue::new_with_capacity(64)?;
+
   pending.push_back(Box::new(RecoverableContext {
     offset: 0,
-    entropy: input.len() as isize,
+    entropy: input.len() as isize * CHAR_USAGE_SCORE,
     symbols: vec![],
     ctx: parser.init(entry)?,
     mode: RecoveryMode::Normal,
     last_failed_state: Default::default(),
   }));
+
   pending.swap_buffers();
 
   let mut failed_contexts: Vec<(ParserState, Box<RecoverableContext>)> = Vec::new();
-  let mut completed = Vec::new();
+  let mut completed: Vec<Box<RecoverableContext>> = Vec::new();
   let mut best_failure = None;
 
   while !pending.pop_is_empty() {
@@ -63,20 +68,7 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   // remaining input into an errata symbol, create an error non-terminal that
   // matches the goal, and wrap all remaining symbols underneath that nonterminal.
 
-  #[cfg(debug_assertions)]
-  dbg!(&completed);
-
-  if let Some(best) = completed.first() {
-    println!("\n");
-    for sym in &best.symbols {
-      Printer::new(sym, db).print();
-      println!("\n");
-      Printer::new(sym, db).print_all();
-    }
-    println!("\n");
-  }
-
-  Ok(())
+  Ok(completed)
 }
 
 fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
@@ -215,13 +207,13 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
               debug_assert_eq!(token_byte_length, 0);
               debug_assert_eq!(token_id, tok_id);
               let entropy = count as isize;
-              rec_ctx.symbols.push(TokenNode::missing_type(
+              rec_ctx.symbols.push(Rc::new(TokenNode::missing_type(
                 emitting_state,
                 tok_id,
                 token_byte_offset,
                 db.token_id_to_str(tok_id).unwrap_or_default().to_string(),
                 entropy as u32,
-              ));
+              )));
               rec_ctx.entropy += entropy;
             }
 
@@ -240,7 +232,7 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
         }
 
         ParseAction::Skip { byte_length, .. } => {
-          rec_ctx.entropy -= byte_length as isize;
+          rec_ctx.entropy -= byte_length as isize * CHAR_USAGE_SCORE;
           contexts.push_back(rec_ctx);
         }
 
@@ -271,11 +263,11 @@ fn create_errata<I: ParserInput>(
   token_byte_length: u32,
   token_byte_offset: u32,
 ) {
-  rec_ctx.symbols.push(TokenNode::error_type(
+  rec_ctx.symbols.push(Rc::new(TokenNode::error_type(
     token_byte_length,
     token_byte_offset,
     input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
-  ));
+  )));
   rec_ctx.entropy += token_byte_length as isize;
 }
 
@@ -314,7 +306,7 @@ fn drop_codepoints<I: ParserInput>(
   last_state: ParserState,
 ) {
   // Continue advancing the input, unless already at EOI. If EOI
-  // advance the token by one codepoint
+  // advance the token by one byte
   count += 1;
 
   rec_ctx.mode = RecoveryMode::CodepointDiscard { start_offset, count };
@@ -349,25 +341,25 @@ fn drop_symbols(
 
   loop {
     if let Some(token) = rec_ctx.symbols.pop() {
-      match &token {
+      match token.as_ref() {
         CSTNode::Errata(tok) => {
           rec_ctx.entropy -= tok.length() as isize;
         }
         CSTNode::Skipped(tok) => {
-          rec_ctx.entropy += tok.length() as isize;
+          rec_ctx.entropy += tok.length() as isize * CHAR_USAGE_SCORE;
         }
         CSTNode::MissingToken(.., state, tok) | CSTNode::Token(state, tok) => {
-          match token {
+          match token.as_ref() {
             CSTNode::MissingToken(entropy, ..) => {
-              rec_ctx.entropy -= entropy as isize;
+              rec_ctx.entropy -= *entropy as isize;
             }
             CSTNode::Token(..) => {
-              rec_ctx.entropy += tok.length() as isize;
+              rec_ctx.entropy += tok.length() as isize * CHAR_USAGE_SCORE;
             }
             _ => unreachable!(),
           }
 
-          let TokenNode { offset, .. } = tok.as_ref();
+          let TokenNode { offset, .. } = tok;
 
           rec_ctx.mode = RecoveryMode::SymbolDiscard { count, end_offset, start_offset: *offset as usize };
 
@@ -394,28 +386,28 @@ fn drop_symbols(
 
           break;
         }
-        CSTNode::NonTerm(..) | CSTNode::Multi(..) => {
+        CSTNode::NonTerm(..) | CSTNode::Alts(..) => {
           // Reduce or increase errata based on the contents of the node
 
           let mut queue = VecDeque::from_iter(vec![token]);
           let mut entropy_delta = 0;
 
           while let Some(token) = queue.pop_front() {
-            match token {
+            match token.as_ref() {
               CSTNode::Errata(tok) => {
                 entropy_delta -= tok.length() as isize;
               }
               CSTNode::MissingToken(entropy, ..) => {
-                entropy_delta -= entropy as isize;
+                entropy_delta -= *entropy as isize;
               }
               CSTNode::Skipped(tok) => {
-                entropy_delta += tok.length() as isize;
+                entropy_delta += tok.length() as isize * CHAR_USAGE_SCORE;
               }
               tok @ CSTNode::Token(..) => {
-                entropy_delta += tok.length() as isize;
+                entropy_delta += tok.length() as isize * CHAR_USAGE_SCORE;
               }
               CSTNode::NonTerm(node) => queue.extend(node.symbols.iter().cloned()),
-              CSTNode::Multi(node) => queue.extend(node.alternatives.first().unwrap().symbols.iter().cloned()),
+              CSTNode::Alts(node) => queue.extend(node.alternatives.first().unwrap().symbols.iter().cloned()),
             }
           }
 

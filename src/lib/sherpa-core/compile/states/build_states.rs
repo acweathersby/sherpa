@@ -116,8 +116,14 @@ pub(crate) fn compile_parser_states(
   let parsers = Arc::new(nonterm_results);
 
   let generation = Arc::new(std::sync::atomic::AtomicU32::new(1));
+
+  #[cfg(not(feature = "wasm-target"))]
   let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
-  //let pool = crate::types::worker_pool::SingleThreadPool {};
+
+  #[cfg(feature = "wasm-target")]
+  let pool = crate::types::worker_pool::SingleThreadPool {};
+
+  let pool = crate::types::worker_pool::SingleThreadPool {};
 
   while generation.load(std::sync::atomic::Ordering::Acquire) > 0 {
     generation.store(0, std::sync::atomic::Ordering::Release);
@@ -207,22 +213,22 @@ pub(crate) fn compile_parser_states(
 
                       // let A = the non-terminal whose peek has failed.
                       //
-                      // Dropping all the states of A; this will results in a parser that is not
+                      // Dropping all states of A; this will results in a parser that is not
                       // enterable at A. Then, mark all exported non-terminals which contains at least
                       // one rule that, directly or indirectly, references an A in the right side as
-                      // "LR only", preventing states with call type transitions from being created.
+                      // "LR only", preventing states with call transitions from being created.
                       // Rebuild the states of the effected non-terminals. Repeat this process for any
-                      // non-terminal, marked as "LR only", that fails to
-                      // generate states due to undeterministic peek.
+                      // non-terminal, marked as "LR only", that fails to generate states due to
+                      // undeterministic peek.
                       //
-                      // If during this iterative process a non-terminal is encountered that is "LR
+                      // If ,during this iterative process, a non-terminal is encountered that is "LR
                       // only", is non-deterministic during peeking, and is a root
                       // entry point for the parser, then we have failed to generate a minimum
                       // acceptable parser for this grammar configuration. Report parser as failed
                       // and produce relevant diagnostic messages.
                       //
                       // If LR style parsing is disabled, then we cannot perform this process. Report
-                      // parser as failed and produce relevant diagnostic messages.
+                      // parser construction as failed and produce relevant diagnostic messages.
                       //-----------------------------------------------------------------------------------
 
                       // Invalidate the job we currently have.

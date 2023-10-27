@@ -45,7 +45,7 @@ pub trait Recognizer<T: ParserInput>: ParserIterator<T> + ParserInitializer {
           let offset_end = (token_byte_offset + token_byte_length) as usize;
           #[cfg(debug_assertions)]
           if let Some(debug) = self.get_debugger() {
-            debug(&DebugEventNew::ActionShift { offset_start, offset_end, token_id }, input);
+            debug(&DebugEventNew::ActionShift { offset_start, offset_end, token_id }, ParserStackTrackers::from(&ctx), input);
           }
         }
 
@@ -53,7 +53,7 @@ pub trait Recognizer<T: ParserInput>: ParserIterator<T> + ParserInitializer {
         {
           #[cfg(debug_assertions)]
           if let Some(debug) = self.get_debugger() {
-            debug(&DebugEventNew::ActionReduce { rule_id: _rule_id }, input);
+            debug(&DebugEventNew::ActionReduce { rule_id: _rule_id }, ParserStackTrackers::from(&ctx), input);
           }
         }
 

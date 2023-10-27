@@ -1,6 +1,52 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, rc::Rc};
 
 use super::*;
+
+#[repr(C)]
+#[derive(Clone, Copy, Eq, PartialEq, Default)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+pub struct ParserStackTrackers {
+  // Input pointers -----------------------------------------------------------
+  /// The head of the input window.
+  pub begin_ptr:    usize,
+  /// Positioned at the end of the last shifted token
+  pub anchor_ptr:   usize,
+  /// Positioned at the start of the current incoming token, and following any
+  /// characters that have been skipped. (This only differs from `anchor_ptr`
+  /// when peeking, in which case there may have been skipped tokens that the
+  /// peeking process has encountered and shifted over)
+  pub sym_ptr:      usize,
+  /// The start of all unevaluated bytes. This differs from `sym_ptr` when
+  /// using scanner states to evaluate incoming bytes
+  pub input_ptr:    usize,
+  /// The end of the input window. This is a fixed reference that should
+  /// not change during parsing unless the end of the input window has been
+  /// reached and a larger window is requested.
+  pub end_ptr:      usize,
+  /// The number of characters that comprize the current
+  /// token. This should be 0 if the tok_id is also 0
+  pub tok_id:       u32,
+  /// The byte length of the current token
+  pub tok_byte_len: u32,
+  /// The byte length of the most current input character. This is usually 1
+  /// byte unless the input contains UTF codepoints outside the ASCII range.
+  pub byte_len:     u32,
+}
+
+impl From<&ParserContext> for ParserStackTrackers {
+  fn from(v: &ParserContext) -> Self {
+    Self {
+      begin_ptr:    v.begin_ptr,
+      anchor_ptr:   v.anchor_ptr,
+      sym_ptr:      v.sym_ptr,
+      input_ptr:    v.input_ptr,
+      end_ptr:      v.end_ptr,
+      tok_id:       v.tok_id,
+      tok_byte_len: v.tok_byte_len,
+      byte_len:     v.byte_len,
+    }
+  }
+}
 
 #[repr(C)]
 #[derive(Clone, Eq, PartialEq)]
@@ -108,7 +154,7 @@ impl ParserContext {
 }
 
 pub trait ForkableContext: QueuedContext {
-  fn symbols(&mut self) -> &mut Vec<CSTNode>;
+  fn symbols(&mut self) -> &mut Vec<Rc<CSTNode>>;
   fn ctx(&self) -> &ParserContext;
   fn ctx_mut(&mut self) -> &mut ParserContext;
   fn entropy(&self) -> &isize;
@@ -146,7 +192,7 @@ impl<CTX: ForkableContext> ForkableContext for Box<CTX> {
   }
 
   #[inline]
-  fn symbols(&mut self) -> &mut Vec<CSTNode> {
+  fn symbols(&mut self) -> &mut Vec<Rc<CSTNode>> {
     self.as_mut().symbols()
   }
 
@@ -172,7 +218,7 @@ pub struct ForkContext {
   pub(crate) entropy: isize,
   pub(crate) offset:  usize,
   pub(crate) ctx:     ParserContext,
-  pub(crate) symbols: Vec<CSTNode>,
+  pub(crate) symbols: Vec<Rc<CSTNode>>,
 }
 
 impl ForkableContext for ForkContext {
@@ -197,7 +243,7 @@ impl ForkableContext for ForkContext {
   }
 
   #[inline]
-  fn symbols(&mut self) -> &mut Vec<CSTNode> {
+  fn symbols(&mut self) -> &mut Vec<Rc<CSTNode>> {
     &mut self.symbols
   }
 
@@ -235,7 +281,7 @@ pub struct RecoverableContext {
   pub(crate) offset: usize,
   pub entropy: isize,
   pub ctx: ParserContext,
-  pub symbols: Vec<CSTNode>,
+  pub symbols: Vec<Rc<CSTNode>>,
   pub mode: RecoveryMode,
   pub last_failed_state: ParserState,
 }
@@ -262,7 +308,7 @@ impl ForkableContext for RecoverableContext {
   }
 
   #[inline]
-  fn symbols(&mut self) -> &mut Vec<CSTNode> {
+  fn symbols(&mut self) -> &mut Vec<Rc<CSTNode>> {
     &mut self.symbols
   }
 

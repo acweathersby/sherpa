@@ -8,6 +8,9 @@ mod test_fork;
 mod test_error_recovery;
 
 #[cfg(test)]
+mod test_cst;
+
+#[cfg(test)]
 mod bytecode;
 
 mod utils;

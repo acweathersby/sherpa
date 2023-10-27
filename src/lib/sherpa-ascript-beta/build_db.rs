@@ -10,14 +10,19 @@ use sherpa_core::{
   CachedString,
   DBNonTermKey,
   DBRuleKey,
+  GrammarIdentities,
   Item,
   ParserDatabase,
   SherpaDatabase,
+  SherpaError,
   SherpaResult,
   SymbolRef,
 };
 
-use crate::types::*;
+use crate::{
+  errors::{add_incompatible_nonterm_types_error, add_prop_redefinition_error},
+  types::*,
+};
 
 pub fn build_database(db: SherpaDatabase) -> AscriptDatabase {
   let mut adb = AscriptDatabase {
@@ -34,7 +39,9 @@ pub fn build_database(db: SherpaDatabase) -> AscriptDatabase {
 
   let nonterm_types = resolve_nonterm_types(db, &mut adb);
 
-  resolve_expressions(db, &mut adb, nonterm_types);
+  if adb.errors.is_empty() {
+    resolve_expressions(db, &mut adb, nonterm_types);
+  }
 
   adb
 }
@@ -42,17 +49,19 @@ pub fn build_database(db: SherpaDatabase) -> AscriptDatabase {
 pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
   for (id, db_rule) in db.rules().iter().enumerate().filter(|(_, r)| !r.is_scanner) {
     let rule = &db_rule.rule;
+    let g_id = db_rule.rule.g_id;
 
     let rule = match &rule.ast {
       None => AscriptRule::LastSymbol(id, Initializer {
-        ty:           AscriptType::Undefined,
-        name:         Default::default(),
+        ty: AscriptType::Undefined,
+        name: Default::default(),
         output_graph: None,
-        ast:          None,
+        ast: None,
+        g_id,
       }),
       Some(ast) => match ast {
         ASTToken::Defined(ast) => match &ast.ast {
-          ASTNode::AST_Struct(strct) => match process_struct(adb, strct) {
+          ASTNode::AST_Struct(strct) => match process_struct(adb, strct, g_id) {
             Ok(struct_initializer) => AscriptRule::Struct(id, struct_initializer),
             Err(err) => {
               adb.errors.push(err);
@@ -60,24 +69,27 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
             }
           },
           ASTNode::AST_Statements(stmt) => AscriptRule::Expression(id, Initializer {
-            ty:           AscriptType::Undefined,
-            name:         Default::default(),
+            ty: AscriptType::Undefined,
+            name: Default::default(),
             output_graph: None,
-            ast:          Some(ASTNode::AST_Statements(stmt.clone())),
+            ast: Some(stmt.statements[0].clone()),
+            g_id,
           }),
           _ => unreachable!(),
         },
         ASTToken::ListEntry(_) => AscriptRule::ListInitial(id, Initializer {
-          ty:           AscriptType::Undefined,
-          name:         Default::default(),
+          ty: AscriptType::Undefined,
+          name: Default::default(),
           output_graph: None,
-          ast:          None,
+          ast: None,
+          g_id,
         }),
-        ASTToken::ListIterate(tok) => AscriptRule::ListContinue(id, Initializer {
-          ty:           AscriptType::Undefined,
-          name:         Default::default(),
+        ASTToken::ListIterate(_) => AscriptRule::ListContinue(id, Initializer {
+          ty: AscriptType::Undefined,
+          name: Default::default(),
           output_graph: None,
-          ast:          None,
+          ast: None,
+          g_id,
         }),
       },
     };
@@ -86,7 +98,7 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
   }
 }
 
-pub fn process_struct(adb: &mut AscriptDatabase, strct: &AST_Struct) -> SherpaResult<StructInitializer> {
+pub fn process_struct(adb: &mut AscriptDatabase, strct: &AST_Struct, g_id: GrammarIdentities) -> SherpaResult<StructInitializer> {
   let name = &strct.typ[2..];
   let struct_id = StringId::from(name);
   let mut initializer = StructInitializer { name: struct_id, props: Default::default() };
@@ -106,9 +118,10 @@ pub fn process_struct(adb: &mut AscriptDatabase, strct: &AST_Struct) -> SherpaRe
       let prop_name: StringId = prop.id.as_str().into();
       let mut ast_prop = AscriptProp {
         is_optional: false,
-        name:        prop.id.to_string(),
-        tok:         prop.tok.clone(),
-        ty:          AscriptType::Undefined,
+        name: prop.id.to_string(),
+        tok: prop.tok.clone(),
+        ty: AscriptType::Undefined,
+        g_id,
       };
 
       seen.insert(prop_name);
@@ -124,10 +137,11 @@ pub fn process_struct(adb: &mut AscriptDatabase, strct: &AST_Struct) -> SherpaRe
       }
 
       initializer.props.insert(StringId::from(prop.id.to_string()), Initializer {
-        ty:           AscriptType::Undefined,
-        name:         prop_name,
+        ty: AscriptType::Undefined,
+        name: prop_name,
         output_graph: None,
-        ast:          prop.value.clone(),
+        ast: prop.value.clone(),
+        g_id,
       });
     }
   }
@@ -143,8 +157,8 @@ pub fn process_struct(adb: &mut AscriptDatabase, strct: &AST_Struct) -> SherpaRe
 
 /// Derives the AST types of all parser NonTerminals.
 pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> OrderedMap<DBNonTermKey, AscriptType> {
-  let mut pending = adb
-    .rules
+  let AscriptDatabase { rules, errors, .. } = adb;
+  let mut pending = rules
     .0
     .iter()
     .enumerate()
@@ -158,8 +172,10 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
     .collect::<Vec<_>>();
 
   let mut nonterms = OrderedMap::new();
+  let mut resolved_nonterms = OrderedMap::new();
+
   for rule in db.rules() {
-    nonterms.entry(rule.nonterm).or_insert((AscriptType::Undefined, 0, 0)).1 += 1
+    nonterms.entry(rule.nonterm).or_insert((AscriptType::Undefined, None, 0, 0)).2 += 1
   }
 
   loop {
@@ -179,10 +195,10 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
             let mut queue = VecDeque::from_iter(pending_nonterm.iter().cloned());
             while let Some(non_term) = queue.pop_front() {
               match nonterms.get_mut(&non_term) {
-                Some((_, 0, _)) => {
+                Some((_, _, 0, _)) => {
                   pending_nonterm.remove(&non_term);
                 }
-                Some((_, 1.., r)) if non_term == nonterm_id => {
+                Some((_, _, 1.., r)) if non_term == nonterm_id => {
                   // Self referential
                   pending_nonterm.remove(&non_term);
                 }
@@ -197,7 +213,7 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
             AscriptRule::LastSymbol(..) => match item.to_complete().decrement() {
               Some(item) => match item.nonterm_index_at_sym(Default::default(), db) {
                 Some(nonterm_key) => match nonterms.get_mut(&nonterm_key) {
-                  Some((ty, resolved, self_recursive)) => {
+                  Some((ty, _, resolved, self_recursive)) => {
                     if *resolved == 0 {
                       *ty
                     } else {
@@ -215,7 +231,7 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
             AscriptRule::ListContinue(..) | AscriptRule::ListInitial(..) => match item.to_complete().decrement() {
               Some(item) => match item.nonterm_index_at_sym(Default::default(), db) {
                 Some(nonterm_key) => match nonterms.get_mut(&nonterm_key) {
-                  Some((ty, v, self_recursive)) => {
+                  Some((ty, _, v, self_recursive)) => {
                     if *v == 0 {
                       match ty {
                         AscriptType::Scalar(ty) => AscriptType::Aggregate(AscriptAggregateType::Vec { base_type: *ty }),
@@ -244,7 +260,8 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
             AscriptRule::Struct(_, id) => AscriptType::Scalar(AscriptScalarType::Struct(id.name)),
             AscriptRule::Invalid(..) => AscriptType::Undefined,
             AscriptRule::Expression(_, init) => {
-              todo!("Resolve stmt type");
+              let ty = resolve_node(db, init.ast.as_ref().unwrap(), item, &resolved_nonterms, &mut Default::default());
+              *ty.get_type()
             }
           };
 
@@ -260,20 +277,32 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
               *type_data = PendingType::Resolved(AscriptType::Undefined);
               continue;
             }
-            a_ty => match nonterms.get_mut(&nonterm_id) {
-              Some((nterm_ty, resolved, _)) => {
-                *type_data = PendingType::Resolved(*nterm_ty);
+            new_ty => match nonterms.get_mut(&nonterm_id) {
+              Some((existing_ty, first_resolved_rule, resolved, _)) => {
+                *type_data = PendingType::Resolved(*existing_ty);
                 match &mut adb.rules[*index] {
-                  AscriptRule::ListContinue(_, init) => init.ty = a_ty,
-                  AscriptRule::ListInitial(_, init) => init.ty = a_ty,
-                  AscriptRule::Expression(_, init) => init.ty = a_ty,
-                  AscriptRule::LastSymbol(_, init) => init.ty = a_ty,
+                  AscriptRule::ListContinue(_, init) => init.ty = new_ty,
+                  AscriptRule::ListInitial(_, init) => init.ty = new_ty,
+                  AscriptRule::Expression(_, init) => init.ty = new_ty,
+                  AscriptRule::LastSymbol(_, init) => init.ty = new_ty,
                   _ => {}
                 }
                 *resolved -= 1;
-                match get_resolved_type(a_ty, *nterm_ty) {
-                  Ok(ty) => *nterm_ty = ty,
-                  Err(err) => todo!("Create Error for failed type \n{err}"),
+                if matches!(existing_ty, AscriptType::Undefined) {
+                  *existing_ty = new_ty;
+                  let _ = first_resolved_rule.insert(rule);
+                  resolved_nonterms.insert(nonterm_id, new_ty);
+                } else {
+                  match get_resolved_type(new_ty, *existing_ty) {
+                    Ok(ty) => *existing_ty = ty,
+                    Err(_) => add_incompatible_nonterm_types_error(
+                      errors,
+                      db,
+                      nonterm_id,
+                      (*existing_ty, first_resolved_rule.unwrap()),
+                      (new_ty, rule),
+                    ),
+                  }
                 }
               }
               None => unreachable!(),
@@ -293,7 +322,7 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
 }
 
 fn resolve_expressions(db: &ParserDatabase, adb: &mut AscriptDatabase, nonterm_types: OrderedMap<DBNonTermKey, AscriptType>) {
-  let AscriptDatabase { structs, rules, .. } = adb;
+  let AscriptDatabase { structs, rules, errors, .. } = adb;
 
   for (index, ast_rule) in rules.iter_mut().enumerate() {
     let item = Item::from((DBRuleKey::from(index), db));
@@ -349,15 +378,36 @@ fn resolve_expressions(db: &ParserDatabase, adb: &mut AscriptDatabase, nonterm_t
         *ty = *graph_node.get_type();
         *output_graph = Some(graph_node);
       }
-      AscriptRule::Struct(_, strct) => {
-        let id: StringId = strct.name;
-        for (name, init) in strct.props.iter_mut().rev() {
+      AscriptRule::Struct(_, rule_struct) => {
+        let struct_name: StringId = rule_struct.name;
+        for (prop_name, init) in rule_struct.props.iter_mut().rev() {
           if let Some(node) = &init.ast {
+            let rule_tok = node.to_token();
             let node = resolve_node(db, node, item, &nonterm_types, selected_indices);
-            if let Some(strct) = structs.get_mut(&id) {
-              if let Some(prop) = strct.properties.get_mut(name) {
-                prop.ty = *node.get_type();
-                init.ty = *node.get_type();
+
+            if let Some(archetype_struct) = structs.get_mut(&struct_name) {
+              if let Some(archetype_prop) = archetype_struct.properties.get_mut(prop_name) {
+                let rule_prop_type = *node.get_type();
+
+                match (archetype_prop.ty, archetype_prop.ty == rule_prop_type) {
+                  (_, true) => {}
+                  (AscriptType::Undefined, _) => {
+                    archetype_prop.ty = rule_prop_type;
+                    archetype_prop.tok = rule_tok;
+                    archetype_prop.g_id = init.g_id;
+                  }
+                  (..) => {
+                    add_prop_redefinition_error(
+                      errors,
+                      db,
+                      struct_name.as_ref().to_string(db.string_store()),
+                      prop_name.as_ref().to_string(db.string_store()),
+                      archetype_prop,
+                      (rule_prop_type, init.g_id, rule_tok),
+                    );
+                  }
+                }
+                init.ty = rule_prop_type;
               }
             }
             init.output_graph = Some(node);
@@ -451,7 +501,23 @@ fn resolve_node(
         GraphNode::Bool(None, AscriptType::Scalar(AscriptScalarType::Bool(bool.value)))
       }
     }
-    node => todo!("handle graph resolve of node {{node:#?}}"),
+    ASTNode::AST_U32(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U32(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U32(None)))
+      }
+    }
+    ASTNode::AST_I64(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I64(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I64(None)))
+      }
+    }
+    node => todo!("handle graph resolve of node {node:#?}"),
   }
 }
 
@@ -501,13 +567,52 @@ fn get_resolved_type(a: AscriptType, b: AscriptType) -> SherpaResult<AscriptType
       Undefined => Ok(b),
       A_ => todo!("resolve different types {a:?} {b:?}"),
     },
-    Scalar(a_scalar) => match a {
+    Scalar(b_scalar) => match a {
       Undefined => Ok(b),
-      Scalar(b_scalar) => {
-        if std::mem::discriminant(&a_scalar) == std::mem::discriminant(&b_scalar) {
-          Ok(a)
+      Scalar(a_scalar) => {
+        use BaseType::*;
+
+        let a_base_type = BaseType::from(a_scalar);
+        let b_base_type = BaseType::from(b_scalar);
+
+        let types = if a_base_type < b_base_type {
+          ((a_base_type, a_scalar, a), (b_base_type, b_scalar, b))
         } else {
-          todo!("resolve different scalar types {a:?} {b:?}")
+          ((b_base_type, b_scalar, b), (a_base_type, a_scalar, a))
+        };
+
+        match types {
+          ((_, _, a), (_, _, b)) if a == b => Ok(a),
+          ((a_base, a_scl, a), (b_base, b_scl, b)) if a_base == b_base => {
+            if a_scl.byte_size() > b_scl.byte_size() {
+              Ok(a)
+            } else {
+              Ok(b)
+            }
+          }
+          ((Bool, a_scl, a), (Int, b_scl, b)) | ((Uint, a_scl, a), (Int, b_scl, b)) => {
+            match (a_scl.byte_size() + 1).max(b_scl.byte_size()) {
+              1..=2 => Ok(Scalar(AscriptScalarType::I16(None))),
+              3..=4 => Ok(Scalar(AscriptScalarType::I32(None))),
+              _ => Ok(Scalar(AscriptScalarType::I64(None))),
+            }
+          }
+          ((Bool, a_scl, a), (Float, b_scl, b))
+          | ((Uint, a_scl, a), (Float, b_scl, b))
+          | ((Int, a_scl, a), (Float, b_scl, b)) => match (a_scl.byte_size() + 1).max(b_scl.byte_size()) {
+            1..=4 => Ok(Scalar(AscriptScalarType::I32(None))),
+            _ => Ok(Scalar(AscriptScalarType::I64(None))),
+          },
+          ((Bool, ..), (Token, ..))
+          | ((Uint, ..), (Token, ..))
+          | ((Int, ..), (Token, ..))
+          | ((Float, ..), (Token, ..))
+          | ((Bool, ..), (String, ..))
+          | ((Uint, ..), (String, ..))
+          | ((Int, ..), (String, ..))
+          | ((Float, ..), (String, ..))
+          | ((Token, ..), (String, ..)) => Ok(Scalar(AscriptScalarType::String(None))),
+          _ => Err(SherpaError::StaticText("Incompatible Types")),
         }
       }
       _ => todo!("Resolve types scaler:{a:?} ty:{b:?}"),

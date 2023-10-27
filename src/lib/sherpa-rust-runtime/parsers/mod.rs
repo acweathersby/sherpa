@@ -6,8 +6,8 @@ use self::{
 };
 use crate::types::{ParserInitializer, ParserInput, ParserIterator};
 
-//pub mod cst;
 pub mod ast;
+pub mod cst;
 pub mod error_recovery;
 pub mod fork;
 pub mod recognizer;

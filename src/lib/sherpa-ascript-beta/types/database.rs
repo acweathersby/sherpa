@@ -6,6 +6,8 @@ use sherpa_core::{
   parser::ASTNode,
   proxy::OrderedMap,
   CachedString,
+  GrammarId,
+  GrammarIdentities,
   IString,
   ParserDatabase,
   SherpaDatabase,
@@ -96,6 +98,12 @@ impl ToValue for StringId {
   }
 }
 
+impl AsRef<IString> for StringId {
+  fn as_ref(&self) -> &IString {
+    &self.0
+  }
+}
+
 impl Into<IString> for StringId {
   fn into(self) -> IString {
     self.0
@@ -143,6 +151,7 @@ pub struct AscriptProp {
   pub(crate) name:        String,
   pub(crate) ty:          AscriptType,
   pub(crate) tok:         Token,
+  pub(crate) g_id:        GrammarIdentities,
 }
 
 impl ValueObj for AscriptProp {
@@ -220,6 +229,7 @@ pub struct Initializer {
   pub(crate) name:         StringId,
   pub(crate) output_graph: Option<GraphNode>,
   pub(crate) ast:          Option<ASTNode>,
+  pub(crate) g_id:         GrammarIdentities,
 }
 
 impl Debug for Initializer {

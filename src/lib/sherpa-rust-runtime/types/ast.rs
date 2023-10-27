@@ -256,11 +256,11 @@ pub trait ASTProducer<I: ParserInput, ASTNode>: ParserProducer<I> {
           token_id,
           ..
         } => {
-          nodes.push(ASTBaseNode::Token(TokenNode::new(
+          nodes.push(ASTBaseNode::Token(Rc::new(TokenNode::new(
             token_id,
             token_byte_offset,
             input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
-          )));
+          ))));
         }
         ParseAction::Reduce { rule_id: _rule_id, symbol_count, .. } => {
           let node = reduce_functions[_rule_id as usize](&mut nodes.drain((nodes.len() - symbol_count as usize)..));

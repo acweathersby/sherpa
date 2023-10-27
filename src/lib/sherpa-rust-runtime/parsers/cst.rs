@@ -1,49 +1,72 @@
-use std::rc::Rc;
+use std::{marker::PhantomData, rc::Rc};
 
-use super::super::types::{ParseAction, ParseError, ParserInput, ParserProducer, TokenRange};
+use crate::types::{CSTNode, EditNode, EntryPoint, ParserError};
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+use super::{
+  super::types::{ParserInput, ParserProducer},
+  error_recovery::parse_with_recovery,
+};
+
+#[derive(Clone, Debug)]
 pub enum CST {
   Terminal { leading_skipped: Vec<Skipped>, byte_len: u32, token_id: u32 },
   NonTerm { nterm: Vec<(u16, u16)>, children: Vec<(u32, Rc<CST>)> },
 }
 
-#[derive(Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Debug)]
 pub struct Skipped {
   pub byte_len: u32,
   pub token_id: u32,
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, Copy)]
-pub enum CSTNode {
-  /// Expects `source_id` to be an identifier that can be used to reference byte
-  /// buffer that represents the origin input string this token was derived
-  /// from.
-  Skipped {
-    id:        u16,
-    source_id: u32,
-    len:       u32,
-    off:       u32,
-  },
-  Terminal {
-    id:        u16,
-    source_id: u32,
-    len:       u32,
-    off:       u32,
-  },
-  NonTerminal {
-    id:           u32,
-    rule:         u32,
-    symbol_count: u32,
-    cache_data:   u32,
-  },
+#[derive(Clone)]
+pub struct EditGraph<I: ParserInput, D: ParserProducer<I>> {
+  graph: Option<Rc<CSTNode>>,
+  db:    Rc<D>,
+  _in:   PhantomData<I>,
 }
 
-type CSTVec = Vec<CSTNode>;
+impl<I: ParserInput, D: ParserProducer<I>> std::fmt::Debug for EditGraph<I, D> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut s = f.debug_struct("EditGraph");
+    s.field("graph", &self.graph);
+    s.finish()
+  }
+}
 
+impl<I: ParserInput, D: ParserProducer<I>> EditGraph<I, D> {
+  /// Initialize the graph with a base input string.
+  pub fn parse(entry: EntryPoint, input: &mut I, db: Rc<D>) -> Result<Self, ParserError> {
+    match parse_with_recovery(input, entry, db.as_ref()) {
+      Ok(mut candidates) => {
+        if let Some(node) = (candidates.len() >= 1).then(|| candidates.remove(0)).and_then(|mut s| s.symbols.drain(..).next()) {
+          dbg!(node.clone());
+          let mut edit = EditNode::new(node);
+          edit.best();
+
+          Ok(Self { graph: Some(edit.into_node().unwrap()), db, _in: Default::default() })
+        } else {
+          Ok(Self { graph: None, db, _in: Default::default() })
+        }
+      }
+      Err(_) => Ok(Self { graph: None, db, _in: Default::default() }),
+    }
+  }
+
+  pub fn insert(&mut self, offset: usize, input: &mut I) -> Result<usize, ParserError> {
+    Err(ParserError::NoData)
+  }
+
+  pub fn delete(&mut self, offset: usize, length: usize) -> Result<usize, ParserError> {
+    Err(ParserError::NoData)
+  }
+
+  pub fn cst(&self) -> Option<&CSTNode> {
+    self.graph.as_ref().map(|s| s.as_ref())
+  }
+}
+
+/*
 pub struct CSTEditor<T: ParserInput> {
   db: Box<dyn ParserProducer<T>>,
 }
@@ -79,7 +102,7 @@ impl<T: ParserInput> CSTEditor<T> {
         ParseAction::Accept { nonterminal_id, .. } => {
           if cst.len() < 1 {
             panic!(
-              "Parser did not resolve CST. This is probably to to the 
+              "Parser did not resolve CST. This is probably to to the
   originating grammar not supporting error recovery. Unable to provide a viable
   Concrete Syntax Tree structure."
             );
@@ -329,3 +352,4 @@ impl<T: ParserInput> CSTEditor<T> {
     None
   }
 }
+ */

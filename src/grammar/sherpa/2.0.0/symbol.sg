@@ -83,7 +83,7 @@ IMPORT ./ascript as ast
 
 <> class >
 
-    "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'vtab' )
+    "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'vtab' | tk:(c:id+) )
 
         :ast { t_ClassSymbol, val:str($2),  tok }
 

@@ -12,133 +12,18 @@
         <div id="documents-host" class="loading adjustable">
             <iframe id="documents-frame" class="frame"></iframe>
         </div>
-        <div id="left-column" class="adjustable">
-            <div class="panel-host">
-                <div class="tabs-header">
-                    <div id="tab-grammar" class="tab active"> Grammar </div>
-                    <div id="tab-formatting" class="tab"> Formatting </div>
-                    <div id="tab-syntax" class="tab"> Highlighting </div>
-                </div>
-                <div id="panel-grammar" class="panel active codemirror-host">
-                </div>
-                <div id="panel-formatting" class="panel codemirror-host">
-                </div>
-                <div id="panel-syntax" class="panel codemirror-host">
-                </div>
-            </div>
-            <div class="panel-host">
-                <div class="tabs-header">
-                    <div id="tab-input" class="tab active"> Parser Input </div>
-                    <div id="tab-ast-source" class="tab"> ASCript </div>
-                    <div id="tab-bytecode-source" class="tab"> Disassembly </div>
-                </div>
-                <div id="panel-input" class="panel active codemirror-host">
-                </div>
-                <div id="panel-bytecode-source" class="panel codemirror-host">
-                    <div class="scroller" id="parser-scoller">
-                        <code><pre id="bytecode-output" class="output"></pre></code>
-                    </div>
-                </div>
-                <div id="panel-ast-source" class="panel codemirror-host">
-                    <div class="scroller" id="syntax-trees-scroller">
-                        <code id="syntax-output"><pre id="ast-source"></pre></code>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div id="right-column" class="adjustable">
-            <div id="error-bar">test</div>
-            <div id="error-blackout"></div>
-            <div class="controls">
-                <div class="debugger-button" id="profile" title="profile parser ( alt+p )">
-                    <i class="fa-solid fa-chart-line active hover inactive"></i>
-                </div>
-                <div class="debugger-button" id="build" title="build parser ( alt+b )">
-                    <i class="fa-solid fa-wrench hover inactive"></i>
-                    <i class="fa-solid fa-check  active"></i>
-                </div>
-                <div class="debugger-button" id="restart" title="restart parser ( alt+r )">
-                    <i class="fa-solid fa-rotate-left active hover inactive"></i>
-                </div>
-                <div class="debugger-button" id="step"  title="step to next instruction ( alt+n )">
-                    <i class="fa-solid fa-forward-step active hover inactive"></i>
-                </div>
-                <div class="debugger-button" id="step-action" title="step to next parser action ( alt+a )">
-                    <i class="fa-solid fa-forward-fast hover inactive active"></i>
-                </div>
-                <div class="debugger-button" id="play" title="continue parsing ( alt+space )" >
-                    <i class="fa-solid fa-forward hover inactive "></i>
-                    <i class="fa-solid fa-pause active"></i>
-                </div>
-                <select id="debugger-entry-dropdown" title="exported entrypoint"></select>
-                <label title="optimize parser IR">  
-                    <input class="debugger-checkbox" type="checkbox" id="op-enable" checked="true"></input>
-                    optimize
-                </label>
-                <label title="use a context free scanner">
-                    <input class="debugger-checkbox" type="checkbox" id="cf-enable"></input>
-                    CF
-                </label>
-                <label title="enable LR style parsing">
-                    <input class="debugger-checkbox" type="checkbox" id="lr-enable"></input>
-                    LR
-                </label>
-                <label title="enable LA style parsing">
-                    <input class="debugger-checkbox" type="checkbox" id="la-enable"></input>
-                    LA
-                </label>
-                <label title="enable recursive descent style parsing">
-                    <input class="debugger-checkbox" type="checkbox" id="rd-enable"></input>
-                    RD
-                </label>
-                <label title="enable fork (GLR/GLL/GHYBRID)"> 
-                    <input class="debugger-checkbox" type="checkbox" id="fk-enable"></input>
-                    FK
-                </label>
-                <label title="enable a look ahead greater than k=1"> 
-                    <input class="debugger-checkbox" type="checkbox" id="pk-enable"></input>
-                    PK
-                </label>
-
-                <label title=""> 
-                    Type
-                    <input class="debugger-field" type="text" id="parser-type" placeholder="N/A" readonly></input>
-                </label>
-
-                <label title=""> 
-                    States
-                    <input class="debugger-field" type="number" id="num-of-states" placeholder="N/A" readonly></input>
-                </label>
-
-            </div>
-            <div id="debugger-output" class="debug-area"> 
-                <div id="debugger-stats">
-                    <div id="debugger-metrics"></div>
-                    <div id="debugger-disassembly"></div>
-                </div>
-                <div id="debugger-ir-state"></div>
-                
-            </div>
-            <div id="syntax-trees" class="debug-area">
-                <div id="debugger-cst-output">test</div>
-                <div id="ast-output">test</div>
-            </div>
-            <div id="parser-code" class="debug-area">
-            
-
-         
-            </div>
-            
-            
+        <div id="lab-host">
+          <noscript>Javascript must be enabled to run Sherpa Lab</noscript>
         </div>
     </main>
 
     <script type="module">
-        import engine, { docs_handler, ScrollHandler,DividerHandler } from "{{ $labScript.Permalink }}";
+        import engine, { lab_handler, docs_handler, ScrollHandler,DividerHandler } from "{{ $labScript.Permalink }}";
         // Connect docs handler to iframe manage interaction between
         // docs and lab.
         docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));
+        lab_handler(document.getElementById("lab-host"));
+        /*
         new ScrollHandler(document.getElementById("parser-scoller"), document.getElementById("parser-code"));
         new DividerHandler(document.getElementById("lab"));
 
@@ -174,7 +59,7 @@
                     });
                 }
             }
-        }
+        }*/
     </script>
 </body>
 

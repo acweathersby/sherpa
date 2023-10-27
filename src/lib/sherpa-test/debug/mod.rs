@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use sherpa_core::ParserDatabase;
-use sherpa_rust_runtime::types::{bytecode::Opcode, DebugEventNew, ParserInput};
+use sherpa_rust_runtime::types::{bytecode::Opcode, DebugEventNew, ParserInput, ParserStackTrackers};
 
 use crate::utils::_write_debug_file_;
 #[derive(Debug, Clone, Copy)]
@@ -64,8 +64,8 @@ pub fn file_debugger(
 ) -> Option<Box<sherpa_rust_runtime::types::DebugFnNew>> {
   let mut stack = vec![];
   _write_debug_file_(&db, "parser_output.tmp", "    ", false).unwrap();
-  Some(Box::new(move |event, ctx| {
-    let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
+  Some(Box::new(move |event, trk, i| {
+    let string = diagram_constructor(event, i, trk, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
       _write_debug_file_(&db, "parser_output.tmp", string, true).unwrap();
@@ -80,8 +80,8 @@ pub fn console_debugger(
   state_lu: HashMap<u32, String>,
 ) -> Option<Box<sherpa_rust_runtime::types::DebugFnNew>> {
   let mut stack = vec![];
-  Some(Box::new(move |event, ctx| {
-    let string = diagram_constructor(event, ctx, &mut stack, &db, &print_config, &state_lu);
+  Some(Box::new(move |event, trk, i| {
+    let string = diagram_constructor(event, i, trk, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
       println!("{string}");
@@ -93,6 +93,7 @@ pub fn console_debugger(
 fn diagram_constructor(
   event: &DebugEventNew<'_>,
   input: &dyn ParserInput,
+  trk: ParserStackTrackers,
   stack: &mut Vec<Node>,
   db: &ParserDatabase,
   pc: &PrintConfig,
@@ -109,7 +110,7 @@ fn diagram_constructor(
     display_state,
   } = *pc;
   match event {
-    DebugEventNew::ExecuteState { base_instruction } => {
+    DebugEventNew::ExecuteState { base_instruction, .. } => {
       let i = base_instruction.address() as u32;
       if let Some(state_name) = state_lu.get(&i) {
         format!(
@@ -218,8 +219,8 @@ Stack:\n{}\n
         disassemble_parse_block(base_instruction.next(), true).0
       )
     }
-    DebugEventNew::ExecuteInstruction { instruction, cursor, is_scanner } if display_instruction => {
-      let active_ptr = *cursor;
+    DebugEventNew::ExecuteInstruction { instruction, is_scanner } if display_instruction => {
+      let active_ptr = trk.sym_ptr;
       if !is_scanner || display_scanner_output {
         if !matches!(instruction.get_opcode(), Opcode::VectorBranch | Opcode::HashBranch) {
           Default::default()

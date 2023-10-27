@@ -719,11 +719,11 @@ fn item_attributes() -> SherpaResult<()> {
 
   assert_eq!(item.is_canonical(), true);
 
-  let item = item.to_origin(Origin::GoalCompleteOOS).to_origin_state(StateId(0));
+  let item = item.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(StateId(0));
 
   assert_eq!(item.is_canonical(), false);
 
-  assert_eq!(item.origin, Origin::GoalCompleteOOS);
+  assert_eq!(item.origin, Origin::__OOS_CLOSURE__);
 
   dbg!(item);
 

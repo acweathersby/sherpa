@@ -1,0 +1,3 @@
+struct CSTStore {
+  Cell
+}

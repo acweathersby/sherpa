@@ -1,43 +1,63 @@
-use crate::*;
+use crate::utils::{_write_disassembly_to_temp_file_, _write_states_to_temp_file_};
+use sherpa_bytecode::compile_bytecode;
 use sherpa_core::*;
-use sherpa_rust_runtime::{parsers::cst::CSTEditor, types::StringInput};
-use std::path::PathBuf;
+use sherpa_rust_runtime::{
+  parsers::{cst::EditGraph, error_recovery::ErrorRecoveringDatabase},
+  types::*,
+};
+use std::{path::PathBuf, rc::Rc};
 
 #[test]
-pub fn construct_trivial_patcher() -> SherpaResult<()> {
+pub fn construct_error_recovering_parser() -> SherpaResult<()> {
   let source = r#"
 
   IGNORE { c:sp }
 
-    <> A > test(+",") "doggo"
+  <> taco > apple ";" $
 
-    <> test > "apple" | "tree"
+  <> apple > topic ";"
+
+  <> topic > test "green" "toast"
+
+  <> test > fn "{}" 
+
+  <> fn > ("fn" | "funct" | "function") "(" field(*",") ")" "{" field(*",") "}" 
+
+  <> field > tk:id ":" val
+
+  <> val > c:num
+
+  <> id > c:id(+)
   
    "#;
 
-  let input = r#"apple, tree doggo"#;
+  let input = r#"fn(2){2}{}green toast;;"#;
 
   let root_path = PathBuf::from("test.sg");
-  let mut grammar = SherpaGrammarBuilder::new();
-  grammar.add_source_from_string(source, &root_path, false)?;
-  let parser_data = grammar.build_db(&root_path)?.build_parser(ParserConfig::default().cst_editor())?.optimize(false)?;
+  let mut grammar = SherpaGrammar::new();
 
-  parser_data._write_states_to_temp_file_()?;
+  grammar.add_source_from_string(source, &root_path, false)?;
+
+  let config = ParserConfig::default().cst_editor();
+  let parser_data = grammar.build_db(&root_path, config)?.build_states(config)?.build_ir_parser(false, false)?;
+
+  _write_states_to_temp_file_(&parser_data)?;
 
   let pkg = compile_bytecode(&parser_data, false)?;
 
-  pkg._write_disassembly_to_temp_file_(parser_data.get_db())?;
+  let pkg = Rc::new(pkg);
 
-  let mut cst_editor = CSTEditor::new(Box::new(pkg));
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
 
-  let cst = cst_editor.create_cst("default", &mut StringInput::from(input), 0)?;
+  let graph: EditGraph<StringInput, BytecodeParserDB> =
+    EditGraph::parse(pkg.default_entrypoint(), &mut StringInput::from(input), pkg.clone())?;
 
-  dbg!(&cst);
+  dbg!(&graph);
 
-  //let cst = cst_editor.patch_cst_array(&cst, &mut StringInput::from("hello let
-  // world"), 6, 8, 15)?;
-  //
-  //dbg!(cst);
+  println!("\n\n");
+  Printer::new(graph.cst().unwrap(), pkg.as_ref()).print();
+
+  println!("\n\n");
 
   Ok(())
 }

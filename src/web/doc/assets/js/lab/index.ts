@@ -11,52 +11,53 @@ import { log } from "js/common/logger";
 import { DividerHandler } from "js/controls/divider";
 
 
-
 export { docs_handler, ScrollHandler, DividerHandler };
+export { lab_handler } from "./lab_handler"
+
 
 export default async function (
-    {
-        codemirror_grammar_host,
-        codemirror_parser_host,
-        disassembly_output,
-        debugger_output,
-        debugger_entry_selection,
-    }: {
-        codemirror_grammar_host: Element;
-        codemirror_parser_host: Element;
-        disassembly_output: Element;
-        debugger_output: HTMLDivElement,
-        debugger_entry_selection: HTMLSelectElement,
-    }
+  {
+    codemirror_grammar_host,
+    codemirror_parser_host,
+    disassembly_output,
+    debugger_output,
+    debugger_entry_selection,
+  }: {
+    codemirror_grammar_host: Element;
+    codemirror_parser_host: Element;
+    disassembly_output: Element;
+    debugger_output: HTMLDivElement,
+    debugger_entry_selection: HTMLSelectElement,
+  }
 ) {
-    try {
-        await init_sherpa();
-        log("Sherpa WASM Runtime initialized");
-    } catch {
-        alert("Sherpa Failed to Load");
-    }
+  try {
+    await init_sherpa();
+    log("Sherpa WASM Runtime initialized");
+  } catch {
+    alert("Sherpa Failed to Load");
+  }
 
-    DebuggerButton.gatherButtons();
-    DebuggerCheckbox.gatherCheckBoxes();
-    DebuggerField.gatherFields();
+  DebuggerButton.gatherButtons();
+  DebuggerCheckbox.gatherCheckBoxes();
+  DebuggerField.gatherFields();
 
-    init(window);
+  init(window);
 
 
-    const ctx = new GrammarContext();
-    initDebugger(ctx, codemirror_parser_host, debugger_entry_selection);
+  const ctx = new GrammarContext();
+  initDebugger(ctx, codemirror_parser_host, debugger_entry_selection);
 
-    const grammar_editor = new EditorView({
-        doc: get_grammar(),
+  const grammar_editor = new EditorView({
+    doc: get_grammar(),
 
-        extensions: [basicSetup,
-            sherpaLang(ctx),
-            EditorView.editorAttributes.of({ class: "Codemirror" }),
-        ],
-        parent: codemirror_grammar_host
-    });
+    extensions: [basicSetup,
+      sherpaLang(ctx),
+      EditorView.editorAttributes.of({ class: "Codemirror" }),
+    ],
+    parent: codemirror_grammar_host
+  });
 
-    set_grammar_update_handler(grammar_str => grammar_editor.dispatch({ changes: { from: 0, to: grammar_editor.state.doc.length, insert: grammar_str } }));
+  set_grammar_update_handler(grammar_str => grammar_editor.dispatch({ changes: { from: 0, to: grammar_editor.state.doc.length, insert: grammar_str } }));
 
 
 }

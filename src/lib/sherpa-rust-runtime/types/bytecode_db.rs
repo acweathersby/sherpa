@@ -16,6 +16,7 @@ pub struct BytecodeParserDB {
   pub nonterm_id_to_address: HashMap<u32, u32>,
   pub state_to_token_ids_map: HashMap<u32, Vec<u32>>,
   pub token_id_to_str: HashMap<u32, String>,
+  pub default_entry: EntryPoint,
 }
 
 impl BytecodeParserDB {
@@ -57,6 +58,10 @@ impl RuntimeDatabase for BytecodeParserDB {
 
   fn token_id_to_str(&self, tok_id: u32) -> Option<&str> {
     self.token_id_to_str.get(&tok_id).map(|s| s.as_str())
+  }
+
+  fn default_entrypoint(&self) -> EntryPoint {
+    self.default_entry
   }
 }
 

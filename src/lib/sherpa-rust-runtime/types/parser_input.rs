@@ -61,6 +61,7 @@ pub trait ParserInput {
   }
 }
 
+#[derive(Debug)]
 pub struct StringInput {
   input: Arc<Vec<u8>>,
 }

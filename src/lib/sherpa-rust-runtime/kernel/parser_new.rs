@@ -87,21 +87,25 @@ fn dispatch<'a, 'debug>(
       }
 
       OpResult { action: None, next: Some(next_instruction), is_goto, can_debug } => {
-        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-        if can_debug {
-          emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
-        }
         if is_goto {
           block_base = next_instruction;
-          #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-          emit_state_debug(debug, bc, block_base.address(), input);
         }
+        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
+        {
+          if can_debug {
+            emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
+          }
+          if is_goto {
+            emit_state_debug(debug, bc, block_base.address() as usize, ParserStackTrackers::from(&*ctx), input, is_scanner);
+          }
+        }
+
         next_instruction
       }
       OpResult { action, next, can_debug, .. } => {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if can_debug {
-          emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
+          emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
         }
         break (action, next, block_base.address());
       }
@@ -451,7 +455,7 @@ fn read_codepoint<'a, 'debug>(
   is_scanner: bool,
 ) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::ReadCodepoint;
-  emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
+  emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
   if get_input_value(MatchInputType::Codepoint, i, ctx, input, debug, is_scanner) == 0 {
     OpResult {
       action:    ParseAction::FailState,
@@ -479,7 +483,7 @@ fn hash_branch<'a, 'debug>(
 ) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::HashBranch;
 
-  emit_instruction_debug(debug, i, input, ctx.sym_ptr, is_scanner);
+  emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
 
   // Decode data
   let TableHeaderData {
@@ -692,7 +696,7 @@ fn token_scan<'a, 'debug>(
       } else {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if state & STATE_HEADER == STATE_HEADER {
-          emit_state_debug(debug, bc, address, input);
+          emit_state_debug(debug, bc, address, ParserStackTrackers::from(&*ctx), input, true);
         }
 
         match dispatch(ParserState { address: address as usize, info: Default::default() }, ctx, input, bc, debug, true) {
@@ -795,8 +799,8 @@ impl<T: ParserInput> ParserIterator<T> for ByteCodeParserNew {
         break Some(ParseAction::Error { last_nonterminal: ctx.nonterm, last_state: state });
       } else {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-        if state.info.is_header {
-          emit_state_debug(&mut debugger, bc, state.address as usize, input);
+        if state.info.is_state_entry {
+          emit_state_debug(&mut debugger, bc, state.address as usize, ParserStackTrackers::from(&*ctx), input, false);
         }
         match dispatch(state, ctx, input, bc, &mut debugger, false) {
           (ParseAction::CompleteState, ..) => {

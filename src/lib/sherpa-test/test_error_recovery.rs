@@ -87,6 +87,18 @@ pub fn construct_error_recovering_erlang_toy() -> SherpaResult<()> {
 
   let result = pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?)?;
 
+  #[cfg(debug_assertions)]
+  dbg!(&result);
+
+  if let Some(best) = result.first() {
+    for sym in &best.symbols {
+      Printer::new(sym, &pkg).print();
+      println!("\n");
+      Printer::new(sym, &pkg).print_all();
+    }
+    println!("\n");
+  }
+
   // assert_eq!(result.trees().first().to_string(), "<name>()->fn <name>()");
 
   Ok(())

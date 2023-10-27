@@ -3,6 +3,8 @@ use std::rc::Rc;
 use sherpa_core::{proxy::OrderedSet, CachedString, DBNonTermKey, IString};
 use sherpa_formatter::*;
 
+use crate::types::value_type;
+
 use super::StringId;
 
 #[derive(Debug)]
@@ -33,6 +35,40 @@ pub enum AscriptType {
   Undefined,
 }
 
+impl AscriptType {
+  pub fn friendly_name(&self) -> String {
+    use AscriptType::*;
+    match self {
+      Scalar(scalar) => scalar.friendly_name(),
+      Aggregate(aggregate) => aggregate.friendly_name(),
+      NonTerminalVal(key) => "Undefined".into(),
+      Undefined => "Undefined".into(),
+    }
+  }
+}
+
+impl PartialEq for AscriptType {
+  fn eq(&self, other: &Self) -> bool {
+    if std::mem::discriminant(self) != std::mem::discriminant(other) {
+      false
+    } else if let (Some(a), Some(b)) = (self.as_aggregate(), other.as_aggregate()) {
+      match (a, b) {
+        (
+          AscriptAggregateType::Map { key_type: a_key, val_type: a_val },
+          AscriptAggregateType::Map { key_type: b_key, val_type: b_val },
+        ) => a_key == b_key && a_val == b_val,
+
+        (AscriptAggregateType::Vec { base_type: a_val }, AscriptAggregateType::Vec { base_type: b_val }) => a_val == b_val,
+        _ => false,
+      }
+    } else if let (Some(a), Some(b)) = (self.as_scalar(), other.as_scalar()) {
+      a == b
+    } else {
+      false
+    }
+  }
+}
+
 #[derive(Debug)]
 pub enum PendingType {
   Resolved(AscriptType),
@@ -51,7 +87,15 @@ impl AscriptType {
       _ => None,
     }
   }
+
+  pub fn as_aggregate(&self) -> Option<AscriptAggregateType> {
+    match self {
+      Self::Aggregate(scalar) => Some(*scalar),
+      _ => None,
+    }
+  }
 }
+
 impl ValueObj for AscriptType {
   fn get_type<'scope>(&'scope self) -> &str {
     "AscriptType"
@@ -151,6 +195,77 @@ pub enum AscriptScalarType {
   TokenRange,
   #[default]
   Undefined,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub enum BaseType {
+  Bool,
+  Uint,
+  Int,
+  Float,
+  Token,
+  String,
+  Other,
+}
+
+impl From<AscriptScalarType> for BaseType {
+  fn from(value: AscriptScalarType) -> Self {
+    use AscriptScalarType::*;
+    match value {
+      AscriptScalarType::Bool(..) => BaseType::Bool,
+      U8(..) | U16(..) | U32(..) | U64(..) => BaseType::Uint,
+      I8(..) | I16(..) | I32(..) | I64(..) => BaseType::Int,
+      F32(..) | F64(..) => BaseType::Float,
+      TokenRange | Token => BaseType::Token,
+      String(..) => BaseType::String,
+      _ => BaseType::Other,
+    }
+  }
+}
+
+impl AscriptScalarType {
+  pub fn byte_size(&self) -> usize {
+    use AscriptScalarType::*;
+    match self {
+      Bool(..) | I8(..) | U8(..) => 1,
+      I16(..) | U16(..) => 2,
+      U32(..) | I32(..) | F32(..) => 4,
+      U64(..) | I64(..) | F64(..) => 8,
+      String(..) => 16,
+      Struct(..) => 128,
+      Token => 16,
+      TokenRange => 8,
+      Undefined => 0,
+    }
+  }
+
+  pub fn friendly_name(&self) -> String {
+    use AscriptScalarType::*;
+    match self {
+      U8(..) => "U8".into(),
+      U16(..) => "U16".into(),
+      U32(..) => "U32".into(),
+      U64(..) => "U64".into(),
+      I8(..) => "I8".into(),
+      I16(..) => "I16".into(),
+      I32(..) => "I32".into(),
+      I64(..) => "I64".into(),
+      F32(..) => "F32".into(),
+      F64(..) => "F64".into(),
+      String(..) => "String".into(),
+      Bool(..) => "Bool".into(),
+      Struct(..) => "Struct".into(),
+      Token => "Token".into(),
+      TokenRange => "TokenRange".into(),
+      Undefined => "Undefined".into(),
+    }
+  }
+}
+
+impl PartialEq for AscriptScalarType {
+  fn eq(&self, other: &Self) -> bool {
+    std::mem::discriminant(self) == std::mem::discriminant(other)
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -265,4 +380,14 @@ impl ValueObj for GraphNode {
 pub enum AscriptAggregateType {
   Vec { base_type: AscriptScalarType },
   Map { key_type: AscriptScalarType, val_type: AscriptScalarType },
+}
+
+impl AscriptAggregateType {
+  pub fn friendly_name(&self) -> String {
+    use AscriptAggregateType::*;
+    match self {
+      Vec { base_type } => base_type.friendly_name() + &"[]",
+      Map { key_type, val_type } => "{ ".to_string() + &key_type.friendly_name() + ":" + &val_type.friendly_name() + "}",
+    }
+  }
 }

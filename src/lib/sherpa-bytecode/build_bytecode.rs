@@ -2,6 +2,7 @@ use sherpa_core::{proxy::*, *};
 use sherpa_rust_runtime::types::{
   bytecode::{insert_op, Opcode as Op, *},
   BytecodeParserDB,
+  EntryPoint,
   TableHeaderData,
   Token,
 };
@@ -46,6 +47,7 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> S
     nonterm_id_to_address: Default::default(),
     state_to_token_ids_map: Default::default(),
     token_id_to_str: db.tokens().iter().map(|tok| (tok.tok_id.to_val(), tok.name.to_string(db.string_store()))).collect(),
+    default_entry: EntryPoint { nonterm_id: db.entry_nterm_keys().first().unwrap().to_val() },
   };
 
   for (name, state) in states {

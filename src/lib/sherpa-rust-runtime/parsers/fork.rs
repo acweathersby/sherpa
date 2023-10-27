@@ -3,14 +3,17 @@ use std::{
   collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
   hash::Hasher,
   ops::Range,
+  rc::Rc,
 };
+
+pub const CHAR_USAGE_SCORE: isize = 100;
 
 pub trait ForkableParser<I: ParserInput>: ParserIterator<I> + ParserInitializer {
   fn fork_parse(&mut self, input: &mut I, entry: EntryPoint) -> Result<(), ParserError> {
     let mut pending = ContextQueue::new_with_capacity(64)?;
     pending.push_back(Box::new(ForkContext {
       offset:  0,
-      entropy: (input.len() as isize),
+      entropy: (input.len() as isize * CHAR_USAGE_SCORE),
       ctx:     self.init(entry)?,
       symbols: Vec::new(),
     }));
@@ -181,11 +184,11 @@ pub fn insert_node<CTX: ForkableContext>(rec_ctx: &mut CTX, node: CSTNode) {
       *rec_ctx.entropy_mut() += node.length() as isize;
     }
     _ => {
-      *rec_ctx.entropy_mut() -= node.length() as isize;
+      *rec_ctx.entropy_mut() -= node.length() as isize * CHAR_USAGE_SCORE;
     }
   }
 
-  rec_ctx.symbols().push(node);
+  rec_ctx.symbols().push(Rc::new(node));
 }
 
 fn create_skip<I: ParserInput>(input: &mut I, token_id: u32, token_byte_length: u32, token_byte_offset: u32) -> CSTNode {
@@ -216,7 +219,7 @@ pub fn reduce_symbols<CTX: ForkableContext>(mut symbol_count: u32, rec_ctx: &mut
 
   while symbol_count > 0 {
     let sym = rec_ctx.symbols().pop().expect(&format!("Should have enough symbols to complete this Non-Terminal"));
-    match sym {
+    match sym.as_ref() {
       CSTNode::Errata { .. } | CSTNode::Skipped { .. } => {}
       _ => {
         symbol_count -= 1;
@@ -233,7 +236,7 @@ pub fn reduce_symbols<CTX: ForkableContext>(mut symbol_count: u32, rec_ctx: &mut
   let offset = start.offset();
   let length = end.offset() + end.length() - offset;
 
-  rec_ctx.symbols().push(NonTermNode::typed(nonterminal_id as u16, rule_id as u16, symbols, offset, length));
+  rec_ctx.symbols().push(Rc::new(NonTermNode::typed(nonterminal_id as u16, rule_id as u16, symbols, offset, length)));
 }
 
 pub type MergeGroups<CTX> = HashMap<u64, Vec<MergeCandidate<CTX>>>;
@@ -270,7 +273,7 @@ pub fn sort_candidate<CTX: ForkableContext>(
     for index in (0..=end_index).rev() {
       let node = &ctx.symbols()[index];
       end_index = index;
-      if matches!(node, CSTNode::Token(..) | CSTNode::MissingToken(..) | CSTNode::Multi(..) | CSTNode::NonTerm(..)) {
+      if matches!(node.as_ref(), CSTNode::Token(..) | CSTNode::MissingToken(..) | CSTNode::Alts(..) | CSTNode::NonTerm(..)) {
         break;
       }
     }
@@ -280,8 +283,8 @@ pub fn sort_candidate<CTX: ForkableContext>(
     for index in (0..end_index).rev() {
       let node = &ctx.symbols()[index];
       if matches!(
-        node,
-        CSTNode::Token(..) | CSTNode::Skipped(..) | CSTNode::MissingToken(..) | CSTNode::Multi(..) | CSTNode::NonTerm(..)
+        node.as_ref(),
+        CSTNode::Token(..) | CSTNode::Skipped(..) | CSTNode::MissingToken(..) | CSTNode::Alts(..) | CSTNode::NonTerm(..)
       ) {
         break;
       } else {
@@ -325,7 +328,7 @@ pub fn attempt_merge<CTX: ForkableContext>(groups: MergeGroups<CTX>, merge_type:
       group.sort_by(|a, b| a.ctx.entropy().cmp(&b.ctx.entropy()));
       struct AltCandidate<CTX: ForkableContext> {
         insert_point: usize,
-        alt:          Vec<Alternative>,
+        alt:          Vec<Rc<Alternative>>,
         follow:       Option<CSTNode>,
         ctx:          CTX,
       }
@@ -335,19 +338,23 @@ pub fn attempt_merge<CTX: ForkableContext>(groups: MergeGroups<CTX>, merge_type:
         let entropy = *ctx.entropy();
         let mut syms = ctx.symbols().drain(sym_range);
 
-        let alt = match (syms.next(), syms) {
-          (Some(CSTNode::Multi(multi)), _) => multi.alternatives.clone(),
-          (Some(sym), syms) => {
-            let mut syms_ = vec![sym];
-            syms_.extend(syms);
-            let alt: Alternative = Alternative {
-              length:  0, //ctx.last_tok_end - start_offset,
-              offset:  start_offset,
-              symbols: syms_,
-              entropy: entropy,
-            };
-            vec![alt]
-          }
+        let base_sym = syms.next();
+
+        let alt = match (base_sym, syms) {
+          (Some(node), syms) => match node.as_ref() {
+            CSTNode::Alts(multi) => multi.alternatives.clone(),
+            _ => {
+              let mut syms_ = vec![node];
+              syms_.extend(syms);
+              let alt: Alternative = Alternative {
+                length:  0, //ctx.last_tok_end - start_offset,
+                offset:  start_offset,
+                symbols: syms_,
+                entropy: entropy,
+              };
+              vec![Rc::new(alt)]
+            }
+          },
           _ => unreachable!(),
         };
 
@@ -376,12 +383,12 @@ pub fn attempt_merge<CTX: ForkableContext>(groups: MergeGroups<CTX>, merge_type:
         .collect();
 
       if alternates.len() == 1 {
-        for (offset, symbol) in alternates.pop().unwrap().symbols.into_iter().enumerate() {
-          ctx.symbols().insert(insert_point + offset, symbol);
+        for (offset, symbol) in alternates.pop().unwrap().symbols.iter().enumerate() {
+          ctx.symbols().insert(insert_point + offset, symbol.clone());
         }
       } else {
         alternates.sort_by(|a, b| a.entropy.cmp(&b.entropy));
-        ctx.symbols().insert(insert_point, Multi::typed(alternates, merge_type));
+        ctx.symbols().insert(insert_point, Rc::new(Alts::typed(alternates, merge_type)));
       }
 
       *ctx.entropy_mut() = lowest_entropy;

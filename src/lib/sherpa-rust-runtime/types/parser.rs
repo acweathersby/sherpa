@@ -43,6 +43,13 @@ pub trait RuntimeDatabase {
 
   ///// Returns a human friendly string representation of the given token id.
   //fn state_id_to_ptr<'str>(&'str self, id: u32) -> Option<&'str str>;
+
+  /// Returns the parser configuration.
+  fn get_config(&self) -> usize {
+    0
+  }
+
+  fn default_entrypoint(&self) -> EntryPoint;
 }
 
 /// An object capable of instantiating a parser
@@ -74,10 +81,11 @@ pub struct UniqueParseState {
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct StateInfo {
-  pub stack_address: u16,
-  pub state_type:    StateType,
-  pub is_header:     bool,
-  pub state_id:      u32,
+  pub stack_address:  u16,
+  pub state_type:     StateType,
+  /// True if the address is the first entry in a state block.
+  pub is_state_entry: bool,
+  pub state_id:       u32,
 }
 
 #[repr(C)]
@@ -98,10 +106,10 @@ impl ParserState {
     Self {
       address,
       info: StateInfo {
-        state_id:      address as u32,
-        stack_address: 0,
-        state_type:    StateType::Normal,
-        is_header:     true,
+        state_id:       address as u32,
+        stack_address:  0,
+        state_type:     StateType::Normal,
+        is_state_entry: true,
       },
     }
   }
@@ -115,10 +123,10 @@ impl ParserState {
     Self {
       address,
       info: StateInfo {
-        state_id:      address as u32,
-        stack_address: 0,
-        state_type:    StateType::Normal,
-        is_header:     false,
+        state_id:       address as u32,
+        stack_address:  0,
+        state_type:     StateType::Normal,
+        is_state_entry: false,
       },
     }
   }

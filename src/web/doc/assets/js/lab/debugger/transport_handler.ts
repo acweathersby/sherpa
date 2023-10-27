@@ -2,7 +2,6 @@ import { DebuggerButton } from "./debugger_io";
 import { FlowNode } from "../../common/flow";
 import * as sherpa from "js/sherpa/sherpa_wasm.js";
 import { CSTNode } from "./cst";
-import { JSReductionType } from "js/sherpa/sherpa_wasm";
 import { StateEffect, Range } from "@codemirror/state";
 import { Decoration } from "@codemirror/view";
 import { DebuggerData, EnableRestartButton, DebuggerError, EnableTransportButtons, DisableTransportButtons, DisableRestartButton } from "./debugger";
@@ -159,7 +158,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
           if (!step.is_scanner) {
 
             let name = sherpa.get_debug_state_name(step.instruction, bytecode, db);
-            console.log({ name, s: step.instruction });
+
             if (name) {
               this.active_state_source = sherpa.get_state_source_string(name, states);
               break;
@@ -167,7 +166,6 @@ export class TransportHandler extends FlowNode<DebuggerData> {
           } else {
 
             let name = sherpa.get_debug_state_name(step.instruction, bytecode, db);
-            console.log({ name });
             if (name) {
               this.active_scanner_state_source = sherpa.get_state_source_string(name, states);
               break;

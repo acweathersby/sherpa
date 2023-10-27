@@ -57,6 +57,7 @@ pub struct ContextQueue<Context: QueuedContext> {
   pop_buffer:  BufferTracker,
   push_buffer: BufferTracker,
 }
+
 #[cfg(debug_assertions)]
 impl<Context: QueuedContext + Debug> Debug for ContextQueue<Context> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
