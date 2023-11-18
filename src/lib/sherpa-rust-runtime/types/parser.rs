@@ -88,6 +88,7 @@ pub struct StateInfo {
   pub state_id:       u32,
 }
 
+/// An identifier for the first instruction of a particular state. 
 #[repr(C)]
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]

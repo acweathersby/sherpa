@@ -54,6 +54,7 @@ pub struct ParserConfig {
   pub ALLOW_BYTE_SEQUENCES: bool,
 }
 
+/// Configuration for the creation of a grammar from grammar sources.
 pub struct GrammarConfig {
   /// An anonymous non-terminal, aka grouped rules `e.g ( symA symB | symC | ..
   /// )`, may be inlined into the body of its host rule if none of the grouped

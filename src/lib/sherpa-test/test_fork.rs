@@ -44,7 +44,7 @@ pub fn construct_forking_parser_glr() -> SherpaResult<()> {
 
   let mut parser = pkg.get_parser()?;
 
-  parser.fork_parse(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?)?;
+  parser.fork_parse(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
 
   Ok(())
 }

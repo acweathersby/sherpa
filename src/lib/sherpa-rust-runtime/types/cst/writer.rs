@@ -3,30 +3,40 @@ use std::io::Write;
 
 pub struct Printer<'node, 'db> {
   node: &'node CSTNode,
-  db:   &'db dyn RuntimeDatabase,
+  db: &'db dyn RuntimeDatabase,
+  write_missing: bool,
 }
 
 impl<'node, 'db> Printer<'node, 'db> {
-  pub fn new<'a, 'b>(node: &'a CSTNode, db: &'b dyn RuntimeDatabase) -> Printer<'a, 'b> {
-    Printer { node, db }
+  pub fn new<'a, 'b>(node: &'a CSTNode, write_missing: bool, db: &'b dyn RuntimeDatabase) -> Printer<'a, 'b> {
+    Printer { node, db, write_missing }
   }
 
   pub fn new_node(&self, node: &'node CSTNode) -> Self {
-    Self { node, db: self.db }
+    Self { node, db: self.db, write_missing: self.write_missing }
+  }
+
+  pub fn to_string(&self) -> String {
+    let mut vec = vec![];
+    self.write(&mut vec);
+    unsafe { String::from_utf8_unchecked(vec) }
   }
 
   pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     use CSTNode::*;
     match self.node {
-      Skipped(skipped) => {
-        w.write(skipped.val.as_bytes())?;
-      }
-      Token(_, token) => {
-        w.write(token.val.as_bytes())?;
-      }
-      MissingToken(.., missing) => {
-        w.write(missing.val.as_bytes())?;
-      }
+      Token(token) => match token.ty() {
+        NodeType::Missing => {
+          if self.write_missing {
+            let id = token.tok_id() as u32;
+            w.write(self.db.token_id_to_str(id).unwrap_or_default().as_bytes())?;
+          }
+        }
+        NodeType::Errata => {}
+        _ => {
+          w.write(token.str().as_bytes())?;
+        }
+      },
       NonTerm(non_term) => {
         for node in &non_term.symbols {
           self.new_node(node).write(w)?;
@@ -39,98 +49,40 @@ impl<'node, 'db> Printer<'node, 'db> {
           }
         }
       }
-      Errata { .. } => {}
     }
     Ok(())
   }
 
   pub fn print(&self) {
-    use CSTNode::*;
-    match self.node {
-      Skipped(..) => {
-        //print!("{}", skipped.val);
-      }
-      Token(_, token) => {
-        print!("{}", token.val);
-      }
-      MissingToken(.., missing) => {
-        print!("{}", missing.val);
-      }
-      NonTerm(non_term) => {
-        for node in &non_term.symbols {
-          self.new_node(node).print();
-        }
-      }
-      Alts(multi) => {
-        if let Some(first) = multi.alternatives.first() {
-          for node in &first.symbols {
-            self.new_node(node).print();
-          }
-        }
-      }
-      Errata { .. } => {}
-    }
+    let mut stdout = std::io::stdout();
+    self.write(&mut stdout).unwrap()
   }
 
   pub fn print_all(&self) {
-    println!("{}", self._print_all().join("\n"));
+    let mut stdout = std::io::stdout();
+    self.write_all(&mut stdout).unwrap();
   }
 
-  fn _print_all(&self) -> Vec<String> {
+  fn write_all<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     use CSTNode::*;
     match self.node {
-      Skipped(..) => {
-        vec![Default::default()]
+      Token(_) => {
+        self.new_node(self.node).write(w)?;
       }
-      Token(_, token) => {
-        vec![token.val.clone()]
-      }
-      MissingToken(.., missing) => {
-        vec![missing.val.clone()]
-      }
+
       NonTerm(non_term) => {
-        let mut vals: Vec<String> = vec![];
         for node in &non_term.symbols {
-          vals = self
-            .new_node(node)
-            ._print_all()
-            .into_iter()
-            .flat_map(|v| {
-              if vals.len() > 0 {
-                vals.iter().map(|a| -> String { a.clone() + &v }).collect::<Vec<_>>()
-              } else {
-                vec![v]
-              }
-            })
-            .collect();
+          self.new_node(node).write_all(w)?;
         }
-        vals
       }
       Alts(multi) => {
-        let mut out_vals = vec![];
         for alt in &multi.alternatives {
-          let mut vals: Vec<String> = vec![];
           for node in &alt.symbols {
-            vals = self
-              .new_node(node)
-              ._print_all()
-              .into_iter()
-              .flat_map(|v| {
-                if vals.len() > 0 {
-                  vals.iter().map(|a| -> String { a.clone() + &v }).collect::<Vec<_>>()
-                } else {
-                  vec![v]
-                }
-              })
-              .collect();
+            self.new_node(node).write_all(w)?;
           }
-          out_vals.extend(vals);
         }
-        out_vals
-      }
-      Errata { .. } => {
-        vec![Default::default()]
       }
     }
+    Ok(())
   }
 }

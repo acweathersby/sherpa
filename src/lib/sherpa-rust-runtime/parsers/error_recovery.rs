@@ -25,8 +25,13 @@ pub trait ErrorRecoveringDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// quality. In this case, the tree containing the least number of error
   /// correction assumptions will be ordered in front of trees that employ more
   /// guesswork to recover parsing.
-  fn parse_with_recovery(&self, input: &mut I, entry: EntryPoint) -> Result<Vec<Box<RecoverableContext>>, ParserError> {
-    parse_with_recovery(input, entry, self)
+  fn parse_with_recovery(
+    &self,
+    input: &mut I,
+    entry: EntryPoint,
+    store: &CSTStore,
+  ) -> Result<Vec<Box<RecoverableContext>>, ParserError> {
+    parse_with_recovery(input, entry, self, store)
   }
 }
 
@@ -36,6 +41,7 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   input: &mut I,
   entry: EntryPoint,
   db: &DB,
+  store: &CSTStore,
 ) -> Result<Vec<Box<RecoverableContext>>, ParserError> {
   let mut parser = db.get_parser()?;
 
@@ -57,8 +63,8 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   let mut best_failure = None;
 
   while !pending.pop_is_empty() {
-    fork_meta_kernel(input, parser.as_mut(), &mut pending, &mut completed, &mut failed_contexts)?;
-    handle_failed_contexts(&mut failed_contexts, input, db, &mut best_failure, &mut parser, &mut pending);
+    fork_meta_kernel(input, parser.as_mut(), &mut pending, &mut completed, &mut failed_contexts, store)?;
+    handle_failed_contexts(&mut failed_contexts, input, db, &mut best_failure, &mut parser, &mut pending, store);
     pending.swap_buffers();
   }
 
@@ -78,6 +84,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
   best_failure: &mut Option<Box<RecoverableContext>>,
   parser: &mut Box<dyn Parser<I>>,
   pending: &mut ContextQueue<Box<RecoverableContext>>,
+  store: &CSTStore,
 ) {
   if failed_contexts.len() > 0 {
     let mut to_process = VecDeque::new();
@@ -88,6 +95,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
         (s.last_failed_state.address as u32, s, None)
       })),
       "pre-error",
+      store,
     )
     .collect::<Vec<_>>()
     {
@@ -99,7 +107,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
 
       match rec_ctx.mode {
         RecoveryMode::Normal | RecoveryMode::SyntheticInput { .. } => {
-          let offset = rec_ctx.get_offset();
+          let offset = rec_ctx.ctx().sym_ptr;
           let ctx = &rec_ctx.ctx;
 
           // We fork our contexts into different recovery modes. This may create a large
@@ -146,11 +154,12 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
     // Need to sort our context so that we are using only contexts that have
     // the best potential (lowest error). This is also the point where
     // we can join contexts that differ only in symbols.
-    let resolved = resolve_errored_contexts(input, db, parser, &mut to_process);
+    let resolved = resolve_errored_contexts(input, db, parser, &mut to_process, store);
 
     let continued = attempt_merge(
       create_merge_groups(resolved.into_iter().map(|s| (s.last_failed_state.address as u32, s, None))),
       "post-error",
+      store,
     )
     .collect::<Vec<_>>();
 
@@ -171,6 +180,7 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
   db: &DB,
   parser: &mut Box<dyn Parser<I>>,
   contexts: &mut VecDeque<Box<RecoverableContext>>,
+  store: &CSTStore,
 ) -> Vec<Box<RecoverableContext>> {
   let mut to_continue = vec![];
   let mut best_failure = None;
@@ -191,15 +201,25 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
               let length = token_byte_offset - start_offset as u32;
 
               create_errata(input, &mut rec_ctx, length, start_offset as u32);
-              insert_node(&mut rec_ctx, create_token(input, emitting_state, token_id, token_byte_length, token_byte_offset));
+              insert_node(
+                emitting_state,
+                &mut rec_ctx,
+                create_token(input, token_id, token_byte_length, token_byte_offset),
+                store,
+              );
 
               rec_ctx.mode = RecoveryMode::Normal;
             }
             RecoveryMode::SymbolDiscard { start_offset, end_offset, .. } => {
-              let length = end_offset as u32 - start_offset as u32;
+              let length: u32 = end_offset as u32 - start_offset as u32;
 
               create_errata(input, &mut rec_ctx, length, start_offset as u32);
-              insert_node(&mut rec_ctx, create_token(input, emitting_state, token_id, token_byte_length, token_byte_offset));
+              insert_node(
+                emitting_state,
+                &mut rec_ctx,
+                create_token(input, token_id, token_byte_length, token_byte_offset),
+                store,
+              );
 
               rec_ctx.mode = RecoveryMode::Normal;
             }
@@ -207,13 +227,9 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
               debug_assert_eq!(token_byte_length, 0);
               debug_assert_eq!(token_id, tok_id);
               let entropy = count as isize;
-              rec_ctx.symbols.push(Rc::new(TokenNode::missing_type(
-                emitting_state,
-                tok_id,
-                token_byte_offset,
-                db.token_id_to_str(tok_id).unwrap_or_default().to_string(),
-                entropy as u32,
-              )));
+              rec_ctx
+                .symbols
+                .push((emitting_state, Rc::new(CSTNode::Token(TokenNode::missing_type(tok_id as u16, entropy as usize)))));
               rec_ctx.entropy += entropy;
             }
 
@@ -223,7 +239,7 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
         }
 
         ParseAction::Reduce { nonterminal_id, rule_id, symbol_count } => {
-          reduce_symbols(symbol_count, rec_ctx.as_mut(), nonterminal_id, rule_id);
+          reduce_symbols(symbol_count, rec_ctx.as_mut(), nonterminal_id, rule_id, store);
           contexts.push_back(rec_ctx);
         }
 
@@ -263,11 +279,12 @@ fn create_errata<I: ParserInput>(
   token_byte_length: u32,
   token_byte_offset: u32,
 ) {
-  rec_ctx.symbols.push(Rc::new(TokenNode::error_type(
-    token_byte_length,
-    token_byte_offset,
-    input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
-  )));
+  rec_ctx.symbols.push((
+    Default::default(),
+    Rc::new(CSTNode::Token(TokenNode::error_type(
+      &input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize),
+    ))),
+  ));
   rec_ctx.entropy += token_byte_length as isize;
 }
 
@@ -338,53 +355,57 @@ fn drop_symbols(
   end_offset: usize,
 ) {
   let count = count + 1;
-
+  let mut start_offset = end_offset;
   loop {
-    if let Some(token) = rec_ctx.symbols.pop() {
+    if let Some((state, token)) = rec_ctx.symbols.pop() {
+      start_offset -= token.len() as usize;
       match token.as_ref() {
-        CSTNode::Errata(tok) => {
-          rec_ctx.entropy -= tok.length() as isize;
-        }
-        CSTNode::Skipped(tok) => {
-          rec_ctx.entropy += tok.length() as isize * CHAR_USAGE_SCORE;
-        }
-        CSTNode::MissingToken(.., state, tok) | CSTNode::Token(state, tok) => {
-          match token.as_ref() {
-            CSTNode::MissingToken(entropy, ..) => {
-              rec_ctx.entropy -= *entropy as isize;
+        CSTNode::Token(tok) => {
+          match tok.ty() {
+            NodeType::Errata => {
+              rec_ctx.entropy -= tok.entropy() as isize;
             }
-            CSTNode::Token(..) => {
-              rec_ctx.entropy += tok.length() as isize * CHAR_USAGE_SCORE;
+            NodeType::Skipped => {
+              rec_ctx.entropy += tok.entropy() as isize * CHAR_USAGE_SCORE;
+            }
+            ty @ NodeType::Missing | ty @ NodeType::Token => {
+              match ty {
+                NodeType::Missing => {
+                  rec_ctx.entropy -= tok.entropy() as isize;
+                }
+                NodeType::Token => {
+                  rec_ctx.entropy += tok.entropy() as isize * CHAR_USAGE_SCORE;
+                }
+                _ => unreachable!(),
+              }
+
+              rec_ctx.mode = RecoveryMode::SymbolDiscard { count, end_offset, start_offset };
+
+              // Remove any states that have been pushed to the stack since this token was
+              // introduced.
+              let ctx = &mut rec_ctx.ctx;
+              while ctx.stack.len() > state.info.stack_address as usize {
+                ctx.stack.pop();
+              }
+
+              if ctx.stack.len() <= 1 {
+                pick_best_failure(best_failure, rec_ctx);
+                break;
+              }
+
+              let ctx = &mut rec_ctx.ctx;
+
+              // Restore the context to the previous state
+              ctx.push_state(state);
+              ctx.is_finished = false;
+              ctx.byte_len = 0;
+              ctx.tok_byte_len = 0;
+              contexts.push_back(rec_ctx);
+
+              break;
             }
             _ => unreachable!(),
           }
-
-          let TokenNode { offset, .. } = tok;
-
-          rec_ctx.mode = RecoveryMode::SymbolDiscard { count, end_offset, start_offset: *offset as usize };
-
-          // Remove any states that have been pushed to the stack since this token was
-          // introduced.
-          let ctx = &mut rec_ctx.ctx;
-          while ctx.stack.len() > state.info.stack_address as usize {
-            ctx.stack.pop();
-          }
-
-          if ctx.stack.len() <= 1 {
-            pick_best_failure(best_failure, rec_ctx);
-            break;
-          }
-
-          let ctx = &mut rec_ctx.ctx;
-
-          // Restore the context to the previous state
-          ctx.push_state(*state);
-          ctx.is_finished = false;
-          ctx.byte_len = 0;
-          ctx.tok_byte_len = 0;
-          contexts.push_back(rec_ctx);
-
-          break;
         }
         CSTNode::NonTerm(..) | CSTNode::Alts(..) => {
           // Reduce or increase errata based on the contents of the node
@@ -394,18 +415,15 @@ fn drop_symbols(
 
           while let Some(token) = queue.pop_front() {
             match token.as_ref() {
-              CSTNode::Errata(tok) => {
-                entropy_delta -= tok.length() as isize;
-              }
-              CSTNode::MissingToken(entropy, ..) => {
-                entropy_delta -= *entropy as isize;
-              }
-              CSTNode::Skipped(tok) => {
-                entropy_delta += tok.length() as isize * CHAR_USAGE_SCORE;
-              }
-              tok @ CSTNode::Token(..) => {
-                entropy_delta += tok.length() as isize * CHAR_USAGE_SCORE;
-              }
+              CSTNode::Token(tok) => match tok.ty() {
+                NodeType::Missing | NodeType::Errata => {
+                  entropy_delta -= tok.entropy() as isize;
+                }
+                NodeType::Skipped | NodeType::Token => {
+                  entropy_delta += tok.entropy() as isize * CHAR_USAGE_SCORE;
+                }
+                _ => unreachable!(),
+              },
               CSTNode::NonTerm(node) => queue.extend(node.symbols.iter().cloned()),
               CSTNode::Alts(node) => queue.extend(node.alternatives.first().unwrap().symbols.iter().cloned()),
             }
@@ -423,7 +441,7 @@ fn drop_symbols(
 
 fn pick_best_failure(best_failure: &mut Option<Box<RecoverableContext>>, rec_ctx: Box<RecoverableContext>) {
   if let Some(failed_ctx) = best_failure.as_deref() {
-    if failed_ctx.get_offset() < rec_ctx.get_offset() || failed_ctx.entropy > rec_ctx.entropy {
+    if failed_ctx.ctx().sym_ptr < rec_ctx.ctx().sym_ptr || failed_ctx.entropy > rec_ctx.entropy {
       *best_failure = Some(rec_ctx);
     }
   } else {

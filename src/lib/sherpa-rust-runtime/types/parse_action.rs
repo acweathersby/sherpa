@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::*;
 
 #[repr(u32)]
@@ -35,6 +37,9 @@ pub enum ParseAction {
   FailState,
   ScannerToken(TokenRange),
   Fork(Vec<ParserState>),
+  ShiftNode {
+    node: Rc<CSTNode>,
+  },
   Shift {
     byte_offset: u32,
     byte_length: u32,

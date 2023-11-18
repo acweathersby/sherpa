@@ -105,30 +105,33 @@ pub struct ParserContext {
   /// incoming token, it will insert a zero-length token with an id of
   /// `default_id` into the token stream, and then attempt to continue parsing.
   pub recovery_tok_id: u32,
+
+  pub node: Option<Rc<CSTNode>>,
 }
 
 impl Default for ParserContext {
   fn default() -> Self {
     ParserContext {
-      stack:           vec![],
-      begin_ptr:       0,
-      anchor_ptr:      0,
-      sym_ptr:         0,
-      input_ptr:       0,
-      end_ptr:         0,
-      tok_byte_len:    0,
-      byte_len:        0,
-      chkp_line_num:   0,
-      chkp_line_off:   0,
-      end_line_num:    0,
-      end_line_off:    0,
-      nonterm:         0,
-      start_line_num:  0,
-      start_line_off:  0,
-      tok_id:          0,
+      stack: vec![],
+      begin_ptr: 0,
+      anchor_ptr: 0,
+      sym_ptr: 0,
+      input_ptr: 0,
+      end_ptr: 0,
+      tok_byte_len: 0,
+      byte_len: 0,
+      chkp_line_num: 0,
+      chkp_line_off: 0,
+      end_line_num: 0,
+      end_line_off: 0,
+      nonterm: 0,
+      start_line_num: 0,
+      start_line_off: 0,
+      tok_id: 0,
       recovery_tok_id: 0,
-      goal_nonterm:    u32::MAX,
-      is_finished:     false,
+      goal_nonterm: u32::MAX,
+      is_finished: false,
+      node: None,
     }
   }
 }
@@ -154,19 +157,19 @@ impl ParserContext {
 }
 
 pub trait ForkableContext: QueuedContext {
-  fn symbols(&mut self) -> &mut Vec<Rc<CSTNode>>;
+  fn symbols(&mut self) -> &mut Vec<(ParserState, Rc<CSTNode>)>;
   fn ctx(&self) -> &ParserContext;
   fn ctx_mut(&mut self) -> &mut ParserContext;
   fn entropy(&self) -> &isize;
   fn entropy_mut(&mut self) -> &mut isize;
   fn split(&self) -> Self;
-  fn set_offset(&mut self, offset: usize);
-  fn get_offset(&self) -> usize;
+  //fn set_offset(&mut self, offset: usize);
+  //fn get_offset(&self) -> usize;
 }
 
 impl<T: ForkableContext> QueuedContext for T {
   fn queued_priority(&self) -> usize {
-    usize::MAX - self.get_offset()
+    usize::MAX - self.ctx().sym_ptr
   }
 }
 
@@ -192,7 +195,7 @@ impl<CTX: ForkableContext> ForkableContext for Box<CTX> {
   }
 
   #[inline]
-  fn symbols(&mut self) -> &mut Vec<Rc<CSTNode>> {
+  fn symbols(&mut self) -> &mut Vec<(ParserState, Rc<CSTNode>)> {
     self.as_mut().symbols()
   }
 
@@ -201,15 +204,15 @@ impl<CTX: ForkableContext> ForkableContext for Box<CTX> {
     Box::new(self.as_ref().split())
   }
 
-  #[inline]
+  /*  #[inline]
   fn get_offset(&self) -> usize {
     self.as_ref().get_offset()
-  }
+  } */
 
-  #[inline]
-  fn set_offset(&mut self, offset: usize) {
-    self.as_mut().set_offset(offset);
-  }
+  //#[inline]
+  //fn set_offset(&mut self, offset: usize) {
+  //  self.as_mut().set_offset(offset);
+  //} /*  */
 }
 
 #[derive(Clone)]
@@ -218,7 +221,7 @@ pub struct ForkContext {
   pub(crate) entropy: isize,
   pub(crate) offset:  usize,
   pub(crate) ctx:     ParserContext,
-  pub(crate) symbols: Vec<Rc<CSTNode>>,
+  pub(crate) symbols: Vec<(ParserState, Rc<CSTNode>)>,
 }
 
 impl ForkableContext for ForkContext {
@@ -243,7 +246,7 @@ impl ForkableContext for ForkContext {
   }
 
   #[inline]
-  fn symbols(&mut self) -> &mut Vec<Rc<CSTNode>> {
+  fn symbols(&mut self) -> &mut Vec<(ParserState, Rc<CSTNode>)> {
     &mut self.symbols
   }
 
@@ -257,13 +260,13 @@ impl ForkableContext for ForkContext {
     }
   }
 
-  fn get_offset(&self) -> usize {
-    self.offset
-  }
+  //fn get_offset(&self) -> usize {
+  //  self.offset
+  //}
 
-  fn set_offset(&mut self, offset: usize) {
-    self.offset = offset
-  }
+  //fn set_offset(&mut self, offset: usize) {
+  //  self.offset = offset
+  //}
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -281,9 +284,34 @@ pub struct RecoverableContext {
   pub(crate) offset: usize,
   pub entropy: isize,
   pub ctx: ParserContext,
-  pub symbols: Vec<Rc<CSTNode>>,
+  pub symbols: Vec<(ParserState, Rc<CSTNode>)>,
   pub mode: RecoveryMode,
   pub last_failed_state: ParserState,
+}
+
+impl RecoverableContext {
+  pub fn nodes(&self) -> impl Iterator<Item = &Rc<CSTNode>> {
+    self.symbols.iter().map(|(_, node)| node)
+  }
+
+  pub fn node_len(&self) -> usize {
+    self.symbols.iter().fold(0, |val, (_, sym)| sym.len() + val)
+  }
+
+  pub fn is_single_node(&self) -> bool {
+    let mut sym_nodes = 0;
+    for (_, sym) in &self.symbols {
+      match sym.ty() {
+        NodeType::Nonterm | NodeType::Token | NodeType::Skipped | NodeType::Alternatives => {
+          sym_nodes += 1;
+        }
+        _ => {}
+      }
+    }
+    sym_nodes == 1
+  }
+
+  pub fn into_first() {}
 }
 
 impl ForkableContext for RecoverableContext {
@@ -308,7 +336,7 @@ impl ForkableContext for RecoverableContext {
   }
 
   #[inline]
-  fn symbols(&mut self) -> &mut Vec<Rc<CSTNode>> {
+  fn symbols(&mut self) -> &mut Vec<(ParserState, Rc<CSTNode>)> {
     &mut self.symbols
   }
 
@@ -324,13 +352,13 @@ impl ForkableContext for RecoverableContext {
     }
   }
 
-  fn get_offset(&self) -> usize {
-    self.offset
-  }
+  //fn get_offset(&self) -> usize {
+  //  self.offset
+  //}
 
-  fn set_offset(&mut self, offset: usize) {
-    self.offset = offset
-  }
+  //fn set_offset(&mut self, offset: usize) {
+  //  self.offset = offset
+  //}
 }
 
 impl PartialEq for RecoverableContext {

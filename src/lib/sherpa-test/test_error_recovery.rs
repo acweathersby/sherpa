@@ -43,7 +43,7 @@ pub fn construct_error_recovering_parser() -> SherpaResult<()> {
 
   _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
 
-  pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?)?;
+  pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
 
   Ok(())
 }
@@ -85,16 +85,17 @@ pub fn construct_error_recovering_erlang_toy() -> SherpaResult<()> {
 
   _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
 
-  let result = pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?)?;
+  let result =
+    pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
 
   #[cfg(debug_assertions)]
   dbg!(&result);
 
   if let Some(best) = result.first() {
-    for sym in &best.symbols {
-      Printer::new(sym, &pkg).print();
+    for (_, sym) in &best.symbols {
+      Printer::new(sym, true, &pkg).print();
       println!("\n");
-      Printer::new(sym, &pkg).print_all();
+      Printer::new(sym, true, &pkg).print_all();
     }
     println!("\n");
   }

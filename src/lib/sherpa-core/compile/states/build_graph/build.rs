@@ -48,6 +48,7 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> SherpaResult<()> {
   Ok(())
 }
 
+/// Insert non-terminal shift actions
 fn handle_cst_actions(gb: &mut GraphBuilder) {
   if gb.config.ALLOW_CST_NONTERM_SHIFT && gb.current_state().build_state() == GraphBuildState::Normal {
     let d = &gb.db_rc();

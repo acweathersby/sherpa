@@ -1,6 +1,6 @@
-use std::{marker::PhantomData, rc::Rc};
+use std::{collections::VecDeque, marker::PhantomData, ops::Deref, rc::Rc};
 
-use crate::types::{CSTNode, EditNode, EntryPoint, ParserError};
+use crate::types::{CSTNode, CSTStore, EditNode, EntryPoint, NodeTraits, ParserError, Printer};
 
 use super::{
   super::types::{ParserInput, ParserProducer},
@@ -19,9 +19,9 @@ pub struct Skipped {
   pub token_id: u32,
 }
 
-#[derive(Clone)]
 pub struct EditGraph<I: ParserInput, D: ParserProducer<I>> {
   graph: Option<Rc<CSTNode>>,
+  store: CSTStore,
   db:    Rc<D>,
   _in:   PhantomData<I>,
 }
@@ -30,30 +30,134 @@ impl<I: ParserInput, D: ParserProducer<I>> std::fmt::Debug for EditGraph<I, D> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut s = f.debug_struct("EditGraph");
     s.field("graph", &self.graph);
+    s.field("store", &self.store);
     s.finish()
   }
 }
 
-impl<I: ParserInput, D: ParserProducer<I>> EditGraph<I, D> {
+impl<'str_input, I: ParserInput + From<String>, D: ParserProducer<I>> EditGraph<I, D> {
   /// Initialize the graph with a base input string.
-  pub fn parse(entry: EntryPoint, input: &mut I, db: Rc<D>) -> Result<Self, ParserError> {
-    match parse_with_recovery(input, entry, db.as_ref()) {
+  pub fn parse(entry: EntryPoint, input: String, db: Rc<D>) -> Result<Self, ParserError> {
+    let mut input = I::from(input);
+    let store: CSTStore = CSTStore::default();
+    match parse_with_recovery(&mut input, entry, db.as_ref(), &store) {
       Ok(mut candidates) => {
-        if let Some(node) = (candidates.len() >= 1).then(|| candidates.remove(0)).and_then(|mut s| s.symbols.drain(..).next()) {
+        if let Some((_, node)) =
+          (candidates.len() >= 1).then(|| candidates.remove(0)).and_then(|mut s| s.symbols.drain(..).next())
+        {
           dbg!(node.clone());
-          let mut edit = EditNode::new(node);
-          edit.best();
+          let mut edit = EditNode::boxed(node);
+          edit.best(&store);
 
-          Ok(Self { graph: Some(edit.into_node().unwrap()), db, _in: Default::default() })
+          Ok(Self {
+            graph: Some(edit.to_node().unwrap()),
+            db,
+            _in: Default::default(),
+            store,
+          })
         } else {
-          Ok(Self { graph: None, db, _in: Default::default() })
+          Ok(Self { graph: None, db, _in: Default::default(), store })
         }
       }
-      Err(_) => Ok(Self { graph: None, db, _in: Default::default() }),
+      Err(_) => Ok(Self { graph: None, db, _in: Default::default(), store }),
     }
   }
 
-  pub fn insert(&mut self, offset: usize, input: &mut I) -> Result<usize, ParserError> {
+  pub fn insert(&mut self, offset: usize, input: &'str_input str) -> Result<usize, ParserError> {
+    // Find the node that represents the closest approximation of the area that
+    // is directly effected by change set.
+
+    let Self { db, graph: graph_main, store, .. } = self;
+
+    let mut reduce_mode = false;
+
+    if let Some(graph) = graph_main.as_mut() {
+      let edit = EditNode::boxed(graph.clone());
+      let mut queue = VecDeque::from_iter(vec![(offset, edit)]);
+
+      // build up our graph
+      while let Some((offset, mut node)) = queue.pop_back() {
+        if let Some(non_term) = node.as_nonterm() {
+          if !reduce_mode {
+            let mut peek_offset = offset;
+
+            // see if a better non-term candidate exists in this nodes children.
+            let children = node.children();
+            let len = children.len();
+
+            for (index, child) in children.into_iter().enumerate() {
+              if child.is_nonterm() {
+                if peek_offset < child.len() {
+                  // Repeat
+                  queue.push_back((offset, node));
+                  queue.push_back((peek_offset, child));
+                  break;
+                }
+              }
+
+              if index == len - 1 || peek_offset < child.len() {
+                queue.push_back((offset, node));
+                reduce_mode = true;
+                break;
+              }
+
+              peek_offset -= child.len();
+            }
+          } else {
+            let nonterm_id = non_term.id as u32;
+
+            let entry_point = EntryPoint { nonterm_id };
+
+            let mut input_string = Printer::new(node.node().unwrap(), false, db.as_ref()).to_string();
+            input_string.insert_str(offset, input);
+
+            let str_len = input_string.len();
+
+            println!("---> {input_string}");
+            let mut input = I::from(input_string);
+
+            let store: CSTStore = CSTStore::default();
+            match parse_with_recovery(&mut input, entry_point, db.as_ref(), &store) {
+              Ok(mut candidates) => {
+                if let Some(ctx) = (candidates.len() >= 1).then(|| candidates.remove(0)) {
+                  if ctx.ctx.sym_ptr >= str_len {
+                    node.replace(
+                      ctx.nodes().map(|n| {
+                        let mut node = EditNode::boxed(n.clone());
+                        node.best(&store);
+                        (*node.to_node().unwrap()).clone()
+                      }),
+                      &store,
+                    );
+
+                    if let Some((_, first)) = queue.pop_front() {
+                      while queue.pop_back().is_some() {}
+                      if let Some(new_node) = first.to_node() {
+                        *graph_main = Some(new_node);
+                      }
+                      return Ok(0);
+                    } else {
+                      panic!("WTF")
+                    }
+                  } else {
+                    println!("Going Up A level!")
+                  }
+                } else {
+                  panic!("[2]");
+                }
+              }
+              Err(_) => panic!("[3]"),
+            }
+
+            //panic!("need to compile:\n[{input_string}] \n {:#?}",
+            // node.node());
+          }
+        }
+      }
+    }
+
+    panic!("WTR");
+
     Err(ParserError::NoData)
   }
 
