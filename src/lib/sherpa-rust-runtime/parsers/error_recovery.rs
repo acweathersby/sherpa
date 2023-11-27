@@ -11,8 +11,12 @@ use super::{
 
 const _TOKEN_SYNTHESIS_PENALTY: isize = 1;
 
+struct ErrorRecoveryConfig {
+  synch_limit: usize,
+}
+
 /// Maximum number of subsequent synthetic tokens
-const SYNTH_LIMIT: usize = 12;
+const SYNTH_LIMIT: usize = 10;
 
 pub trait ErrorRecoveringDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// Parse while attempting to recover from any errors encountered in the
@@ -25,12 +29,7 @@ pub trait ErrorRecoveringDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// quality. In this case, the tree containing the least number of error
   /// correction assumptions will be ordered in front of trees that employ more
   /// guesswork to recover parsing.
-  fn parse_with_recovery(
-    &self,
-    input: &mut I,
-    entry: EntryPoint,
-    store: &CSTStore,
-  ) -> Result<Vec<Box<RecoverableContext>>, ParserError> {
+  fn parse_with_recovery(&self, input: &mut I, entry: EntryPoint, store: &CSTStore) -> Result<Vec<RecCTX>, ParserError> {
     parse_with_recovery(input, entry, self, store)
   }
 }
@@ -42,24 +41,17 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
   entry: EntryPoint,
   db: &DB,
   store: &CSTStore,
-) -> Result<Vec<Box<RecoverableContext>>, ParserError> {
+) -> Result<Vec<RecCTX>, ParserError> {
   let mut parser = db.get_parser()?;
 
   let mut pending = ContextQueue::new_with_capacity(64)?;
 
-  pending.push_back(Box::new(RecoverableContext {
-    offset: 0,
-    entropy: input.len() as isize * CHAR_USAGE_SCORE,
-    symbols: vec![],
-    ctx: parser.init(entry)?,
-    mode: RecoveryMode::Normal,
-    last_failed_state: Default::default(),
-  }));
+  pending.push_back(0, create_recovery_ctx::<I, DB>(input, &mut parser, entry)?);
 
   pending.swap_buffers();
 
-  let mut failed_contexts: Vec<(ParserState, Box<RecoverableContext>)> = Vec::new();
-  let mut completed: Vec<Box<RecoverableContext>> = Vec::new();
+  let mut failed_contexts: Vec<(ParserState, RecCTX)> = Vec::new();
+  let mut completed: Vec<RecCTX> = Vec::new();
   let mut best_failure = None;
 
   while !pending.pop_is_empty() {
@@ -78,12 +70,12 @@ pub fn parse_with_recovery<I: ParserInput, DB: ParserProducer<I>>(
 }
 
 fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
-  failed_contexts: &mut Vec<(ParserState, Box<RecoverableContext>)>,
+  failed_contexts: &mut Vec<(ParserState, RecCTX)>,
   input: &mut I,
   db: &DB,
-  best_failure: &mut Option<Box<RecoverableContext>>,
+  best_failure: &mut Option<RecCTX>,
   parser: &mut Box<dyn Parser<I>>,
-  pending: &mut ContextQueue<Box<RecoverableContext>>,
+  pending: &mut ContextQueue<RecCTX>,
   store: &CSTStore,
 ) {
   if failed_contexts.len() > 0 {
@@ -110,6 +102,17 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
           let offset = rec_ctx.ctx().sym_ptr;
           let ctx = &rec_ctx.ctx;
 
+          // ---------------------------------------------------------------
+          // 2. Drop bytes/codepoints until the input is positioned at the start of an
+          //    acceptable token.
+          drop_codepoints(&rec_ctx, &mut to_process, best_failure, input, 0, offset, last_state);
+
+          // ---------------------------------------------------------------
+          // 3. Drop symbols until a prior state is reached where the current input is
+          //    accepted.
+
+          drop_symbols(&rec_ctx, &mut to_process, best_failure, 0, ctx.sym_ptr);
+
           // We fork our contexts into different recovery modes. This may create a large
           // number of independent contexts, but we'll likely prune many of the recovered
           // paths as they become unrecoverable or, score poorly relative to other paths,
@@ -118,24 +121,10 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
           // We can do several actions to recover from this error.
           // ---------------------------------------------------------------
           // 1. Create a zero length token whose id matches one of the expected tokens at
-          //    this point. The failing state address can be used as a key into a lookup
-          //    table that contains all possible token id's expected at this point.
+          //    this state. The failing state address can be used as a key into a lookup
+          //    table that contains all expected token ids.
 
           inject_synthetics(&rec_ctx, db, last_state, &mut to_process);
-
-          // ---------------------------------------------------------------
-          // 2. Drop bytes/codepoints until the input is positioned at the start of an
-          //    acceptable token.
-          if offset < end {
-            drop_codepoints(rec_ctx.split(), &mut to_process, best_failure, input, 0, offset, last_state);
-          }
-
-          // ---------------------------------------------------------------
-          // 3. Drop symbols until a prior state is reached where the current input is
-          //    accepted.
-          if rec_ctx.symbols.len() > 0 {
-            drop_symbols(rec_ctx.split(), &mut to_process, best_failure, 0, ctx.sym_ptr);
-          }
 
           // ---------------------------------------------------------------
           // 4(parser dependent): Find a recovery state within the stack
@@ -154,7 +143,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
     // Need to sort our context so that we are using only contexts that have
     // the best potential (lowest error). This is also the point where
     // we can join contexts that differ only in symbols.
-    let resolved = resolve_errored_contexts(input, db, parser, &mut to_process, store);
+    let resolved = resolve_errored_contexts(input, parser, &mut to_process, store);
 
     let continued = attempt_merge(
       create_merge_groups(resolved.into_iter().map(|s| (s.last_failed_state.address as u32, s, None))),
@@ -170,18 +159,17 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
     all.sort();
 
     for rec_ctx in all.into_iter().take(32) {
-      pending.push_with_priority(rec_ctx)
+      pending.push_with_priority(rec_ctx.prority(), rec_ctx)
     }
   }
 }
 
-fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
+fn resolve_errored_contexts<I: ParserInput>(
   input: &mut I,
-  db: &DB,
   parser: &mut Box<dyn Parser<I>>,
-  contexts: &mut VecDeque<Box<RecoverableContext>>,
+  contexts: &mut VecDeque<RecCTX>,
   store: &CSTStore,
-) -> Vec<Box<RecoverableContext>> {
+) -> Vec<RecCTX> {
   let mut to_continue = vec![];
   let mut best_failure = None;
 
@@ -223,7 +211,7 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
 
               rec_ctx.mode = RecoveryMode::Normal;
             }
-            RecoveryMode::SyntheticInput { tok_id, count } => {
+            RecoveryMode::SyntheticInput { tok_id, count, .. } => {
               debug_assert_eq!(token_byte_length, 0);
               debug_assert_eq!(token_id, tok_id);
               let entropy = count as isize;
@@ -232,14 +220,13 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
                 .push((emitting_state, Rc::new(CSTNode::Token(TokenNode::missing_type(tok_id as u16, entropy as usize)))));
               rec_ctx.entropy += entropy;
             }
-
             _ => unreachable!(),
           }
           to_continue.push(rec_ctx);
         }
 
         ParseAction::Reduce { nonterminal_id, rule_id, symbol_count } => {
-          reduce_symbols(symbol_count, rec_ctx.as_mut(), nonterminal_id, rule_id, store);
+          reduce_symbols(symbol_count, &mut rec_ctx, nonterminal_id, rule_id, store);
           contexts.push_back(rec_ctx);
         }
 
@@ -257,10 +244,10 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
             pick_best_failure(&mut best_failure, rec_ctx);
           }
           RecoveryMode::CodepointDiscard { count, start_offset } => {
-            drop_codepoints(rec_ctx, contexts, &mut best_failure, input, count, start_offset, last_state);
+            drop_codepoints(&rec_ctx, contexts, &mut best_failure, input, count, start_offset, last_state);
           }
           RecoveryMode::SymbolDiscard { count, end_offset, .. } => {
-            drop_symbols(rec_ctx, contexts, &mut best_failure, count, end_offset);
+            drop_symbols(&rec_ctx, contexts, &mut best_failure, count, end_offset);
           }
           _ => unreachable!(),
         },
@@ -273,12 +260,7 @@ fn resolve_errored_contexts<I: ParserInput, DB: ParserProducer<I>>(
   to_continue
 }
 
-fn create_errata<I: ParserInput>(
-  input: &mut I,
-  rec_ctx: &mut Box<RecoverableContext>,
-  token_byte_length: u32,
-  token_byte_offset: u32,
-) {
+fn create_errata<I: ParserInput>(input: &mut I, rec_ctx: &mut RecCTX, token_byte_length: u32, token_byte_offset: u32) {
   rec_ctx.symbols.push((
     Default::default(),
     Rc::new(CSTNode::Token(TokenNode::error_type(
@@ -289,20 +271,38 @@ fn create_errata<I: ParserInput>(
 }
 
 fn inject_synthetics<I: ParserInput, DB: ParserProducer<I>>(
-  rec_ctx: &Box<RecoverableContext>,
+  rec_ctx: &RecCTX,
   db: &DB,
   last_state: ParserState,
-  failed_contexts: &mut VecDeque<Box<RecoverableContext>>,
+  failed_contexts: &mut VecDeque<RecCTX>,
 ) {
+  let new_origin_state = last_state.info.state_id as usize;
+  let new_offset = rec_ctx.offset;
+
+  // A check to make sure where not creating an infinite series of tokens due to
+  // production rules such as `A => a A?`  or `A => A 'a' | A => 'a'`
+  let (same_state, curr_id) = match rec_ctx.mode {
+    RecoveryMode::SyntheticInput { origin_state, offset, tok_id, .. } => {
+      (origin_state == new_origin_state && offset == new_offset, tok_id)
+    }
+    _ => (false, 0),
+  };
+
+  if matches!(rec_ctx.mode, RecoveryMode::SyntheticInput { .. }) {}
+
   let count = match rec_ctx.mode {
     RecoveryMode::SyntheticInput { count, .. } => count,
     _ => 0,
   } + 1;
   if count < SYNTH_LIMIT {
-    if let Some(ids) = db.get_expected_tok_ids_at_state(last_state.info.state_id) {
+    if let Some(ids) = db.get_expected_tok_ids_at_state(new_origin_state as u32) {
       for id in ids {
+        if same_state && curr_id == *id {
+          continue;
+        }
+
         let mut rec_ctx = rec_ctx.split();
-        rec_ctx.mode = RecoveryMode::SyntheticInput { tok_id: *id, count };
+        rec_ctx.mode = RecoveryMode::SyntheticInput { tok_id: *id, count, origin_state: new_origin_state, offset: new_offset };
         rec_ctx.ctx.push_state(last_state);
         rec_ctx.ctx.recovery_tok_id = *id;
         rec_ctx.ctx.byte_len = 0;
@@ -314,46 +314,59 @@ fn inject_synthetics<I: ParserInput, DB: ParserProducer<I>>(
 }
 
 fn drop_codepoints<I: ParserInput>(
-  mut rec_ctx: Box<RecoverableContext>,
-  contexts: &mut VecDeque<Box<RecoverableContext>>,
-  best_failure: &mut Option<Box<RecoverableContext>>,
+  rec_ctx: &RecCTX,
+  contexts: &mut VecDeque<RecCTX>,
+  best_failure: &mut Option<RecCTX>,
   input: &mut I,
   mut count: usize,
   start_offset: usize,
   last_state: ParserState,
 ) {
+  let end = input.len();
+  let offset = rec_ctx.ctx().sym_ptr;
   // Continue advancing the input, unless already at EOI. If EOI
-  // advance the token by one byte
-  count += 1;
+  // advance the one byte
 
-  rec_ctx.mode = RecoveryMode::CodepointDiscard { start_offset, count };
+  if offset < end {
+    count += 1;
 
-  let ctx = &mut rec_ctx.ctx;
+    let mut rec_ctx = rec_ctx.split();
 
-  if ctx.sym_ptr < input.len() {
-    // Restore the context to the previous state
-    ctx.push_state(last_state);
-    ctx.is_finished = false;
+    rec_ctx.mode = RecoveryMode::CodepointDiscard { start_offset, count };
 
-    // advance the token by one codepoint
-    ctx.sym_ptr += input.codepoint_len(ctx.sym_ptr) as usize;
+    let ctx = &mut rec_ctx.ctx;
 
-    ctx.byte_len = 0;
-    ctx.tok_byte_len = 0;
+    if ctx.sym_ptr < input.len() {
+      // Restore the context to the previous state
+      ctx.push_state(last_state);
+      ctx.is_finished = false;
 
-    contexts.push_back(rec_ctx);
-  } else {
-    pick_best_failure(best_failure, rec_ctx);
+      // advance the input by one codepoint
+      ctx.sym_ptr += input.codepoint_len(ctx.sym_ptr) as usize;
+
+      ctx.byte_len = 0;
+      ctx.tok_byte_len = 0;
+
+      contexts.push_back(rec_ctx);
+    } else {
+      pick_best_failure(best_failure, rec_ctx);
+    }
   }
 }
 
 fn drop_symbols(
-  mut rec_ctx: Box<RecoverableContext>,
-  contexts: &mut VecDeque<Box<RecoverableContext>>,
-  best_failure: &mut Option<Box<RecoverableContext>>,
+  rec_ctx: &RecCTX,
+  contexts: &mut VecDeque<RecCTX>,
+  best_failure: &mut Option<RecCTX>,
   count: usize,
   end_offset: usize,
 ) {
+  if rec_ctx.symbols.len() == 0 {
+    return;
+  };
+
+  let mut rec_ctx = rec_ctx.split();
+
   let count = count + 1;
   let mut start_offset = end_offset;
   loop {
@@ -439,8 +452,8 @@ fn drop_symbols(
   }
 }
 
-fn pick_best_failure(best_failure: &mut Option<Box<RecoverableContext>>, rec_ctx: Box<RecoverableContext>) {
-  if let Some(failed_ctx) = best_failure.as_deref() {
+fn pick_best_failure(best_failure: &mut Option<RecCTX>, rec_ctx: RecCTX) {
+  if let Some(failed_ctx) = best_failure {
     if failed_ctx.ctx().sym_ptr < rec_ctx.ctx().sym_ptr || failed_ctx.entropy > rec_ctx.entropy {
       *best_failure = Some(rec_ctx);
     }

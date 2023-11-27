@@ -135,10 +135,14 @@ pub fn create_soup() -> Result<JSSherpaGrammar, JsError> {
 /// Creates a parser db from a soup and a root grammar, or returns semantic
 /// errors.
 #[wasm_bindgen]
-pub fn create_parse_db(grammar_id: String, soup: &JSSherpaGrammar) -> Result<JSParserDB, PositionedErrors> {
+pub fn create_parse_db(
+  grammar_id: String,
+  soup: &JSSherpaGrammar,
+  config: &JSParserConfig,
+) -> Result<JSParserDB, PositionedErrors> {
   let grammar = soup.as_ref();
 
-  let parser_db = grammar.build_db(&PathBuf::from(grammar_id), Default::default()).map_err(to_err)?;
+  let parser_db = grammar.build_db(&PathBuf::from(grammar_id), config.into()).map_err(to_err)?;
 
   Ok(JSParserDB(Box::new(parser_db)))
 }

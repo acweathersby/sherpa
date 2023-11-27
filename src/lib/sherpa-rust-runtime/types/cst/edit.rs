@@ -20,11 +20,11 @@ impl NodeRef {
 }
 #[derive(Default, Debug)]
 pub struct EditNode {
-  parent:    Option<ManuallyDrop<EditNodeRef>>,
-  children:  Option<Vec<EditNodeRef>>,
-  _ref: isize,
-  node:      NodeRef,
-  index:     usize,
+  parent:   Option<ManuallyDrop<EditNodeRef>>,
+  children: Option<Vec<EditNodeRef>>,
+  _ref:     isize,
+  node:     NodeRef,
+  index:    usize,
 }
 
 #[derive(Debug)]
@@ -124,11 +124,13 @@ impl EditNodeRef {
     }
   }
 
-  pub fn replace(&mut self, nodes: impl IntoIterator<Item = CSTNode>, store: &CSTStore) {
+  pub fn replace(&mut self, nodes: impl IntoIterator<Item = Rc<CSTNode>>, store: &CSTStore) {
     unsafe {
       let internal = &mut *self.internal;
       let index = internal.index;
+
       let mut par = internal.parent.clone();
+
       while let Some(mut parent) = par {
         parent.as_mut().make_dirty();
         par = parent.as_ref().parent.clone();
@@ -139,7 +141,7 @@ impl EditNodeRef {
 
         let syms = children.drain(index..).skip(1).collect::<Vec<_>>();
 
-        children.extend(nodes.into_iter().map(|n| EditNode::boxed(store.get_unique(n))));
+        children.extend(nodes.into_iter().map(|n| EditNode::boxed(n)));
 
         children.extend(syms);
 
@@ -155,7 +157,7 @@ impl EditNodeRef {
         self.as_mut().decr_count();
         self.try_drop_internal();
 
-        self.internal = Box::into_raw(Box::new(EditNode::new(Rc::new(node))));
+        self.internal = Box::into_raw(Box::new(EditNode::new(node)));
 
         //println!("--- Creating {:X}", self.internal as *const _ as usize);
 
@@ -178,8 +180,10 @@ impl EditNodeRef {
     }
 
     if let Some(alts) = self.as_alts() {
-      let first = alts.alternatives.first().unwrap().symbols.iter().map(|i| (**i).clone()).next().unwrap();
-      self.replace([first], store)
+      let first = alts.alternatives.first().unwrap().symbols.iter().map(|i| i.clone()).next().unwrap();
+      let mut edit = EditNode::boxed(first);
+      edit.best(store);
+      self.replace([edit.to_node().unwrap()], store);
     }
 
     self
@@ -219,11 +223,11 @@ impl NodeTraits for EditNodeRef {
 impl EditNode {
   fn new<'par>(node: Rc<CSTNode>) -> Self {
     Self {
-      parent:    None,
-      children:  None,
-      node:      NodeRef::Clean(node),
-      index:     0,
-      _ref: 1,
+      parent:   None,
+      children: None,
+      node:     NodeRef::Clean(node),
+      index:    0,
+      _ref:     1,
     }
   }
 
@@ -251,4 +255,51 @@ impl EditNode {
     }
     &mut self.node
   }
+}
+
+pub fn split_alternates(node: &Rc<CSTNode>) -> Vec<Vec<Rc<CSTNode>>> {
+  match node.as_ref() {
+    CSTNode::NonTerm(NonTermNode { id, rule, length, symbols }) => {
+      let alts = fun_name(symbols);
+
+      let mut result = vec![];
+
+      for alt in alts {
+        let length = alt.iter().fold(0, |a, b| a + b.len());
+        result.push(vec![Rc::new(NonTermNode::typed(*id, *rule, alt, length))]);
+      }
+
+      result
+    }
+    CSTNode::Token(_) => {
+      vec![vec![node.clone()]]
+    }
+    CSTNode::Alts(alt) => alt.alternatives.iter().flat_map(|alt| fun_name(&alt.symbols)).collect(),
+    _ => vec![],
+  }
+}
+
+fn fun_name(symbols: &Vec<Rc<CSTNode>>) -> Vec<Vec<Rc<CSTNode>>> {
+  let mut alts = vec![vec![]];
+
+  for sym in symbols {
+    let results = split_alternates(sym);
+    if results.len() > 1 {
+      alts = results
+        .iter()
+        .flat_map(|node| {
+          alts.iter().map(|a| {
+            let mut b = a.clone();
+            b.extend(node.iter().cloned());
+            b
+          })
+        })
+        .collect();
+    } else {
+      for alt in &mut alts {
+        alt.push(sym.clone())
+      }
+    }
+  }
+  alts
 }

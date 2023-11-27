@@ -14,8 +14,6 @@ fn main() {
 
   let result = db.build_ast::<Token, _, _>(&mut StringInput::from("Hello World"), entry, ast::ReduceRules::new()).unwrap();
 
-  db.parse_with_recovery(&mut StringInput::from("Hell World"), entry).unwrap();
-
   println!("{result:#?}");
 }
 

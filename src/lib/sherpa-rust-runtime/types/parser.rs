@@ -49,6 +49,9 @@ pub trait RuntimeDatabase {
     0
   }
 
+  /// The main entry point for the root grammar. This is typically the
+  /// Nonterminal declared in the first `EXPORT` statement of the root
+  /// grammar, or the first Nonterminal declared in the root grammar.
   fn default_entrypoint(&self) -> EntryPoint;
 }
 
@@ -88,7 +91,7 @@ pub struct StateInfo {
   pub state_id:       u32,
 }
 
-/// An identifier for the first instruction of a particular state. 
+/// An identifier for the first instruction of a particular state.
 #[repr(C)]
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]

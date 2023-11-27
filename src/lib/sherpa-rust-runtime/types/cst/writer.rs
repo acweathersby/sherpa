@@ -60,11 +60,12 @@ impl<'node, 'db> Printer<'node, 'db> {
 
   pub fn print_all(&self) {
     let mut stdout = std::io::stdout();
-    self.write_all(&mut stdout).unwrap();
+    self.write_all(&mut stdout, true).unwrap();
   }
 
-  fn write_all<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
+  fn write_all<W: Write>(&self, w: &mut W, root: bool) -> std::io::Result<()> {
     use CSTNode::*;
+
     match self.node {
       Token(_) => {
         self.new_node(self.node).write(w)?;
@@ -72,13 +73,16 @@ impl<'node, 'db> Printer<'node, 'db> {
 
       NonTerm(non_term) => {
         for node in &non_term.symbols {
-          self.new_node(node).write_all(w)?;
+          if root {
+            w.write(b"\n\n")?;
+          }
+          self.new_node(node).write_all(w, false)?;
         }
       }
       Alts(multi) => {
         for alt in &multi.alternatives {
           for node in &alt.symbols {
-            self.new_node(node).write_all(w)?;
+            self.new_node(node).write_all(w, root)?;
           }
         }
       }

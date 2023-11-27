@@ -7,8 +7,8 @@ pub trait QueuedContext: Sized {
 }
 
 #[cfg_attr(debug_assertions, derive(Debug))]
-pub struct Sled<Context: QueuedContext> {
-  content:  Option<Context>,
+pub struct Sled<T: Sized> {
+  content:  Option<T>,
   next:     Option<u32>,
   priority: usize,
 }
@@ -34,12 +34,12 @@ impl BufferTracker {
   }
 }
 
-pub struct PopIterartor<'queue, Context: QueuedContext> {
-  pop_queue: &'queue mut ContextQueue<Context>,
+pub struct PopIterator<'queue, T: Sized> {
+  pop_queue: &'queue mut ContextQueue<T>,
 }
 
-impl<'queue, Context: QueuedContext> Iterator for PopIterartor<'queue, Context> {
-  type Item = Context;
+impl<'queue, T: Sized> Iterator for PopIterator<'queue, T> {
+  type Item = T;
 
   fn next(&mut self) -> Option<Self::Item> {
     self.pop_queue.pop_front()
@@ -50,8 +50,8 @@ impl<'queue, Context: QueuedContext> Iterator for PopIterartor<'queue, Context> 
 /// queues, that is a push queue and a pop queue. The push and pop queues can be
 /// swapped to allow cyclic queueing processes.
 
-pub struct ContextQueue<Context: QueuedContext> {
-  slice:       *mut Sled<Context>,
+pub struct ContextQueue<T: Sized> {
+  slice:       *mut Sled<T>,
   capacity:    u32,
   free_list:   Option<u32>,
   pop_buffer:  BufferTracker,
@@ -71,7 +71,7 @@ impl<Context: QueuedContext + Debug> Debug for ContextQueue<Context> {
   }
 }
 
-impl<Context: QueuedContext> ContextQueue<Context> {
+impl<T: Sized> ContextQueue<T> {
   /// Create a new queue capable of holding `capacity` items. Note that this
   /// capacity is shared between both internal buffers. If the number of items
   /// stored in both buffers exceeds this capacity then the queue will be
@@ -83,12 +83,12 @@ impl<Context: QueuedContext> ContextQueue<Context> {
   pub fn new_with_capacity(capacity: u32) -> Result<Self, ParserError> {
     let capacity = capacity.max(1);
 
-    let Ok(layout) = Layout::array::<Sled<Context>>(capacity as usize) else {
+    let Ok(layout) = Layout::array::<Sled<T>>(capacity as usize) else {
       return Err(ParserError::OutOfMemory);
     };
 
     unsafe {
-      let ptr = std::alloc::alloc(layout) as *mut Sled<Context>;
+      let ptr = std::alloc::alloc(layout) as *mut Sled<T>;
 
       if ptr.is_null() {
         return Err(ParserError::OutOfMemory);
@@ -130,7 +130,7 @@ impl<Context: QueuedContext> ContextQueue<Context> {
 
   /// Returns the underlying store as a slice.
   #[cfg(debug_assertions)]
-  pub fn slice(&self) -> &[Sled<Context>] {
+  pub fn slice(&self) -> &[Sled<T>] {
     unsafe { std::slice::from_raw_parts(self.slice, self.capacity as usize) }
   }
 
@@ -139,7 +139,7 @@ impl<Context: QueuedContext> ContextQueue<Context> {
   /// a buffer, thus all data that is modified is garbage at worst, and
   /// zero initialized bytes at best, and can be discarded without doing any
   /// sort of cleanup.
-  unsafe fn init_buffer(ptr: *mut Sled<Context>, start_index: isize, end_index: isize) {
+  unsafe fn init_buffer(ptr: *mut Sled<T>, start_index: isize, end_index: isize) {
     for i in start_index..=end_index {
       let ptr = ptr.offset(i);
       let mut data = Sled {
@@ -157,15 +157,15 @@ impl<Context: QueuedContext> ContextQueue<Context> {
 
     let new_capacity = self.capacity << 1;
 
-    let Ok(old_layout) = Layout::array::<Sled<Context>>(self.capacity as usize) else {
+    let Ok(old_layout) = Layout::array::<Sled<T>>(self.capacity as usize) else {
       return Err(ParserError::OutOfMemory);
     };
 
-    let Ok(new_layout) = Layout::array::<Sled<Context>>(new_capacity as usize) else {
+    let Ok(new_layout) = Layout::array::<Sled<T>>(new_capacity as usize) else {
       return Err(ParserError::OutOfMemory);
     };
 
-    let ptr = std::alloc::realloc(self.slice as *mut u8, old_layout, new_layout.size()) as *mut Sled<Context>;
+    let ptr = std::alloc::realloc(self.slice as *mut u8, old_layout, new_layout.size()) as *mut Sled<T>;
 
     if ptr.is_null() {
       return Err(ParserError::OutOfMemory);
@@ -183,12 +183,12 @@ impl<Context: QueuedContext> ContextQueue<Context> {
     Ok(())
   }
 
-  pub fn take_pop<'queue>(&'queue mut self) -> PopIterartor<'queue, Context> {
-    PopIterartor { pop_queue: self }
+  pub fn take_pop<'queue>(&'queue mut self) -> PopIterator<'queue, T> {
+    PopIterator { pop_queue: self }
   }
 
   /// Pop the next item from the top of the pop buffer.
-  pub fn pop_front(&mut self) -> Option<Context> {
+  pub fn pop_front(&mut self) -> Option<T> {
     match self.pop_buffer {
       BufferTracker::None => None,
       BufferTracker::Some { len, first, last } => unsafe {
@@ -206,7 +206,7 @@ impl<Context: QueuedContext> ContextQueue<Context> {
     }
   }
 
-  pub fn push_back(&mut self, ctx: Context) {
+  pub fn push_back(&mut self, priority: usize, ctx: T) {
     if let Some(next) = self.free_list {
       unsafe {
         let data = self.slice.offset(next as isize);
@@ -216,7 +216,7 @@ impl<Context: QueuedContext> ContextQueue<Context> {
 
         debug_assert!(incoming.content.is_none());
 
-        incoming.priority = ctx.queued_priority();
+        incoming.priority = priority;
         incoming.content = Some(ctx);
 
         match self.push_buffer {
@@ -233,11 +233,11 @@ impl<Context: QueuedContext> ContextQueue<Context> {
       }
     } else {
       unsafe { self.increase_capacity().expect("Ran out of memory") };
-      self.push_back(ctx)
+      self.push_back(priority, ctx)
     }
   }
 
-  pub fn push_with_priority(&mut self, ctx: Context) {
+  pub fn push_with_priority(&mut self, priority: usize, ctx: T) {
     if let Some(new) = self.free_list {
       unsafe {
         let data = self.slice.offset(new as isize);
@@ -247,7 +247,7 @@ impl<Context: QueuedContext> ContextQueue<Context> {
 
         debug_assert!(incoming.content.is_none());
 
-        incoming.priority = ctx.queued_priority();
+        incoming.priority = priority;
         incoming.content = Some(ctx);
 
         match self.push_buffer {
@@ -285,7 +285,7 @@ impl<Context: QueuedContext> ContextQueue<Context> {
       }
     } else {
       unsafe { self.increase_capacity().expect("Ran out of memory") };
-      self.push_with_priority(ctx)
+      self.push_with_priority(priority, ctx)
     }
   }
 
@@ -296,7 +296,7 @@ impl<Context: QueuedContext> ContextQueue<Context> {
   }
 }
 
-impl<Context: QueuedContext> Drop for ContextQueue<Context> {
+impl<T: Sized> Drop for ContextQueue<T> {
   fn drop(&mut self) {
     unsafe {
       debug_assert!(!self.slice.is_null(), "Slice has been corrupted");
@@ -321,7 +321,7 @@ impl<Context: QueuedContext> Drop for ContextQueue<Context> {
         }
       }
 
-      std::alloc::dealloc(self.slice as *mut u8, Layout::array::<Sled<Context>>(self.capacity as usize).unwrap());
+      std::alloc::dealloc(self.slice as *mut u8, Layout::array::<Sled<T>>(self.capacity as usize).unwrap());
     }
   }
 }
@@ -378,8 +378,8 @@ mod test {
   fn insert_and_retrieve_object() -> Result<(), ParserError> {
     let mut queue = TestQueue::new_with_capacity(1)?;
 
-    queue.push_back(TestData { payload: 2, priority: 0 });
-    queue.push_back(TestData { payload: 0, priority: 2 });
+    queue.push_back(0, TestData { payload: 2, priority: 0 });
+    queue.push_back(2, TestData { payload: 0, priority: 2 });
 
     assert_eq!(queue.pop_front(), None, "the pop buffer should be empty");
 
@@ -396,11 +396,11 @@ mod test {
   fn insert_and_retrieve_object_with_ascending_prority() -> Result<(), ParserError> {
     let mut queue = TestQueue::new_with_capacity(1)?;
 
-    queue.push_with_priority(TestData { payload: 1, priority: 1 });
-    queue.push_with_priority(TestData { payload: 2, priority: 2 });
-    queue.push_with_priority(TestData { payload: 3, priority: 3 });
-    queue.push_with_priority(TestData { payload: 4, priority: 4 });
-    queue.push_with_priority(TestData { payload: 5, priority: 5 });
+    queue.push_with_priority(1, TestData { payload: 1, priority: 1 });
+    queue.push_with_priority(2, TestData { payload: 2, priority: 2 });
+    queue.push_with_priority(3, TestData { payload: 3, priority: 3 });
+    queue.push_with_priority(4, TestData { payload: 4, priority: 4 });
+    queue.push_with_priority(5, TestData { payload: 5, priority: 5 });
 
     assert_eq!(queue.pop_front(), None, "the pop buffer should be empty");
 
@@ -421,11 +421,11 @@ mod test {
   fn insert_and_retrieve_object_with_descending_prority() -> Result<(), ParserError> {
     let mut queue = TestQueue::new_with_capacity(1)?;
 
-    queue.push_with_priority(TestData { payload: 5, priority: 5 });
-    queue.push_with_priority(TestData { payload: 4, priority: 4 });
-    queue.push_with_priority(TestData { payload: 3, priority: 3 });
-    queue.push_with_priority(TestData { payload: 2, priority: 2 });
-    queue.push_with_priority(TestData { payload: 1, priority: 1 });
+    queue.push_with_priority(5, TestData { payload: 5, priority: 5 });
+    queue.push_with_priority(4, TestData { payload: 4, priority: 4 });
+    queue.push_with_priority(3, TestData { payload: 3, priority: 3 });
+    queue.push_with_priority(2, TestData { payload: 2, priority: 2 });
+    queue.push_with_priority(1, TestData { payload: 1, priority: 1 });
 
     assert_eq!(queue.pop_front(), None, "the pop buffer should be empty");
 
@@ -450,7 +450,7 @@ mod test {
 
     for _ in 0..max_items {
       let priority = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos() % (max_items as u32);
-      queue.push_with_priority(TestData { payload: priority as usize, priority });
+      queue.push_with_priority(priority as usize, TestData { payload: priority as usize, priority });
     }
 
     let mut start = u32::MAX;

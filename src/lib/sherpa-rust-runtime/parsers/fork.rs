@@ -1,6 +1,7 @@
 use crate::types::*;
 use std::{
   collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
+  fmt::Debug,
   hash::Hasher,
   ops::Range,
   rc::Rc,
@@ -11,12 +12,15 @@ pub const CHAR_USAGE_SCORE: isize = 100;
 pub trait ForkableParser<I: ParserInput>: ParserIterator<I> + ParserInitializer {
   fn fork_parse(&mut self, input: &mut I, entry: EntryPoint, store: &CSTStore) -> Result<(), ParserError> {
     let mut pending = ContextQueue::new_with_capacity(64)?;
-    pending.push_back(Box::new(ForkContext {
-      offset:  0,
-      entropy: (input.len() as isize * CHAR_USAGE_SCORE),
-      ctx:     self.init(entry)?,
-      symbols: Vec::new(),
-    }));
+    pending.push_back(
+      0,
+      Box::new(ForkContext {
+        offset:  0,
+        entropy: (input.len() as isize * CHAR_USAGE_SCORE),
+        ctx:     self.init(entry)?,
+        symbols: Vec::new(),
+      }),
+    );
     pending.swap_buffers();
 
     let mut errored = Default::default();
@@ -26,9 +30,6 @@ pub trait ForkableParser<I: ParserInput>: ParserIterator<I> + ParserInitializer 
       fork_meta_kernel(input, self, &mut pending, &mut completed, &mut errored, store)?;
       pending.swap_buffers();
     }
-
-    #[cfg(debug_assertions)]
-    dbg!(completed);
 
     Ok(())
   }
@@ -40,7 +41,7 @@ impl<T: ParserIterator<I> + ParserInitializer, I: ParserInput> ForkableParser<I>
 /// least one parse action, placing them back into the pending queue, the
 /// `completed` if they have been completed, or `errored` if an
 /// error was encountered.
-pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: ForkableContext>(
+pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: ForkableContext + Debug>(
   input: &mut I,
   parser: &mut P,
   pending: &mut ContextQueue<CTX>,
@@ -55,7 +56,7 @@ pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CT
   while let Some(mut rec_ctx) = pending.pop_front() {
     if !rec_ctx.ctx().is_finished {
       if rec_ctx.ctx().sym_ptr > min_advance {
-        pending.push_with_priority(rec_ctx);
+        pending.push_with_priority(rec_ctx.prority(), rec_ctx);
         continue;
       }
 
@@ -65,12 +66,13 @@ pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CT
         match action {
           ParseAction::Skip { byte_offset, byte_length, token_id, .. } => {
             insert_node(Default::default(), &mut rec_ctx, create_skip(input, token_id, byte_length, byte_offset), store);
-            pending.push_with_priority(rec_ctx);
+            pending.push_with_priority(rec_ctx.prority(), rec_ctx);
           }
 
           ParseAction::Shift { byte_offset, byte_length, token_id, emitting_state, .. } => {
+            rec_ctx.handle_shift();
             insert_node(emitting_state, &mut rec_ctx, create_token(input, token_id, byte_length, byte_offset), store);
-            pending.push_with_priority(rec_ctx);
+            pending.push_with_priority(rec_ctx.prority(), rec_ctx);
           }
 
           ParseAction::Error { last_state, .. } => {
@@ -87,7 +89,7 @@ pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CT
             for state in states {
               let mut new_ctx = rec_ctx.split();
               new_ctx.ctx_mut().push_state(state);
-              pending.push_with_priority(new_ctx);
+              pending.push_with_priority(new_ctx.prority(), new_ctx);
             }
           }
 
@@ -113,6 +115,7 @@ pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CT
                   }
 
                   ParseAction::Shift { byte_offset, byte_length, token_id, emitting_state, .. } => {
+                    rec_ctx.handle_shift();
                     reduction_stage.push_back((
                       non_terminal_id as u32,
                       rec_ctx,
@@ -142,7 +145,7 @@ pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CT
                     for state in states {
                       let mut new_ctx = rec_ctx.split();
                       new_ctx.ctx_mut().push_state(state);
-                      pending.push_with_priority(new_ctx);
+                      pending.push_with_priority(new_ctx.prority(), new_ctx);
                     }
                     break;
                   }
@@ -171,7 +174,7 @@ pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CT
       if rec_ctx.ctx().is_finished {
         completed.push(rec_ctx);
       } else {
-        pending.push_with_priority(rec_ctx);
+        pending.push_with_priority(rec_ctx.prority(), rec_ctx);
       }
     }
   }
@@ -263,9 +266,7 @@ pub fn sort_candidate<CTX: ForkableContext>(
   use std::hash::Hash;
   let (hash, entry) = if ctx.symbols().len() > 0 {
     let symbols = ctx.symbols();
-    let (state, last) = symbols.last().expect("");
     let mut end_index = symbols.len() - 1;
-    let mut start_offset = 0;
 
     for index in (0..=end_index).rev() {
       let (_, node) = &ctx.symbols()[index];

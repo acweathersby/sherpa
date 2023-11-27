@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
   compile::{
-    ir::{build_ir_from_graph, optimize, sweep},
+    ir::{build_ir_from_graph, sweep},
     states::build_states::{compile_parser_states, NonTermGraph, ScannerGraph},
   },
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut},
@@ -302,15 +302,24 @@ impl JournalReporter for SherpaGraph {
 }
 
 impl SherpaGraph {
-  pub fn build_ir_parser(&self, opt: bool, optimize_for_debugging: bool) -> SherpaResult<SherpaIRParser> {
+  /// Construct an IR parser from the parse states.
+  ///
+  /// # Args
+  ///
+  /// - optimize - Perform optimization passes on the IR states
+  ///
+  /// - optimize_for_debugging - Rewrite states to improve source mapping within
+  ///   debuggers
+  ///  
+  pub fn build_ir_parser(&self, optimize: bool, optimize_for_debugging: bool) -> SherpaResult<SherpaIRParser> {
     match build_ir_from_graph(self) {
       Ok((classification, ir_states)) => {
         let Self { config, db, .. } = self;
         let mut j = self.j.transfer();
         j.flush_reports();
 
-        let (states, report): (Vec<_>, _) = if opt {
-          optimize(db, config, ir_states, optimize_for_debugging)?
+        let (states, report): (Vec<_>, _) = if optimize {
+          crate::compile::ir::optimize(db, config, ir_states, optimize_for_debugging)?
         } else {
           sweep(db, config, ir_states, optimize_for_debugging)?
         };
@@ -320,7 +329,7 @@ impl SherpaGraph {
           config: *config,
           db: db.clone(),
           states,
-          is_optimized: opt,
+          is_optimized: optimize,
           report,
           j,
         })

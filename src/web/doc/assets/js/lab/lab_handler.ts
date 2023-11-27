@@ -3,6 +3,7 @@ import { Container, Thing, ButtonThing, InputThing, CMThing } from "../common/la
 import { DebuggerButton } from "./debugger/debugger_io";
 import { get_grammar } from "js/common/session_storage";
 import init, * as sherpa from "js/sherpa/sherpa_wasm.js";
+import { CSTNodeRoot } from "./ast_editor/node";
 
 export async function lab_handler(div: HTMLDivElement) {
   await init();
@@ -27,11 +28,8 @@ export async function lab_handler(div: HTMLDivElement) {
   ])
 
   grammar_editor.attach(inputs);
-  console.log(DebuggerButton.buttons)
 
   let lsp_base_test = new Thing("div", "lsp-test", "LSP TEST", false);
-
-  lsp_base_test.io.contentEditable = "true";
 
   lsp_base_test.attach(outputs);
 
@@ -41,27 +39,18 @@ export async function lab_handler(div: HTMLDivElement) {
   IGNORE { c:sp }
   <> B > A(+) ";"
 
-  <> A > "Hello " "{ " tk:(c:id+)(+) " }" 
+  <> A > "Hello" "{" tk:(c:id+)(+) "}" 
   
   
   `, "/");
-  let db = sherpa.create_parse_db("/", grammar);
-  let config = new sherpa.JSParserConfig;
+  let config = sherpa.JSParserConfig.cst_editor();
+  let db = sherpa.create_parse_db("/", grammar, config);
   let ir = sherpa.create_parser_states(db, true, config);
   let parser = sherpa.create_bytecode(ir);
-  let graph = sherpa.EditGraph.new(sherpa.LSPSystem.new(parser));
 
-  graph.parse("Hello { world }");
-
-  lsp_base_test.io.innerText = graph.to_string();
-
-  lsp_base_test.io.addEventListener("input", e => {
-    let selections = window.getSelection();
-    if (selections) {
-      let selection_offset = selections.anchorOffset;
-      console.log({ selection_offset })
-    }
-  });
+  let root_node = new CSTNodeRoot(parser);
 
 
+  // create a base entry for an editor
+  root_node.attach(lsp_base_test.ele)
 }

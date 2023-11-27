@@ -68,7 +68,7 @@ pub fn construct_error_recovering_erlang_toy() -> SherpaResult<()> {
   
    "#;
 
-  let input = "";
+  let input = "test test";
 
   println!("------------------");
 
@@ -96,6 +96,50 @@ pub fn construct_error_recovering_erlang_toy() -> SherpaResult<()> {
       Printer::new(sym, true, &pkg).print();
       println!("\n");
       Printer::new(sym, true, &pkg).print_all();
+    }
+    println!("\n");
+  }
+
+  Ok(())
+}
+
+#[test]
+pub fn temp_lab_test() -> SherpaResult<()> {
+  let source = r#"
+
+  IGNORE { c:sp }
+
+  <> B > A(+) ";"
+
+  <> A > "Hello" "{" tk:(c:id+)(+) "}" 
+  
+   "#;
+
+  let input = "{a  { a } {bbbb }  ;";
+
+  let root_path = PathBuf::from("test.sg");
+  let mut grammar = SherpaGrammar::new();
+  grammar.add_source_from_string(source, &root_path, false)?;
+
+  let config = ParserConfig::default().cst_editor();
+  let parser_data = grammar.build_db(&root_path, config)?.build_states(config)?.build_ir_parser(false, false)?;
+
+  _write_states_to_temp_file_(&parser_data)?;
+
+  let pkg = compile_bytecode(&parser_data, false)?;
+
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
+
+  let result =
+    pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
+
+  println!("------------------");
+  if let Some(best) = result.first() {
+    for (_, sym) in &best.symbols {
+      for alt in split_alternates(sym) {
+        Printer::new(alt.first().unwrap(), true, &pkg).print();
+        println!("\n");
+      }
     }
     println!("\n");
   }

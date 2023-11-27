@@ -70,10 +70,10 @@ export class Container {
 
     let diff = total_size - used_sizes;
     let container_allotment = (diff / number_of_containers) / total_size;
-    console.log({ used_sizes, total_size, diff, number_of_containers })
+
 
     if (container_allotment > 0 && container_allotment < Infinity) {
-      console.log({ container_allotment })
+
 
       for (const node of this.children) {
         if (node instanceof Container) {
