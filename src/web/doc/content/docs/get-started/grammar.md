@@ -4,10 +4,10 @@ date: 2023-03-01T18:56:57-07:00
 draft: false
 ---
 
-# Getting Started With Sherpa
+# Getting Started With Radlr
 
 Well, no time like the present to get started! Check this out,
-```sherpa { lab="true" lab-tut="true" }
+```radlr { lab="true" lab-tut="true" }
 IGNORE { c:sp }
 
 <> A > "hello" "world"
@@ -17,9 +17,9 @@ IGNORE { c:sp }
 hello world
 
 ```
-> Cool huh, you'll notice we are now in the Sherpa "lab".
+> Cool huh, you'll notice we are now in the Radlr "lab".
 
-> Note: these documents are integrated with Sherpa lab. Whenever you see the 
+> Note: these documents are integrated with Radlr lab. Whenever you see the 
 (TODO: Beaker symbol), you can click on it to open the lab to start experimenting
 with the related subject. Better yet, you won't lose your place in the docs, since
 lab comes a documents view, which will update to whatever place you were when 
@@ -45,9 +45,9 @@ feram in quod contra et vix, admoneo et everti tabo remoto precatus.
 > vetito longe demittant vivacia. Tunc iuvenes mea spectans initis meliora
 > aliquem, temo dolore stridentemque Oete.
 
-Sherpa is perfectly at home creating LR based parsers. For example, this grammar
+Radlr is perfectly at home creating LR based parsers. For example, this grammar
 is inherently LR:
-```sherpa { lab="true" }
+```radlr { lab="true" }
 IGNORE { c:sp } 
 
 <> A >   X 'c'
@@ -68,7 +68,7 @@ xxxxxxxc
 
 #### Check out this JSON
 
-```sherpa { lab="true" }
+```radlr { lab="true" }
 IGNORE { c:sp c:nl }
 EXPORT json as entry
 NAME json
@@ -156,7 +156,7 @@ erat vetustas operire aut purus [luctus](http://quam.io/vulnera), fiducia
 ossibus inmeritam sola Melaneus nescio. Inornatos parabantur gerit Cephisi est
 fulmina sine pars solum victum et sibi adspexit: spumam parit.
 
-```sherpa { lab="true" }
+```radlr { lab="true" }
 <> A > "hello" "world"
 ```
 

@@ -33,9 +33,9 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      WASM_DIR: ./src/web/sherpa-wasm
+      WASM_DIR: ./src/web/Radlr-wasm
       WEB_SOURCE_DIR: ./src/web/doc
-      LAB_SRC_DIR: ./src/web/doc/assets/js/sherpa
+      LAB_SRC_DIR: ./src/web/doc/assets/js/Radlr
       LAB_PUB_DIR: ./src/web/doc/static/js/lab
       DOC_PUB_DIR: ./src/web/doc/public
 
@@ -67,12 +67,12 @@ jobs:
         working-directory: ${{ env.WEB_SOURCE_DIR }}
         run: npm install
             
-      - name: Build Sherpa WASM
+      - name: Build Radlr WASM
         working-directory: ${{ env.WASM_DIR }}
         run: wasm-pack build --target web
       
       - name: Copy WASM to HUGO build environment
-        run: cp $WASM_DIR/pkg/* $LAB_SRC_DIR/ && mv $LAB_SRC_DIR/sherpa_wasm_bg.wasm $LAB_PUB_DIR/
+        run: cp $WASM_DIR/pkg/* $LAB_SRC_DIR/ && mv $LAB_SRC_DIR/Radlr_wasm_bg.wasm $LAB_PUB_DIR/
 
       - name: Setup Pages
         id: pages

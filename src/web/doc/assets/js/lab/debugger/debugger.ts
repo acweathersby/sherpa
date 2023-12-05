@@ -1,9 +1,9 @@
-import { JSParserConfig } from "js/sherpa/sherpa_wasm";
+import { JSParserConfig } from "js/radlr/radlr_wasm";
 import { DebuggerButton, DebuggerCheckbox, DebuggerField } from "./debugger_io";
 import { FlowNode, RootFlowNode } from "../../common/flow";
 import { EventType as GrammarEventType, GrammarContext } from "../grammar_context";
 import { get_input } from "../../common/session_storage";
-import * as sherpa from "js/sherpa/sherpa_wasm.js";
+import * as radlr from "js/radlr/radlr_wasm.js";
 import { StateField } from "@codemirror/state"
 import { EditorView } from "@codemirror/view"
 import { basicSetup } from "codemirror";
@@ -11,8 +11,8 @@ import { TransportHandler } from "./transport_handler";
 
 export type DebuggerData = {
   debugger_entry_selection: HTMLSelectElement,
-  states: sherpa.JSIRParser | null,
-  bytecode: sherpa.JSBytecodeParserDB | null,
+  states: radlr.JSIRParser | null,
+  bytecode: radlr.JSBytecodeParserDB | null,
   parser_editor: EditorView | null,
   parser_host: Element,
   grammar_ctx: GrammarContext,
@@ -81,10 +81,10 @@ class InitCodeMirror extends FlowNode<DebuggerData> {
 
 class GrammarDocListener extends FlowNode<DebuggerData> {
 
-  configure_entry_options(db: sherpa.JSParserDB, entries: HTMLSelectElement) {
+  configure_entry_options(db: radlr.JSParserDB, entries: HTMLSelectElement) {
     entries.innerHTML = "";
 
-    for (const entry_name of sherpa.get_entry_names(db)) {
+    for (const entry_name of radlr.get_entry_names(db)) {
       let option = document.createElement("option");
       option.innerText = entry_name;
       option.value = entry_name;
@@ -248,18 +248,18 @@ class ParseBuilder extends FlowNode<DebuggerData> {
         let states, bytecode;
 
         try {
-          states = sherpa.create_parser_states(db, this.optimize, this.config);
+          states = radlr.create_parser_states(db, this.optimize, this.config);
 
           DebuggerField.get("parser-type").ele.value = states.classification.get_type();
           DebuggerField.get("num-of-states").ele.value = states.num_of_states + "";
 
-          bytecode = sherpa.create_bytecode(states);
+          bytecode = radlr.create_bytecode(states);
           data.states = states;
           data.bytecode = bytecode;
           this.parser_valid = true;
           return [this, new LockBuildButton, new TransportHandler, new ClearDebuggerError];
         } catch (e) {
-          if (e instanceof sherpa.PositionedErrors) {
+          if (e instanceof radlr.PositionedErrors) {
             let errors = [];
             for (let i = 0; i < e.length; i++) {
               let error = e.get_error_at(i);

@@ -1,12 +1,12 @@
 #![allow(unused)]
 
-use sherpa_rust_runtime::parsers::ast::{Tk, Reducer, Node};
+use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
 
 
-/// ### `sherpa` Rust Parser
+/// ### `radlr` Rust Parser
 ///
-/// - **GENERATOR**: sherpa 1.0.0-beta2
-/// - **SOURCE**: /home/work/projects/lib_sherpa/src/grammar/v2_0_0/grammar.sg
+/// - **GENERATOR**: radlr 1.0.0-beta2
+/// - **SOURCE**: /home/work/projects/lib_radlr/src/grammar/v2_0_0/grammar.sg
 ///
 /// #### WARNING:
 ///

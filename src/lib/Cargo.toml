@@ -1,17 +1,17 @@
 [workspace]
 
 members = [
-    "./sherpa",
-    "./sherpa-rust-build",
-    "./sherpa-build",
-    "./sherpa-core", 
-    "./sherpa-ascript",
-    "./sherpa-bytecode",
-    "./sherpa-x86",
-    "./sherpa-rust-runtime",
-    "./sherpa-test",
-    "./sherpa-formatter",
-    "./sherpa-ascript-beta",
+    "./radlr",
+    "./radlr-rust-build",
+    "./radlr-build",
+    "./radlr-core", 
+    "./radlr-ascript",
+    "./radlr-bytecode",
+    "./radlr-x86",
+    "./radlr-rust-runtime",
+    "./radlr-test",
+    "./radlr-formatter",
+    "./radlr-ascript-beta",
 ]
 
 resolver = "2"

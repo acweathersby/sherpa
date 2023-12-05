@@ -1,4 +1,4 @@
-image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
+image: $CI_REGISTRY/anthony/radlr/radlr-build:latest
 
 variables:
   GIT_DEPTH: 10
@@ -11,7 +11,7 @@ stages:
 
 build_core:
   stage: build
-  image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
+  image: $CI_REGISTRY/anthony/radlr/radlr-build:latest
   rules:
     - when: always
   script:
@@ -21,12 +21,12 @@ build_core:
     when: on_success
     expire_in: "7 days"
     paths:
-      - "src/lib/sherpa-core/lib/"
-      - "src/lib/sherpa-core/grammar/compile/parser/sherpa.rs"
+      - "src/lib/radlr-core/lib/"
+      - "src/lib/radlr-core/grammar/compile/parser/radlr.rs"
 
 build_wasm:
   stage: build
-  image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
+  image: $CI_REGISTRY/anthony/radlr/radlr-build:latest
   rules:
     - when: always
   script:
@@ -37,7 +37,7 @@ build_wasm:
     when: on_success
     expire_in: "7 days"
     paths:
-      - "src/web/sherpa-wasm/pkg"
+      - "src/web/radlr-wasm/pkg"
 
 build_site_node:
   stage: build-site
@@ -57,17 +57,17 @@ build_site_node:
 
 build_site_hugo:
   stage: build-site
-  image: $CI_REGISTRY/anthony/sherpa/hugo-build:latest
+  image: $CI_REGISTRY/anthony/radlr/hugo-build:latest
   needs:
     - build_site_node
     - build_wasm
   rules:
     - when: on_success
   script:
-    - mkdir -p ./src/web/doc/assets/js/sherpa
+    - mkdir -p ./src/web/doc/assets/js/radlr
     - mkdir -p ./src/web/doc/static/js/lab
-    - cp ./src/web/sherpa-wasm/pkg/* ./src/web/doc/assets/js/sherpa
-    - mv ./src/web/doc/assets/js/sherpa/sherpa_wasm_bg.wasm ./src/web/doc/static/js/lab
+    - cp ./src/web/radlr-wasm/pkg/* ./src/web/doc/assets/js/radlr
+    - mv ./src/web/doc/assets/js/radlr/radlr_wasm_bg.wasm ./src/web/doc/static/js/lab
     - cd ./src/web/doc
     - hugo -b $CI_PAGES_URL
   artifacts:
@@ -92,9 +92,9 @@ pages:
     paths:
       - public
 
-test_sherpa_binary_parser:
+test_radlr_binary_parser:
   stage: test
-  image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
+  image: $CI_REGISTRY/anthony/radlr/radlr-build:latest
   needs:
     - "build_core"
   rules:
@@ -102,9 +102,9 @@ test_sherpa_binary_parser:
   script:
     - ./scripts/run_binary_tests
 
-test_sherpa_bytecode_parser:
+test_radlr_bytecode_parser:
   stage: test
-  image: $CI_REGISTRY/anthony/sherpa/sherpa-build:latest
+  image: $CI_REGISTRY/anthony/radlr/radlr-build:latest
   needs:
     - "build_core"
   rules:

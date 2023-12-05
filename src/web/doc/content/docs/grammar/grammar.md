@@ -1,17 +1,17 @@
 ---
-title: "Sherpa Grammar"
-description: "Sherpa Documentation"
+title: "Radlr Grammar"
+description: "Radlr Documentation"
 draft: false
 ---
 
 
-# Writing A Sherpa Grammar
+# Writing A Radlr Grammar
 
-A Sherpa grammar file is a document, written in a syntax inspired by [EBNF](https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form) and common regex expressions, that is used to define a specific language. Sherpa uses grammars to create parsers and fuzzer
+A Radlr grammar file is a document, written in a syntax inspired by [EBNF](https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form) and common regex expressions, that is used to define a specific language. Radlr uses grammars to create parsers and fuzzer
 
 ## A Brief Introduction To Grammars
 
-> If you are familia with grammars you may want to skip to [here](#sherpa-rules) to get to the meat of things.
+> If you are familia with grammars you may want to skip to [here](#radlr-rules) to get to the meat of things.
 
 A grammar is composed of one or more rules, with each rule defining how two sets of symbols relate to each other. The general form of a rule is  `A -> a` where the `->` separating the left part of the rule from its right. 
 
@@ -44,16 +44,16 @@ When the right part of a rule is replaced by its left side, we are discovering w
 >
 > sentence
 
- In general, the number of symbols on either side of the rule is unlimited, but Sherpa grammars are based on Context Free Grammars, and as such restrict the number of symbols on the left to just one. The symbol on the left side of a rule is called a _non-terminal_, and the symbols on the right side can be a mixture of other _non-terminals_ ( including the _non-terminal_ on the left part of a rule ) and _terminals_, which are the atomic parts of the grammar and cannot  the left part of a rule and hence cannont be expanded into other symbols. 
+ In general, the number of symbols on either side of the rule is unlimited, but Radlr grammars are based on Context Free Grammars, and as such restrict the number of symbols on the left to just one. The symbol on the left side of a rule is called a _non-terminal_, and the symbols on the right side can be a mixture of other _non-terminals_ ( including the _non-terminal_ on the left part of a rule ) and _terminals_, which are the atomic parts of the grammar and cannot  the left part of a rule and hence cannont be expanded into other symbols. 
  
  So to reiterate, to generate a string in a language defined by a grammar we start with a single _non-terminal_, and replace it through an iterative process of applying grammars rules from left to right until we are left with only _terminal_ symbols. 
  
  Going in the opposite direction, we can take a string and find all matching _terminal_ symbols in  that string. Then we can go through an iterative process of applying our grammar rules from right to left,  replacing both  _terminals_ and _non-terminal_ with other _non-terminals_. If we get to a point where we are left with a single _non-terminal_ that happens to be our goal, then the string has been successfully parsed.
 
 
-### The Sherpa Style
+### The Radlr Style
 
-A rule in a Sherpa grammar looks appears like this 
+A rule in a Radlr grammar looks appears like this 
 
 ```
 <> name > sym1 sym2 ... symN
@@ -62,7 +62,7 @@ A rule in a Sherpa grammar looks appears like this
 where `name` on the left of `>` is our _nonterminal_ symbol, and the `sym*`s to the right of the `>` represent other _nonterminals_ and/or _terminals_ symbols. 
 
 
-## Sherpa Rules
+## Radlr Rules
 
 ### Multiple Rule Bodies
 
@@ -103,7 +103,7 @@ of a basic production is `"<>" <production_name> ">" <production_rules>`, where 
 Production rules are comprised of symbols that can represent sequences of characters, known as *terminal* symbols, 
 and/or identifiers that refer to other productions, called *non-terminal* symbols. 
 
-```Sherpa
+```Radlr
 <> ... > \im_a_terminal_symbol t:im_also_a_terminal_symbol im_a_non_terminal_symbol
 ```
 <dance/>
@@ -118,9 +118,9 @@ sequence with a newline or space. An example of this is the sequence `\hello \wo
 
 #### A Simple Grammar
 
-Let's create a simple grammar to demonstrate the process of writing a Sherpa grammar. In order to produce a parser that can 
+Let's create a simple grammar to demonstrate the process of writing a Radlr grammar. In order to produce a parser that can 
 recognize simple arithmetic expressions, such as `1+2+3`, one could write the following grammar:
-```sherpa { lab=true }
+```radlr { lab=true }
 
 <> sum > sum "+" num | num 
 
@@ -140,27 +140,27 @@ The second production `num` contains multiple rules, each with a single terminal
 >
 > Certain parser compiling algorithms, such as parsers in the LL family and recursive descent parsers, 
 > are unable to parse such productions in that form, as this would let to an infinite recursion. There a methods to
-> transform such productions, however Sherpa is able to directly work with left recursive grammars without transformations. 
+> transform such productions, however Radlr is able to directly work with left recursive grammars without transformations. 
 > It is actually encouraged to use left recursion, since this leads to the compilation of a more efficient parser.
 
-Sherpa provides some modifiers and built in symbols that make it easier to write complex grammars. In our example
+Radlr provides some modifiers and built in symbols that make it easier to write complex grammars. In our example
 grammar, we can use the *generated* symbol `g:num` to represent a character in the range [0..9]. 
 
-```Sherpa
+```Radlr
 <> num > g:num
 ```
 
 We may also to replace the trivial non-terminal `num` with this generated symbol, which in turn allows us to remove the 
 `num` non-terminal entirely.
 
-```Sherpa
+```Radlr
 <> sum > sum \+ g:num | g:num
 ```
 
 We can represent a sequence that repeats zero or more times with the symbol *modifier* `(*)`. To apply a modifier to a sequence
 of symbols, we can wrap them in `(` `)` parenthetic brackets. Applying this syntax to our grammar, we can re-write it as:
 
-```Sherpa
+```Radlr
 <> sum > g:num ( \+ g:num )(*)
 ```
 This single non-terminal represents the same grammar as our first version, but more compactly.
@@ -169,18 +169,18 @@ This single non-terminal represents the same grammar as our first version, but m
 
 As it is, this grammar will produce a parser that can do nothing more than tell us if a givin input can be produced by the grammar,
 in effect the parser can only recognize an input as being part of the grammar. However, if we want are parser to do something more 
-interesting, we can provide reduce functions that act on the recognized symbols of the grammar symbols. Sherpa calls a reduce
+interesting, we can provide reduce functions that act on the recognized symbols of the grammar symbols. Radlr calls a reduce
 function when the parser recognizes an input as being part of a particular production rule. Going back to an early iteration of our 
 grammar, we can add a reduce function to the `num` production's rule to convert the `g:num` symbol into a numeric object:
 
-```Sherpa
+```Radlr
 <> num > g:num :ast { parseInt($1 + "") }
 ```
 
 > When a *terminal-symbol* is passed to a reduce function, it is represented by a [Token](#todo) object. This object provides several utility
 > methods useful when analyzing and transforming an AST into other forms. 
 
-We're using JavaScript expressions to define action used in the reduce function `:ast { ... }`. Sherpa supports other syntaxes, but
+We're using JavaScript expressions to define action used in the reduce function `:ast { ... }`. Radlr supports other syntaxes, but
 its native form is JavaScript, so we'll stick with that. The contents of a reduce function is an expression that takes the parsed symbols
 of a production rule, modifies them in some way, and returns a new object or primitive. Inside a reduce function symbols are referenced 
 by the syntax `\$ g:num`, where `g:num` is the one-based index position of the symbol.
@@ -188,7 +188,7 @@ by the syntax `\$ g:num`, where `g:num` is the one-based index position of the s
 An alternative to using the `\$ g:num` syntax to reference a symbol in a production rule is to use *annotated* symbols and define a
 reference name for a symbol: 
 
-```Sherpa
+```Radlr
 <> num > g:num^number :ast { parseInt(number + "") }
 ```
 
@@ -196,22 +196,22 @@ The `g:num` symbol has been annotated with the reference annotation `^number`, w
 refer to that symbol. We can also add a reduce function to the `sum` grammar non-terminal. We'll also use an previous iteration of this
 non-terminal to apply the reduce function:
 
-```Sherpa
+```Radlr
 <> sum >    sum^operandA \+ num^operandB   :ast { operandA + operandB }
         
         |   num
 ```
 
-Note in the second production `|  num` we do not need to apply a parse action, as Sherpa will automatically pass the value of 
+Note in the second production `|  num` we do not need to apply a parse action, as Radlr will automatically pass the value of 
 number primitive when it completed the production `<> num > g:num^number :ast { parseInt(number + "") }`  
 
-> By default, Sherpa will return the last symbol within a production rule when it recognizes that rule.
+> By default, Radlr will return the last symbol within a production rule when it recognizes that rule.
 
 Likewise, the value of num in `... \+ num^operandB ...` is the numeric literal that was created when the non-terminal `num` was completed. 
 
 Now our grammar looks like this:
 
-```sherpa { lab=true }
+```radlr { lab=true }
 <> sum >   sum^opA "+" num^opB   
                                         :ast{ $opA + $opB }
        |   num
@@ -224,7 +224,7 @@ Now our grammar looks like this:
 ```
 
 
-```sherpa { lab=true }
+```radlr { lab=true }
 IGNORE { c:sp c:nl }
 
 <> element_block > '<' component_identifier
@@ -266,9 +266,9 @@ IGNORE { c:sp c:nl }
 
 ```
 
-Sherpa makes it easy to solve the precedence problem for mathematical expressions. 
+Radlr makes it easy to solve the precedence problem for mathematical expressions. 
 
-```sherpa { lab=true }
+```radlr { lab=true }
 IGNORE { tk:space }
 
 <> expr > expr "+"{1} expr{1}
@@ -287,10 +287,10 @@ IGNORE { tk:space }
 
 
 ```
-# The secret sauce. The one thing that makes sherpa different from all other parser compilers is it exposes itself to you for your pleasure.
+# The secret sauce. The one thing that makes radlr different from all other parser compilers is it exposes itself to you for your pleasure.
 
 
-```sherpa { lab=true }
+```radlr { lab=true }
 IGNORE { c:sp  } 
 
 A => match : BYTE (65 /* A */ | 66 /* B */) { goto B }
@@ -304,7 +304,7 @@ A
 ```
 
 
-```sherpa { lab=true }
+```radlr { lab=true }
 IGNORE { c:sp  } 
 
 <> A > ( B | ":" C )(+)
@@ -325,7 +325,7 @@ IGNORE { c:sp  }
 ```
 
 
-```sherpa { lab=true }
+```radlr { lab=true }
 IGNORE { tk:space } 
 
 <> compound > "(" ( compound | atom )(*)  ")"
@@ -345,7 +345,7 @@ IGNORE { tk:space }
 
 > Yacc uses some preprocessing during the parsing of syntactic input. This has been emulated with ir code.
 
-```sherpa { lab=true }
+```radlr { lab=true }
 
 IGNORE { c:nl c:sp c:tab tk:comment }
 
@@ -477,7 +477,7 @@ A parse produced by this grammar will now be able to take an input such as `"1+2
 
 ## What Next
 
-Checkout [creating the bash parser](./tutorial.bash_parser.index.md) if you desire a thorough guide on generating a parser with Sherpa.
+Checkout [creating the bash parser](./tutorial.bash_parser.index.md) if you desire a thorough guide on generating a parser with Radlr.
 
 You can also checkout the Grammar API to gain an in-depth understanding of grammar constructs. 
 

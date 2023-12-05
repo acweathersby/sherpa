@@ -1,4 +1,4 @@
-# Sherpa CLI
+# Radlr CLI
 
 ## How to get it
 
@@ -11,20 +11,20 @@
 
 ---
 
-### `sherpa build` 
+### `radlr build` 
 
 Build a parser from one or more grammar files. Each grammar source is compiled into a separate parser source file. 
 
 #### Example
 
 ```sh
-$ sherpa build ./the-best-language-ever.sp
+$ radlr build ./the-best-language-ever.sp
 ```
 
 #### Command Format
 
 ```
-sherpa build [Arguments]? <.sg Source File>+
+radlr build [Arguments]? <.sg Source File>+
 ```
 
 #### Arguments
@@ -54,20 +54,20 @@ These arguments are active when `--type` is set to `llvm`
     file.
 
 ---
-### `sherpa disassemble`
+### `radlr disassemble`
 
 Produce a *"disassembly"* file of the parser bytecode of a grammar.
 
 #### Command Format
 
 ```
-sherpa disassemble [Arguments]? <.sg Source File>+
+radlr disassemble [Arguments]? <.sg Source File>+
 ```
 -- Args 
 
  # License 
 
- The core Sherpa source code is licensed under [GNU-GPLv3](../../../LICENSE.md). 
+ The core Radlr source code is licensed under [GNU-GPLv3](../../../LICENSE.md). 
 
  The runtime source code is licensed under [GNU-LGPLv3](../../../LICENSE.md). 
 

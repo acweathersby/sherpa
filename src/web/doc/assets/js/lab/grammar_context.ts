@@ -1,4 +1,4 @@
-import * as sherpa from "js/sherpa/sherpa_wasm.js";
+import * as radlr from "js/radlr/radlr_wasm.js";
 
 export const enum EventType {
   DBDeleted = "db-deleted",
@@ -12,9 +12,9 @@ export const enum EventType {
 /// and its derivatives
 export class GrammarContext {
 
-  private soup_: sherpa.JSSoup;
+  private soup_: radlr.JSSoup;
 
-  private db_: sherpa.JSParserDB | null;
+  private db_: radlr.JSParserDB | null;
 
   public listeners: Map<EventType, Set<{ (ctx: GrammarContext): void }>>;
 
@@ -22,15 +22,15 @@ export class GrammarContext {
 
   private RUNNING_EVENTS: boolean;
 
-  private current_parse_errors: sherpa.JSSherpaSourceError[];
+  private current_parse_errors: radlr.JSRadlrSourceError[];
 
-  private current_db_errors: sherpa.JSSherpaSourceError[];
+  private current_db_errors: radlr.JSRadlrSourceError[];
 
-  private current_parser_errors: sherpa.JSSherpaSourceError[];
+  private current_parser_errors: radlr.JSRadlrSourceError[];
 
-  /// Should only be called after sherpa is initialized
+  /// Should only be called after radlr is initialized
   constructor() {
-    this.soup_ = sherpa.create_soup();
+    this.soup_ = radlr.create_soup();
     this.listeners = new Map();
     this.pending_events = [];
     this.RUNNING_EVENTS = false;
@@ -40,27 +40,27 @@ export class GrammarContext {
     this.current_db_errors = [];
   }
 
-  get soup(): sherpa.JSSoup {
+  get soup(): radlr.JSSoup {
     return this.soup_;
   }
 
-  get db(): sherpa.JSParserDB | null {
+  get db(): radlr.JSParserDB | null {
     return this.db_;
   }
 
-  get parse_errors(): sherpa.JSSherpaSourceError[] {
+  get parse_errors(): radlr.JSRadlrSourceError[] {
     return this.current_parse_errors;
   }
 
-  get db_errors(): sherpa.JSSherpaSourceError[] {
+  get db_errors(): radlr.JSRadlrSourceError[] {
     return this.current_db_errors;
   }
 
-  get parser_errors(): sherpa.JSSherpaSourceError[] {
+  get parser_errors(): radlr.JSRadlrSourceError[] {
     return this.current_parser_errors;
   }
 
-  get ast_errors(): sherpa.JSSherpaSourceError[] {
+  get ast_errors(): radlr.JSRadlrSourceError[] {
     return []
   }
 
@@ -94,7 +94,7 @@ export class GrammarContext {
       this.soup.add_grammar(input_string, grammar_name);
       this.signal(EventType.GrammarAdded);
     } catch (e) {
-      if (e instanceof sherpa.PositionedErrors) {
+      if (e instanceof radlr.PositionedErrors) {
         for (let i = 0; i < e.length; i++) {
           let error = e.get_error_at(i);
           if (error)
@@ -125,11 +125,11 @@ export class GrammarContext {
     }
 
     try {
-      this.db_ = sherpa.create_parse_db(grammar_name, this.soup_);
+      this.db_ = radlr.create_parse_db(grammar_name, this.soup_);
       this.signal(EventType.DBCreated, false);
       return true;
     } catch (e) {
-      if (e instanceof sherpa.PositionedErrors) {
+      if (e instanceof radlr.PositionedErrors) {
         for (let i = 0; i < e.length; i++) {
           let error = e.get_error_at(i);
           if (error)
@@ -144,7 +144,7 @@ export class GrammarContext {
     return false;
   }
 
-  public setParserErrors(e: sherpa.JSSherpaSourceError[] | sherpa.JSSherpaSourceError) {
+  public setParserErrors(e: radlr.JSRadlrSourceError[] | radlr.JSRadlrSourceError) {
     this.clearParserErrors();
 
     this.current_parser_errors.length = 0;

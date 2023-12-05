@@ -11,8 +11,8 @@ pushd ${0:a:h}/..
 ##########################
 
 ##########################
-## SHERPA WASM
-pushd $SHERPA_WASM_DIR
+## RADLR WASM
+pushd $RADLR_WASM_DIR
 
 # Build the wasm library
 if [[ "$1" == "dev" ]]
@@ -26,10 +26,10 @@ fi
 
 # Move the wasm data to out lab directory
 
-mkdir -p $SHERPA_LAB_SRC_DIR
-mkdir -p $SHERPA_LAB_PUB_DIR
-cp ./pkg/* $SHERPA_LAB_SRC_DIR
-cp $SHERPA_LAB_SRC_DIR/sherpa_wasm_bg.wasm $SHERPA_LAB_PUB_DIR/
+mkdir -p $RADLR_LAB_SRC_DIR
+mkdir -p $RADLR_LAB_PUB_DIR
+cp ./pkg/* $RADLR_LAB_SRC_DIR
+cp $RADLR_LAB_SRC_DIR/radlr_wasm_bg.wasm $RADLR_LAB_PUB_DIR/
 
 popd
 ##########################

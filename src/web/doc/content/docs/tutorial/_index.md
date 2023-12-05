@@ -1,6 +1,6 @@
 ---
-title: "Sherpa | Docs"
-description: "Sherpa Tutorials"
+title: "Radlr | Docs"
+description: "Radlr Tutorials"
 draft: false
 docsroot: true
 ---
@@ -37,13 +37,13 @@ First things first we need to create a grammar. A grammar formally defines a set
 
 > `/[\w]+/` - The regex that matches any wordlike sequence of characters
 
-In much the same way, a Sherpa grammar contains symbols that direct the parser in matching inputs.
+In much the same way, a Radlr grammar contains symbols that direct the parser in matching inputs.
 
 > `<> start > ( c:id | c:num )(+)` - Equivalant to the above regex
 
-Sherpa has a distinct set of symbols that can be used to match a variety of characters and character sequeneces. More information on them can be found [here](about:blank). Additionally, a review of regex can make you more familiar of the.  Unlike regex, sherpa grammars can match more than just regular expressions. 
+Radlr has a distinct set of symbols that can be used to match a variety of characters and character sequeneces. More information on them can be found [here](about:blank). Additionally, a review of regex can make you more familiar of the.  Unlike regex, radlr grammars can match more than just regular expressions. 
 
-> Inputs such as `{ { {  } } }` cannot be reliably parsed using regular expressions, but are no problem for more powerfull parser like Sherpa.
+> Inputs such as `{ { {  } } }` cannot be reliably parsed using regular expressions, but are no problem for more powerfull parser like Radlr.
 
 For our purpose, we'll want to define different parts of an input as having special meanings, such as matching identifiers, brackets, functions, and statements. We can define specific sets of symbols within rules, and give those rules a specific name. For instance to define our identifiers we can add 
 

@@ -1,6 +1,6 @@
 baseURL: "http://example.org/"
 languageCode: en-us
-title: Sherpa
+title: Radlr
 relativeURLs: true
 module:
   hugoVersion:

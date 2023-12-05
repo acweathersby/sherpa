@@ -1,7 +1,7 @@
 use clap::{arg, value_parser, ArgMatches, Command};
-use sherpa_bytecode::compile_bytecode;
-use sherpa_core::{JournalReporter, ParserStore, SherpaError, SherpaGrammar, SherpaResult};
-use sherpa_rust_build::compile_rust_bytecode_parser;
+use radlr_bytecode::compile_bytecode;
+use radlr_core::{JournalReporter, ParserStore, RadlrError, RadlrGrammar, RadlrResult};
+use radlr_rust_build::compile_rust_bytecode_parser;
 use std::{fs::File, io::Write, path::PathBuf};
 
 #[derive(Clone, Debug)]
@@ -11,7 +11,7 @@ enum ParserType {
 }
 
 pub fn command() -> ArgMatches {
-  Command::new("Sherpa")
+  Command::new("Radlr")
     .version("1.0.0-beta1")
     .author("Anthony Weathersby <acweathersby.codes@gmail.com>")
     .subcommand(
@@ -31,9 +31,9 @@ pub fn command() -> ArgMatches {
     )
     .subcommand(
       Command::new("build")
-        .about("Constructs a parser from a Sherpa grammar.")
+        .about("Constructs a parser from a Radlr grammar.")
         .arg(
-          arg!( -t --type <TYPE> "The type of parser Sherpa will construct\n" )
+          arg!( -t --type <TYPE> "The type of parser Radlr will construct\n" )
           .required(false)
           .value_parser(|value: &str| -> Result<ParserType, &'static str> {match value {
             "llvm" => Ok(ParserType::LLVM),
@@ -90,7 +90,7 @@ fn configure_matches(matches: &ArgMatches, pwd: &PathBuf) -> (ParserType, PathBu
   (parser_type, out_dir.clone(), lib_out_dir.clone())
 }
 
-fn main() -> SherpaResult<()> {
+fn main() -> RadlrResult<()> {
   let pwd = std::env::current_dir().unwrap();
 
   let matches = command();
@@ -102,9 +102,9 @@ fn main() -> SherpaResult<()> {
 
     build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir, matches)
   } else if matches.subcommand_matches("disassemble").is_some() {
-    SherpaResult::Ok(())
+    RadlrResult::Ok(())
   } else {
-    SherpaResult::Err(SherpaError::from("Command Not Recognized"))
+    RadlrResult::Err(RadlrError::from("Command Not Recognized"))
   }
 }
 
@@ -115,14 +115,14 @@ fn build_parser(
   _lib_out_dir: PathBuf,
   out_dir: PathBuf,
   matches: &ArgMatches
-) -> SherpaResult<()> {
+) -> RadlrResult<()> {
   let debug = matches.get_one::<bool>("debug").cloned().unwrap_or_default();
 
   let config = Default::default();
 
   debug_assert_eq!(debug, true);
 
-  let mut grammar = SherpaGrammar::new();
+  let mut grammar = RadlrGrammar::new();
 
   for path in grammar_sources {
     grammar.add_source(path)?;
@@ -163,11 +163,11 @@ fn build_parser(
     ParserType::LLVM => {
       #[cfg(feature = "llvm")]
       {
-        sherpa_llvm::llvm_parser_build::build_llvm_parser(&parser, &name, &_lib_out_dir, None, true)?;
-        sherpa_rust_build::compile_rust_llvm_parser(&parser, &name, &name)
+        radlr_llvm::llvm_parser_build::build_llvm_parser(&parser, &name, &_lib_out_dir, None, true)?;
+        radlr_rust_build::compile_rust_llvm_parser(&parser, &name, &name)
       }
       #[cfg(not(feature = "llvm"))]
-      SherpaResult::Err("Compilation not supported".into())
+      RadlrResult::Err("Compilation not supported".into())
     }
     _ => {
       let pkg = compile_bytecode(&parser, false)?;
@@ -187,15 +187,15 @@ fn build_parser(
 
   file.write_all(output.as_bytes())?;
 
-  SherpaResult::Ok(())
+  RadlrResult::Ok(())
 }
 
 #[test]
-fn test_sherpa_bytecode_bootstrap() -> SherpaResult<()> {
-  let sherpa_grammar =
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/sherpa/2.0.0/grammar.sg").canonicalize().unwrap();
+fn test_radlr_bytecode_bootstrap() -> RadlrResult<()> {
+  let radlr_grammar =
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/radlr/2.0.0/grammar.sg").canonicalize().unwrap();
 
-  //build_parser(&[sherpa_grammar], ParserType::Bytecode, Some("test_sherpa".into()), std::env::temp_dir(), std::env::temp_dir())
+  //build_parser(&[radlr_grammar], ParserType::Bytecode, Some("test_radlr".into()), std::env::temp_dir(), std::env::temp_dir())
 
   Ok(())
 }

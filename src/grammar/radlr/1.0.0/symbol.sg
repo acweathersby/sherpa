@@ -1,0 +1,118 @@
+NAME radlr_symbol
+
+IGNORE { c:sp c:nl }
+
+<> annotated_symbol > 
+
+        list^s [unordered tk:reference?^r "?" ?^o  priority?^p ]
+
+            :ast { t_AnnotatedSymbol, priority:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
+
+        | list
+
+<> priority > "{" tk:priority_num '}' :ast { t_Priority, val: u32($2) }
+        | "!" :ast { t_Priority, exclusive: true }
+
+<> priority_num > c:num(+)
+
+<> list >
+
+        symbol "(+"  terminal?  ')'
+
+            :ast { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok }
+
+        | symbol "(*" terminal?  ')'
+
+            :ast { t_List_Production, c_Symbol, terminal_symbol:$3, symbols:$1, tok, optional:true }
+
+        | symbol "+"
+
+            :ast { t_List_Production, c_Symbol, symbols:$1, tok }
+            
+        | symbol "*"
+
+            :ast { t_List_Production, c_Symbol, symbols:$1, tok, optional:true }
+
+
+        | symbol
+
+<> symbol >
+
+        terminal
+
+        | non_terminal
+        
+        | terminal_non_terminal
+
+        | class
+
+<> class >
+
+        "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'htab' )
+
+            :ast { t_ClassSymbol, c_Symbol , c_Terminal, val:str($2),  tok }
+
+<> terminal_non_terminal >
+
+        "tk:" non_terminal
+
+             :ast { t_Production_Terminal_Symbol , c_Symbol , c_Terminal, production:$2, tok }
+
+<> non_terminal > 
+
+        production_symbol
+
+        | import_production_symbol
+
+<> production_symbol > 
+
+        tk:identifier_syms
+
+             :ast { t_Production_Symbol , c_Symbol, name:str($1),   tok }
+
+<> import_production_symbol>
+
+        tk:identifier_syms '::' tk:identifier_syms
+
+             :ast { t_Production_Import_Symbol , c_Symbol , module:str($1), name:str($3), tok } 
+
+
+<> terminal > 
+
+        "\"" ( c:id | c:sym | c:num | c:sp | escaped )(+) "\""
+
+            :ast { t_Terminal , c_Symbol , c_Terminal, val:str($2), tok, is_exclusive:true } 
+
+        | "'" ( c:id | c:sym | c:num | c:sp | escaped )(+) "'"
+
+            :ast { t_Terminal , c_Symbol , c_Terminal, val:str($2), tok }
+               
+
+<> escaped > "\\" ( c:id | c:sym | c:num | c:sp )
+
+<> reference > 
+
+        "^" tk:identifier_syms
+
+<> identifier > 
+
+        tk:identifier_syms 
+
+<> identifier_syms >  
+
+        identifier_syms c:id
+
+        | identifier_syms '_'
+
+        | identifier_syms '-'
+
+        | identifier_syms c:num
+
+        | '_'
+
+        | '-'
+
+        | c:id
+
+
+<> end_of_input > "$" :ast { t_EOFSymbol, c_Symbol , c_Terminal, tok }

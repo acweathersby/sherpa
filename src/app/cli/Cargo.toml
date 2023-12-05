@@ -1,33 +1,33 @@
 [package]
-name = "sherpa-cli"
+name = "radlr-cli"
 version = "1.0.0-beta1"
 edition = "2021"
 
 [[bin]]
-name = "sherpa"
+name = "radlr"
 path = "./main.rs"
 
 [dependencies]
 clap = { version="4.0.29" }
 
-[dependencies.sherpa_core]
-path = "../../lib/sherpa-core"
+[dependencies.radlr_core]
+path = "../../lib/radlr-core"
 features = ["auto_print_errors"]
 
-[dependencies.sherpa_ascript]
-path = "../../lib/sherpa-ascript"
+[dependencies.radlr_ascript]
+path = "../../lib/radlr-ascript"
 
-[dependencies.sherpa_bytecode]
-path = "../../lib/sherpa-bytecode"
+[dependencies.radlr_bytecode]
+path = "../../lib/radlr-bytecode"
 
-[dependencies.sherpa_rust_build]
-path = "../../lib/sherpa-rust-build"
+[dependencies.radlr_rust_build]
+path = "../../lib/radlr-rust-build"
 
-[dependencies.sherpa_formatter]
-path = "../../lib/sherpa-formatter"
+[dependencies.radlr_formatter]
+path = "../../lib/radlr-formatter"
 
-[dependencies.sherpa_ascript_beta]
-path = "../../lib/sherpa-ascript-beta"
+[dependencies.radlr_ascript_beta]
+path = "../../lib/radlr-ascript-beta"
 
 [profile.release]
 opt-level=3

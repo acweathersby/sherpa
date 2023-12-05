@@ -1,0 +1,138 @@
+NAME radlr
+
+IMPORT ./ir as ir
+IMPORT ./symbol as sym
+IMPORT ./token as tok
+IMPORT ./ascript as ast
+IMPORT ./defined_type_eval as dt
+IMPORT ../1.0.0/comment as cmt
+
+IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
+
+EXPORT grammar as grammar
+EXPORT ast::struct as ast_struct
+EXPORT ast::expression as ast_expression
+EXPORT ir::state as ir
+EXPORT dt::def_type as type_eval
+EXPORT dt::escaped_string as escaped
+
+
+<> grammar >
+
+    [preamble(*) ( cf_rules | peg_rules | append_rules | ir::state | template_rule )(+)]
+
+        :ast { t_Grammar, preamble:$1, rules:$2, tok }
+
+
+<> preamble >
+
+    export_clause
+
+    | import_clause
+
+    | name_clause
+
+    | ignore_clause
+
+
+<> export_clause >
+
+    "EXPORT" sym::nonterminal (( "AS" | "as" ) tok::id)?
+
+        :ast { t_Export, nonterminal:$2, reference:str($3) } 
+
+
+<> import_clause >
+
+    "IMPORT" ( c:id | c:sym | c:num )(+) c:sp ( "AS" | "as" ) tok::id
+
+        :ast { t_Import, uri: str($2), reference:str($5), tok }
+
+<> ignore_clause >
+
+    "IGNORE" "{"  sym::terminal(*) "}"
+
+        :ast { t_Ignore, symbols: $3 }
+
+
+<> name_clause >
+
+    "NAME" tok::id
+
+        :ast { t_Name, name: str($2) }
+
+
+<> template_rule > 
+
+    "<" template_param(+",")^p ">" sym::nonterminal_symbol^n ">" rules^r
+
+        :ast { t_TemplateRules, name_sym:$n, template_params:$p, rules: $r, tok }
+
+<> template_param > 
+        tok::id (":" "sym")?                    :ast { t_TemplateSym,     val:str($1) }
+    |   ast::type_identifier ":" "ast"          :ast { t_TemplateASTType, val:str($1) }
+    
+
+<> cf_rules > 
+
+    "<>" sym::nonterminal_symbol^n ">" rules^r
+
+        :ast { t_CFRules, name_sym:$n, rules: $r, tok }
+
+
+<> peg_rules >
+
+    ":>" sym::nonterminal_symbol^n ">" rules^r
+
+        :ast { t_PegRules, name_sym:$n, rules: $r, tok }
+
+<> append_rules >
+
+    '+' ">" sym::nonterminal^n ">" rules^r
+
+        :ast { t_AppendRules,  name_sym:$n, rules: $r, tok }
+
+<> rules >  rule(+"|")
+
+<> rule >
+
+    ( [ ( sym::annotated_symbol | not_empty )(*)^s sym::end_of_input?^eoi ] :ast [$s, $eoi] )^s 
+    
+    ast_definition?^a
+
+        :ast { t_Rule, symbols:$s, ast:$a, tok }
+
+
+<> ast_definition >
+
+        ":ast" ast::body^ast
+
+            :ast  { t_Ascript, ast:$ast, tok }
+
+
++> sym::nonterminal >
+
+    "(" rules ")"{1}
+
+        :ast { t_Grouped_Rules, rules:$2,  tok }
+
+
+
++> sym::terminal >
+
+    "tk:(" rules ")"{1}
+
+        :ast { t_TokenGroupRules, rules:$2,  tok }
+
+
+<> not_empty >
+
+    "[" sym::annotated_symbol(+)^s ']' "!"?^o
+
+        :ast { t_NotEmptySet, unordered: bool($o), symbols:$s, tok }
+
+<> ignore_scope > 
+      
+    ignore_clause "{" ( cf_rules | peg_rules | append_rules | ir::state | template_rule )(+) "}"
+
+        :ast { t_Grammar, preamble:$1, rules:$2, tok }

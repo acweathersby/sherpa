@@ -1,0 +1,34 @@
+[package]
+name = "radlr_core"
+version = "1.0.0-beta2"
+edition = "2021"
+authors = ["Anthony Weathersby <acweathersby.codes@gmail.com>"]
+
+build="./link_binary_parser.rs"
+
+[lib]
+path = "./lib.rs"
+
+[dependencies]
+radlr_rust_runtime = {path = "../radlr-rust-runtime"}
+
+[features]
+# Uses the binary parser instead of the bytecode parser. This parser needs
+# to be built first, as it is not included with the radlr source code.
+binary-parser = []
+
+# Enables code compatibility with wasm-build
+wasm-target = []
+
+# Enable features for use in the browser based lab
+wasm-lab = ["wasm-target"]
+
+# Enable multi-threading code
+multithread = []
+
+# Enable the debug printing of errors
+auto_print_errors = []
+
+[profile.release]
+opt-level=3
+debug = 0

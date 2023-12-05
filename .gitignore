@@ -5,9 +5,9 @@
 **/bin
 **/target
 **/pkg
-src/web/lab/src/sherpa/
-src/lib/sherpa-core/lib/
-src/lib/sherpa-core/grammar/compile/parser/sherpa.rs
+src/web/lab/src/Radlr/
+src/lib/Radlr-core/lib/
+src/lib/Radlr-core/grammar/compile/parser/Radlr.rs
 
 # Debugging artifacts
 /sandbox

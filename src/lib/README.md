@@ -1,22 +1,22 @@
-# Sherpa Libraries
+# Radlr Libraries
 
-## Sherpa Rust Runtime
+## Radlr Rust Runtime
 
 Main runtime components for Rust based parsers. Includes common types used throughout the other libraries.  
 
-## Sherpa Core
+## Radlr Core
 
 This contains the grammar parser and compiler. 
 
-## Sherpa Ascript
+## Radlr Ascript
 
 AST compiler 
 
-## Sherpa Bytecode
+## Radlr Bytecode
 
 Bytecode compiler - Converts parser states into parser bytecode 
 
-## Sherpa LLVM
+## Radlr LLVM
 
 LLVM compiler - Creates parsers using LLVM.
 

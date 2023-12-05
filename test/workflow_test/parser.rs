@@ -1,16 +1,23 @@
 #![allow(unused)]
 
-/// ### `sherpa` Rust Parser
+/// ### `radlr` Rust Parser
 ///
-/// - **GENERATOR**: sherpa 1.0.0-beta2
-/// - **SOURCE**: /home/work/projects/lib_sherpa/src/grammar/v2_0_0/grammar.sg
+/// - **GENERATOR**: radlr 1.0.0-beta2
+/// - **SOURCE**: /home/work/projects/lib_radlr/src/grammar/v2_0_0/grammar.sg
 ///
-/// #### WARNING:
+/// #### WARNING WARNING WARNING WARNING
+/// #### WARNING WARNING WARNING WARNING
+/// #### WARNING WARNING WARNING WARNING
 ///
 /// This is a generated file. Any changes to this file may be **overwritten
 /// without notice**.
 ///
+/// #### GNINRAW GNINRAW GNINRAW GNINRAW
+/// #### GNINRAW GNINRAW GNINRAW GNINRAW
+/// #### GNINRAW GNINRAW GNINRAW GNINRAW
+///
 /// #### License:
+
 /// Copyright (c) 2023 Anthony Weathersby
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -31,10 +38,10 @@
 /// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 /// IN THE SOFTWARE
 
-use sherpa_rust_runtime::{kernel::ByteCodeParserNew, parsers::Parser, types::*, *};
+use radlr_rust_runtime::{kernel::ByteCodeParserNew, parsers::Parser, types::*, *};
 use std::{collections::HashMap, rc::Rc};
 
-const BINARY: &'static [u8] = include_bytes!("/home/work/projects/lib_sherpa/test/workflow_test/parser.bin");
+const BINARY: &'static [u8] = include_bytes!("/home/work/projects/lib_radlr/test/workflow_test/parser.bin");
 
 const NONTERM_NAME_TO_ID: [(&'static str, u32); 1] = [("default",0),];
 
@@ -42,11 +49,11 @@ const TOKEN_ID_TO_STRING: [(u32, &'static str); 5] = [(0, r###"Default"###),(1, 
 
 const NONTERM_ID_TO_ADDRESS: [(u32, u32); 1] = [(0, 8),];
 
-const STATE_TO_TOKEN_IDS: [(u32, &'static [u32]); 2] = [(21, &TOKENS_0),(61, &TOKENS_1),];
+const STATE_TO_TOKEN_IDS: [(u32, &'static [u32]); 2] = [(21, &TOKENS_1),(61, &TOKENS_0),];
 
-const TOKENS_0: [u32;1]=[4,];
+const TOKENS_0: [u32;1]=[3,];
 
-const TOKENS_1: [u32;1]=[3,];
+const TOKENS_1: [u32;1]=[4,];
 
 
 /// Parser database for the "" parser
@@ -81,6 +88,10 @@ impl AsRef<[u8]> for ParserDB {
 
 
 impl RuntimeDatabase for ParserDB {
+  fn default_entrypoint(&self) -> EntryPoint {
+      EntryPoint { nonterm_id: 0 }
+  }
+
   fn get_entry_data_from_name(&self, entry_name: &str) -> Result<EntryPoint, ParserError> {
     if let Some(id) = self.nonterm_name_to_id.get(entry_name) {
       Ok(EntryPoint { nonterm_id: *id })

@@ -150,6 +150,73 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57bcfdad1b858c2db7c38303a6d2ad4dfaf5eb53dfeb0910128b2c26d6158503"
 
 [[package]]
+name = "radlr-cli"
+version = "1.0.0-beta1"
+dependencies = [
+ "clap",
+ "radlr_ascript",
+ "radlr_ascript_beta",
+ "radlr_bytecode",
+ "radlr_core",
+ "radlr_formatter",
+ "radlr_rust_build",
+]
+
+[[package]]
+name = "radlr_ascript"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_ascript_beta"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_formatter",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_bytecode"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_core"
+version = "1.0.0-beta2"
+dependencies = [
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_formatter"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_rust_build"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_ascript",
+ "radlr_bytecode",
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_rust_runtime"
+version = "1.0.0-beta1"
+
+[[package]]
 name = "rustix"
 version = "0.38.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -161,73 +228,6 @@ dependencies = [
  "linux-raw-sys",
  "windows-sys",
 ]
-
-[[package]]
-name = "sherpa-cli"
-version = "1.0.0-beta1"
-dependencies = [
- "clap",
- "sherpa_ascript",
- "sherpa_ascript_beta",
- "sherpa_bytecode",
- "sherpa_core",
- "sherpa_formatter",
- "sherpa_rust_build",
-]
-
-[[package]]
-name = "sherpa_ascript"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_ascript_beta"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_formatter",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_bytecode"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_core"
-version = "1.0.0-beta2"
-dependencies = [
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_formatter"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_rust_build"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_ascript",
- "sherpa_bytecode",
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_rust_runtime"
-version = "1.0.0-beta1"
 
 [[package]]
 name = "strsim"

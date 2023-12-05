@@ -156,6 +156,110 @@ dependencies = [
 ]
 
 [[package]]
+name = "radlr"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_ascript",
+ "radlr_bytecode",
+ "radlr_core",
+ "radlr_llvm",
+ "radlr_rust_build",
+]
+
+[[package]]
+name = "radlr-x86"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_ascript"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_ascript_beta"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_formatter",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_build"
+version = "0.0.0"
+dependencies = [
+ "radlr_ascript",
+ "radlr_ascript_beta",
+ "radlr_bytecode",
+ "radlr_core",
+ "radlr_formatter",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_bytecode"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_core"
+version = "1.0.0-beta2"
+dependencies = [
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_formatter"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_llvm"
+version = "1.0.0-beta1"
+dependencies = [
+ "inkwell",
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_rust_build"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_ascript",
+ "radlr_bytecode",
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_rust_runtime"
+version = "1.0.0-beta1"
+
+[[package]]
+name = "radlr_test_suite"
+version = "1.0.0-beta1"
+dependencies = [
+ "radlr_ascript",
+ "radlr_bytecode",
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -204,110 +308,6 @@ name = "semver"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
-
-[[package]]
-name = "sherpa"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_ascript",
- "sherpa_bytecode",
- "sherpa_core",
- "sherpa_llvm",
- "sherpa_rust_build",
-]
-
-[[package]]
-name = "sherpa-x86"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_ascript"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_ascript_beta"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_formatter",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_build"
-version = "0.0.0"
-dependencies = [
- "sherpa_ascript",
- "sherpa_ascript_beta",
- "sherpa_bytecode",
- "sherpa_core",
- "sherpa_formatter",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_bytecode"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_core"
-version = "1.0.0-beta2"
-dependencies = [
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_formatter"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_llvm"
-version = "1.0.0-beta1"
-dependencies = [
- "inkwell",
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_rust_build"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_ascript",
- "sherpa_bytecode",
- "sherpa_core",
- "sherpa_rust_runtime",
-]
-
-[[package]]
-name = "sherpa_rust_runtime"
-version = "1.0.0-beta1"
-
-[[package]]
-name = "sherpa_test_suite"
-version = "1.0.0-beta1"
-dependencies = [
- "sherpa_ascript",
- "sherpa_bytecode",
- "sherpa_core",
- "sherpa_rust_runtime",
-]
 
 [[package]]
 name = "smallvec"

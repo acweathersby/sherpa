@@ -1,6 +1,6 @@
 ---
-title: "Sherpa Grammar Symbols"
-description: "Sherpa Documentation"
+title: "Radlr Grammar Symbols"
+description: "Radlr Documentation"
 draft: false
 ---
 

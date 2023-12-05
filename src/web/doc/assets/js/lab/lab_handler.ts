@@ -2,7 +2,7 @@ import { basicSetup } from "codemirror";
 import { Container, Thing, ButtonThing, InputThing, CMThing } from "../common/layout"
 import { DebuggerButton } from "./debugger/debugger_io";
 import { get_grammar } from "js/common/session_storage";
-import init, * as sherpa from "js/sherpa/sherpa_wasm.js";
+import init, * as radlr from "js/radlr/radlr_wasm.js";
 import { CSTNodeRoot } from "./ast_editor/node";
 
 export async function lab_handler(div: HTMLDivElement) {
@@ -33,7 +33,7 @@ export async function lab_handler(div: HTMLDivElement) {
 
   lsp_base_test.attach(outputs);
 
-  let grammar = sherpa.create_soup();
+  let grammar = radlr.create_soup();
   grammar.add_grammar(`
 
   IGNORE { c:sp }
@@ -43,10 +43,10 @@ export async function lab_handler(div: HTMLDivElement) {
   
   
   `, "/");
-  let config = sherpa.JSParserConfig.cst_editor();
-  let db = sherpa.create_parse_db("/", grammar, config);
-  let ir = sherpa.create_parser_states(db, true, config);
-  let parser = sherpa.create_bytecode(ir);
+  let config = radlr.JSParserConfig.cst_editor();
+  let db = radlr.create_parse_db("/", grammar, config);
+  let ir = radlr.create_parser_states(db, true, config);
+  let parser = radlr.create_bytecode(ir);
 
   let root_node = new CSTNodeRoot(parser);
 

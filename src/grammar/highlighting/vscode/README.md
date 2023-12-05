@@ -1,5 +1,5 @@
-# Sherpa Syntax Highlighting
+# Radlr Syntax Highlighting
 
-Syntax highlighting definitions for Sherpa grammar files.
+Syntax highlighting definitions for Radlr grammar files.
 
 MIT License

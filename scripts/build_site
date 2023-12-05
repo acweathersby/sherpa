@@ -22,23 +22,23 @@ rm -rf $PUBLIC_WEB_FOLDER/*
 
 
 ##########################
-## SHERPA WASM
+## RADLR WASM
 $ROOT_DIR/scripts/build_wasm
 ##########################
 
 
 ##########################
-## SHERPA DOC
-pushd $SHERPA_WEB_SOURCE_DIR
+## RADLR DOC
+pushd $RADLR_WEB_SOURCE_DIR
 
 # remove old public dir
-rm -rf $SHERPA_DOC_PUB_DIR
+rm -rf $RADLR_DOC_PUB_DIR
 
 # build files
 hugo
 
 # Copy public folder to public/lab
-cp -fr $SHERPA_DOC_PUB_DIR/* $PUBLIC_WEB_FOLDER
+cp -fr $RADLR_DOC_PUB_DIR/* $PUBLIC_WEB_FOLDER
 
 popd
 ##########################

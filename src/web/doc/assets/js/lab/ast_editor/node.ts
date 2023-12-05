@@ -1,4 +1,4 @@
-import { EditGraph, JSBytecodeParserDB, JSCSTNode, JSPatchResult } from "js/sherpa/sherpa_wasm";
+import { EditGraph, JSBytecodeParserDB, JSCSTNode, JSPatchResult } from "js/radlr/radlr_wasm";
 
 class CSTNode {
   /// The UI representation of this node.  

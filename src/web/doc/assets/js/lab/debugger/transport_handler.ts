@@ -1,11 +1,11 @@
 import { DebuggerButton } from "./debugger_io";
 import { FlowNode } from "../../common/flow";
-import * as sherpa from "js/sherpa/sherpa_wasm.js";
+import * as radlr from "js/radlr/radlr_wasm.js";
 import { CSTNode } from "./cst";
 import { StateEffect, Range } from "@codemirror/state";
 import { Decoration } from "@codemirror/view";
 import { DebuggerData, EnableRestartButton, DebuggerError, EnableTransportButtons, DisableTransportButtons, DisableRestartButton } from "./debugger";
-import { JSDebugEvent } from "js/sherpa/sherpa_wasm";
+import { JSDebugEvent } from "js/radlr/radlr_wasm";
 
 const highlight_effect = StateEffect.define<Range<Decoration>[]>();
 const filter_effects = StateEffect.define<((from: number, to: number) => boolean)>();
@@ -14,9 +14,9 @@ const scan_dec = Decoration.mark({ attributes: { style: "background-color: blue"
 const end_dec = Decoration.mark({ attributes: { style: "background-color: green" } });
 export class TransportHandler extends FlowNode<DebuggerData> {
 
-  parser: sherpa.JSByteCodeParser | null = null;
+  parser: radlr.JSByteCodeParser | null = null;
   debugger_offset: number = -1;
-  debugger_steps: sherpa.JSDebugPacket[] = [];
+  debugger_steps: radlr.JSDebugPacket[] = [];
   PARSING: boolean = false;
   allow_play: boolean = false;
   play_interval: number = -1;
@@ -115,7 +115,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
         + markSource(this.active_scanner_state_source, this.scanner_off);
 
       //@ts-ignore
-      document.getElementById("debugger-disassembly").innerText = sherpa.create_instruction_disassembly(step.instruction, bytecode);
+      document.getElementById("debugger-disassembly").innerText = radlr.create_instruction_disassembly(step.instruction, bytecode);
 
       //@ts-ignore
       document.getElementById("debugger-metrics").innerText = JSON.stringify(step, undefined, 2)
@@ -137,7 +137,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
       return;
 
     outer: while (true) {
-      let step: sherpa.JSDebugPacket | undefined;
+      let step: radlr.JSDebugPacket | undefined;
 
       if (this.debugger_offset < this.debugger_steps.length) {
         step = this.debugger_steps[this.debugger_offset];
@@ -157,17 +157,17 @@ export class TransportHandler extends FlowNode<DebuggerData> {
 
           if (!step.is_scanner) {
 
-            let name = sherpa.get_debug_state_name(step.instruction, bytecode, db);
+            let name = radlr.get_debug_state_name(step.instruction, bytecode, db);
 
             if (name) {
-              this.active_state_source = sherpa.get_state_source_string(name, states);
+              this.active_state_source = radlr.get_state_source_string(name, states);
               break;
             }
           } else {
 
-            let name = sherpa.get_debug_state_name(step.instruction, bytecode, db);
+            let name = radlr.get_debug_state_name(step.instruction, bytecode, db);
             if (name) {
-              this.active_scanner_state_source = sherpa.get_state_source_string(name, states);
+              this.active_scanner_state_source = radlr.get_state_source_string(name, states);
               break;
             }
           }
@@ -194,7 +194,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
 
           view.dispatch({ effects });
 
-          let token_offset = sherpa.get_debug_tok_offsets(step.instruction, bytecode);
+          let token_offset = radlr.get_debug_tok_offsets(step.instruction, bytecode);
           if (token_offset) {
             if (step.is_scanner) {
               this.scanner_off[0] = token_offset.start - 1;
@@ -205,9 +205,9 @@ export class TransportHandler extends FlowNode<DebuggerData> {
             }
           }
 
-          let debug_symbols: number[] | undefined = sherpa.get_debug_symbol_ids(step.instruction, bytecode);
+          let debug_symbols: number[] | undefined = radlr.get_debug_symbol_ids(step.instruction, bytecode);
           if (debug_symbols && debug_symbols.length > 0) {
-            //debug_symbols.forEach(s => active_search_symbols.add(sherpa.get_symbol_name_from_id(s, db)));
+            //debug_symbols.forEach(s => active_search_symbols.add(radlr.get_symbol_name_from_id(s, db)));
           }
 
           if (!step.is_scanner) {
@@ -240,23 +240,23 @@ export class TransportHandler extends FlowNode<DebuggerData> {
         } break outer;;
         case JSDebugEvent.Reduce: {
           let { nonterminal_id, rule_id, symbol_count } = step;
-          let expr = sherpa.get_rule_expression_string(rule_id, db);
+          let expr = radlr.get_rule_expression_string(rule_id, db);
 
           if (true) {
-            let name = sherpa.get_nonterminal_name_from_id(nonterminal_id, db);
+            let name = radlr.get_nonterminal_name_from_id(nonterminal_id, db);
             let node = new CSTNode(name, expr, false);
             node.children = this.cst_nodes.slice(-symbol_count);
             this.cst_nodes.length -= symbol_count;
             this.cst_nodes.push(node);
           } else {
 
-            /*             switch (sherpa.get_rule_reduce_type(rule_id, db)) {
+            /*             switch (radlr.get_rule_reduce_type(rule_id, db)) {
                           case JSReductionType.LeftRecursive:
                             {
                               let nodes = this.cst_nodes.slice(-symbol_count);
                               let first = nodes.shift();
                               if (first) {
-                                if (first?.name != sherpa.get_nonterminal_name_from_id(nonterminal_id, db)) {
+                                if (first?.name != radlr.get_nonterminal_name_from_id(nonterminal_id, db)) {
                                   // intentional fall through;
                                 } else {
                                   first.children.push(...nodes);
@@ -270,7 +270,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
                           case JSReductionType.SingleTerminal:
                           case JSReductionType.SemanticAction:
                             {
-                              let name = sherpa.get_nonterminal_name_from_id(nonterminal_id, db);
+                              let name = radlr.get_nonterminal_name_from_id(nonterminal_id, db);
                               let node = new CSTNode(name, expr, false);
                               node.children = this.cst_nodes.slice(-symbol_count);
                               this.cst_nodes.length -= symbol_count;
@@ -327,7 +327,7 @@ export class TransportHandler extends FlowNode<DebuggerData> {
         let parser_input = data.debugger_entry_selection.value;
 
         try {
-          this.parser = sherpa.JSByteCodeParser.new(data.parser_editor.state.doc.toString(), data.bytecode);
+          this.parser = radlr.JSByteCodeParser.new(data.parser_editor.state.doc.toString(), data.bytecode);
           this.parser.init(parser_input);
         } catch (e) {
           return [...base_return, new DebuggerError("Parser Compiler Error")];

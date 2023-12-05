@@ -1,6 +1,6 @@
 ---
-title: "Sherpa | Docs"
-description: "Sherpa Documentation"
+title: "Radlr | Docs"
+description: "Radlr Documentation"
 draft: false
 docsroot: true
 ---

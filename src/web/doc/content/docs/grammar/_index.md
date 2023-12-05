@@ -1,6 +1,6 @@
 ---
 title: "Grammar Reference"
-description: "Sherpa Documentation"
+description: "Radlr Documentation"
 draft: false
 weight: 2
 ---

@@ -10,8 +10,8 @@ name = "json_test_parser"
 path = "./bin.rs"
 
 
-[dependencies.sherpa_rust_runtime]
-path = "../../src/lib/sherpa-rust-runtime"
+[dependencies.radlr_rust_runtime]
+path = "../../src/lib/radlr-rust-runtime"
 
-[build-dependencies.sherpa_build]
-path = "../../src/lib/sherpa-build"
+[build-dependencies.radlr_build]
+path = "../../src/lib/radlr-build"

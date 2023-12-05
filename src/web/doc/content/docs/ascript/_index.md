@@ -1,6 +1,6 @@
 ---
 title: "Ascript"
-description: "Sherpa Documentation"
+description: "Radlr Documentation"
 draft: false
 weight: 3
 ---
@@ -29,7 +29,7 @@ property value.
 
 ##### example
 
-```sherpa { lab=true }
+```radlr { lab=true }
 /* A simple struct definition */ 
 
 <> expr > expr^l "+" expr^r :ast { t_Add, l, r  }

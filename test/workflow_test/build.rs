@@ -1,8 +1,8 @@
 use std::{path::PathBuf, str::FromStr};
 
-use sherpa_build::{build, SherpaResult};
+use radlr_build::{build, RadlrResult};
 
-fn main() -> SherpaResult<()> {
+fn main() -> RadlrResult<()> {
   println!("cargo:rerun-if-changed=build.rs");
   println!("cargo:rerun-if-changed=rust_script.form");
   println!("cargo:rerun-if-changed=rust_bytecode_script.form");

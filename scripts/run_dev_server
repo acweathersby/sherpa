@@ -13,7 +13,7 @@ pushd ${0:a:h}/..
 
 ##########################
 ## Startup dev environment
-pushd $SHERPA_WEB_SOURCE_DIR
+pushd $RADLR_WEB_SOURCE_DIR
 echo $PWD
 npm install
 

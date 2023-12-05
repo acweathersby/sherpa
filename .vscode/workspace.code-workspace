@@ -33,7 +33,7 @@
       "path": "../src/grammar"
     },
     {
-      "name": "lib_sherpa",
+      "name": "lib_radlr",
       "path": ".."
     },
     {

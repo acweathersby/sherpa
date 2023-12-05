@@ -1,8 +1,8 @@
-import init_sherpa, * as sherpa from "js/sherpa/sherpa_wasm.js";
+import init_radlr, * as radlr from "js/radlr/radlr_wasm.js";
 import { basicSetup, EditorView, } from 'codemirror';
 import { ScrollHandler } from "../controls/scroll";
 import docs_handler from './docs_handler';
-import { sherpaLang } from './sherpa_lang';
+import { radlrLang } from './radlr_lang';
 import { GrammarContext } from './grammar_context';
 import { get_grammar, get_input, init, set_grammar_update_handler, set_parser_update_handler } from "../common/session_storage";
 import { DebuggerButton, DebuggerCheckbox, DebuggerField } from "./debugger/debugger_io";
@@ -31,10 +31,10 @@ export default async function (
   }
 ) {
   try {
-    await init_sherpa();
-    log("Sherpa WASM Runtime initialized");
+    await init_radlr();
+    log("Radlr WASM Runtime initialized");
   } catch {
-    alert("Sherpa Failed to Load");
+    alert("Radlr Failed to Load");
   }
 
   DebuggerButton.gatherButtons();
@@ -51,7 +51,7 @@ export default async function (
     doc: get_grammar(),
 
     extensions: [basicSetup,
-      sherpaLang(ctx),
+      radlrLang(ctx),
       EditorView.editorAttributes.of({ class: "Codemirror" }),
     ],
     parent: codemirror_grammar_host

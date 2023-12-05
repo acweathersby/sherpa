@@ -1,0 +1,14 @@
+[package]
+name = "radlr_ascript"
+version = "1.0.0-beta1"
+edition = "2021"
+authors = ["Anthony Weathersby <acweathersby.codes@gmail.com>"]
+
+[lib]
+path ="./lib.rs"
+
+[dependencies.radlr_core]
+path = "../radlr-core"
+
+[dependencies.radlr_rust_runtime]
+path = "../radlr-rust-runtime"
