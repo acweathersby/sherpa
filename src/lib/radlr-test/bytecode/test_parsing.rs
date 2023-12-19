@@ -157,24 +157,24 @@ pub fn group_token() -> RadlrResult<()> {
 pub fn templates() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r#"
+    EXPORT A as A
 
     <> A > block::<t_Chaco, "test">
 
-    <t_T:ast, Content> block >
-        wrapped::<"[", Content, "]"> :ast { t_T }
+    <Aa, Bb, Cc> wrapped > Aa Bb? Cc
+    
+    <t_T:ast, Content:sym> block >
+    wrapped::<"[", Content, "]"> :ast { t_T }
       | wrapped::<"(", Content, ")">
       | wrapped::<"{", Content, "}">
-
-    <A, B, C> wrapped > A B? C
-
-  "#],
+      "#],
     &[
-      ("default", "{test}", true),
-      ("default", "(test)", true),
-      ("default", "[test]", true),
-      ("default", "{}", true),
-      ("default", "()", true),
-      ("default", "[]", true),
+      ("A", "{test}", true),
+      ("A", "(test)", true),
+      ("A", "[test]", true),
+      ("A", "{}", true),
+      ("A", "()", true),
+      ("A", "[]", true),
     ],
     ParserConfig::default(),
   )
