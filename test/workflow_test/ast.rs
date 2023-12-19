@@ -14,7 +14,7 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
 /// without notice**.
 ///
 /// #### License:
-/// Copyright (c) 2023 Anthony Weathersby
+/// Copyright (c) 2020-2024 Anthony Weathersby
 ///
 /// Permission is hereby granted, free of charge, to any person obtaining a copy
 /// of this software and associated documentation files (the 'Software'), to
