@@ -525,8 +525,8 @@ fn process_rule_symbols(
         let mut rule_id = Set::new();
 
         for pending_rule in pending_rules {
-          // Prevent empty rules from being created.
-          if pending_rule.symbols.is_empty() {
+          // Prevent empty rules from being created, unless all permutations are allowed.
+          if pending_rule.symbols.is_empty() && !set.unordered {
             continue;
           }
 
