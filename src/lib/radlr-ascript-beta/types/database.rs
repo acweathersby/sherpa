@@ -144,14 +144,20 @@ impl ValueObj for AscriptStruct {
     "AscriptStruct"
   }
 }
-
-#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct AscriptProp {
   pub(crate) is_optional: bool,
   pub(crate) name:        String,
   pub(crate) ty:          AscriptType,
   pub(crate) tok:         Token,
   pub(crate) g_id:        GrammarIdentities,
+}
+
+#[cfg(not(debug_assertions))]
+impl Debug for AscriptProp {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str("AscriptProp")
+  }
 }
 
 impl ValueObj for AscriptProp {

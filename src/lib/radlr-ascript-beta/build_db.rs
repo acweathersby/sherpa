@@ -517,7 +517,9 @@ fn resolve_node(
         GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I64(None)))
       }
     }
+    #[cfg(debug_assertions)]
     node => todo!("handle graph resolve of node {node:#?}"),
+    _ => panic!("Unresolved node type"),
   }
 }
 

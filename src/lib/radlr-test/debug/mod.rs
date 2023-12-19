@@ -57,7 +57,7 @@ impl Node {
 }
 
 #[allow(unused)]
-pub fn file_debugger(
+pub fn  file_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,
   state_lu: HashMap<u32, String>,

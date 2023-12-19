@@ -480,6 +480,7 @@ pub trait RadlrParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool
             line_num: token_line_count,
             line_off: token_line_offset,
           };
+
           ast_stack.push(AstSlot(Node::default(), tok, Default::default()));
         }
         ParseAction::Error { .. } => {

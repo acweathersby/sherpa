@@ -100,7 +100,7 @@ fn main() -> RadlrResult<()> {
     let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
     let name = matches.get_one::<String>("name").cloned();
 
-    build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir, matches)
+    build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir, matches.get_one::<bool>("debug").cloned().unwrap_or_default())
   } else if matches.subcommand_matches("disassemble").is_some() {
     RadlrResult::Ok(())
   } else {
@@ -114,13 +114,12 @@ fn build_parser(
   name: Option<String>,
   _lib_out_dir: PathBuf,
   out_dir: PathBuf,
-  matches: &ArgMatches
+  debug:bool
 ) -> RadlrResult<()> {
-  let debug = matches.get_one::<bool>("debug").cloned().unwrap_or_default();
 
   let config = Default::default();
 
-  debug_assert_eq!(debug, true);
+  //debug_assert_eq!(debug, true);
 
   let mut grammar = RadlrGrammar::new();
 
@@ -195,7 +194,7 @@ fn test_radlr_bytecode_bootstrap() -> RadlrResult<()> {
   let radlr_grammar =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/radlr/2.0.0/grammar.sg").canonicalize().unwrap();
 
-  //build_parser(&[radlr_grammar], ParserType::Bytecode, Some("test_radlr".into()), std::env::temp_dir(), std::env::temp_dir())
+  build_parser(&[radlr_grammar], ParserType::Bytecode, Some("test_radlr".into()), std::env::temp_dir(), std::env::temp_dir(), false)?;
 
   Ok(())
 }

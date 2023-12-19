@@ -284,7 +284,7 @@ impl Alts {
       Self { alternatives, length, meta_label }
     }
     #[cfg(not(debug_assertions))]
-    Self { alternatives, length, offset }
+    Self { alternatives, length }
   }
 
   pub fn typed(alternatives: Vec<Rc<Alternative>>, meta_label: &'static str) -> CSTNode {

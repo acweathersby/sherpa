@@ -37,11 +37,11 @@ pub trait ForkableParser<I: ParserInput>: ParserIterator<I> + ParserInitializer 
 
 impl<T: ParserIterator<I> + ParserInitializer, I: ParserInput> ForkableParser<I> for T {}
 
-/// Takes a series of in progress contexts and attempts to advances them by at
+/// Takes a series of in-progress contexts and attempts to advances them by at
 /// least one parse action, placing them back into the pending queue, the
 /// `completed` if they have been completed, or `errored` if an
 /// error was encountered.
-pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: ForkableContext + Debug>(
+pub(crate) fn fork_meta_kernel<I: ParserInput, P: ForkableParser<I> + ?Sized, CTX: ForkableContext>(
   input: &mut I,
   parser: &mut P,
   pending: &mut ContextQueue<CTX>,
