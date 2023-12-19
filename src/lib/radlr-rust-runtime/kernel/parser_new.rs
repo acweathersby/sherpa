@@ -270,6 +270,7 @@ fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserCo
     can_debug: false,
   }
 }
+
 /// Performs the [Opcode::SkipToken] operation
 fn skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::SkipToken;
@@ -436,8 +437,12 @@ fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   ctx.recovery_tok_id = 0;
   ctx.tok_byte_len = 0;
   ctx.byte_len = 0;
+
+  ctx.chkp_line_num = ctx.end_line_num;
+  ctx.chkp_line_num = ctx.start_line_off;
   ctx.end_line_off = ctx.start_line_off;
   ctx.end_line_num = ctx.end_line_num;
+
   OpResult {
     action:    ParseAction::None,
     next:      i.next(),
@@ -456,7 +461,8 @@ fn read_codepoint<'a, 'debug>(
 ) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::ReadCodepoint;
   emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
-  if get_input_value(MatchInputType::Codepoint, i, ctx, input, debug, is_scanner) == 0 {
+  let (cp, is_nl) = get_input_value(MatchInputType::Codepoint, i, ctx, input, debug, is_scanner);
+  if cp == 0 {
     OpResult {
       action:    ParseAction::FailState,
       next:      None,
@@ -464,6 +470,10 @@ fn read_codepoint<'a, 'debug>(
       can_debug: false,
     }
   } else {
+    if is_nl {
+      ctx.end_line_num += 1;
+      ctx.end_line_off = ctx.input_ptr as u32;
+    }
     OpResult {
       action:    ParseAction::None,
       next:      i.next(),
@@ -497,7 +507,7 @@ fn hash_branch<'a, 'debug>(
 
   let hash_mask = (1 << modulo_base) - 1;
 
-  let input_value = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
+  let (input_value, is_nl) = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
   loop {
     let mut hash_index = (input_value & hash_mask) as usize;
     loop {
@@ -508,6 +518,10 @@ fn hash_branch<'a, 'debug>(
       let next = ((cell >> 22) & 0x3FF) as i32 - 512;
 
       if value == input_value {
+        if is_nl {
+          ctx.end_line_num += 1;
+          ctx.end_line_off = ctx.input_ptr as u32;
+        }
         return OpResult {
           action:    ParseAction::None,
           next:      Some((i.bytecode(), i.address() + off as usize).into()),
@@ -547,11 +561,15 @@ fn vector_branch<'a, 'debug>(
     ..
   } = i.into();
 
-  let input_value = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
+  let (input_value, is_nl) = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
 
   loop {
     let value_index = (input_value as i32 - value_offset as i32) as usize;
     if value_index < table_length as usize {
+      if is_nl {
+        ctx.end_line_num += 1;
+        ctx.end_line_off = ctx.input_ptr as u32;
+      }
       let mut iter: ByteCodeIterator = (i.bytecode(), table_start + value_index * 4).into();
       let address_offset = iter.next_u32_le().unwrap();
       return OpResult {
@@ -578,8 +596,9 @@ fn get_input_value<'a, 'debug>(
   input: &impl ParserInput,
   debug: &mut Option<&'debug mut DebugFnNew>,
   is_scanner: bool,
-) -> u32 {
-  match input_type {
+) -> (u32, bool) {
+  let mut is_nl = false;
+  let val = match input_type {
     MatchInputType::NonTerminal => ctx.nonterm as u32,
     MatchInputType::EndOfFile => (ctx.input_ptr >= input.len()) as u32,
     MatchInputType::Token => {
@@ -601,8 +620,7 @@ fn get_input_value<'a, 'debug>(
       let byte = input.byte(ctx.input_ptr);
 
       if byte == 10 {
-        ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.input_ptr as u32;
+        is_nl = true;
       }
 
       if byte > 0 {
@@ -616,8 +634,7 @@ fn get_input_value<'a, 'debug>(
       let byte = input.byte(ctx.input_ptr);
 
       if byte == 10 {
-        ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.input_ptr as u32;
+        is_nl = true;
       }
 
       if byte > 0 {
@@ -633,8 +650,7 @@ fn get_input_value<'a, 'debug>(
       let len = get_utf8_byte_length_from_code_point(cp);
 
       if cp == 10 {
-        ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.input_ptr as u32;
+        is_nl = true;
       }
 
       match input_type {
@@ -665,7 +681,9 @@ fn get_input_value<'a, 'debug>(
         i_type => unreachable!("{}", i_type),
       }
     }
-  }
+  };
+
+  (val, is_nl)
 }
 
 fn token_scan<'a, 'debug>(
