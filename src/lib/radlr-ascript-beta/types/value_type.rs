@@ -330,14 +330,17 @@ impl ValueObj for GraphNode {
   }
 
   fn get_keys<'scope>(&'scope self) -> &'static [&'static str] {
-    &["left", "right", "key", "index", "val"]
+    &["left", "right", "key", "index", "init", "ast_type"]
   }
 
   fn get_val<'scope>(&'scope self, key: &str, core: &radlr_core::IStringStore) -> Value<'scope> {
     use GraphNode::*;
     match key {
       "left" => match self {
-        Add(left, ..) => Value::Obj(left.as_ref()),
+        Add(left, ..) => {
+          dbg!(&self);
+          Value::Obj(left.as_ref())
+        }
         Sub(left, ..) => Value::Obj(left.as_ref()),
         Mul(left, ..) => Value::Obj(left.as_ref()),
         Div(left, ..) => Value::Obj(left.as_ref()),
@@ -364,15 +367,24 @@ impl ValueObj for GraphNode {
         TokSym(_, last_ref, ..) => Value::Int(*last_ref as isize),
         _ => Value::None,
       },
-      "val" => match self {
+      "init" => match self {
         Map(_, val, ..) => Value::Obj(val.as_ref()),
         Vec(val, ..) => Value::Obj(val),
-        Str(val, ..) => val.as_ref().map(|v| Value::Obj(v.as_ref())).unwrap_or(Value::None),
-        Bool(val, ..) => val.as_ref().map(|v| Value::Obj(v.as_ref())).unwrap_or(Value::None),
+        Str(val, ..) => val.as_ref().map(convertRCToValue).unwrap_or(Value::None),
+        Bool(val, ..) => val.as_ref().map(convertRCToValue).unwrap_or(Value::None),
+        Num(val, ..) => val.as_ref().map(convertRCToValue).unwrap_or(Value::None),
         _ => Value::None,
       },
+      "ast_type" => Value::Obj(self.get_type()),
       _ => GraphNode::get_type(self).get_val(key, core),
     }
+  }
+}
+
+fn convertRCToValue(v: &Rc<GraphNode>) -> Value {
+  match v.as_ref() {
+    GraphNode::Undefined(_) => Value::None,
+    v => Value::Obj(v),
   }
 }
 

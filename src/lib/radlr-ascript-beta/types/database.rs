@@ -23,7 +23,7 @@ use radlr_rust_runtime::types::Token;
 pub struct AscriptDatabase {
   pub(crate) structs: AscriptStructs,
   /// If errors are present then it is likely that the
-  /// database is in an incomplete state and SHOULD not be
+  /// database is in an incomplete state and SHOULD NOT be
   /// used to construct parser outputs.
   pub(crate) errors:  Vec<RadlrError>,
 

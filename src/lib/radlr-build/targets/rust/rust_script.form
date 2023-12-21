@@ -1,8 +1,5 @@
 @{#![allow(unused)]
 
-use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
-
-
 /// ### `radlr` Rust Parser
 ///
 /// - **GENERATOR**: radlr 1.0.0-beta2
@@ -34,6 +31,8 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
 /// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 /// IN THE SOFTWARE
 
+use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
+
 @structs
   
 @rules.iter#rule_function()
@@ -42,7 +41,36 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
 
 #_ {@"This is a comment function. Since we never call it, it has the same effect as a comment in other languages."}
 
+#convert_type_name type_name:str {
+  match type_name {
+    "tok"    { Token }
+    "str"    { String } 
+    "bool"   { bool }
+    "i8"     { i8 }
+    "i16"    { i6 }
+    "i32"    { i2 }
+    "i64"    { i4 }
+    "u8"     { u8 }
+    "u16"    { u16 }
+    "u32"    { u32 }
+    "u64"    { u64 }
+    "f32"    { f32 }
+    "f64"    { f64 }
+    { @{ [TODO: ScalarType @type_name ] } }
+  }
+}
+
+#prop_name ts:str {
+  match ts {
+    "type" { r# @[ts] }
+    "enum" { r# @[ts] }
+    { @[ts] }
+  }
+}
+
 #type_structs {
+
+
 
   #node_entry { @self.name(Box<@self.name<Token>>) @; }
   #token_entry { AstNode::@self.name(n)\ =>\ { n.tok.clone()@; } @; }
@@ -91,24 +119,16 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
           match t.base_type {
             "str"     { String }
             "tok"     { Vec<Token> }
-            { @{ [TODO: Map Type @t.agg_type @t.base_type ] } }
+            { @{ [TODO: Vec Type @t.agg_type @t.base_type ] } }
           }
         }
-        "mep" { @{ [TODO: Map Type @t.agg_type @t.base_type ] } }
-        {
-          match t.base_type {
-            "tok"    { Token }
-            "str"    { String } 
-            "bool"   { bool }
-            { @{ [TODO: Map Type @t.agg_type @t.base_type ] } }
-          }
-        }
+        "map" { @{ [TODO: Map Type @t.agg_type @t.base_type ] } }
+        { #convert_type_name(t.base_type) }
       }
     }
     
-
     #prop_define {
-      @self.name\ :\ #prop_type(self.type), @;
+      #prop_name(@self.name):\ #prop_type(self.type), @;
     }
 
     \n#[derive(Clone,\ Debug,\ Hash)]\n
@@ -123,6 +143,22 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
 }
 
 #rule_function {
+
+  #type_NumNode ref:str {
+    match self.init {
+      & { 
+        @self.init.(ref)
+
+        match (self.init.agg_type, self.init.base_type) {
+          ("vec", _)  { let\ @ref\ =\ @ref. len()\ as\ #convert_type_name(@self.base_type); @; }
+          ("map", _)  { let\ @ref\ =\ @ref. len()\ as\ #convert_type_name(@self.base_type); @; }
+          (_, "tok")  {  let\ @ref\ =\ @ref. to_string(); }
+          { let\ @ref:String\ = "";  }
+        }@;
+      }
+      { let\ @ref\ =\ @self.base_val;@; }
+    }
+  }
 
   #type_TokNode ref:str {
     let\ @ref\ =\ tokens[@self.index].clone();@;
@@ -145,11 +181,81 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
     }@;
   }
 
+  #type_AddNode ref:str {
+    
+    @ref_l={ @ref + "_l" }
+    @ref_r={ @ref + "_r" }
+
+    @self.right.(@ref_r)
+    @self.left.(@ref_l)
+
+    match (self.left.agg_type, self.right.agg_type) {
+      ("vec",  "vec") {
+        vec_vec
+      }
+
+      ("vec",  "map") {
+        vec_map
+      }
+
+      ("map",  "vec") {
+        map_vec
+      }
+
+      ("map",  "map") {
+        map_map
+      }
+
+      ("vec",  _) {
+        
+        match self.right.base_type {
+          "tok" { 
+            let\ mut\ @ref\ =\ @ref_l; @;
+            @ref . push ( @ref_r ) ; @;
+          }
+        }
+        
+      }
+
+      (_,  "vec") {
+        add_vec
+      }
+
+      ("map",  _) {
+        map_add
+      }
+
+      (_,  "map") {
+        add_map
+      }
+
+      (_, _) {
+        scalar_add
+      }
+    } @;
+  }
+
+  #type_VecNode ref:str {
+
+    #vec_elements_initializers ref:str {
+      @ref={ ref + "_" + index }
+      @self.(ref)@;
+    }
+
+    #vec_elements_names ref:str {
+      @ref={ ref + "_" + index }
+      @ref match iter_last { & { } { "," } }@;
+    }
+    /* @self.init */@;
+    @self.init.iter#vec_elements_initializers(ref) 
+
+    let\ @ref\ =\ vec![\ @self.init.iter#vec_elements_names(ref)\ ];@;
+  }
 
   #type_StrNode ref:str {
-    /* @self.val.agg_type\ ::\ @self.val.base_type */@;
-    @self.val.(ref)
-    match (self.val.agg_type, self.val.base_type) {
+    /* @self.init.agg_type\ ::\ @self.init.base_type */@;
+    @self.init.(ref)
+    match (self.init.agg_type, self.init.base_type) {
       ("vec", "tok") {  let\ @ref\ =\ @ref[0]\ .slice(@ref[@ref\ .len() - 1]); }
       (_, "tok")     {  let\ @ref\ =\ @ref. to_string(); }
       { let\ @ref:String\ = "";  }
@@ -157,8 +263,8 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
   }
 
   #type_BoolNode ref:str {
-    match self.val {
-      { let\ @ref\ =\ Falsed @; }
+    match self.init {
+      { let\ @ref\ =\ false ; @; }
       & { 
         let\ @ref\ =\ match self.base_val 
           { "false" { false } "true" { false } } 
@@ -181,7 +287,7 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
 
     @self.props.iter#print_struct_initializer()
 
-    #print_struct_assign { @self.name, @; }
+    #print_struct_assign { #prop_name(@self.name), @; }
 
     AstNode::@self.name(Box::new(@self.name{
       @self.props.iter#print_struct_assign()
@@ -190,8 +296,19 @@ use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
   }
 
   #type_Initializer {
-    init___
+    @out={ "out" }
+
     let\ nodes = unsafe { &mut *nodes };@;
+    /*\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ */
+    /*\ @self.node.#type\ */@;
+    @self.node.(@out)@;
+
+    /*\ @self.node.ast_type.agg_type\ @self.node.ast_type.base_type\ */@;
+    match (@self.node.ast_type.agg_type, @self.node.ast_type.base_type) {
+      ("vec", "tok") { 
+        AstNode::Tokens(@out) @;
+      }
+    }
   }
 
   #_{ 

@@ -13,6 +13,8 @@ pub fn build(db: &RadlrDatabase, output_dir: &Path) -> RadlrResult<()> {
 
   let bytecode = radlr_bytecode::compile_bytecode(&parser, false)?;
 
+  std::fs::create_dir_all(output_dir)?;
+
   let binary_path = output_dir.join("parser.bin");
   let parser_path = output_dir.join("parser.rs");
   let ast_path = output_dir.join("ast.rs");
@@ -61,6 +63,7 @@ pub fn build(db: &RadlrDatabase, output_dir: &Path) -> RadlrResult<()> {
       .collect::<OrderedMap<_, _>>();
 
     let token_maps = token_maps.iter().map(|(v, k)| (k.to_string(), v.clone())).collect::<OrderedMap<_, _>>();
+
     ctx.set_val("ir_token_lookup", Value::Obj(&states_lu));
     ctx.set_val("binary_path", binary_path.intern(db.get_internal().string_store()).into());
     ctx.set_val("nonterm_name_to_id", Value::Obj(&nonterm_name_to_id));
@@ -69,6 +72,7 @@ pub fn build(db: &RadlrDatabase, output_dir: &Path) -> RadlrResult<()> {
     ctx.set_val("state_to_token_ids_map", Value::Obj(&state_to_token_ids_map));
     ctx.set_val("token_maps", Value::Obj(&token_maps));
     ctx.max_width = 100;
+
     let f: Formatter = FormatterResult::from(BC_SCRIPT).into_result()?;
 
     f.write_to_output(&mut ctx, parser)?.flush()?;

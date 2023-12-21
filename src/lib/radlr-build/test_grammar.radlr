@@ -1,0 +1,3 @@
+<> test 
+  >  "hello" c:sp(*) "world" 
+    :ast { t_Name, typ:$1, type2:$3, spaces: u32($2), tok, d: f32($2) }

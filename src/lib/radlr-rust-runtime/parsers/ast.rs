@@ -77,7 +77,7 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token>, R
       ParseAction::Fork { .. } => {
         panic!("No implementation of fork resolution is available")
       }
-      ParseAction::Skip { byte_offset: token_byte_offset, byte_length: token_byte_length, .. } => {}
+      ParseAction::Skip { .. } => {}
       ParseAction::Shift {
         byte_length: token_byte_length,
         byte_offset: token_byte_offset,

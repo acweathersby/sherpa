@@ -4,7 +4,11 @@ use crate::{
 };
 use radlr_core::{CachedString, ErrorClass, IString, IStringStore, RadlrError, RadlrResult};
 use radlr_rust_runtime::types::Token;
-use std::{collections::HashMap, io::Write, vec};
+use std::{collections::HashMap, fmt::format, io::Write, vec};
+
+pub const fn formatter_error_class() -> ErrorClass {
+  ErrorClass::Extended(2)
+}
 
 /// A formatter for complicated code.
 ///
@@ -428,8 +432,6 @@ impl Formatter {
       ctx.set("iter_first".to_token(), Value::Int(1));
       let len = obj_val.get_len();
 
-      println!("{len} -------------------------------");
-
       for (i, (key, val)) in obj_val.get_iter(&root_ctx.s_store).into_iter().enumerate() {
         ctx.set("index".to_token(), Value::Int(i as isize));
         ctx.set("key".to_token(), key);
@@ -438,7 +440,6 @@ impl Formatter {
         if i + 1 >= len {
           ctx.set("iter_last".to_token(), Value::Int(1));
         }
-
         Self::set_funct_variables(funct_ctx, &args, &mut ctx);
 
         match Self::interpret_sequence(&funct_ctx.f.content, &mut ctx, w)? {
@@ -508,7 +509,7 @@ impl Formatter {
 
       Ok(result)
     } else {
-      Err(RadlrError::StaticText("Function not defined on context"))
+      create_missing_function_error(call, root_ctx)
     }
   }
 
@@ -527,8 +528,6 @@ impl Formatter {
 
         Self::set_funct_variables(funct_ctx, &args, root_ctx);
 
-        println!("{}", call.tok.blame(1, 1, "", Default::default()));
-
         match Self::interpret_sequence(&funct_ctx.f.content, root_ctx, w)? {
           None => {
             return Ok(());
@@ -538,7 +537,7 @@ impl Formatter {
           }
         }
       } else {
-        return Err(RadlrError::StaticText("Function not defined on context"));
+        return create_missing_function_error(call, root_ctx);
       }
     }
   }
@@ -814,16 +813,16 @@ impl Formatter {
         }
       }
 
-      for m in matches {
-        if match &m.match_expr {
-          Some(exprs) => {
-            expressions.len() == exprs.expressions.len() && {
+      for arm in matches {
+        if match &arm.match_expr {
+          Some(match_exprs) => {
+            expressions.len() == match_exprs.expressions.len() && {
               let mut i = 0;
               loop {
                 if i == expressions.len() {
                   break true;
-                } else if exprs.expressions[i].as_Ignore().is_some() {
-                } else if exprs.expressions[i].as_False().is_some() {
+                } else if match_exprs.expressions[i].as_Ignore().is_some() {
+                } else if match_exprs.expressions[i].as_False().is_some() {
                   if match expressions[i] {
                     Value::Int(val) => val != 0,
                     Value::Num(val) => val != 0.0,
@@ -832,7 +831,7 @@ impl Formatter {
                   } {
                     break false;
                   }
-                } else if exprs.expressions[i].as_True().is_some() {
+                } else if match_exprs.expressions[i].as_True().is_some() {
                   if match expressions[i] {
                     Value::Int(val) => val == 0,
                     Value::Num(val) => val == 0.0,
@@ -842,11 +841,11 @@ impl Formatter {
                   } {
                     break false;
                   }
-                } else if exprs.expressions[i].as_NotNone().is_some() {
-                  if !matches!(expressions[i], Value::None) {
+                } else if match_exprs.expressions[i].as_NotNone().is_some() {
+                  if matches!(expressions[i], Value::None) {
                     break false;
                   }
-                } else if !compare_vals(&expressions[i], &Self::eval_expression(&exprs.expressions[i], ctx)?) {
+                } else if !compare_vals(&expressions[i], &Self::eval_expression(&match_exprs.expressions[i], ctx)?) {
                   break false;
                 }
                 i += 1;
@@ -855,7 +854,7 @@ impl Formatter {
           }
           _ => false,
         } {
-          return Self::interpret_sequence(&m.content, ctx, writer);
+          return Self::interpret_sequence(&arm.content, ctx, writer);
         }
       }
     }
@@ -866,6 +865,32 @@ impl Formatter {
 
     Ok(None)
   }
+}
+
+fn create_missing_function_error(call: &Call, root_ctx: &FormatterContext<'_, '_>) -> Result<(), RadlrError> {
+  let mut available_functions = vec![];
+
+  let mut ctx = Some(root_ctx);
+
+  while let Some(c) = &ctx {
+    if let Some(fns) = c.functs.as_ref() {
+      available_functions.extend(fns.values().into_iter().map(|f| f.f.name.clone()));
+    }
+
+    ctx = c.parent.clone();
+  }
+
+  available_functions.sort();
+
+  Err(RadlrError::SourceError {
+    loc:        call.tok.clone(),
+    path:       Default::default(),
+    id:         (formatter_error_class(), 1, "function-not-found").into(),
+    msg:        format!("Function {} not found in this context", call.name),
+    inline_msg: Default::default(),
+    ps_msg:     format!("Available functions in this context are [\n    {}\n]", available_functions.join("\n    ")),
+    severity:   radlr_core::RadlrErrorSeverity::Critical,
+  })
 }
 
 fn _simple_error(tok: Token, message: &str) -> RadlrError {
@@ -892,7 +917,7 @@ fn _hint_error(tok: Token, message: &str, hint: &str) -> RadlrError {
   }
 }
 
-fn create_missing_function_error<T>(call: &parser::Call) -> Result<T, RadlrError> {
+/* fn create_missing_function_error<T>(call: &parser::Call) -> Result<T, RadlrError> {
   Err(RadlrError::SourceError {
     loc:        call.tok.clone(),
     path:       Default::default(),
@@ -902,7 +927,7 @@ fn create_missing_function_error<T>(call: &parser::Call) -> Result<T, RadlrError
     ps_msg:     "hint: create a minimum function definition for ".to_string() + &call.name + ": " + &call.name + " { }",
     severity:   radlr_core::RadlrErrorSeverity::Critical,
   })
-}
+} */
 
 /// A call made at the end of execution sequence.
 type TailCall<'call> = &'call Call;

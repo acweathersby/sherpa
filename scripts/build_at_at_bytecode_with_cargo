@@ -1,0 +1,25 @@
+#! /bin/zsh
+
+# This script is used to rebuild the at_at parser
+# This should only ever need to be done if:
+# 1. The at_at grammar is extended or modified
+# 2. New features are added to at_at parsers that need to 
+#    be incorporated into the radlr at_at parser.
+
+pushd ${0:a:h}/..
+
+ROOT_DIR=$PWD
+RADLR_LIBRARY_DIR=$ROOT_DIR/src/lib/radlr-core/lib
+RADLR_CLI_DIR=$ROOT_DIR/src/app/cli
+export RUSTFLAGS="-Awarnings"
+pushd $RADLR_CLI_DIR
+
+cargo run \
+    --bin radlr \
+    -- build -t bytecode\
+     -a \
+     -d \
+     -l rust \
+     --libout $ROOT_DIR/src/lib/radlr-core/lib/ \
+     -o $ROOT_DIR/src/lib/radlr-formatter/parser/ \
+      $ROOT_DIR/src/grammar/radlr/2.0.0/at_at.sg

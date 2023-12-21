@@ -352,18 +352,18 @@ fn resolve_expressions(db: &ParserDatabase, adb: &mut AscriptDatabase, nonterm_t
       }
       AscriptRule::ListContinue(_, init) => {
         let Initializer { output_graph, ty, .. } = init;
-        let first = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
+        let first = match get_item_at_sym_ref(item, db, |_, _| true /* matches first item */) {
           Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices),
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
         let last = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
-          Some(item) => graph_node_from_item(item, db, &nonterm_types,selected_indices),
+          Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices),
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
 
-        //*ty = AscriptType::Aggregate(AscriptAggregateType::Vec { base_type: last.get_type().as_scalar().unwrap() });
+        debug_assert!(matches!(first.get_type(), AscriptType::Aggregate(AscriptAggregateType::Vec { .. })));
 
-        let first = GraphNode::Vec(GraphNodeVecInits(vec![last.clone()]), *ty);
+        //let first = GraphNode::Vec(GraphNodeVecInits(vec![first.clone()]), *ty);
         let join = GraphNode::Add(Rc::new(first), Rc::new(last), *ty);
         *output_graph = Some(join);
       }
@@ -501,12 +501,60 @@ fn resolve_node(
         GraphNode::Bool(None, AscriptType::Scalar(AscriptScalarType::Bool(bool.value)))
       }
     }
+    ASTNode::AST_U8(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U8(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U8(None)))
+      }
+    }
+    ASTNode::AST_U16(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U16(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U16(None)))
+      }
+    }
     ASTNode::AST_U32(val) => {
       if let Some(init) = &val.initializer {
         let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
         GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U32(None)))
       } else {
         GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U32(None)))
+      }
+    }
+    ASTNode::AST_U64(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U64(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U64(None)))
+      }
+    }
+    ASTNode::AST_I8(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I8(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I8(None)))
+      }
+    }
+    ASTNode::AST_I16(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I16(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I16(None)))
+      }
+    }
+    ASTNode::AST_I32(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I32(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I32(None)))
       }
     }
     ASTNode::AST_I64(val) => {
@@ -517,6 +565,23 @@ fn resolve_node(
         GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I64(None)))
       }
     }
+    ASTNode::AST_F32(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::F32(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::F32(None)))
+      }
+    }
+    ASTNode::AST_F64(val) => {
+      if let Some(init) = &val.initializer {
+        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices);
+        GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::F64(None)))
+      } else {
+        GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::F64(None)))
+      }
+    }
+
     #[cfg(debug_assertions)]
     node => todo!("handle graph resolve of node {node:#?}"),
     _ => panic!("Unresolved node type"),
