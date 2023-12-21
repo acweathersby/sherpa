@@ -14,11 +14,11 @@ RADLR_CLI_DIR=$ROOT_DIR/src/app/cli
 RUSTFLAGS="${RUSTFLAGS} -Awarnings"
 pushd $RADLR_CLI_DIR
 export RUSTFLAGS
-radlr \
+radlr_x86_64 \
      build -t bytecode\
      -a \
      -d \
      -l rust \
      --libout $ROOT_DIR/src/lib/radlr-core/lib/ \
      -o $ROOT_DIR/src/lib/radlr-formatter/parser/ \
-      $ROOT_DIR/src/grammar/radlr/2.0.0/ascript_form.sg
+      $ROOT_DIR/src/grammar/radlr/2.0.0/at_at.sg
