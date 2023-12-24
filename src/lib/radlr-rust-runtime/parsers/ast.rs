@@ -1,9 +1,11 @@
 //! A parser that produce the tokens, including skipped tokens, of an input.
 
+use std::fmt::Debug;
 use crate::types::*;
 
 pub trait Tk: Clone + Default + std::hash::Hash {
   fn to_string(&self) -> String;
+  fn trim(&self, start: usize, end: usize) -> Self;
   fn from_range(start: usize, end: usize, id: u32, source: SharedSymbolBuffer) -> Self;
   fn from_slice(slice: &[Self]) -> Self;
 }
@@ -25,7 +27,7 @@ pub trait AstDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// quality. In this case, the tree containing the least number of error
   /// correction assumptions will be ordered in front of trees that employ more
   /// guesswork to recover parsing.
-  fn build_ast<Token: Tk, N: Node<Token>, R: AsRef<[Reducer<Token, N>]>>(
+  fn build_ast<Token: Tk, N: Node<Token> + Debug, R: AsRef<[Reducer<Token, N>]>>(
     &self,
     input: &mut I,
     entry: EntryPoint,
@@ -37,7 +39,7 @@ pub trait AstDatabase<I: ParserInput>: ParserProducer<I> + Sized {
 
 impl<I: ParserInput, T: ParserProducer<I> + Sized> AstDatabase<I> for T {}
 
-fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token>, R: AsRef<[Reducer<Token, N>]>>(
+fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token> + Debug, R: AsRef<[Reducer<Token, N>]>>(
   input: &mut I,
   entry: EntryPoint,
   db: &DB,

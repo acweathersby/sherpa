@@ -113,19 +113,19 @@ impl<T: ParserInput> ParserProducer<T> for @name {
 
 
 #nonterm_name_to_id {
-  ( "@key", @self ),@;
+  ( "@_key_", @self ),@;
 }
 
 #token_id_to_str {
-  ( @key,\ r###"@self"### ),@;
+  ( @_key_,\ r###"@self"### ),@;
 }
 
 #nonterm_id_to_address {
-  ( @key,\ @self ),@;
+  ( @_key_,\ @self ),@;
 }
 
 #state_to_token_ids_map {
-  ( @key,\ &TOKENS_@self ),@;
+  ( @_key_,\ &TOKENS_@self ),@;
 }
 
 #token_ids {
@@ -133,5 +133,5 @@ impl<T: ParserInput> ParserProducer<T> for @name {
     @self,  @;
   }
 
-  const\ TOKENS_@key:\ [u32; @self.#len] = [ @self.iter#vals() ];\n\n
+  const\ TOKENS_@_key_:\ [u32; @self.#len] = [ @self.iter#vals() ];\n\n
 }

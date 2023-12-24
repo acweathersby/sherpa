@@ -101,7 +101,7 @@ pub enum RadlrError {
     /// Location of the error within a source file.
     loc:        Token,
     /// Path to the source file containing the error.
-    path:       PathBuf,
+    path:       String,
     /// A unique identifier for this class of error, in the form `g:id(+)(\-
     /// g:id(+))(*)`
     id:         ErrorId,
@@ -180,13 +180,13 @@ impl RadlrError {
   /// Convert RadlrParseError into RadlrError
   pub fn from_parse_error(err: RadlrParseError, path: PathBuf) -> RadlrError {
     Self::SourceError {
-      loc: err.loc,
-      path,
-      id: (ErrorClass::Parsing, 99, "parse-error").into(),
-      msg: err.message,
+      loc:        err.loc,
+      path:       path.to_str().unwrap().to_string(),
+      id:         (ErrorClass::Parsing, 99, "parse-error").into(),
+      msg:        err.message,
       inline_msg: err.inline_message,
-      ps_msg: Default::default(),
-      severity: RadlrErrorSeverity::Critical,
+      ps_msg:     Default::default(),
+      severity:   RadlrErrorSeverity::Critical,
     }
   }
 
@@ -316,7 +316,7 @@ impl std::fmt::Debug for RadlrError {
       SourceError { msg, id, inline_msg, loc, path, ps_msg, .. } => f.write_fmt(format_args!(
         "\n{} [{}:{}]\n{}\n\n{}\n\n{}\n",
         id.to_string(),
-        path.to_str().unwrap(),
+        path,
         loc.loc_stub(),
         msg.trim(),
         loc.blame(1, 1, &inline_msg.trim(), BlameColor::RED),

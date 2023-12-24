@@ -921,7 +921,7 @@ pub fn compile_struct_props(
     btree_map::Entry::Vacant(_) => {
       return Err(RadlrError::SourceError {
         loc:        ast.tok.clone(),
-        path:       rule.g_id.path.to_path(db.string_store()),
+        path:       rule.g_id.path.to_string(db.string_store()),
         id:         (ascript_error_class(), 0, "undefined-struct").into(),
         msg:        "Struct should be defined at this point".into(),
         inline_msg: Default::default(),

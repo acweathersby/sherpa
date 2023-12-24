@@ -45,15 +45,40 @@ const BINARY: &'static [u8] = include_bytes!("/home/work/projects/lib_radlr/test
 
 const NONTERM_NAME_TO_ID: [(&'static str, u32); 1] = [("default",0),];
 
-const TOKEN_ID_TO_STRING: [(u32, &'static str); 5] = [(0, r###"Default"###),(1, r###"c:sp"###),(2, r###"c:nl"###),(3, r###"World"###),(4, r###"Hello"###),];
+const TOKEN_ID_TO_STRING: [(u32, &'static str); 9] = [
+  (0, r###"Default"###),
+  (1, r###"c:sp"###),
+  (2, r###"c:nl"###),
+  (3, r###","###),
+  (4, r###"{"###),
+  (5, r###"}"###),
+  (6, r###":"###),
+  (7, r###"<string>"###),
+  (8, r###"c:num"###),
+];
 
 const NONTERM_ID_TO_ADDRESS: [(u32, u32); 1] = [(0, 8),];
 
-const STATE_TO_TOKEN_IDS: [(u32, &'static [u32]); 2] = [(21, &TOKENS_1),(61, &TOKENS_0),];
+const STATE_TO_TOKEN_IDS: [(u32, &'static [u32]); 8] = [
+  (142, &TOKENS_1),
+  (200, &TOKENS_3),
+  (21, &TOKENS_4),
+  (364, &TOKENS_0),
+  (440, &TOKENS_2),
+  (497, &TOKENS_0),
+  (509, &TOKENS_0),
+  (79, &TOKENS_2),
+];
 
-const TOKENS_0: [u32;1]=[3,];
+const TOKENS_0: [u32;2]=[3,5,];
 
-const TOKENS_1: [u32;1]=[4,];
+const TOKENS_1: [u32;1]=[6,];
+
+const TOKENS_2: [u32;1]=[7,];
+
+const TOKENS_3: [u32;2]=[7,8,];
+
+const TOKENS_4: [u32;1]=[4,];
 
 
 /// Parser database for the "" parser

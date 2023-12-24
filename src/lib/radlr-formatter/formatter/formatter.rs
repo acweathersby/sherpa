@@ -417,7 +417,7 @@ impl Formatter {
     }
   }
 
-  /// Returns `true` if a call was made to function with a matching signature.
+  /// Returns `true` if a call was made to a function with a matching signature.
   fn interpret_iterator_call<'ctx: 'fn_scope, 'fn_scope, W: Write>(
     call: &'fn_scope Call,
     obj_val: &'ctx dyn ValueObj,
@@ -425,20 +425,21 @@ impl Formatter {
     w: &mut W,
   ) -> RadlrResult<()> {
     let (name_sig, args) = Self::create_function_sig(&call.name, &call.args, root_ctx)?;
+
     if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, root_ctx) {
       let ctx = &root_ctx;
-      let mut ctx = FormatterContext::create_scope(ctx);
+      let mut ctx = FormatterContext::create_scope(&call.name, ctx);
       ctx.functs = Some(&funct_ctx.functions);
-      ctx.set("iter_first".to_token(), Value::Int(1));
+      ctx.set("_iter_first_".to_token(), Value::Int(1));
       let len = obj_val.get_len();
 
       for (i, (key, val)) in obj_val.get_iter(&root_ctx.s_store).into_iter().enumerate() {
-        ctx.set("index".to_token(), Value::Int(i as isize));
-        ctx.set("key".to_token(), key);
+        ctx.set("_index_".to_token(), Value::Int(i as isize));
+        ctx.set("_key_".to_token(), key);
         ctx.set("self".to_token(), val);
 
         if i + 1 >= len {
-          ctx.set("iter_last".to_token(), Value::Int(1));
+          ctx.set("_iter_last_".to_token(), Value::Int(1));
         }
         Self::set_funct_variables(funct_ctx, &args, &mut ctx);
 
@@ -468,7 +469,7 @@ impl Formatter {
     let (name_sig, args) = Self::create_function_sig(&("#type_".to_string() + type_name), &args, ctx)?;
     if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, ctx) {
       let ctx = &ctx;
-      let mut ctx = FormatterContext::create_scope(ctx);
+      let mut ctx = FormatterContext::create_scope(type_name, ctx);
       ctx.functs = Some(&funct_ctx.functions);
       ctx.set("self".to_token(), obj_val);
       Self::set_funct_variables(funct_ctx, &args, &mut ctx);
@@ -491,10 +492,11 @@ impl Formatter {
     w: &mut W,
   ) -> RadlrResult<()> {
     let (name_sig, args) = Self::create_function_sig(&call.name, &call.args, root_ctx)?;
+
     if let Some(funct_ctx) = Self::resolve_function_call_target(name_sig, root_ctx) {
       let result = {
         let ctx = &root_ctx;
-        let mut ctx = FormatterContext::create_scope(ctx);
+        let mut ctx = FormatterContext::create_scope(&call.name, ctx);
         ctx.functs = Some(&funct_ctx.functions);
 
         Self::set_funct_variables(funct_ctx, &args, &mut ctx);
@@ -563,6 +565,7 @@ impl Formatter {
           let s_store = &ctx.s_store;
           let mut obj_map = Some(obj_map);
           let mut obj_val = Value::None;
+
           for (index, path) in obj.path.iter().enumerate() {
             if let Some(obj_map_unwrapped) = &obj_map {
               match match path {
@@ -570,6 +573,7 @@ impl Formatter {
                   return Ok(ObjectEvalResult::TypeCall(*obj_map_unwrapped, &tc.expressions));
                 }
                 Iterator(iter) => return Ok(ObjectEvalResult::Iter(*obj_map_unwrapped, &iter.call)),
+                Keys(_) => Value::Str(obj_map.unwrap().get_keys().join(" | ").intern(&ctx.s_store)),
                 Type(_) => Value::Str(obj_map.unwrap().get_type().intern(&ctx.s_store)),
                 Length(_) => Value::Int(obj_map.unwrap().get_len() as isize),
                 Prop(prop) => Self::get_prop(*obj_map_unwrapped, prop.name.as_str(), s_store),
@@ -613,6 +617,16 @@ impl Formatter {
   ) -> RadlrResult<Value<'ctx>> {
     use parser::ASTNode::*;
     let val = match expr {
+      //*
+      Call(call) => {
+        // Functions calls in expressions ALWAYS resolve to a string type.
+        let mut writer = Vec::with_capacity(1024);
+
+        let mut ctx = ctx.clone();
+        Self::interpret_function_call(call, &mut ctx, &mut writer)?;
+        Value::Str(unsafe { String::from_utf8_unchecked(writer) }.intern(&ctx.s_store))
+      }
+      //*/
       Obj(obj) => match Self::eval_obj(obj, ctx)? {
         ObjectEvalResult::Value(val) => val,
         ObjectEvalResult::TypeCall(obj, args) => {
@@ -746,6 +760,8 @@ impl Formatter {
       },
       False(_) => Value::Int(0),
       True(_) => Value::Int(1),
+      NotNone(_) => Value::Int(1),
+      None(_) => Value::None,
       literal @ Literal(_) => {
         let mut vec = Vec::with_capacity(512);
         Self::interpret_node_imut_ctx(literal, ctx, &mut vec)?;
@@ -814,47 +830,45 @@ impl Formatter {
       }
 
       for arm in matches {
-        if match &arm.match_expr {
-          Some(match_exprs) => {
-            expressions.len() == match_exprs.expressions.len() && {
-              let mut i = 0;
-              loop {
-                if i == expressions.len() {
-                  break true;
-                } else if match_exprs.expressions[i].as_Ignore().is_some() {
-                } else if match_exprs.expressions[i].as_False().is_some() {
-                  if match expressions[i] {
-                    Value::Int(val) => val != 0,
-                    Value::Num(val) => val != 0.0,
-                    Value::Str(str) => str != Default::default(),
-                    _ => false,
-                  } {
-                    break false;
-                  }
-                } else if match_exprs.expressions[i].as_True().is_some() {
-                  if match expressions[i] {
-                    Value::Int(val) => val == 0,
-                    Value::Num(val) => val == 0.0,
-                    Value::Obj(_) => true,
-                    Value::Str(str) => str == Default::default(),
-                    _ => false,
-                  } {
-                    break false;
-                  }
-                } else if match_exprs.expressions[i].as_NotNone().is_some() {
-                  if matches!(expressions[i], Value::None) {
-                    break false;
-                  }
-                } else if !compare_vals(&expressions[i], &Self::eval_expression(&match_exprs.expressions[i], ctx)?) {
+        for match_exprs in &arm.match_expressions {
+          if expressions.len() == match_exprs.expressions.len() && {
+            let mut i = 0;
+            loop {
+              if i == expressions.len() {
+                break true;
+              } else if match_exprs.expressions[i].as_Ignore().is_some() {
+              } else if match_exprs.expressions[i].as_True().is_some() {
+                if match expressions[i] {
+                  Value::Int(val) => val == 0,
+                  Value::Num(val) => val == 0.0,
+                  Value::Obj(_) => false,
+                  Value::Str(str) => str == Default::default(),
+                  Value::None => true,
+                } {
                   break false;
                 }
-                i += 1;
+              } else if match_exprs.expressions[i].as_False().is_some() {
+                if match expressions[i] {
+                  Value::Int(val) => val != 0,
+                  Value::Num(val) => val != 0.0,
+                  Value::Str(str) => str != Default::default(),
+                  Value::Obj(_) => true,
+                  Value::None => false,
+                } {
+                  break false;
+                }
+              } else if match_exprs.expressions[i].as_NotNone().is_some() {
+                if matches!(expressions[i], Value::None) {
+                  break false;
+                }
+              } else if !compare_vals(&expressions[i], &Self::eval_expression(&match_exprs.expressions[i], ctx)?) {
+                break false;
               }
+              i += 1;
             }
+          } {
+            return Self::interpret_sequence(&arm.content, ctx, writer);
           }
-          _ => false,
-        } {
-          return Self::interpret_sequence(&arm.content, ctx, writer);
         }
       }
     }
@@ -874,7 +888,11 @@ fn create_missing_function_error(call: &Call, root_ctx: &FormatterContext<'_, '_
 
   while let Some(c) = &ctx {
     if let Some(fns) = c.functs.as_ref() {
-      available_functions.extend(fns.values().into_iter().map(|f| f.f.name.clone()));
+      available_functions.extend(
+        fns.values().into_iter().map(|f| {
+          format!("{} {}", f.f.name.clone(), f.f.params.iter().map(|p| { p.ty.clone() }).collect::<Vec<_>>().join(", "))
+        }),
+      );
     }
 
     ctx = c.parent.clone();
@@ -886,7 +904,7 @@ fn create_missing_function_error(call: &Call, root_ctx: &FormatterContext<'_, '_
     loc:        call.tok.clone(),
     path:       Default::default(),
     id:         (formatter_error_class(), 1, "function-not-found").into(),
-    msg:        format!("Function {} not found in this context", call.name),
+    msg:        format!("Function {} not found in the context [{}]", call.name, root_ctx.name),
     inline_msg: Default::default(),
     ps_msg:     format!("Available functions in this context are [\n    {}\n]", available_functions.join("\n    ")),
     severity:   radlr_core::RadlrErrorSeverity::Critical,

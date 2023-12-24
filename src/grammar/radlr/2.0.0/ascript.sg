@@ -6,7 +6,8 @@ IMPORT ./token as token
 
 <> body >
 
-    structprop
+    struct_prop
+    
     | add
 
     | map 
@@ -71,41 +72,41 @@ IMPORT ./token as token
 
 <> numeric_convert > 
 
-    "u8"  convert_initializer?
+    "u8"  numeric_initializer?
         :ast { t_AST_U8,  initializer: $2, tok  }
 
-    | "u16" convert_initializer?
+    | "u16" numeric_initializer?
         :ast { t_AST_U16, initializer: $2, tok  }
 
-    | "u32" convert_initializer?
+    | "u32" numeric_initializer?
         :ast { t_AST_U32, initializer: $2, tok  }
 
-    | "u64" convert_initializer?
+    | "u64" numeric_initializer?
         :ast { t_AST_U64, initializer: $2, tok  }
 
-    | "i8"  convert_initializer?
+    | "i8"  numeric_initializer?
         :ast { t_AST_I8,  initializer: $2, tok  }
 
-    | "i16" convert_initializer?
+    | "i16" numeric_initializer?
         :ast { t_AST_I16, initializer: $2, tok  }
 
-    | "i32" convert_initializer?
+    | "i32" numeric_initializer?
         :ast { t_AST_I32, initializer: $2, tok  }
 
-    | "i64" convert_initializer?
+    | "i64" numeric_initializer?
         :ast { t_AST_I64, initializer: $2, tok  }
 
-    | "f32" convert_initializer?
+    | "f32" numeric_initializer?
         :ast { t_AST_F32, initializer: $2, tok  }
 
-    | "f64" convert_initializer?
+    | "f64" numeric_initializer?
         :ast { t_AST_F64, initializer: $2, tok  }
 
 <> numeric_initializer > 
 
-    | convert_initializer
+    convert_initializer |
 
-   '(' token::int ")"       
+   '(' token::num ")"       
         :ast { t_NumInit, expression: { t_AST_NUMBER, value:f64($2) } }
 
 <> convert_initializer > 

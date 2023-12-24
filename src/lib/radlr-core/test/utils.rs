@@ -29,7 +29,7 @@ pub fn build_parse_states_from_source_str<'a, T>(
         .add_source_from_string(source, &source_path, false)?
         .build_db(source_path, Default::default())?
         .build_states(Default::default())?
-        .build_ir_parser(false, false)?
+        .build_ir_parser(true, false)?
         .into(),
     )
   } else {

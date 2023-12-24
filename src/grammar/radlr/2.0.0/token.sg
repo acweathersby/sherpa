@@ -8,6 +8,8 @@ NAME token
 
 <> int > tk:int_tok
 
+<> num > tk:num_tok
+
 <> id_tok > ( "-" | "_" | c:id ) ( c:id | '_' | '-' | c:num )(*)
 
 <> string_tok > "\"" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\""
@@ -17,3 +19,5 @@ NAME token
 <> escaped > "\\"{:9999} ( c:sym | c:num | c:sp | c:id )
 
 <> int_tok > c:num(+)
+
+<> num_tok > ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | '-' )? c:num(+) )?

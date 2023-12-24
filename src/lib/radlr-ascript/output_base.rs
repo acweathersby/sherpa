@@ -232,7 +232,7 @@ impl<'a> AscriptWriterUtils<'a> {
       {
         panic!("{}", RadlrError::SourceError {
           loc:        ast.to_token(),
-          path:       PathBuf::from(rule.g_id.path.to_string(self.db.string_store())),
+          path:       rule.g_id.path.to_string(self.db.string_store()),
           id:         (ascript_error_class(), 0, "ascript-writer-utils-unhandled-ast-node").into(),
           msg:        format!("An unhandled ast node has been encountered"),
           inline_msg: format!("Node type [{:?}] lacks an ASTExprHandler {ast:?}", ast.get_type()),
@@ -243,7 +243,7 @@ impl<'a> AscriptWriterUtils<'a> {
       #[cfg(not(debug_assertions))]
       panic!("{}", RadlrError::SourceError {
         loc:        ast.to_token(),
-        path:       PathBuf::from(rule.g_id.path.to_string(self.db.string_store())),
+        path:       rule.g_id.path.to_string(self.db.string_store()),
         id:         (ascript_error_class(), 0, "ascript-writer-utils-unhandled-ast-node").into(),
         msg:        format!("An unhandled ast node has been encountered"),
         inline_msg: format!("Node type lacks an ASTExprHandler"),

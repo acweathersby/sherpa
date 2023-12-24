@@ -7,31 +7,28 @@ use crate::BuildConfig;
 
 use super::common::build_ascript_ast;
 
-const SCRIPT: &'static str = include_str!("rust_ast_script.atat");
-const BC_SCRIPT: &'static str = include_str!("rust_bytecode_script.atat");
+const SCRIPT: &'static str = include_str!("typescript_ast_script.atat");
 
 pub fn build(db: &RadlrDatabase, build_config: BuildConfig, parser_config: ParserConfig, output_dir: &Path) -> RadlrResult<()> {
   let states = db.build_states(Default::default())?;
-
   let parser = states.build_ir_parser(true, false)?;
 
   let bytecode = radlr_bytecode::compile_bytecode(&parser, false)?;
 
   std::fs::create_dir_all(output_dir)?;
 
-  let binary_path = output_dir.join("parser.bin");
-  let parser_path = output_dir.join("parser.rs");
-  let ast_path = output_dir.join("ast.rs");
+  let parser_path = output_dir.join("parser.ts");
+  let ast_path = output_dir.join("ast.ts");
 
-  {
-    let mut parser_binary = OpenOptions::new().append(false).truncate(true).write(true).create(true).open(&binary_path)?;
+  /*   {
+     let mut parser_binary = OpenOptions::new().append(false).truncate(true).write(true).create(true).open(&binary_path)?;
 
-    bytecode.write_binary(&mut parser_binary)?;
+     bytecode.write_binary(&mut parser_binary)?;
 
-    parser_binary.flush()?;
-  }
-
-  {
+     parser_binary.flush()?;
+   }
+  */
+  /* {
     let parser = OpenOptions::new().append(false).truncate(true).write(true).create(true).open(&parser_path)?;
     let s_store = db.get_internal().string_store();
     let mut ctx: FormatterContext = FormatterContext::new("RustForm", s_store.clone());
@@ -80,7 +77,7 @@ pub fn build(db: &RadlrDatabase, build_config: BuildConfig, parser_config: Parse
     let f: Formatter = FormatterResult::from(BC_SCRIPT).into_result()?;
 
     f.write_to_output(&mut ctx, parser)?.flush()?;
-  }
+  } */
 
   build_ascript_ast(db, SCRIPT, ast_path, build_config)?;
 

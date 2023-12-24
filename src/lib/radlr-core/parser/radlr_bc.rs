@@ -1,6 +1,5 @@
 use radlr_rust_runtime::{
   deprecate::*,
-  llvm_parser::*,
   types::{ast::*, Token, TokenRange},
 };
 /// ### `radlr` Rust Parser

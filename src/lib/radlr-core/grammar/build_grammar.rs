@@ -503,7 +503,11 @@ fn process_rule_symbols(
           }
         }
 
-        let indices = set.symbols.iter().enumerate().map(|(i, _)| i).collect();
+        let indices = set.symbols.iter().enumerate().map(|(i, _)| i).collect::<Vec<_>>();
+
+        if indices.len() > 4 {
+          todo!("Create error/warning about factorial explosions with `[]` sets greater than 4: (5+)! combinatorial explosion")
+        }
 
         let candidate_symbols = set.symbols.iter().enumerate().map(|(i, s)| (i + index, s)).collect::<Array<_>>();
 

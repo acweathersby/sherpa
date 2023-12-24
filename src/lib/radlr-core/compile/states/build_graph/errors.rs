@@ -42,7 +42,7 @@ pub(super) fn lr_disabled_error(gb: &GraphBuilder, lr_items: Items) -> RadlrResu
     if first.rule_is_left_recursive(gb.get_mode(), db) {
       return Err(RadlrError::SourceError {
         loc:        first.rule(db).tok.clone(),
-        path:       first.rule(db).g_id.path.to_path(s_store),
+        path:       first.rule(db).g_id.path.to_string(s_store),
         id:         (ForbiddenLR, 0, "left-recursion-forbidden").into(),
         msg:        "Could not construct parse graph without LR states, this rule is left recursive".into(),
         inline_msg: "".into(),

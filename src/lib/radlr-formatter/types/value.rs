@@ -1,5 +1,14 @@
-use radlr_core::{proxy::OrderedMap, CachedString, IString, IStringStore};
-use std::{collections::HashMap, fmt::Debug, hash::Hash};
+use radlr_core::{
+  proxy::{OrderedMap, OrderedSet},
+  CachedString,
+  IString,
+  IStringStore,
+};
+use std::{
+  collections::{HashMap, HashSet},
+  fmt::Debug,
+  hash::Hash,
+};
 
 #[derive(Default, Clone, Copy, Debug)]
 pub enum Value<'scope> {
@@ -70,6 +79,8 @@ impl<'scope> From<IString> for Value<'scope> {
 }
 
 pub trait ValueObj: Debug {
+  /// Returns the `Value` associated with the given `key` or `Value::None` if
+  /// the key does not exist.
   #[allow(unused)]
   fn get_val<'scope>(&'scope self, key: &str, s_store: &IStringStore) -> Value<'scope> {
     Value::None
@@ -83,14 +94,20 @@ pub trait ValueObj: Debug {
   #[allow(unused)]
   fn vals<'scope>(&'scope self, funct: &mut dyn FnMut(String, Value<'scope>)) {}
 
+  /// Returns a unique type name that can be access through this objects
+  /// `.#type` property.
   fn get_type<'scope>(&'scope self) -> &str {
     "undefined"
   }
 
+  /// Returns a  list of keys that can be used to debug invalid property access
+  /// errors.
   fn get_keys<'scope>(&'scope self) -> &'static [&'static str] {
     &["type", "len"]
   }
 
+  /// Return an iterable object that can be used in `.iter#<fn_name>()` property
+  /// calls. Returning an empty vec disables this property.
   fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
     Default::default()
   }
@@ -213,6 +230,42 @@ impl<'a, T: ToValue + Debug> ValueObj for Vec<T> {
   }
 }
 
+impl<'a, T: ToValue + Debug + Default> ValueObj for OrderedSet<T> {
+  fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
+    Value::None
+  }
+
+  fn get_type<'scope>(&'scope self) -> &str {
+    "ordered_set"
+  }
+
+  fn get_len<'scope>(&'scope self) -> usize {
+    self.len()
+  }
+
+  fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+    self.iter().enumerate().map(|(i, v)| (Value::Int(i as isize), v.into_val(s_store))).collect()
+  }
+}
+
+impl<'a, T: ToValue + Debug + Default> ValueObj for HashSet<T> {
+  fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
+    Value::None
+  }
+
+  fn get_type<'scope>(&'scope self) -> &str {
+    "hash_set"
+  }
+
+  fn get_len<'scope>(&'scope self) -> usize {
+    self.len()
+  }
+
+  fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+    self.iter().enumerate().map(|(i, v)| (Value::Int(i as isize), v.into_val(s_store))).collect()
+  }
+}
+
 impl<'a, T: ToValue + Debug> ValueObj for &[T] {
   fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
     if index < self.len() {
@@ -233,6 +286,101 @@ impl<'a, T: ToValue + Debug> ValueObj for &[T] {
   fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
     self.iter().enumerate().map(|(i, v)| (Value::Int(i as isize), v.into_val(s_store))).collect()
   }
+}
+
+#[macro_export]
+macro_rules! formatted_typed_set {
+  ($name: ident, $element_type:ty, $type_name:literal, $attr:meta) => {
+    #[$attr]
+    pub struct $name(pub(crate) Set<$element_type>);
+
+    impl std::ops::Deref for $name {
+      type Target = Set<$element_type>;
+
+      fn deref(&self) -> &Set<$element_type> {
+        &self.0
+      }
+    }
+
+    impl std::ops::DerefMut for $name {
+      fn deref_mut(&mut self) -> &mut Set<$element_type> {
+        &mut self.0
+      }
+    }
+
+    impl ValueObj for $name {
+      fn get_index<'scope>(&'scope self, index: usize, s_store: &radlr_core::IStringStore) -> Value<'scope> {
+        Value::None
+      }
+
+      fn get_len<'scope>(&'scope self) -> usize {
+        self.0.get_len()
+      }
+
+      fn get_type<'scope>(&'scope self) -> &str {
+        $type_name
+      }
+
+      fn get_val<'scope>(&'scope self, key: &str, s_store: &radlr_core::IStringStore) -> Value<'scope> {
+        Value::None
+      }
+
+      fn get_iter<'scope>(&'scope self, s_store: &radlr_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+        self.0.get_iter(s_store)
+      }
+    }
+  };
+  ($name: ident, $element_type:ty, $type_name:literal) => {
+    formatted_typed_set!($name, $element_type, $type_name, derive(Debug, Default));
+  };
+}
+
+#[macro_export]
+macro_rules! formatted_typed_ordered_set {
+  ($name: ident, $element_type:ty, $type_name:literal, $attr:meta) => {
+    #[$attr]
+    pub struct $name(pub(crate) OrderedSet<$element_type>);
+
+    impl std::ops::Deref for $name {
+      type Target = OrderedSet<$element_type>;
+
+      fn deref(&self) -> &OrderedSet<$element_type> {
+        &self.0
+      }
+    }
+
+    impl std::ops::DerefMut for $name {
+      fn deref_mut(&mut self) -> &mut OrderedSet<$element_type> {
+        &mut self.0
+      }
+    }
+
+    impl ValueObj for $name {
+      fn get_index<'scope>(&'scope self, index: usize, s_store: &radlr_core::IStringStore) -> Value<'scope> {
+        self.0.get_index(index, s_store)
+      }
+
+      fn get_len<'scope>(&'scope self) -> usize {
+        self.0.get_len()
+      }
+
+      fn get_type<'scope>(&'scope self) -> &str {
+        $type_name
+      }
+
+      fn get_val<'scope>(&'scope self, key: &str, s_store: &radlr_core::IStringStore) -> Value<'scope> {
+        self.0.get_val(key, s_store)
+      }
+
+      fn get_iter<'scope>(&'scope self, s_store: &radlr_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+        self.0.get_iter(s_store)
+      }
+    }
+  };
+
+  ($name: ident, $element_type:ty, $type_name:literal) => {
+    formatted_typed_ordered_set!($name, $element_type, $type_name, derive(Debug, Default));
+  };
 }
 
 #[macro_export]

@@ -61,6 +61,7 @@ IGNORE { c:sp c:nl }
     | expr "/"{2} expr{2}               :ast { t_Div, l:$1, r:$3, tok }
     | num
     | object
+    | call
     | at_string_literal
     | plain_string_literal
 
@@ -125,7 +126,7 @@ IGNORE { c:sp c:nl }
     | tk:( '.' "#type")                 :ast { t_Type, tok }
     | tk:( '.' "#keys")                 :ast { t_Keys, tok }
     | tk:( '.' "#len")                  :ast { t_Length, tok }
-    | tk:( '.' 'iter') call             :ast { t_Iterator, call, tok }
+    | tk:( '.' 'ite' "r") call          :ast { t_Iterator, call, tok }
 
 <> id 
     > binding_id | non_binding_id

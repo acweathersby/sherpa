@@ -15,7 +15,7 @@ pub(crate) fn add_invalid_import_source_error(
   let parser::Import { tok, .. } = import;
   j.report_mut().add_error(RadlrError::SourceError {
     loc:        tok.clone(),
-    path:       import_path.clone(),
+    path:       import_path.to_str().unwrap().to_string(),
     id:         (Imports, 0, "invalid-import-source").into(),
     msg:        format!("Could not resolve filepath {}", base_path.to_str().unwrap()),
     inline_msg: "source not found".to_string(),
@@ -119,7 +119,7 @@ pub fn _add_missing_nonterminal_definition_error(j: &mut Journal, tok: Token, g_
 pub fn empty_rule_error(rule: &Rule, s_store: &IStringStore) -> RadlrError {
   RadlrError::SourceError {
     loc:        rule.tok.clone(),
-    path:       rule.g_id.path.to_path(s_store),
+    path:       rule.g_id.path.to_string(s_store),
     id:         (Grammar, 2, "empty-rule-not-allowed").into(),
     msg:        "Rules that can derive the empty rule `{} => ε` are currently not allowed in Radlr Grammars!".into(),
     inline_msg: "This symbol is optional leads to a derivation of this rule that lacks any symbols".into(),
@@ -131,7 +131,7 @@ pub fn empty_rule_error(rule: &Rule, s_store: &IStringStore) -> RadlrError {
 pub fn invalid_nonterminal_alias(loc: Token, path: IString, s_store: &IStringStore) -> RadlrError {
   RadlrError::SourceError {
     loc,
-    path: path.to_path(s_store),
+    path: path.to_string(s_store),
     id: (Grammar, 3, "aliased-nonterminal-rule-definition").into(),
     inline_msg: Default::default(),
     msg: "Can not resolve grammar that has non-terminal definitions and state definitions with the same name: ".to_string(),
@@ -145,7 +145,7 @@ pub fn invalid_nonterminal_alias(loc: Token, path: IString, s_store: &IStringSto
 pub fn missing_nonterminal_rules(loc: Token, path: IString, s_store: &IStringStore) -> RadlrError {
   RadlrError::SourceError {
     loc,
-    path: path.to_path(s_store),
+    path: path.to_string(s_store),
     id: (Grammar, 4, "missing-nonterminal-rules").into(),
     inline_msg: Default::default(),
     msg: "Cannot find definition for non-terminal".into(),

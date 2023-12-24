@@ -252,7 +252,7 @@ pub(crate) fn add_incompatible_nonterm_types_error(
 pub(crate) fn add_unmatched_prop_error(j: &mut Journal, rule: &Rule, db: &ParserDatabase, prop: &AST_Property) {
   j.report_mut().add_error(RadlrError::SourceError {
     id:         (ascript_error_class(), 5, "unmatched-valueless-prop").into(),
-    path:       PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
+    path:       rule.g_id.path.clone().to_string(db.string_store()),
     inline_msg: Default::default(),
     loc:        prop.tok.clone(),
     msg:        format!("This property does nor resolve to a symbol within it's associated rule",),

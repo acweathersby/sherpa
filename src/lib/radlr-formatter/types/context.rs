@@ -3,7 +3,7 @@ use crate::Functions;
 use radlr_core::{CachedString, IString, IStringStore};
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FormatterContext<'scope: 'fn_scope, 'fn_scope> {
   #[allow(unused)]
   pub(crate) parent:       Option<&'scope FormatterContext<'scope, 'fn_scope>>,
@@ -13,11 +13,12 @@ pub struct FormatterContext<'scope: 'fn_scope, 'fn_scope> {
   pub(crate) block_level:  usize,
   pub(crate) s_store:      IStringStore,
   pub(crate) functs:       Option<&'fn_scope Functions>,
+  pub(crate) name:         &'scope str,
   pub max_width:           usize,
 }
 
 impl<'scope: 'fn_scope, 'fn_scope> FormatterContext<'scope, 'fn_scope> {
-  pub fn new(s_store: IStringStore) -> Self {
+  pub fn new(name: &'scope str, s_store: IStringStore) -> Self {
     Self {
       tab_size: 2,
       indent_level: 0,
@@ -27,6 +28,7 @@ impl<'scope: 'fn_scope, 'fn_scope> FormatterContext<'scope, 'fn_scope> {
       s_store,
       max_width: 120,
       functs: None,
+      name,
     }
   }
 
@@ -71,21 +73,34 @@ impl<'scope: 'fn_scope, 'fn_scope> FormatterContext<'scope, 'fn_scope> {
     }
   }
 
-  pub(crate) fn create_scope<'a: 'b, 'b>(par: &'a Self) -> FormatterContext<'a, 'b> {
+  pub(crate) fn create_scope<'a: 'b, 'b>(name: &'a str, par: &'a Self) -> FormatterContext<'a, 'b> {
     FormatterContext {
-      tab_size:     par.tab_size,
+      tab_size: par.tab_size,
       indent_level: par.indent_level,
-      block_level:  par.block_level,
-      parent:       Some(par),
-      values:       Default::default(),
-      s_store:      par.s_store.clone(),
-      max_width:    par.max_width,
-      functs:       None,
+      block_level: par.block_level,
+      parent: Some(par),
+      values: Default::default(),
+      s_store: par.s_store.clone(),
+      max_width: par.max_width,
+      functs: None,
+      name,
     }
   }
 
   pub(crate) fn get(&self, id: &IString) -> Value<'scope> {
-    self.values.get(id).cloned().unwrap_or_default()
+    match self.values.get(id) {
+      Some(val) => val.clone(),
+      None => {
+        if let Some(mut parent) = &self.parent {
+          while let Some(p) = &parent.parent {
+            parent = *p;
+          }
+          parent.get(id)
+        } else {
+          Default::default()
+        }
+      }
+    }
   }
 
   pub(crate) fn set(&mut self, id: IString, val: Value<'scope>) {
