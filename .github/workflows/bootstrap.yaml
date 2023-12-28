@@ -29,8 +29,8 @@ jobs:
       - name: Cargo's version is
         run: cargo --version
       - name: Bootstrapping bytecode parser
-        working-directory: src/app/cli
-        run: cargo run --bin Radlr --release  -- build -t bytecode -a --name Radlr_bc -l rust -o ../../src/lib/Radlr-core/parser/ ../../grammar/2.0.0/grammar.sg
+        working-directory: crates/cli
+        run: cargo run --bin Radlr --release  -- build -t bytecode -a --name Radlr_bc -l rust -o ../radlr-core/parser/ ../../grammars/radlr/2.0.0/grammar.sg
       - name: Test bytecode parser
-        working-directory: src/lib
+        working-directory: crates
         run: cargo test --workspace

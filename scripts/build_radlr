@@ -3,9 +3,9 @@
 pushd ${0:a:h}/..
 
 # Build the radlr release for linux
-cargo build --package radlr --release --bin radlr 
+cargo build --package radlr-cli --release --bin radlr 
 
 # Output the build to the releases folder.
-mkdir -p releases/linux_bin
+mkdir -p releases/linux/bin
 
-mv ./target/release/radlr ./releases/linux_bin/radlr
+mv ./target/release/radlr ./releases/linux/bin/radlr

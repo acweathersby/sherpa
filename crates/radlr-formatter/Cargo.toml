@@ -1,0 +1,12 @@
+[package]
+name = "radlr_formatter"
+version = "1.0.0-beta1"
+edition = "2021"
+
+[lib]
+#proc-macro = true
+path = "./lib.rs"
+
+[dependencies]
+radlr_core          = { path="../radlr-core" }
+radlr_rust_runtime  = { path="../radlr-rust-runtime" }

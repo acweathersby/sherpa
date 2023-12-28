@@ -1,0 +1,29 @@
+[workspace]
+
+members = [
+    "./crates/cli",
+    "./crates/radlr",
+    "./crates/radlr-rust-build",
+    "./crates/radlr-build",
+    "./crates/radlr-core", 
+    "./crates/radlr-ascript",
+    "./crates/radlr-bytecode",
+    #"./crates/radlr-x86",
+    "./crates/radlr-rust-runtime",
+    "./crates/radlr-test",
+    "./crates/radlr-formatter",
+    "./crates/radlr-ascript-beta",
+]
+
+exclude = [
+  "test"
+]
+
+resolver = "2"
+
+[profile.dev]
+debug = 2
+
+[profile.release]
+opt-level=3
+debug = 0

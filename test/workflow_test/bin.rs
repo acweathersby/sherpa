@@ -2,10 +2,8 @@ use radlr_rust_runtime::{
   parsers::ast::{AstDatabase, Tk},
   types::{RuntimeDatabase, SharedSymbolBuffer, StringInput},
 };
-
-use crate::ast::{AST_TestNode, EntryAny, ValAny};
-mod ast;
 mod parser;
+use crate::parser::{ASTNode, EntryAny, ValAny};
 
 fn main() {
   let db: parser::ParserDB = parser::ParserDB::new();
@@ -26,13 +24,13 @@ fn main() {
 }"###,
       ),
       entry,
-      ast::ReduceRules::new(),
+      parser::ReduceRules::new(),
     )
     .unwrap();
 
   println!("{result:#?}");
 
-  if let AST_TestNode::JSON(json) = result {
+  if let ASTNode::JSON(json) = result {
     match &json.body {
       EntryAny::Array(array) => {
         for val in &array.values {

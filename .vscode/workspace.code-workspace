@@ -1,37 +1,5 @@
 {
-	"folders": [
-    {
-      "name": "Library Sources",
-      "path": "../src/lib"
-    },
-    {
-      "name": "CLI Source",
-      "path": "../src/app/cli"
-    },
-    {
-      "name": "Web Sources",
-      "path": "../src/web"
-    },
-    {
-      "name": "Scripts",
-      "path": "../scripts"
-    },
-    {
-      "name": "Releases",
-      "path": "../releases"
-    },
-    {
-      "name": "Web Public",
-      "path": "../public"
-    },
-    {
-      "name": "Tests",
-      "path": "../test"
-    },
-    {
-      "name": "Grammars",
-      "path": "../src/grammar"
-    },
+  "folders": [
     {
       "name": "lib_radlr",
       "path": ".."
@@ -40,41 +8,41 @@
       "path": "../test/workflow_test"
     }
   ],
-	"settings": {
-		"lldb.dereferencePointers": false,
-		"lldb.consoleMode": "evaluate",
-		"files.exclude": {
-			"**/.git": true,
-			"**/.svn": true,
-			"**/.hg": true,
-			"**/CVS": true,
-			"**/.DS_Store": true,
-			"**/Thumbs.db": true,
-			"**/target/**": true
-		},
-		"lldb.displayFormat": "auto",
-		"lldb.showDisassembly": "auto",
-		"cSpell.words": [
-			"ascript",
-			"gotos",
-			"nonterm",
-			"nonterminal",
-			"nterm",
-			"nterms",
-			"prec"
-		]
-	},
-	"launch": {
-		"version": "0.2.0",
-		"configurations": [
-			{
-				"type": "lldb",
-				"request": "launch",
-				"name": "Debug",
-				"program": "${workspaceFolder}/<your program>",
-				"args": [],
-				"cwd": "${workspaceFolder}"
-			}
-		]
-	}
+  "settings": {
+    "lldb.dereferencePointers": false,
+    "lldb.consoleMode": "evaluate",
+    "files.exclude": {
+      "**/.git": true,
+      "**/.svn": true,
+      "**/.hg": true,
+      "**/CVS": true,
+      "**/.DS_Store": true,
+      "**/Thumbs.db": true,
+      "**/target/**": true
+    },
+    "lldb.displayFormat": "auto",
+    "lldb.showDisassembly": "auto",
+    "cSpell.words": [
+      "ascript",
+      "gotos",
+      "nonterm",
+      "nonterminal",
+      "nterm",
+      "nterms",
+      "prec"
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "type": "lldb",
+        "request": "launch",
+        "name": "Debug",
+        "program": "${workspaceFolder}/<your program>",
+        "args": [],
+        "cwd": "${workspaceFolder}"
+      }
+    ]
+  }
 }

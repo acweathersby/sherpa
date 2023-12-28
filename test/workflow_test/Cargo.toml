@@ -9,9 +9,8 @@ build = "./build.rs"
 name = "json_test_parser"
 path = "./bin.rs"
 
-
 [dependencies.radlr_rust_runtime]
-path = "../../src/lib/radlr-rust-runtime"
+path = "../../crates/radlr-rust-runtime"
 
 [build-dependencies.radlr_build]
-path = "../../src/lib/radlr-build"
+path = "../../crates/radlr-build"

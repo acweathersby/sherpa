@@ -1,0 +1,24 @@
+[package]
+name = "radlr-cli"
+version = "1.0.0-beta1"
+edition = "2021"
+
+[[bin]]
+name = "radlr"
+path = "./main.rs"
+
+[dependencies]
+clap                = { version="4.0.29" }
+radlr_core          = { path="../radlr-core" }
+radlr_ascript       = { path="../radlr-ascript" }
+radlr_bytecode      = { path="../radlr-bytecode" }
+radlr_rust_build    = { path="../radlr-rust-build" }
+radlr_formatter     = { path="../radlr-formatter" }
+radlr_ascript_beta  = { path="../radlr-ascript-beta" }
+radlr_build         = { path="../radlr-build" }
+
+[profile.release]
+opt-level=3
+panic = 'abort'
+lto = true
+debug = 0

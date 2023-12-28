@@ -5,9 +5,10 @@
 **/bin
 **/target
 **/pkg
-src/web/lab/src/Radlr/
-src/lib/Radlr-core/lib/
-src/lib/Radlr-core/grammar/compile/parser/Radlr.rs
+releases/
+web/lab/src/radlr/
+crates/radlr-core/lib/
+crates/radlr-core/grammar/compile/parser/radlr.rs
 
 # Debugging artifacts
 /sandbox
@@ -26,7 +27,7 @@ src/lib/Radlr-core/grammar/compile/parser/Radlr.rs
 # public site folders
 **/public/
 /public
-src/web/lab/public/index.js
+web/lab/public/index.js
 
 # folders tagged with --ignore--
 **/*--ignore--*/

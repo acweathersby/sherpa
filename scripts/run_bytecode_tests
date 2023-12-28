@@ -8,10 +8,10 @@
 pushd ${0:a:h}/..
 
 ROOT_DIR=$PWD
-RADLR_LIBRARY_DIR=$ROOT_DIR/src/lib
+RADLR_CRATES_DIR=$ROOT_DIR/crates
 RADLR_CLI_DIR=$ROOT_DIR/src/app/cli
 
-pushd $RADLR_LIBRARY_DIR
+pushd $RADLR_CRATES_DIR
 
 cargo test --workspace
 

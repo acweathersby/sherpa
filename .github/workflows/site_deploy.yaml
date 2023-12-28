@@ -33,11 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      WASM_DIR: ./src/web/Radlr-wasm
-      WEB_SOURCE_DIR: ./src/web/doc
-      LAB_SRC_DIR: ./src/web/doc/assets/js/Radlr
-      LAB_PUB_DIR: ./src/web/doc/static/js/lab
-      DOC_PUB_DIR: ./src/web/doc/public
+      WASM_DIR: ./web/radlr-wasm
+      WEB_SOURCE_DIR: ./web/doc
+      LAB_SRC_DIR: ./web/doc/assets/js/radlr
+      LAB_PUB_DIR: ./web/doc/static/js/lab
+      DOC_PUB_DIR: ./web/doc/public
 
     steps:
       - uses: actions/checkout@v3
@@ -72,7 +72,7 @@ jobs:
         run: wasm-pack build --target web
       
       - name: Copy WASM to HUGO build environment
-        run: cp $WASM_DIR/pkg/* $LAB_SRC_DIR/ && mv $LAB_SRC_DIR/Radlr_wasm_bg.wasm $LAB_PUB_DIR/
+        run: cp $WASM_DIR/pkg/* $LAB_SRC_DIR/ && mv $LAB_SRC_DIR/radlr_wasm_bg.wasm $LAB_PUB_DIR/
 
       - name: Setup Pages
         id: pages

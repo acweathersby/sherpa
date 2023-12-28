@@ -1,0 +1,15 @@
+[package]
+name = "radlr_build"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+path = "./lib.rs"
+
+[dependencies]
+radlr_core          = { path="../radlr-core", features = ["auto_print_errors"] }
+radlr_rust_runtime  = { path="../radlr-rust-runtime" }
+radlr_ascript       = { path="../radlr-ascript" }
+radlr_bytecode      = { path="../radlr-bytecode" }
+radlr_formatter     = { path="../radlr-formatter" }
+radlr_ascript_beta  = { path="../radlr-ascript-beta" }
