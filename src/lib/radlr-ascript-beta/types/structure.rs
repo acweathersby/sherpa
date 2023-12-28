@@ -21,9 +21,13 @@ formatted_typed_ordered_map!(AscriptStructProps, StringId, AscriptProp, "Ascript
 impl ValueObj for AscriptStruct {
   fn get_val<'scope>(&'scope self, key: &str, s_store: &radlr_core::IStringStore) -> Value<'scope> {
     match key {
+      "is_empty" => Value::Int((self.properties.len() == 0) as isize),
       "name" => Value::Str(self.name.intern(s_store)),
       "props" => Value::Obj(&self.properties),
-      "has_token" => Value::Int(self.has_token as isize),
+      "has_token" => {
+        dbg!(self);
+        Value::Int(self.has_token as isize)
+      }
       _ => Value::None,
     }
   }
@@ -54,6 +58,7 @@ impl ValueObj for AscriptProp {
     match key {
       "name" => Value::Str(self.name.intern(s_store)),
       "type" => Value::Obj(&self.ty),
+
       "optional" => {
         dbg!(self);
         if self.is_optional {

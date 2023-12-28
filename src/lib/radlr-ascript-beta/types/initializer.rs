@@ -49,11 +49,12 @@ impl ValueObj for Initializer {
 
 #[derive(Debug)]
 pub struct StructInitializer {
-  pub(crate) name:     StringId,
-  pub(crate) props:    AscriptStructInitProps,
+  pub(crate) name:      StringId,
+  pub(crate) props:     AscriptStructInitProps,
   /// `true` if the number of `props`  is equal to the number of property
   /// definitions.
-  pub(crate) complete: bool,
+  pub(crate) complete:  bool,
+  pub(crate) has_token: bool,
 }
 
 formatted_typed_ordered_map!(AscriptStructInitProps, StringId, Initializer, "AscriptStructInitProps");
@@ -64,6 +65,7 @@ impl ValueObj for StructInitializer {
       "props" => Value::Obj(&self.props),
       "name" => Value::Str(self.name.0),
       "complete" => Value::Int(self.complete as isize),
+      "has_token" => Value::Int(self.has_token as isize),
       _ => Value::None,
     }
   }

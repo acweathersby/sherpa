@@ -122,7 +122,7 @@ impl ValueObj for AscriptType {
         AscriptScalarType::I64(_) => Value::Str("i64".intern(s_store)),
         AscriptScalarType::F32(_) => Value::Str("f32".intern(s_store)),
         AscriptScalarType::F64(_) => Value::Str("f64".intern(s_store)),
-        AscriptScalarType::Struct(_) => Value::Str("struct".intern(s_store)),
+        AscriptScalarType::Struct(..) => Value::Str("struct".intern(s_store)),
         AscriptScalarType::Any(_) => Value::Str("any".intern(s_store)),
         AscriptScalarType::Token => Value::Str("tok".intern(s_store)),
         AscriptScalarType::TokenRange => Value::Str("tok_range".intern(s_store)),
@@ -199,7 +199,7 @@ pub enum AscriptScalarType {
   F64(Option<f64>),
   String(Option<IString>),
   Bool(bool),
-  Struct(StringId),
+  Struct(StringId, bool),
   Any(usize),
   Token,
   TokenRange,
@@ -220,8 +220,12 @@ impl ValueObj for AscriptScalarType {
     use AscriptScalarType::*;
     match key {
       "name" => match self {
-        Struct(strct) => Value::Str(*strct.as_ref()),
+        Struct(strct, _) => Value::Str(*strct.as_ref()),
         _ => Value::Str(self.get_type().intern(s_store)),
+      },
+      "is_empty" => match self {
+        Struct(_, is_empty) => Value::Int(*is_empty as isize),
+        _ => Value::None,
       },
       "index" => match self {
         Any(index) => Value::Int(*index as isize),
@@ -348,7 +352,7 @@ impl PartialOrd for AscriptScalarType {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     match (self, other) {
       (AscriptScalarType::Any(a), AscriptScalarType::Any(b)) => a.partial_cmp(b),
-      (AscriptScalarType::Struct(a), AscriptScalarType::Struct(b)) => a.partial_cmp(b),
+      (AscriptScalarType::Struct(a, _), AscriptScalarType::Struct(b, _)) => a.partial_cmp(b),
       _ => self.precedence().partial_cmp(&other.precedence()),
     }
   }
@@ -358,7 +362,7 @@ impl Ord for AscriptScalarType {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
     match (self, other) {
       (AscriptScalarType::Any(a), AscriptScalarType::Any(b)) => a.cmp(b),
-      (AscriptScalarType::Struct(a), AscriptScalarType::Struct(b)) => a.cmp(b),
+      (AscriptScalarType::Struct(a, _), AscriptScalarType::Struct(b, _)) => a.cmp(b),
       _ => self.precedence().cmp(&other.precedence()),
     }
   }
@@ -370,7 +374,7 @@ impl PartialEq for AscriptScalarType {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
       (AscriptScalarType::Any(a), AscriptScalarType::Any(b)) => a.cmp(b).is_eq(),
-      (AscriptScalarType::Struct(a), AscriptScalarType::Struct(b)) => a.cmp(b).is_eq(),
+      (AscriptScalarType::Struct(a, _), AscriptScalarType::Struct(b, _)) => a.cmp(b).is_eq(),
       _ => std::mem::discriminant(self) == std::mem::discriminant(other),
     }
   }

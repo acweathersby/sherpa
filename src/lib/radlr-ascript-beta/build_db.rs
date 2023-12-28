@@ -162,7 +162,7 @@ fn extract_type_data(ty: AscriptType, types: &mut AscriptTypes) {
         }
       }
     }
-    AscriptType::Scalar(AscriptScalarType::Struct(_)) | AscriptType::Scalar(AscriptScalarType::Token) => {}
+    AscriptType::Scalar(AscriptScalarType::Struct(..)) | AscriptType::Scalar(AscriptScalarType::Token) => {}
     ty => {
       types.0.insert(ty);
     }
@@ -217,6 +217,19 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
       },
     };
 
+    for init in &mut adb.rules.0 {
+      match init {
+        AscriptRule::Struct(_, s) => {
+          if let Some(strct) = adb.structs.get(&s.name) {
+            s.has_token = strct.has_token;
+          } else {
+            panic!("Initializer's structure is not defined!");
+          }
+        }
+        _ => {}
+      }
+    }
+
     adb.rules.push(rule);
   }
 
@@ -248,8 +261,15 @@ pub fn process_struct_node(
 ) -> RadlrResult<StructInitializer> {
   let name = &strct.typ[2..];
   let struct_id = StringId::from(name);
-  let mut initializer = StructInitializer { name: struct_id, props: Default::default(), complete: false };
-  let mut seen = OrderedSet::new();
+
+  let mut initializer = StructInitializer {
+    name:      struct_id,
+    props:     Default::default(),
+    complete:  false,
+    has_token: false,
+  };
+
+  let mut seen: BTreeSet<StringId> = OrderedSet::new();
   let mut existing_struct = true;
 
   let ast_struct = adb.structs.entry(struct_id).or_insert_with(|| {
@@ -263,35 +283,68 @@ pub fn process_struct_node(
   });
 
   for prop in &strct.props {
-    if let Some(prop) = prop.as_AST_Property() {
-      let prop_name: StringId = prop.id.as_str().into();
-      let mut ast_prop = AscriptProp {
-        is_optional: false,
-        name: prop.id.to_string(),
-        tok: prop.tok.clone(),
-        ty: AscriptType::Undefined,
-        g_id,
-      };
+    match prop {
+      ASTNode::AST_Property(prop) => {
+        let prop_name: StringId = prop.id.as_str().into();
+        let mut ast_prop = AscriptProp {
+          is_optional: false,
+          name: prop.id.to_string(),
+          tok: prop.tok.clone(),
+          ty: AscriptType::Undefined,
+          g_id,
+        };
 
-      seen.insert(prop_name);
+        seen.insert(prop_name);
 
-      match ast_struct.properties.get_mut(&prop_name) {
-        Some(..) => {}
-        None => {
-          if existing_struct {
-            ast_prop.is_optional = true;
+        match ast_struct.properties.get_mut(&prop_name) {
+          Some(..) => {}
+          None => {
+            if existing_struct {
+              ast_prop.is_optional = true;
+            }
+            ast_struct.properties.insert(prop_name, ast_prop);
           }
-          ast_struct.properties.insert(prop_name, ast_prop);
         }
-      }
 
-      initializer.props.insert(StringId::from(prop.id.to_string()), Initializer {
-        ty: AscriptType::Undefined,
-        name: prop_name,
-        output_graph: None,
-        ast: prop.value.clone(),
-        g_id,
-      });
+        initializer.props.insert(StringId::from(prop.id.to_string()), Initializer {
+          ty: AscriptType::Undefined,
+          name: prop_name,
+          output_graph: None,
+          ast: prop.value.clone(),
+          g_id,
+        });
+      }
+      ast @ ASTNode::AST_Token(tok) => {
+        let tok_id = StringId::from("tok");
+        initializer.props.insert(tok_id, Initializer {
+          ty: AscriptType::Undefined,
+          name: tok_id,
+          output_graph: None,
+          ast: Some(ast.clone()),
+          g_id,
+        });
+
+        let mut ast_prop = AscriptProp {
+          is_optional: false,
+          name: "tok".to_string(),
+          tok: Default::default(),
+          ty: AscriptType::Undefined,
+          g_id,
+        };
+
+        match ast_struct.properties.get_mut(&tok_id) {
+          Some(..) => {}
+          None => {
+            if existing_struct {
+              ast_prop.is_optional = true;
+            }
+            ast_struct.properties.insert(tok_id, ast_prop);
+          }
+        }
+
+        ast_struct.has_token = true;
+      }
+      _ => {}
     }
   }
 
@@ -395,10 +448,13 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
               },
               None => AscriptType::Undefined,
             },
-            AscriptRule::Struct(_, id) => AscriptType::Scalar(AscriptScalarType::Struct(id.name)),
+            AscriptRule::Struct(_, id) => AscriptType::Scalar(AscriptScalarType::Struct(
+              id.name,
+              adb.structs.get(&id.name).map(|a| a.properties.len() == 0).unwrap_or_default(),
+            )),
             AscriptRule::Invalid(..) => AscriptType::Undefined,
             AscriptRule::Expression(_, init) => {
-              match resolve_node(
+              match create_graph_node(
                 db,
                 init.ast.as_ref().unwrap(),
                 item,
@@ -413,7 +469,7 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
                     AscriptType::Aggregate(agg_ty) => {
                       match agg_ty {
                         AscriptAggregateType::Map { key_type, .. } => match key_type {
-                          AscriptScalarType::Struct(structs) => {
+                          AscriptScalarType::Struct(structs, _) => {
                             let rule = item.rule(db);
                             panic!("{}", RadlrError::SourceError {
                               loc:        rule.tok.clone(),
@@ -526,7 +582,7 @@ fn resolve_expressions(
         let Initializer { ast, output_graph, .. } = init;
 
         if let Some(node) = &ast {
-          *output_graph = Some(resolve_node(db, node, item, &nonterm_types, selected_indices, any_type_lu, any_types)?);
+          *output_graph = Some(create_graph_node(db, node, item, &nonterm_types, selected_indices, any_type_lu, any_types)?);
         }
       }
       AscriptRule::ListInitial(_, init) => {
@@ -580,7 +636,7 @@ fn resolve_expressions(
         for (prop_name, init) in rule_struct.props.iter_mut().rev() {
           if let Some(node) = &init.ast {
             let rule_tok = node.to_token();
-            let node = resolve_node(db, node, item, &nonterm_types, selected_indices, any_type_lu, any_types)?;
+            let node = create_graph_node(db, node, item, &nonterm_types, selected_indices, any_type_lu, any_types)?;
 
             if let Some(archetype_struct) = structs.get_mut(&struct_name) {
               if let Some(archetype_prop) = archetype_struct.properties.get_mut(prop_name) {
@@ -655,7 +711,7 @@ fn graph_node_from_item(
   }
 }
 
-fn resolve_node(
+fn create_graph_node(
   db: &ParserDatabase,
   node: &ASTNode,
   item: Item,
@@ -670,7 +726,7 @@ fn resolve_node(
       let mut initializers = vec![];
 
       for node in vec.initializer.iter() {
-        let node = resolve_node(db, node, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let node = create_graph_node(db, node, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         ty = get_resolved_type(node.get_type(), &ty, any_indices, any_maps, "__TEMP___").unwrap();
         initializers.push(node);
       }
@@ -692,8 +748,8 @@ fn resolve_node(
     }
 
     ASTNode::AST_Map(map) => {
-      let key = resolve_node(db, &map.key, item, nonterm_types, selected_indices, any_indices, any_maps)?;
-      let val = resolve_node(db, &map.val, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+      let key = create_graph_node(db, &map.key, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+      let val = create_graph_node(db, &map.val, item, nonterm_types, selected_indices, any_indices, any_maps)?;
 
       let ascript_type = AscriptType::Aggregate(AscriptAggregateType::Map {
         key_type: key.get_type().as_scalar().unwrap(),
@@ -731,8 +787,8 @@ fn resolve_node(
     }
 
     ASTNode::AST_Add(add) => {
-      let l = resolve_node(db, &add.left, item, nonterm_types, selected_indices, any_indices, any_maps)?;
-      let r = resolve_node(db, &add.right, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+      let l = create_graph_node(db, &add.left, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+      let r = create_graph_node(db, &add.right, item, nonterm_types, selected_indices, any_indices, any_maps)?;
       match l.get_type() {
         AscriptType::Scalar(l_type) => match l_type {
           _ => todo!("resolve add of {l_type:?} {r:?}"),
@@ -746,7 +802,7 @@ fn resolve_node(
 
     ASTNode::AST_STRING(str) => {
       if let Some(init) = &str.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Str(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::String(None))))
       } else {
         Ok(GraphNode::Str(None, AscriptType::Scalar(AscriptScalarType::String(None))))
@@ -755,7 +811,7 @@ fn resolve_node(
 
     ASTNode::AST_BOOL(bool) => {
       if let Some(init) = &bool.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Bool(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::Bool(false))))
       } else {
         Ok(GraphNode::Bool(None, AscriptType::Scalar(AscriptScalarType::Bool(bool.value))))
@@ -764,7 +820,7 @@ fn resolve_node(
 
     ASTNode::AST_U8(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U8(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U8(None))))
@@ -773,7 +829,7 @@ fn resolve_node(
 
     ASTNode::AST_U16(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U16(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U16(None))))
@@ -782,7 +838,7 @@ fn resolve_node(
 
     ASTNode::AST_U32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U32(None))))
@@ -791,7 +847,7 @@ fn resolve_node(
 
     ASTNode::AST_U64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U64(None))))
@@ -800,7 +856,7 @@ fn resolve_node(
 
     ASTNode::AST_I8(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I8(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I8(None))))
@@ -809,7 +865,7 @@ fn resolve_node(
 
     ASTNode::AST_I16(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I16(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I16(None))))
@@ -818,7 +874,7 @@ fn resolve_node(
 
     ASTNode::AST_I32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I32(None))))
@@ -827,7 +883,7 @@ fn resolve_node(
 
     ASTNode::AST_I64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I64(None))))
@@ -836,7 +892,7 @@ fn resolve_node(
 
     ASTNode::AST_F32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::F32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::F32(None))))
@@ -845,7 +901,7 @@ fn resolve_node(
 
     ASTNode::AST_F64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = resolve_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::F64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::F64(None))))
@@ -1004,7 +1060,7 @@ fn get_resolved_type(
         }
       }
       Aggregate(a_gg) => match b_scalar {
-        AscriptScalarType::Struct(_) => Err(RadlrError::StaticText("Incompatible Types")),
+        AscriptScalarType::Struct(..) => Err(RadlrError::StaticText("Incompatible Types")),
         _ => todo!("Resolve types agg_a:{a_gg:?} ty:{b_scalar:?}"),
       },
       _ => todo!("Resolve types scaler:{a:?} ty:{b:?}"),

@@ -1,4 +1,4 @@
-use crate::{AscriptScalarType, AscriptType, AscriptTypes};
+use crate::{AscriptAggregateType, AscriptScalarType, AscriptType, AscriptTypes};
 use radlr_core::CachedString;
 use radlr_formatter::*;
 use std::fmt::Debug;
@@ -18,17 +18,36 @@ impl ValueObj for AscriptAny {
     match key {
       "name" => Value::Str(self.name.intern(s_store)),
       "types" => Value::Obj(&self.types),
-      "has_token" => {
-        use AscriptScalarType::*;
-        use AscriptType::*;
-        Value::Int(self.types.0.iter().any(|t| matches!(t, Scalar(Token) | Scalar(Struct(_)) | Scalar(TokenRange))) as isize)
-      }
+      "has_token" => Value::Int(self.types.0.iter().any(contains_token_reference) as isize),
       _ => Value::None,
     }
   }
 
   fn get_type<'scope>(&'scope self) -> &str {
     "AscriptAnyEnum"
+  }
+}
+
+fn contains_token_reference(t: &AscriptType) -> bool {
+  use AscriptAggregateType::*;
+  use AscriptScalarType::*;
+  use AscriptType::*;
+  match t {
+    Scalar(Token) | Scalar(Struct(_, false)) | Scalar(TokenRange) => true,
+    Aggregate(Vec { val_type }) => match val_type {
+      Token | Struct(_, false) | TokenRange => true,
+      _ => false,
+    },
+    Aggregate(Map { key_type, val_type }) => {
+      (match key_type {
+        Token | Struct(_, false) | TokenRange => true,
+        _ => false,
+      }) || (match val_type {
+        Token | Struct(_, false) | TokenRange => true,
+        _ => false,
+      })
+    }
+    _ => false,
   }
 }
 
