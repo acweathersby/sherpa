@@ -1,13 +1,14 @@
 //! A parser that produce the tokens, including skipped tokens, of an input.
 
-use std::fmt::Debug;
 use crate::types::*;
+use std::fmt::Debug;
 
 pub trait Tk: Clone + Default + std::hash::Hash {
   fn to_string(&self) -> String;
   fn trim(&self, start: usize, end: usize) -> Self;
   fn from_range(start: usize, end: usize, id: u32, source: SharedSymbolBuffer) -> Self;
   fn from_slice(slice: &[Self]) -> Self;
+  fn len(&self) -> usize;
 }
 
 pub trait Node<Token: Tk>: Default {}

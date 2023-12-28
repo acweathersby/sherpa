@@ -1,10 +1,9 @@
 use radlr_rust_runtime::{
-  parsers::{
-    ast::{AstDatabase, Tk},
-    error_recovery::ErrorRecoveringDatabase,
-  },
+  parsers::ast::{AstDatabase, Tk},
   types::{RuntimeDatabase, SharedSymbolBuffer, StringInput},
 };
+
+use crate::ast::{AST_TestNode, EntryAny, ValAny};
 mod ast;
 mod parser;
 
@@ -12,9 +11,42 @@ fn main() {
   let db: parser::ParserDB = parser::ParserDB::new();
   let entry = db.get_entry_data_from_name("default").unwrap();
 
-  let result = db.build_ast::<Token, _, _>(&mut StringInput::from("Hello World"), entry, ast::ReduceRules::new()).unwrap();
+  let result = db
+    .build_ast::<Token, _, _>(
+      &mut StringInput::from(
+        r###"
+{ 
+  "ts": [1,2,3,{ "taco": "legendary" },5,6,7,8,9],
+  "tree" : {  
+    "rope" : null,
+    "tree" : true
+  }, 
+  "test": 1,
+  "vest" : "test sts"
+}"###,
+      ),
+      entry,
+      ast::ReduceRules::new(),
+    )
+    .unwrap();
 
   println!("{result:#?}");
+
+  if let AST_TestNode::JSON(json) = result {
+    match &json.body {
+      EntryAny::Array(array) => {
+        for val in &array.values {
+          match val {
+            ValAny::Array(array) => {}
+            ValAny::Null => {}
+            _ => {}
+          }
+        }
+      }
+      EntryAny::Object(body) => if body.values.contains_key("test") {},
+      _ => {}
+    }
+  }
 }
 
 #[derive(Debug, Clone, Default, Hash)]
@@ -45,5 +77,15 @@ impl Tk for Token {
 
   fn to_string(&self) -> String {
     self.string.clone()
+  }
+
+  fn trim(&self, start: usize, end: usize) -> Self {
+    let offset = self.offset + start;
+    let len = self.len - (start + end);
+    Self { len, offset, string: self.string[start..start + len].to_string() }
+  }
+
+  fn len(&self) -> usize {
+    self.len
   }
 }
