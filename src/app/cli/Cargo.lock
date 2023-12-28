@@ -156,6 +156,7 @@ dependencies = [
  "clap",
  "radlr_ascript",
  "radlr_ascript_beta",
+ "radlr_build",
  "radlr_bytecode",
  "radlr_core",
  "radlr_formatter",
@@ -174,6 +175,18 @@ dependencies = [
 name = "radlr_ascript_beta"
 version = "1.0.0-beta1"
 dependencies = [
+ "radlr_core",
+ "radlr_formatter",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_build"
+version = "0.0.0"
+dependencies = [
+ "radlr_ascript",
+ "radlr_ascript_beta",
+ "radlr_bytecode",
  "radlr_core",
  "radlr_formatter",
  "radlr_rust_runtime",

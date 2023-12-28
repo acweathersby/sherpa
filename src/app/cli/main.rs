@@ -1,8 +1,9 @@
 use clap::{arg, value_parser, ArgMatches, Command};
+use radlr_build::BuildConfig;
 use radlr_bytecode::compile_bytecode;
-use radlr_core::{JournalReporter, ParserStore, RadlrError, RadlrGrammar, RadlrResult};
+use radlr_core::{JournalReporter, ParserStore, RadlrError, RadlrGrammar, RadlrResult, ParserConfig};
 use radlr_rust_build::compile_rust_bytecode_parser;
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{fs::File, io::Write, path::PathBuf, default};
 
 #[derive(Clone, Debug)]
 enum ParserType {
@@ -14,6 +15,7 @@ pub fn command() -> ArgMatches {
   Command::new("Radlr")
     .version("1.0.0-beta1")
     .author("Anthony Weathersby <acweathersby.codes@gmail.com>")
+    .about("A LL, LR, & RAD parser compiler for both deterministic and non-deterministic grammers.")
     .subcommand(
         Command::new("disassemble")
         .about("Produce a disassembly file representing the bytecode of a parser for a specific grammar.")
@@ -42,6 +44,10 @@ pub fn command() -> ArgMatches {
           .default_value("bytecode")
         ) 
         .arg(
+          arg!( --beta "Use the beta toolchain" )
+          .required(false)
+        )
+        .arg(
           arg!( -a --ast "Create AST code, in the target language, from AScripT definitions" )
           .required(false)
         )
@@ -53,7 +59,7 @@ pub fn command() -> ArgMatches {
           .default_value("rust")
         )
         .arg(
-        arg!( -o --out <OUTPUT_PATH> "The path to the directory which the parser files will be written to.\n  Defaults to the CWD" )
+        arg!( -o --out <OUTPUT_PATH> "The path to the directory which the parser files will be written to.\n  Defaults to the current directory" )
           .required(false)
           .value_parser(value_parser!(PathBuf))
         ).arg(
@@ -65,7 +71,7 @@ pub fn command() -> ArgMatches {
           .required(false)
           .value_parser(value_parser!(String))
         ).arg(
-          arg!( -d --debug "Outputs debugging files to the OUTPUT_PATH" )
+          arg!( -g --debug "Outputs debugging files to the OUTPUT_PATH" )
           .required(false)
           .value_parser(value_parser!(bool))
         )
@@ -100,7 +106,29 @@ fn main() -> RadlrResult<()> {
     let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
     let name = matches.get_one::<String>("name").cloned();
 
-    build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir, matches.get_one::<bool>("debug").cloned().unwrap_or_default())
+    let use_beta = matches.get_one::<bool>("beta").cloned().unwrap_or(false);
+    let debug = matches.get_one::<bool>("debug").cloned().unwrap_or_default();
+
+    if use_beta {
+      let target_language = match true {
+        _ => radlr_build::RadlrBuildTarget::Rust
+       };
+      let mut build_config = BuildConfig::new(&grammar_sources.as_slice()[0]);
+      build_config.include_debug_symbols = debug;
+      build_config.build_ast = matches.get_one::<bool>("ast").cloned().unwrap_or_default();
+      build_config.lib_out = &_lib_out_dir;
+      build_config.out_dir = &out_dir;
+
+      build_config.parser_type = match true {
+          _ => radlr_build::ParserType::Bytecode
+      };
+    
+      let mut parser_config = ParserConfig::default();
+    
+      radlr_build::fs_build(build_config, parser_config, target_language)
+    }else { 
+      build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir )
+    }
   } else if matches.subcommand_matches("disassemble").is_some() {
     RadlrResult::Ok(())
   } else {
@@ -108,13 +136,13 @@ fn main() -> RadlrResult<()> {
   }
 }
 
+
 fn build_parser(
   grammar_sources: &[PathBuf],
   parser_type: ParserType,
   name: Option<String>,
   _lib_out_dir: PathBuf,
   out_dir: PathBuf,
-  debug:bool
 ) -> RadlrResult<()> {
 
   let config = Default::default();
@@ -194,7 +222,7 @@ fn test_radlr_bytecode_bootstrap() -> RadlrResult<()> {
   let radlr_grammar =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/radlr/2.0.0/grammar.sg").canonicalize().unwrap();
 
-  build_parser(&[radlr_grammar], ParserType::Bytecode, Some("test_radlr".into()), std::env::temp_dir(), std::env::temp_dir(), false)?;
+  build_parser(&[radlr_grammar], ParserType::Bytecode, Some("test_radlr".into()), std::env::temp_dir(), std::env::temp_dir())?;
 
   Ok(())
 }

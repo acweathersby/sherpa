@@ -29,6 +29,9 @@ path = "../../lib/radlr-formatter"
 [dependencies.radlr_ascript_beta]
 path = "../../lib/radlr-ascript-beta"
 
+[dependencies.radlr_build]
+path = "../../lib/radlr-build"
+
 [profile.release]
 opt-level=3
 panic = 'abort'
