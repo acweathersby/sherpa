@@ -1,4 +1,4 @@
-@{#![allow(unused)]
+@{
 
 /// ### `radlr` Rust Parser
 ///
@@ -45,13 +45,8 @@ class Token {
 
 #_ {@"This is a comment function. Since we never call it, it has the same effect as a comment in other languages."}
 
-#any_rust_type any:obj{ @any.name }
-
-#any_rust_type_impl any:obj{ @any.name }
-
-
 #any_items_union {
-  #ast_node_rust_type(self)
+  #ast_node_ts_type(self)
   match _iter_last_ {
     true { } { \ |\ }
   }
@@ -79,29 +74,7 @@ class Token {
   }
 }
 
-#ty_to_cap_name ty:obj {
-  match ty.#type {
-    "Struct"  { @ty.name }
-    "Any"     { @ANY_ENUMS.[@ty.index].name }
-    { @ty.#type }
-  }
-}
-
-#ty_to_ast_name ty:obj {
-  @agg_type={ @ty.agg_type }
-  match @agg_type {
-    "Map" {  #ty_to_cap_name(ty.key)#ty_to_cap_name(ty.val) }
-    "Vec" { 
-      match ty.val.#type {
-        "Any"  { @ANY_ENUMS.[@ty.val.index].name s }
-        { #ty_to_cap_name(ty.val)s }
-      }  
-    }
-    {  #ty_to_cap_name(ty.val) }
-  }
-}
-
-#ast_node_rust_type ty:obj {
+#ast_node_ts_type ty:obj {
   @agg_type={ @ty.agg_type }
   match @agg_type {
     
@@ -113,32 +86,18 @@ class Token {
   }
 }
 
-#_{ Escaping of names that full under Rust's reserved identifier set. }
-#esc_ ts:str {
-  match ts {
-    "type" | "enum" | "struct" | "ref" { r# @[ts] }
-    { @[ts] }
-  }
-}
-
 #ast_nodes types:obj structs:obj any_enums:obj {
   
   #_{ AST DECLARATION -------------------------------------------------------------------------- }
-
   #_{ Not Used }
-
   #_{ ------------------------------------------------------------------------------------------ }
 
   #_{ TYPE DECLARATIONS ------------------------------------------------------------------------ }
-
   #_{ Not Used }
-
   #_{ ------------------------------------------------------------------------------------------ }
 
   #_{ ANY DECLARATIONS ------------------------------------------------------------------------- }
-
   #_{ Not Used }
-
   #_{ ------------------------------------------------------------------------------------------ }
 
   #_{ STRUCT DECLARATIONS----------------------------------------------------------------------- }
@@ -150,12 +109,12 @@ class Token {
       #prop_define del:str {
         @self.name
         match self.optional { true { ? } }
-        :\ #ast_node_rust_type(self.type) 
+        :\ #ast_node_ts_type(self.type) 
         @del @;
       }
 
       #param_define del:str {
-        @self.name:\ #ast_node_rust_type(self.type) 
+        @self.name:\ #ast_node_ts_type(self.type) 
         match self.optional { true { | undefined } }
         @del @;
       }
