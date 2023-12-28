@@ -24,10 +24,7 @@ impl ValueObj for AscriptStruct {
       "is_empty" => Value::Int((self.properties.len() == 0) as isize),
       "name" => Value::Str(self.name.intern(s_store)),
       "props" => Value::Obj(&self.properties),
-      "has_token" => {
-        dbg!(self);
-        Value::Int(self.has_token as isize)
-      }
+      "has_token" => Value::Int(self.has_token as isize),
       _ => Value::None,
     }
   }
@@ -60,7 +57,6 @@ impl ValueObj for AscriptProp {
       "type" => Value::Obj(&self.ty),
 
       "optional" => {
-        dbg!(self);
         if self.is_optional {
           Value::Int(1)
         } else {

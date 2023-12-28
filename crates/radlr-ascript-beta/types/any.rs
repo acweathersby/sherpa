@@ -1,12 +1,13 @@
-use crate::{AscriptAggregateType, AscriptScalarType, AscriptType, AscriptTypes};
+use crate::{AscriptAggregateType, AscriptDatabase, AscriptScalarType, AscriptType, AscriptTypes};
 use radlr_core::CachedString;
 use radlr_formatter::*;
-use std::fmt::Debug;
+use std::{collections::BTreeSet, fmt::Debug};
 
 #[derive(Debug)]
 pub struct AscriptAny {
   pub(crate) types: AscriptTypes,
   pub(crate) name:  String,
+  pub(crate) used:  bool,
 }
 
 impl ValueObj for AscriptAny {
@@ -51,4 +52,49 @@ fn contains_token_reference(t: &AscriptType) -> bool {
   }
 }
 
-formatted_typed_vector!(AscriptAnys, AscriptAny, "any_enums");
+#[derive(Debug)]
+/// Provides services to remap AnyTypes to enums of Any
+pub struct AscriptAnys<'db> {
+  db:   &'db AscriptDatabase,
+  anys: Vec<AscriptAny>,
+  len:  usize,
+}
+
+impl<'db> AscriptAnys<'db> {
+  pub fn new(db: &'db AscriptDatabase) -> Self {
+    let used_indices = BTreeSet::from_iter(db.any_type_lu.iter().cloned());
+    Self {
+      db,
+      len: used_indices.len(),
+      anys: db
+        .any_types
+        .iter()
+        .enumerate()
+        .map(|(i, any)| AscriptAny {
+          types: AscriptTypes(any.1.iter().map(|t| AscriptType::Scalar(*t)).collect()),
+          name:  format!("{}Any", any.0),
+          used:  used_indices.contains(&i),
+        })
+        .collect(),
+    }
+  }
+}
+
+impl<'a> ValueObj for AscriptAnys<'a> {
+  fn get_type<'scope>(&'scope self) -> &str {
+    "any_enums"
+  }
+
+  fn get_len<'scope>(&'scope self) -> usize {
+    self.len
+  }
+
+  fn get_index<'scope>(&'scope self, index: usize, s_store: &radlr_core::IStringStore) -> Value<'scope> {
+    let remapped_index = self.db.any_type_lu[index];
+    Value::Obj(&self.anys[remapped_index])
+  }
+
+  fn get_iter<'scope>(&'scope self, s_store: &radlr_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+    self.anys.iter().filter(|i| i.used).enumerate().map(|(i, any)| (Value::Int(i as isize), Value::Obj(any))).collect()
+  }
+}

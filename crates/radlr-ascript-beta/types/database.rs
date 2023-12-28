@@ -54,7 +54,7 @@ impl AscriptDatabase {
   pub fn format<W: Write>(&self, script: &str, writer: W, max_width: usize, ast_struct_name: &str) -> RadlrResult<W> {
     let mut ctx: FormatterContext = FormatterContext::new("AscriptForm", self.db.string_store().clone());
 
-    let any = self.create_any_enums();
+    let any = AscriptAnys::new(self);
     ctx.set_val("STRUCTS", Value::Obj(&self.structs));
     ctx.set_val("TYPES", Value::Obj(&self.types));
     ctx.set_val("RULES", Value::Obj(&self.rules));
@@ -64,26 +64,6 @@ impl AscriptDatabase {
 
     let f: Formatter = FormatterResult::from(script).into_result()?;
     f.write_to_output(&mut ctx, writer)
-  }
-
-  fn create_any_enums(&self) -> AscriptAnys {
-    let mut vec = vec![];
-    let mut used_indices = OrderedSet::new();
-    for ty in self.types.0.iter() {
-      if let Some(AscriptScalarType::Any(index)) = ty.as_scalar() {
-        used_indices.insert(index);
-      }
-    }
-
-    for indice in used_indices {
-      let any = &self.any_types[indice];
-      vec.push(AscriptAny {
-        types: AscriptTypes(any.1.iter().map(|t| AscriptType::Scalar(*t)).collect()),
-        name:  format!("{}Any", any.0),
-      })
-    }
-
-    AscriptAnys(vec)
   }
 
   pub fn get_errors(&self) -> Option<&[RadlrError]> {
