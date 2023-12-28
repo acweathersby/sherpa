@@ -28,7 +28,7 @@ fn main() {
     )
     .unwrap();
 
-  println!("{result:#?}");
+  eprintln!("{result:#?}");
 
   if let ASTNode::JSON(json) = result {
     match &json.body {

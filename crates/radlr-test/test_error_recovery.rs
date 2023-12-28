@@ -70,7 +70,7 @@ pub fn construct_error_recovering_erlang_toy() -> RadlrResult<()> {
 
   let input = "test test";
 
-  println!("------------------");
+  eprintln!("------------------");
 
   let root_path = PathBuf::from("test.sg");
   let mut grammar = RadlrGrammar::new();
@@ -88,16 +88,13 @@ pub fn construct_error_recovering_erlang_toy() -> RadlrResult<()> {
   let result =
     pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
 
-  #[cfg(debug_assertions)]
-  dbg!(&result);
-
   if let Some(best) = result.first() {
     for (_, sym) in &best.symbols {
       Printer::new(sym, true, &pkg).print();
-      println!("\n");
+      eprintln!("\n");
       Printer::new(sym, true, &pkg).print_all();
     }
-    println!("\n");
+    eprintln!("\n");
   }
 
   Ok(())
@@ -133,15 +130,15 @@ pub fn temp_lab_test() -> RadlrResult<()> {
   let result =
     pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
 
-  println!("------------------");
+  eprintln!("------------------");
   if let Some(best) = result.first() {
     for (_, sym) in &best.symbols {
       for alt in split_alternates(sym) {
         Printer::new(alt.first().unwrap(), true, &pkg).print();
-        println!("\n");
+        eprintln!("\n");
       }
     }
-    println!("\n");
+    eprintln!("\n");
   }
 
   // assert_eq!(result.trees().first().to_string(), "<name>()->fn <name>()");

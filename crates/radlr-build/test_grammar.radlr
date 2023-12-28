@@ -1,46 +1,14 @@
-IGNORE {c:sp c:nl}
+IGNORE { c:sp c:nl }
 
-<> json 
+<> statement > e            :ast { t_Stmt, v:$1 }
 
-  > entry :ast { t_JSON, body: $1, tok }
+<> e > e "+"{1} e{1}        :ast { t_Sum, l:$1, r:$3 }
+     | e "*"{2} e{2}        :ast { t_Mul, l:$1, r:$3 }
+     | term
 
-<> entry > obj | array
-  
-<> obj 
-  
-  > "{" key_val(+",") "}" :ast { t_Object, values: $2 }
+<> term > tk:num            :ast { t_Num, v:u32($1) }
+        | "(" e ")"         :ast { t_Paren, exp:$2 }
 
-<> array
-  
-  > "[" val(+",") "]" :ast { t_Array, values: $2 }
+<> num > c:num(+)
 
-
-<> string 
-  
-  > "\""  ( c:id | c:sp |  c:num | c:sym )(*)  "\""
-
-
-<> key_val 
-
-  > key ":" val :ast map($1, $3)
-
-
-<> key 
-
-  > tk:string :ast str(tok<1,1>)
-
-
-<> val 
-  > tk:string :ast str(tok<1,1>)
-  | c:num     :ast f64($1)
-  | obj
-  | array
-  | "true"    :ast bool($1)
-  | "false"   :ast bool
-  | "null"    :ast {t_Null}
-
-
-<> string 
-  > "\""  ( c:id | c:sp |  c:num | c:sym )(*)  "\""
- 
 

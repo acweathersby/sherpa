@@ -1,6 +1,6 @@
 use super::super::parser::ASTNode;
 use crate::types::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Resolves and verifies a grammar file path acquired from an `@IMPORT`
 /// statement exists.
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 /// Additionally, if the given file path is relative, then it is appended to the
 /// parent dir path of the current grammar, whose path is provided by the
 /// current grammar dir argument.
-pub(crate) fn resolve_grammar_path(path: &PathBuf, current_grammar_dir: &PathBuf, extension: &[&str]) -> RadlrResult<PathBuf> {
+pub(crate) fn resolve_grammar_path(path: &Path, current_grammar_dir: &Path, extension: &[&str]) -> RadlrResult<PathBuf> {
   RadlrResult::Ok(
     match (
       path.is_file(),
@@ -35,7 +35,7 @@ pub(crate) fn resolve_grammar_path(path: &PathBuf, current_grammar_dir: &PathBuf
           path.canonicalize().ok()
         })
         .next()
-        .ok_or(format!("Tried to load file with these extension {:?}", extension))?,
+        .ok_or(format!("Tried to load file with these extension [{}]", extension.join("|")))?,
 
       // Default
       _ => path.canonicalize()?,

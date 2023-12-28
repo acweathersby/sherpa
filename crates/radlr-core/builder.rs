@@ -10,7 +10,7 @@ use crate::{
     ir::{build_ir_from_graph, sweep},
     states::build_states::{compile_parser_states, NonTermGraph, ScannerGraph},
   },
-  grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut},
+  grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut, utils::resolve_grammar_path},
   o_to_r,
   proxy::{Array, DeduplicateIterator, Queue, Set},
   types::*,
@@ -78,6 +78,16 @@ impl RadlrGrammar {
 
   pub fn path_to_id<T: Into<PathBuf>>(&self, path: T) -> GrammarIdentities {
     GrammarIdentities::from_path(&path.into(), &self.soup.string_store)
+  }
+
+  /// Takes a path and makes a best attempt to resolve it to a RadLR grammar
+  /// file.
+  pub fn resolve_to_grammar_file(path: &Path) -> RadlrResult<PathBuf> {
+    let cwd = std::env::current_dir()?;
+    let cwd = path.parent().unwrap_or(cwd.as_path());
+    let resolved_path = resolve_grammar_path(&path, cwd, &["sg", "radlr"])?;
+    let resolved_path = resolved_path.canonicalize()?;
+    Ok(resolved_path)
   }
 
   /// Adds a grammar source to the soup
@@ -277,7 +287,7 @@ impl RadlrDatabase {
     let RadlrDatabase { db, .. } = self;
 
     for tok in db.tokens() {
-      println!("{: >5}  {: <10}", tok.tok_id.to_val(), tok.name.to_string(db.string_store()))
+      eprintln!("{: >5}  {: <10}", tok.tok_id.to_val(), tok.name.to_string(db.string_store()))
     }
   }
 }
@@ -587,7 +597,7 @@ pub trait ParserStore: JournalReporter {
       let states = self.get_states();
       for state in states {
         if let Ok(string) = state.1.print(self.get_db(), true) {
-          println!("{}", string);
+          eprintln!("{}", string);
         }
       }
     }

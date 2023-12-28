@@ -57,7 +57,7 @@ impl Node {
 }
 
 #[allow(unused)]
-pub fn  file_debugger(
+pub fn file_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,
   state_lu: HashMap<u32, String>,
@@ -84,7 +84,7 @@ pub fn console_debugger(
     let string = diagram_constructor(event, i, trk, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
-      println!("{string}");
+      eprintln!("{string}");
     }
   }))
 }

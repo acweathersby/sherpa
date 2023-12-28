@@ -306,7 +306,7 @@ pub trait GraphStateReference<'graph> {
 
   #[cfg(debug_assertions)]
   fn _debug_print_(&'graph self) {
-    println!("{}", self._debug_string_());
+    eprintln!("{}", self._debug_string_());
   }
 
   fn _debug_string_(&'graph self) -> String {
@@ -602,7 +602,7 @@ impl<'follow: 'follow> GraphHost {
   pub fn _debug_print_(&self) {
     #[cfg(debug_assertions)]
     {
-      println!("{}", self._debug_string_());
+      eprintln!("{}", self._debug_string_());
     }
   }
 
@@ -1268,7 +1268,7 @@ impl GraphBuilder {
 
   #[cfg(debug_assertions)]
   pub fn _print_state_(&self) {
-    println!("{}", self.get_state(self.state_id)._debug_string_());
+    eprintln!("{}", self.get_state(self.state_id)._debug_string_());
   }
 
   #[cfg(debug_assertions)]

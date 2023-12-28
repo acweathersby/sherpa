@@ -362,7 +362,7 @@ fn playground() -> RadlrResult<()> {
       let mut ctx = FormatterContext::new("test", s_store);
       ctx.set_val("test", Value::Obj(&list));
 
-      println!("{}", formatter.write_to_string(&mut ctx, 1024)?);
+      eprintln!("{}", formatter.write_to_string(&mut ctx, 1024)?);
 
       Ok(())
     }

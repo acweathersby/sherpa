@@ -61,7 +61,7 @@ fn test_full_grammar() -> RadlrResult<()> {
   let entry = pkg.get_entry_data_from_name("grammar").expect("Grammar export should be enterable");
 
   for file_path in validation_files.chain(grammar_files.into_iter()) {
-    println!("{}", file_path.file_name().and_then(|f| f.to_str()).expect("Could not read file name"));
+    eprintln!("{}", file_path.file_name().and_then(|f| f.to_str()).expect("Could not read file name"));
 
     let input = std::fs::read_to_string(file_path)?;
 

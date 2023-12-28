@@ -3,9 +3,6 @@
     {
       "name": "lib_radlr",
       "path": ".."
-    },
-    {
-      "path": "../test/workflow_test"
     }
   ],
   "settings": {

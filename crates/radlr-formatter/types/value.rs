@@ -97,7 +97,7 @@ pub trait ValueObj: Debug {
   /// Returns a unique type name that can be access through this objects
   /// `.#type` property.
   fn get_type<'scope>(&'scope self) -> &str {
-    "undefined"
+    "undefinedObj"
   }
 
   /// Returns a  list of keys that can be used to debug invalid property access

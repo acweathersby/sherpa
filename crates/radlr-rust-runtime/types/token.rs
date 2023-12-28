@@ -535,7 +535,7 @@ mod test {
     let blame_string = tok.blame(2, 1, "test", None);
     let lines = blame_string.split("\n").collect::<Vec<_>>();
 
-    println!("{}", blame_string);
+    eprintln!("{}", blame_string);
 
     assert_eq!(lines.len(), 6);
 
@@ -556,7 +556,7 @@ mod test {
     let blame_string = tok.blame(2, 3, "start", None);
     let lines = blame_string.split("\n").collect::<Vec<_>>();
 
-    println!("{}", blame_string);
+    eprintln!("{}", blame_string);
 
     assert_eq!(lines.len(), 6);
 

@@ -1,5 +1,8 @@
 #![allow(unused_mut, unused)]
-use super::build_grammar::{create_grammar_data, extract_nonterminals, parse_grammar, GrammarData};
+use super::{
+  build_grammar::{create_grammar_data, extract_nonterminals, parse_grammar, GrammarData},
+  utils::resolve_grammar_path,
+};
 use crate::{
   grammar::build_grammar::{convert_grammar_data_to_header, process_nonterminals, process_parse_state},
   journal::{Journal, ReportType},
@@ -98,6 +101,7 @@ fn compile_grammar_data(j: &mut Journal, g_data: GrammarData, g_s: &GrammarSoup)
   RadlrResult::Ok(id)
 }
 
+#[track_caller]
 fn load_from_path(j: &mut Journal, source_path: PathBuf, soup: &GrammarSoup) -> RadlrResult<GrammarData> {
   match std::fs::read_to_string(&source_path) {
     Ok(source) => {

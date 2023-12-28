@@ -38,25 +38,23 @@ pub fn construct_error_recovering_parser() -> RadlrResult<()> {
   let mut graph: EditGraph<StringInput, BytecodeParserDB> =
     EditGraph::parse(pkg.default_entrypoint(), input.to_string(), pkg.clone())?;
 
-  dbg!(&graph.cst());
-
-  println!("\n\n--");
+  eprintln!("\n\n--");
   Printer::new(graph.cst().unwrap().as_ref(), true, pkg.as_ref()).print();
-  println!("\n\n");
+  eprintln!("\n\n");
 
   let result = graph.patch_insert(&graph.cst().unwrap(), 8, "2,     d").expect("Insert should produce result");
 
-  println!("{:#?}", result);
+  eprintln!("{:#?}", result);
 
-  println!("\n\n--");
+  eprintln!("\n\n--");
   Printer::new(graph.cst().unwrap().as_ref(), true, pkg.as_ref()).print();
-  println!("\n\n");
+  eprintln!("\n\n");
 
   graph.patch_insert(&graph.cst().unwrap(), 8, ")} fn(");
 
-  println!("\n\n--");
+  eprintln!("\n\n--");
   Printer::new(graph.cst().unwrap().as_ref(), true, pkg.as_ref()).print();
-  println!("\n\n");
+  eprintln!("\n\n");
 
   Ok(())
 }

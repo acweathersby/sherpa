@@ -87,20 +87,34 @@ impl<'a> BuildConfig<'a> {
 }
 
 /// Build a Radlr parser from a grammar file
-pub fn fs_build(build_config: BuildConfig, parser_config: radlr_core::ParserConfig, target: TargetLanguage) -> RadlrResult<()> {
-  let BuildConfig { lib_out, source_out, root_grammar_path, .. } = build_config;
+pub fn fs_build<'b>(
+  build_config: BuildConfig<'b>,
+  parser_config: radlr_core::ParserConfig,
+  target: TargetLanguage,
+) -> RadlrResult<()> {
+  let mut local_build_config = build_config;
 
-  let db = RadlrGrammar::new().add_source(root_grammar_path)?.build_db(root_grammar_path, parser_config)?;
+  let BuildConfig { lib_out, source_out, root_grammar_path, .. } = &mut local_build_config;
 
-  std::fs::create_dir_all(lib_out)?;
-  std::fs::create_dir_all(source_out)?;
+  std::fs::create_dir_all(*lib_out)?;
+  std::fs::create_dir_all(*source_out)?;
+
+  let canonical_libout = lib_out.canonicalize()?;
+  let canonical_source_out = source_out.canonicalize()?;
+
+  (*lib_out) = &canonical_libout;
+  (*source_out) = &canonical_source_out;
+
+  let resolved_root_path = RadlrGrammar::resolve_to_grammar_file(root_grammar_path)?;
+
+  let db = RadlrGrammar::new().add_source(&resolved_root_path)?.build_db(resolved_root_path, parser_config)?;
 
   match target {
     TargetLanguage::Rust => {
-      targets::rust::build(&db, build_config, parser_config)?;
+      targets::rust::build(&db, local_build_config, parser_config)?;
     }
     TargetLanguage::TypeScript => {
-      targets::typescript::build(&db, build_config, parser_config)?;
+      targets::typescript::build(&db, local_build_config, parser_config)?;
     }
     TargetLanguage::JavaScript => {
       todo!("Build Javascript: Not yet supported")

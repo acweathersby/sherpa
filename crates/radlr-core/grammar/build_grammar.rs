@@ -1120,8 +1120,6 @@ mod test {
 
     let nterm = super::process_nonterminals(o_to_r(nterms.pop(), "")?, &g_data, &s_store, &templates, &mut Default::default())?;
 
-    dbg!(&nterm.symbols);
-
     assert_eq!(nterm.sub_nterms.len(), 1);
     assert_eq!(nterm.symbols.len(), 3);
 
@@ -1150,8 +1148,6 @@ mod test {
     assert_eq!(parse_states.len(), 1);
 
     let parse_state = super::process_parse_state(parse_states.pop().unwrap(), &g_data, &s_store)?;
-
-    dbg!(&parse_state, &s_store);
 
     assert_eq!(parse_state.symbols.len(), 3);
 

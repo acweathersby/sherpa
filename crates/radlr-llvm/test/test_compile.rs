@@ -89,7 +89,7 @@ fn verify_construction_of_init_function() -> RadlrResult<()> {
 
   unsafe { assert!(construct_init(&module).is_ok()) }
 
-  println!("{}", module.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
   RadlrResult::Ok(())
 }
@@ -103,7 +103,7 @@ fn verify_construction_of_ast_builder() -> RadlrResult<()> {
 
   unsafe { assert!(construct_ast_builder::<u32>(&module).is_ok()) }
 
-  println!("{}", module.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
   RadlrResult::Ok(())
 }
@@ -117,7 +117,7 @@ fn verify_construction_of_push_state_function() -> RadlrResult<()> {
 
   assert!(construct_push_state_function(&module).is_ok());
 
-  println!("{}", module.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
   RadlrResult::Ok(())
 }
@@ -168,7 +168,7 @@ fn should_push_new_state() -> RadlrResult<()> {
       rt_ctx.goto_size as usize,
     );
 
-    println!("{:#?}", rt_ctx);
+    eprintln!("{:#?}", rt_ctx);
     assert_eq!(stack[0].goto_fn as usize, 0x10101010_01010101);
     assert_eq!(stack[0].state, NORMAL_STATE_FLAG_LLVM);
 
@@ -192,7 +192,7 @@ fn verify_construction_of_get_adjusted_input_block_function() -> RadlrResult<()>
 
   unsafe { assert!(construct_get_adjusted_input_block_function(&module).is_ok()) }
 
-  println!("{}", module.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
   RadlrResult::Ok(())
 }
@@ -206,7 +206,7 @@ fn verify_construction_of_emit_eop_function() -> RadlrResult<()> {
 
   unsafe { assert!(construct_emit_end_of_parse(&module).is_ok()) }
 
-  println!("{}", module.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
   RadlrResult::Ok(())
 }
@@ -232,7 +232,7 @@ fn should_initialize_context() -> RadlrResult<()> {
 
     //    assert_eq!(rt_ctx.reader.as_ref().unwrap().string, reader.string);
 
-    println!("{:?}:{:#?}", root, rt_ctx);
+    eprintln!("{:?}:{:#?}", root, rt_ctx);
   };
   RadlrResult::Ok(())
 }
@@ -248,7 +248,7 @@ fn verify_utf8_lookup_functions() -> RadlrResult<()> {
 
   unsafe { assert!(construct_merge_utf8_part_function(&module).is_ok()) }
 
-  println!("{}", module.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
   RadlrResult::Ok(())
 }
@@ -279,11 +279,10 @@ fn should_yield_correct_cp_values_for_inputs() -> RadlrResult<()> {
 
     let get_code_point = get_parse_function::<GetUtf8CP>(&jit_engine, "get_utf8_codepoint_info_shim").unwrap();
 
-    dbg!(get_code_point.call(" ".as_ptr()));
     assert_eq!(get_code_point.call(" ".as_ptr()).val, 32);
-    // assert_eq!(get_code_point.call(" ".as_ptr()).len, 1);
+    assert_eq!(get_code_point.call(" ".as_ptr()).len, 1);
     assert_eq!(get_code_point.call("☺".as_ptr()).val, 0x263A);
-    // assert_eq!(get_code_point.call("☺".as_ptr()).len, 3);
+    assert_eq!(get_code_point.call("☺".as_ptr()).len, 3);
   };
 
   RadlrResult::Ok(())
@@ -298,7 +297,7 @@ fn verify_construct_extend_stack() -> RadlrResult<()> {
 
   unsafe { assert!(construct_extend_stack(&module).is_ok()) }
 
-  println!("{}", module.module.to_string());
+  eprintln!("{}", module.module.to_string());
 
   RadlrResult::Ok(())
 }
@@ -363,7 +362,7 @@ fn should_extend_stack() -> RadlrResult<()> {
 
     assert_eq!(rt_ctx.goto_size, 960);
 
-    println!("{:#?}", stack);
+    eprintln!("{:#?}", stack);
   };
 
   RadlrResult::Ok(())
@@ -387,7 +386,7 @@ IGNORE { c:sp }
 
       compile_states(&tp, &module)?;
 
-      println!("{}", module.module.to_string());
+      eprintln!("{}", module.module.to_string());
 
       RadlrResult::Ok(())
     },
@@ -434,19 +433,13 @@ IGNORE { c:sp }
 
         let action = next_fn.call(&mut rt_ctx);
 
-        dbg!(action);
-
         assert!(matches!(action, ParseActionType::Shift));
 
         let action = next_fn.call(&mut rt_ctx);
 
-        dbg!(action);
-
         assert!(matches!(action, ParseActionType::Skip));
 
         let action = next_fn.call(&mut rt_ctx);
-
-        dbg!(action);
 
         assert!(matches!(action, ParseActionType::Shift));
 
@@ -505,7 +498,7 @@ mango""##,
       ("P", 0, |ctx, slots| {
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
-        println!("Reduced P");
+        eprintln!("Reduced P");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "world");
         assert_eq!(slots[0].1.line_off, 5, "Line offset of `world` should be 5");
         assert_eq!(slots[0].1.line_num, 3, "Line number of `world` should be 3");
@@ -513,7 +506,7 @@ mango""##,
       ("A", 0 /* A */, |ctx, slots| {
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
-        println!("Reduced A");
+        eprintln!("Reduced A");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nh\n\"");
         assert_eq!(slots[0].1.line_num, 0, "Line number of `\"\\nh\\n\"` should be 0");
         assert_eq!(slots[0].1.line_off, 0, "Line offset of `\"\\nh\\n\"` should be 0");
@@ -523,7 +516,7 @@ mango""##,
       ("C", 0, |ctx, slots| {
         let counter = unsafe { ctx.get_meta_mut() };
         *counter += 1;
-        println!("Reduced C");
+        eprintln!("Reduced C");
         assert_eq!(slots[0].1.to_slice(ctx.get_str()), "\"\nmango\"");
         assert_eq!(slots[0].1.line_num, 7, "Line number of `mango` should be 7");
         assert_eq!(slots[0].1.line_off, 20, "Line offset of `mango` should be 20");
@@ -618,7 +611,7 @@ IGNORE { c:sp c:nl }
 
         let final_token = _a.1 + _b.1;
 
-        println!(
+        eprintln!(
           "{}",
           final_token.to_token(unsafe { &mut *ctx.reader }).blame(0, 0, "Completed Parse of [test]", BlameColor::RED)
         );
@@ -626,11 +619,11 @@ IGNORE { c:sp c:nl }
         slots.assign(0, AstSlot(0, final_token, TokenRange::default()));
       }),
       ("B", 0, |_, slots| {
-        println!("<B> 02 - {}  {:#?}", 0, slots);
+        eprintln!("<B> 02 - {}  {:#?}", 0, slots);
         // Do nothing
       }),
       ("P", 0, |_, slots| {
-        println!("<P> 03 - {}  {:#?}", 0, slots);
+        eprintln!("<P> 03 - {}  {:#?}", 0, slots);
         let AstSlot(_, _a, _) = slots.take(0);
         slots.take(1);
         let AstSlot(_, _c, _) = slots.take(2);
@@ -639,7 +632,7 @@ IGNORE { c:sp c:nl }
     ]),
   );
 
-  println!("{:#?}", parse_result);
+  eprintln!("{:#?}", parse_result);
 
   assert!(matches!(parse_result, ParseResult::Complete(..)));
 
@@ -699,7 +692,7 @@ NAME llvm_language_test
       let module = construct_module(&ctx, &target_data, ctx.create_module("test"));
       compile_llvm_module_from_parse_states(&tp, &module)?;
 
-      println!("{}", module.module.to_string());
+      eprintln!("{}", module.module.to_string());
 
       RadlrResult::Ok(())
     },

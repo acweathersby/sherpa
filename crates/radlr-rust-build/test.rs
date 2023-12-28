@@ -30,7 +30,7 @@ fn temp_test_grammar() -> RadlrResult<()> {
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
 
       let writer = write_rust_ast(w)?;
-      println!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
 
       RadlrResult::Ok(())
     },
@@ -74,7 +74,7 @@ fn test_grammar() -> RadlrResult<()> {
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
 
       let writer = write_rust_ast(w)?;
-      println!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output()).unwrap());
 
       RadlrResult::Ok(())
     },
@@ -99,7 +99,7 @@ fn test_add_hoc_vector_prop_merged_with_vector_nonterminal() -> RadlrResult<()> 
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
       let writer = write_rust_ast(w)?;
 
-      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output())?);
       RadlrResult::Ok(())
     },
   )?;
@@ -177,7 +177,7 @@ fn rust_vector_return_types_print_correctly() -> RadlrResult<()> {
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
       let writer = write_rust_ast(w)?;
 
-      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output())?);
       RadlrResult::Ok(())
     },
   )
@@ -239,7 +239,7 @@ fn group_nonterminals_get_correct_type_information() -> RadlrResult<()> {
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
       let writer = write_rust_ast(w)?;
 
-      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output())?);
       RadlrResult::Ok(())
     },
   )
@@ -257,7 +257,7 @@ fn token_range_slice() -> RadlrResult<()> {
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
       let writer = write_rust_ast(w)?;
 
-      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output())?);
       RadlrResult::Ok(())
     },
   )
@@ -277,7 +277,7 @@ fn reference_nonterminal_and_reference_names_when_using_valueless_props() -> Rad
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
       let writer = write_rust_ast(w)?;
 
-      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output())?);
       RadlrResult::Ok(())
     },
   )
@@ -300,7 +300,7 @@ fn convert_str_to_numeric() -> RadlrResult<()> {
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
       let writer = write_rust_ast(w)?;
 
-      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output())?);
       RadlrResult::Ok(())
     },
   )
@@ -322,7 +322,7 @@ fn temp() -> RadlrResult<()> {
       let w = AscriptWriter::new(&u, CodeWriter::new(vec![]));
       let writer = write_rust_ast(w)?;
 
-      println!("{}", String::from_utf8(writer.into_writer().into_output())?);
+      eprintln!("{}", String::from_utf8(writer.into_writer().into_output())?);
       RadlrResult::Ok(())
     },
   )

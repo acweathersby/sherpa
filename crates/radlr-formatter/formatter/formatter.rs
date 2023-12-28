@@ -125,7 +125,7 @@ impl Formatter {
 
   #[cfg(debug_assertions)]
   pub fn _debug_print_(&self) {
-    println!("{:#?}", self.script)
+    eprintln!("{:#?}", self.script)
   }
 
   pub fn write_to_string<'a>(&'a self, ctx: &mut FormatterContext<'_, 'a>, capacity: usize) -> RadlrResult<String> {
@@ -385,7 +385,16 @@ impl Formatter {
           vals.push(obj);
         }
         node => {
-          todo!("Handle the interpretation of arg type: \n{}", arg.to_token().blame(1, 1, "", Default::default()))
+          todo!(
+            "Handle the interpretation of arg type:[{}] \n{}",
+            match node {
+              Value::Obj(obj) => {
+                obj.get_type().to_string()
+              }
+              _ => format!("{node:?}").to_string(),
+            },
+            arg.to_token().blame(1, 1, "", Default::default())
+          )
         }
       }
     }

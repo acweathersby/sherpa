@@ -193,7 +193,7 @@ fn compile_statement<'a, 'llvm: 'a>(
       }
       node => {
         #[cfg(debug_assertions)]
-        dbg!(node);
+        eprintln!("{:?}", node);
         unreachable!();
       }
     }
@@ -219,7 +219,7 @@ fn compile_statement<'a, 'llvm: 'a>(
       }
       node => {
         #[cfg(debug_assertions)]
-        dbg!(node);
+        eprintln!("{:?}", node);
         unreachable!();
       }
     }

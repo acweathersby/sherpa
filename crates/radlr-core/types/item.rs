@@ -580,7 +580,7 @@ impl Item {
 
   #[cfg(debug_assertions)]
   pub fn _debug_print_(&self, db: &ParserDatabase) {
-    println!("{}", self._debug_string_w_db_(db))
+    eprintln!("{}", self._debug_string_w_db_(db))
   }
 
   pub fn _debug_string_(&self) -> String {
@@ -700,8 +700,6 @@ fn item_transition_functions() -> RadlrResult<()> {
 
   assert_eq!(item.is_successor(), true);
 
-  dbg!(item);
-
   Ok(())
 }
 
@@ -724,8 +722,6 @@ fn item_attributes() -> RadlrResult<()> {
   assert_eq!(item.is_canonical(), false);
 
   assert_eq!(item.origin, Origin::__OOS_CLOSURE__);
-
-  dbg!(item);
 
   Ok(())
 }
@@ -829,7 +825,7 @@ pub trait TransitionPairRefIter<'a>: Iterator<Item = &'a TransitionPair> + Sized
 
   #[cfg(debug_assertions)]
   fn _debug_print_(self, db: &ParserDatabase, message: &str) {
-    println!("=====> {}\n{}\n=====<\n", message, self._debug_string_(db))
+    eprintln!("=====> {}\n{}\n=====<\n", message, self._debug_string_(db))
   }
 
   #[cfg(debug_assertions)]
@@ -876,7 +872,7 @@ macro_rules! common_iter_functions {
 
     #[cfg(debug_assertions)]
     fn _debug_print_(self, _comment: &str) {
-      println!("------>{} \n {}", _comment, self.to_debug_string("\n\n"));
+      eprintln!("------>{} \n {}", _comment, self.to_debug_string("\n\n"));
     }
 
     fn to_debug_string(self, sep: &str) -> String {
@@ -1108,10 +1104,10 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> 
 #[allow(unused)]
 #[cfg(debug_assertions)]
 fn debug_items<'db, T: IntoIterator<Item = Item>>(comment: &str, items: T, db: &ParserDatabase) {
-  println!("\n {} --> ", comment);
+  eprintln!("\n {} --> ", comment);
 
   for item in items {
-    println!("    {}", item._debug_string_w_db_(db));
+    eprintln!("    {}", item._debug_string_w_db_(db));
   }
 }
 
