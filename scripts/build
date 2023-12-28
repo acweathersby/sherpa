@@ -1,6 +1,0 @@
-# Build the radlr release for linux
-cargo build --release --bin radlr --features "llvm,radlr-binary-parser"
-
-# Output the build to the releases folder.
-mkdir -p releases/linux_bin
-mv ./target/release/radlr ./releases/linux_bin/radlr_x86_64

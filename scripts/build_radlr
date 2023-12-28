@@ -1,0 +1,11 @@
+#! /bin/zsh
+
+pushd ${0:a:h}/..
+
+# Build the radlr release for linux
+cargo build --package radlr --release --bin radlr 
+
+# Output the build to the releases folder.
+mkdir -p releases/linux_bin
+
+mv ./target/release/radlr ./releases/linux_bin/radlr
