@@ -700,6 +700,11 @@ pub fn compile_expression_type(
       tag:          rule_id,
       type_:        F64(None),
     }],
+    ASTNode::AST_NumberLiteral(..) => vec![TaggedType {
+      symbol_index: rule_len as u32,
+      tag:          rule_id,
+      type_:        F64(None),
+    }],
     ASTNode::AST_Member(..) => vec![TaggedType {
       symbol_index: rule_len as u32,
       tag:          rule_id,

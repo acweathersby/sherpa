@@ -7,6 +7,6 @@ IGNORE { c:sp c:nl }
        | term                   
   
   <> term > tk:num            :ast f64($1)  
-          | "(" e ")"         :ast {$2}      
+          | "(" e ")"         :ast $2      
           
-  <> num > c:num(+) ( "." c:num(*) )?
+  <> num > c:num(+)
