@@ -72,7 +72,38 @@ pub(super) fn resolve_reduce_reduce_conflict(
 
         Ok(ReduceReduceConflictResolution::Peek(k as u16, follow_pairs))
       }
-      _ => todo!("Resolve lookahead conflicts"),
+      _ => {
+        #[cfg(debug_assertions)]
+        {
+          for (i, follow_pair) in follow_pairs.iter().enumerate() {
+            let mut item = follow_pair.kernel;
+            println!("-------------- \n\n");
+
+            loop {
+              println!("{}", item._debug_string_w_db_(&gb.db()));
+              let origin_state_id = item.origin_state;
+
+              let origin_state = gb.get_state(origin_state_id);
+
+              let kernel_items = origin_state.get_kernel_items();
+
+              if item.is_initial() && origin_state_id.is_root() {
+                break;
+              }
+
+              if let Some(i) = kernel_items.iter().find(|i| item.is_successor_of(i)) {
+                item = *i;
+              } else {
+                break;
+              }
+            }
+
+            println!("{i} {}", follow_pair._debug_string_(&gb.db()));
+          }
+          todo!("Resolve lookahead conflicts: \n prec_sym{prec_sym:#?}  \nfollow_pairs: {follow_pairs:#?}\n\n");
+        }
+        todo!("Resolve lookahead conflicts: Use debug build to print a more verbose error message.");
+      }
     }
   }
 }

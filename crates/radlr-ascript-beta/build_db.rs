@@ -191,11 +191,11 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
               AscriptRule::Invalid(id)
             }
           },
-          ASTNode::AST_Statements(stmt) => AscriptRule::Expression(id, Initializer {
+          ASTNode::AST_Statement(stmt) => AscriptRule::Expression(id, Initializer {
             ty: AscriptType::Undefined,
             name: Default::default(),
             output_graph: None,
-            ast: Some(stmt.statements[0].clone()),
+            ast: Some(stmt.expression.clone()),
             g_id,
           }),
           _ => unreachable!(),
@@ -359,210 +359,128 @@ pub fn process_struct_node(
 
 /// Derives the AST types of all parser NonTerminals.
 pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> OrderedMap<DBNonTermKey, AscriptType> {
-  let AscriptDatabase { structs, errors, rules, types, any_type_lu, any_types, .. } = adb;
-  let mut pending = rules
-    .0
-    .iter()
-    .enumerate()
-    .map(|(i, _)| {
-      (i, DBRuleKey::from(i), PendingType::Unresolved { non_terms: Default::default(), ty: Default::default() })
-    })
-    .collect::<Vec<_>>();
+  let AscriptDatabase { errors, any_type_lu, any_types, .. } = adb;
 
-  let mut nonterms = OrderedMap::new();
   let mut resolved_nonterms = OrderedMap::new();
+  //let pending_nonterms = OrderedMap::new();
+  let mut rule_nonterms = OrderedMap::new();
 
-  for rule in db.rules() {
-    nonterms.entry(rule.nonterm).or_insert((AscriptType::Undefined, None, 0, 0)).2 += 1
-  }
+  // Collect all non_term_dependency_of_a_rule
 
-  loop {
-    let mut complete = true;
-
-    for (index, rule_id, type_data) in &mut pending {
-      if db.rules()[*index].is_scanner {
-        continue;
+  for (i, _) in db.rules().iter().enumerate() {
+    match &adb.rules.get(i) {
+      Some(AscriptRule::Expression(_, node)) => {
+        let item = Item::from((DBRuleKey::from(i), db));
+        let set = rule_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
+        get_nonterm_refs(
+          GraphResolveData {
+            db,
+            item,
+            node: node.ast.as_ref().unwrap(),
+            nonterm_types: &resolved_nonterms,
+            default_nonterm_type: None,
+          },
+          set,
+        )
       }
-
-      match type_data {
-        PendingType::Unresolved { non_terms: pending_nonterm, ty } => {
-          let rule = &db.rules()[*index];
-          let nonterm_id = rule.nonterm;
-
-          if pending_nonterm.len() > 0 {
-            let mut queue = VecDeque::from_iter(pending_nonterm.iter().cloned());
-            while let Some(non_term) = queue.pop_front() {
-              match nonterms.get_mut(&non_term) {
-                Some((_, _, 0, _)) => {
-                  pending_nonterm.remove(&non_term);
-                }
-                Some((_, _, 1.., r)) if non_term == nonterm_id => {
-                  // Self referential
-                  pending_nonterm.remove(&non_term);
-                }
-                _ => {}
-              }
-            }
+      Some(AscriptRule::LastSymbol(..)) => {
+        let item = Item::from((DBRuleKey::from(i), db));
+        let item = item.to_penultimate();
+        match item.nonterm_index_at_sym(Default::default(), db) {
+          Some(nonterm_key) => {
+            let set = rule_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
+            set.insert(nonterm_key);
           }
-
-          let item = Item::from((*rule_id, db));
-
-          let ty = match &mut adb.rules[*index] {
-            AscriptRule::LastSymbol(..) => match item.to_complete().decrement() {
-              Some(item) => match item.nonterm_index_at_sym(Default::default(), db) {
-                Some(nonterm_key) => match nonterms.get_mut(&nonterm_key) {
-                  Some((ty, _, resolved, self_recursive)) => {
-                    if *resolved == 0 {
-                      *ty
-                    } else {
-                      *self_recursive += (nonterm_key == nonterm_id) as u32;
-                      pending_nonterm.insert(nonterm_key);
-                      AscriptType::Undefined
-                    }
-                  }
-                  None => AscriptType::Undefined,
-                },
-                None => AscriptType::Scalar(AscriptScalarType::Token),
-              },
-              None => AscriptType::Undefined,
-            },
-            AscriptRule::ListContinue(..) | AscriptRule::ListInitial(..) => match item.to_complete().decrement() {
-              Some(item) => match item.nonterm_index_at_sym(Default::default(), db) {
-                Some(nonterm_key) => match nonterms.get_mut(&nonterm_key) {
-                  Some((ty, _, v, self_recursive)) => {
-                    if *v == 0 {
-                      match ty {
-                        AscriptType::Scalar(ty) => AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: *ty }),
-                        agg @ AscriptType::Aggregate(..) => *agg,
-                        _ => AscriptType::Undefined,
-                      }
-                    } else {
-                      *self_recursive += (nonterm_key == nonterm_id) as u32;
-                      pending_nonterm.insert(nonterm_key);
-                      AscriptType::Undefined
-                    }
-                  }
-                  None => AscriptType::Undefined,
-                },
-                None => AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: AscriptScalarType::Token }),
-              },
-              None => AscriptType::Undefined,
-            },
-            AscriptRule::Struct(_, id) => AscriptType::Scalar(AscriptScalarType::Struct(
-              id.name,
-              adb.structs.get(&id.name).map(|a| a.properties.len() == 0).unwrap_or_default(),
-            )),
-            AscriptRule::Invalid(..) => AscriptType::Undefined,
-            AscriptRule::Expression(_, init) => {
-              match create_graph_node(
-                db,
-                init.ast.as_ref().unwrap(),
-                item,
-                &resolved_nonterms,
-                &mut Default::default(),
-                any_type_lu,
-                any_types,
-              ) {
-                Ok(ty) => {
-                  let ty = ty.get_type();
-                  match ty {
-                    AscriptType::Aggregate(agg_ty) => {
-                      match agg_ty {
-                        AscriptAggregateType::Map { key_type, .. } => match key_type {
-                          AscriptScalarType::Struct(structs, _) => {
-                            let rule = item.rule(db);
-                            panic!("{}", RadlrError::SourceError {
-                              loc:        rule.tok.clone(),
-                              path:       rule.g_id.path.to_string(db.string_store()),
-                              id:         (ascript_error_class(), 5, "invalid-key-type").into(),
-                              msg:        "Struct type cannot be used as a key to a map".into(),
-                              inline_msg: Default::default(),
-                              ps_msg:     item._debug_string_w_db_(db),
-                              severity:   radlr_core::RadlrErrorSeverity::Critical,
-                            })
-                          }
-                          _ => {}
-                        },
-                        _ => {}
-                      };
-                    }
-                    _ => {}
-                  }
-                  *ty
-                }
-                Err(missing_nonterm_id) => {
-                  pending_nonterm.insert(missing_nonterm_id);
-                  AscriptType::Undefined
-                }
-              }
-            }
-          };
-
-          if pending_nonterm.len() > 0 {
-            // Keep this alive until all non_terminal requirements are
-            // resolved.
-            complete = false;
-            continue;
-          }
-
-          match ty {
-            AscriptType::Undefined => {
-              *type_data = PendingType::Resolved(AscriptType::Undefined);
-              continue;
-            }
-            new_ty => match nonterms.get_mut(&nonterm_id) {
-              Some((existing_ty, first_resolved_rule, resolved, _)) => {
-                // resolve non-term types.
-
-                *type_data = PendingType::Resolved(*existing_ty);
-
-                match &mut adb.rules[*index] {
-                  AscriptRule::ListContinue(_, init) => init.ty = new_ty,
-                  AscriptRule::ListInitial(_, init) => init.ty = new_ty,
-                  AscriptRule::Expression(_, init) => init.ty = new_ty,
-                  AscriptRule::LastSymbol(_, init) => init.ty = new_ty,
-                  _ => {}
-                }
-
-                let ref_name = db.nonterm_friendly_name_string(nonterm_id);
-                *existing_ty = match get_resolved_type(&new_ty, existing_ty, any_type_lu, any_types, &ref_name) {
-                  Ok(ty) => ty,
-                  Err(_) => {
-                    add_incompatible_nonterm_types_error(
-                      &mut adb.errors,
-                      db,
-                      nonterm_id,
-                      (*existing_ty, first_resolved_rule.unwrap()),
-                      (new_ty, rule),
-                    );
-                    panic!("TEst")
-                  }
-                };
-
-                let _ = first_resolved_rule.get_or_insert(rule);
-
-                *resolved -= 1;
-
-                if *resolved > 0 {
-                  continue;
-                }
-
-                resolved_nonterms.insert(nonterm_id, *existing_ty);
-              }
-              None => unreachable!(),
-            },
-          }
+          None => {}
         }
-        _ => {}
       }
-    }
+      Some(_) => {
+        rule_nonterms.entry(DBRuleKey::from(i as u32)).or_insert_with(|| OrderedSet::new());
+      }
 
-    if complete {
-      break;
+      _ => {}
     }
   }
 
-  nonterms.into_iter().map(|(k, (v, ..))| (k, v)).collect()
+  // Start with rules that do not rely on non-term-values;
+  let mut queue = VecDeque::from_iter(rule_nonterms.iter().filter_map(|(r, s)| s.is_empty().then_some(*r)));
+
+  while let Some(rule_id) = queue.pop_front() {
+    let index: usize = rule_id.into();
+    let item = Item::from((rule_id, db));
+
+    let ty = match &adb.rules.get(index) {
+      Some(AscriptRule::Invalid(..)) => AscriptType::Undefined,
+      Some(AscriptRule::Struct(_, id)) => AscriptType::Scalar(AscriptScalarType::Struct(
+        id.name,
+        adb.structs.get(&id.name).map(|a| a.properties.len() == 0).unwrap_or_default(),
+      )),
+      Some(AscriptRule::LastSymbol(id, node)) => {
+        match graph_type_from_item(item.to_penultimate(), db, &resolved_nonterms, None) {
+          (ty, _) => ty,
+          _ => AscriptType::Undefined,
+        }
+      }
+      Some(AscriptRule::Expression(id, node)) => match get_graph_type(
+        GraphResolveData {
+          db,
+          item,
+          node: node.ast.as_ref().unwrap(),
+          nonterm_types: &resolved_nonterms,
+          default_nonterm_type: None,
+        },
+        &mut GraphMutData {
+          selected_indices: &mut Default::default(),
+          any_indices:      any_type_lu,
+          any_maps:         any_types,
+        },
+      ) {
+        Ok(ty) => ty,
+        Err(err) => {
+          errors.push(err);
+          continue;
+        }
+      },
+      Some(AscriptRule::ListContinue(..)) | Some(AscriptRule::ListInitial(..)) => {
+        match item.to_penultimate().nonterm_index_at_sym(Default::default(), db) {
+          Some(nonterm_key) => match resolved_nonterms.get(&nonterm_key) {
+            Some(ty) => match ty {
+              AscriptType::Scalar(ty) => AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: *ty }),
+              agg @ AscriptType::Aggregate(..) => *agg,
+              _ => AscriptType::Undefined,
+            },
+            None => AscriptType::Undefined,
+          },
+          None => AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: AscriptScalarType::Token }),
+        }
+      }
+      _ => unreachable!(""),
+    };
+
+    let nonterm_id = db.db_rule(rule_id).nonterm;
+
+    if ty.is_unknown() {
+      continue;
+    }
+
+    let was_empty = resolved_nonterms.get(&nonterm_id).is_none();
+    let existing_type = resolved_nonterms.entry(nonterm_id).or_insert(ty.clone());
+
+    if was_empty || *existing_type != ty {
+      queue.extend(rule_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
+
+      let ref_name = db.nonterm_friendly_name_string(nonterm_id);
+
+      match get_resolved_type(existing_type, &ty, any_type_lu, any_types, &ref_name) {
+        Ok(resolved_type) => {
+          *existing_type = resolved_type;
+        }
+        Err(err) => errors.push(err),
+      }
+    }
+  }
+
+  resolved_nonterms
 }
 
 fn resolve_expressions(
@@ -579,26 +497,39 @@ fn resolve_expressions(
     let selected_indices = &mut selected_indices;
     match ast_rule {
       AscriptRule::Expression(_, init) => {
-        let Initializer { ast, output_graph, .. } = init;
-
-        if let Some(node) = &ast {
-          *output_graph = Some(create_graph_node(db, node, item, &nonterm_types, selected_indices, any_type_lu, any_types)?);
-        }
+        let node = create_graph_node(
+          GraphResolveData {
+            db,
+            item,
+            node: init.ast.as_ref().unwrap(),
+            nonterm_types: &nonterm_types,
+            default_nonterm_type: None,
+          },
+          &mut GraphMutData {
+            selected_indices: selected_indices,
+            any_indices:      any_type_lu,
+            any_maps:         any_types,
+          },
+        )?;
+        init.ty = node.get_type().clone();
+        init.output_graph = Some(node);
       }
       AscriptRule::ListInitial(_, init) => {
         let Initializer { output_graph, ty, .. } = init;
 
         let last = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
-          Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices)?,
+          Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices, None)?,
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
 
         match last.get_type() {
           AscriptType::Aggregate(_) => {
+            *ty = last.get_type().clone();
             *output_graph = Some(last);
           }
           _ => {
             let last = GraphNode::Vec(GraphNodeVecInits(vec![last]), *ty);
+            *ty = last.get_type().clone();
             *output_graph = Some(last);
           }
         };
@@ -607,11 +538,11 @@ fn resolve_expressions(
         let Initializer { output_graph, ty, .. } = init;
 
         let first = match get_item_at_sym_ref(item, &adb.db, |_, _| true /* matches first item */) {
-          Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, selected_indices)?,
+          Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, selected_indices, None)?,
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
         let last = match get_item_at_sym_ref(item, &adb.db, |item, _| item.is_penultimate()) {
-          Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, selected_indices)?,
+          Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, selected_indices, None)?,
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
 
@@ -624,7 +555,7 @@ fn resolve_expressions(
         let Initializer { output_graph, ty, .. } = init;
 
         let graph_node = match get_item_at_sym_ref(item, &adb.db, |item, _| item.is_penultimate()) {
-          Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, selected_indices)?,
+          Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, selected_indices, None)?,
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
 
@@ -636,7 +567,20 @@ fn resolve_expressions(
         for (prop_name, init) in rule_struct.props.iter_mut().rev() {
           if let Some(node) = &init.ast {
             let rule_tok = node.to_token();
-            let node = create_graph_node(db, node, item, &nonterm_types, selected_indices, any_type_lu, any_types)?;
+            let node = create_graph_node(
+              GraphResolveData {
+                db,
+                item,
+                node: init.ast.as_ref().unwrap(),
+                nonterm_types: &nonterm_types,
+                default_nonterm_type: None,
+              },
+              &mut GraphMutData {
+                selected_indices: selected_indices,
+                any_indices:      any_type_lu,
+                any_maps:         any_types,
+              },
+            )?;
 
             if let Some(archetype_struct) = structs.get_mut(&struct_name) {
               if let Some(archetype_prop) = archetype_struct.properties.get_mut(prop_name) {
@@ -694,40 +638,274 @@ fn get_item_at_sym_ref<'db, F: Fn(Item, &SymbolRef) -> bool>(item: Item, db: &'d
   None
 }
 
+fn graph_type_from_item(
+  item: Item,
+  db: &ParserDatabase,
+  nonterm_types: &std::collections::BTreeMap<DBNonTermKey, AscriptType>,
+  default_type: Option<(DBNonTermKey, &AscriptType)>,
+) -> (AscriptType, Option<DBNonTermKey>) {
+  if let Some(nonterm_id) = item.nonterm_index_at_sym(Default::default(), db) {
+    match nonterm_types.get(&nonterm_id) {
+      Some(ty) => (*ty, Some(nonterm_id)),
+      None => match default_type {
+        Some((id, ty)) => {
+          if (id == nonterm_id) {
+            (*ty, Some(nonterm_id))
+          } else {
+            (AscriptType::Undefined, Some(nonterm_id))
+          }
+        }
+        None => (AscriptType::Undefined, Some(nonterm_id)),
+      },
+    }
+  } else {
+    (AscriptType::Scalar(AscriptScalarType::Token), None)
+  }
+}
+
 fn graph_node_from_item(
   item: Item,
   db: &ParserDatabase,
   nonterm_types: &std::collections::BTreeMap<DBNonTermKey, AscriptType>,
   selected_indices: &mut HashSet<usize>,
+  default_type: Option<(DBNonTermKey, &AscriptType)>,
 ) -> Result<GraphNode, DBNonTermKey> {
   let index = item.sym_index() as usize;
   if let Some(nonterm_id) = item.nonterm_index_at_sym(Default::default(), db) {
     match nonterm_types.get(&nonterm_id) {
       Some(ty) => Ok(GraphNode::Sym(index, selected_indices.insert(index), *ty)),
-      None => Err(nonterm_id),
+      None => match default_type {
+        Some((id, ty)) => {
+          if (id == nonterm_id) {
+            Ok(GraphNode::Sym(index, selected_indices.insert(index), *ty))
+          } else {
+            Err(nonterm_id)
+          }
+        }
+        None => Err(nonterm_id),
+      },
     }
   } else {
     Ok(GraphNode::TokSym(index, selected_indices.insert(index), AscriptType::Scalar(AscriptScalarType::Token)))
   }
 }
 
-fn create_graph_node(
-  db: &ParserDatabase,
-  node: &ASTNode,
+struct GraphMutData<'a> {
+  selected_indices: &'a mut HashSet<usize>,
+  any_indices:      &'a mut Vec<usize>,
+  any_maps:         &'a mut Vec<AnyTypeRef>,
+}
+
+#[derive(Clone, Copy)]
+struct GraphResolveData<'a> {
   item: Item,
-  nonterm_types: &OrderedMap<DBNonTermKey, AscriptType>,
-  selected_indices: &mut HashSet<usize>,
-  any_indices: &mut Vec<usize>,
-  any_maps: &mut Vec<AnyTypeRef>,
-) -> Result<GraphNode, DBNonTermKey> {
-  match node {
+  db: &'a ParserDatabase,
+  node: &'a ASTNode,
+  nonterm_types: &'a OrderedMap<DBNonTermKey, AscriptType>,
+  default_nonterm_type: Option<(DBNonTermKey, &'a AscriptType)>,
+}
+
+impl<'a> GraphResolveData<'a> {
+  pub fn to_node(self, node: &'a ASTNode) -> GraphResolveData {
+    Self { node, ..self }
+  }
+}
+
+/// Returns the type of the root node in ascript node graph;
+fn get_nonterm_refs<'a>(args: GraphResolveData<'a>, nonterms: &mut OrderedSet<DBNonTermKey>) {
+  let ty = match args.node {
+    ASTNode::AST_NamedReference(rf) => {
+      match get_item_at_sym_ref(args.item, args.db, |_, sym| sym.annotation == rf.value.to_token()) {
+        Some(item) => match graph_type_from_item(item, args.db, args.nonterm_types, args.default_nonterm_type) {
+          (_, Some(nonterm)) => {
+            nonterms.insert(nonterm);
+          }
+          _ => {}
+        },
+        None => {}
+      }
+    }
+
+    ASTNode::AST_IndexReference(rf) => {
+      match get_item_at_sym_ref(args.item, args.db, |_, sym| sym.original_index as isize == (rf.value - 1) as isize) {
+        Some(item) => match graph_type_from_item(item, args.db, args.nonterm_types, args.default_nonterm_type) {
+          (_, Some(nonterm)) => {
+            nonterms.insert(nonterm);
+          }
+          _ => {}
+        },
+        None => {}
+      }
+    }
+    ASTNode::AST_Vector(vec) => {
+      for node in vec.initializer.iter() {
+        get_nonterm_refs(args.to_node(node), nonterms);
+      }
+    }
+
+    ASTNode::AST_Map(map) => {
+      get_nonterm_refs(args.to_node(&map.key), nonterms);
+      get_nonterm_refs(args.to_node(&map.val), nonterms);
+    }
+
+    ASTNode::AST_Add(add) => {
+      get_nonterm_refs(args.to_node(&add.left), nonterms);
+      get_nonterm_refs(args.to_node(&add.right), nonterms);
+    }
+    ASTNode::AST_Mul(mul) => {
+      get_nonterm_refs(args.to_node(&mul.left), nonterms);
+      get_nonterm_refs(args.to_node(&mul.right), nonterms);
+    }
+    ASTNode::AST_Token(..)
+    | ASTNode::AST_String(..)
+    | ASTNode::AST_Bool(..)
+    | ASTNode::AST_U8(..)
+    | ASTNode::AST_U16(..)
+    | ASTNode::AST_U32(..)
+    | ASTNode::AST_U64(..)
+    | ASTNode::AST_I8(..)
+    | ASTNode::AST_I16(..)
+    | ASTNode::AST_I32(..)
+    | ASTNode::AST_I64(..)
+    | ASTNode::AST_F32(..)
+    | ASTNode::AST_F64(..) => {}
+    #[cfg(debug_assertions)]
+    node => todo!("handle graph type resolve of node {node:#?}"),
+    _ => panic!("Unresolved node type"),
+  };
+}
+
+/// Returns the type of the root node in ascript node graph;
+fn get_graph_type<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -> RadlrResult<AscriptType> {
+  let ty = match args.node {
+    ASTNode::AST_NamedReference(rf) => {
+      match get_item_at_sym_ref(args.item, args.db, |_, sym| sym.annotation == rf.value.to_token()) {
+        Some(item) => graph_type_from_item(item, args.db, args.nonterm_types, args.default_nonterm_type).0,
+        None => AscriptType::Undefined,
+      }
+    }
+
+    ASTNode::AST_IndexReference(rf) => {
+      match get_item_at_sym_ref(args.item, args.db, |_, sym| sym.original_index as isize == (rf.value - 1) as isize) {
+        Some(item) => graph_type_from_item(item, args.db, args.nonterm_types, args.default_nonterm_type).0,
+        None => AscriptType::Undefined,
+      }
+    }
     ASTNode::AST_Vector(vec) => {
       let mut ty = AscriptType::Undefined;
       let mut initializers = vec![];
 
       for node in vec.initializer.iter() {
-        let node = create_graph_node(db, node, item, nonterm_types, selected_indices, any_indices, any_maps)?;
-        ty = get_resolved_type(node.get_type(), &ty, any_indices, any_maps, "__TEMP___").unwrap();
+        let node = get_graph_type(args.to_node(node), mut_args)?;
+        ty = get_resolved_type(&node, &ty, mut_args.any_indices, mut_args.any_maps, "__TEMP___").unwrap();
+        initializers.push(node);
+      }
+
+      let ty = if let Some(ty_) = ty.as_aggregate() {
+        match ty_ {
+          AscriptAggregateType::Map { val_type, .. } => AscriptType::Scalar(val_type),
+          AscriptAggregateType::Vec { val_type } => AscriptType::Scalar(val_type),
+        }
+      } else {
+        ty
+      };
+
+      debug_assert!(ty.as_scalar().is_some(), "Type: {ty:#?}");
+
+      AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: ty.as_scalar().unwrap() })
+    }
+
+    ASTNode::AST_Map(map) => {
+      let key = get_graph_type(args.to_node(&map.key), mut_args)?;
+      let val = get_graph_type(args.to_node(&map.val), mut_args)?;
+
+      if key.is_unknown() || val.is_unknown() {
+        AscriptType::Undefined
+      } else {
+        let ascript_type = AscriptType::Aggregate(AscriptAggregateType::Map {
+          key_type: key.as_scalar().unwrap(),
+          val_type: val.as_scalar().unwrap(),
+        });
+
+        ascript_type
+      }
+    }
+
+    ASTNode::AST_Add(add) => {
+      let l_ty = get_graph_type(args.to_node(&add.left), mut_args)?;
+      let r_ty = get_graph_type(args.to_node(&add.right), mut_args)?;
+
+      if l_ty.is_unknown() || r_ty.is_unknown() {
+        AscriptType::Undefined
+      } else if l_ty.is_numeric() && r_ty.is_numeric() {
+        let l_scalar = l_ty.as_scalar().unwrap();
+        let r_scalar = r_ty.as_scalar().unwrap();
+
+        (l_scalar.precedence() > r_scalar.precedence()).then_some(l_ty).unwrap_or(r_ty)
+      } else if l_ty.is_token() || r_ty.is_token() {
+        if l_ty.is_string() || r_ty.is_string() {
+          AscriptType::Scalar(AscriptScalarType::String(None))
+        } else if l_ty.is_token() && r_ty.is_token() {
+          AscriptType::Scalar(AscriptScalarType::Token)
+        } else {
+          AscriptType::Undefined
+        }
+      } else if l_ty.is_string() || r_ty.is_string() {
+        AscriptType::Scalar(AscriptScalarType::String(None))
+      } else {
+        get_resolved_type(&l_ty, &r_ty, mut_args.any_indices, mut_args.any_maps, "__TEMP___").unwrap()
+      }
+    }
+    ASTNode::AST_Mul(mul) => {
+      let l_ty = get_graph_type(args.to_node(&mul.left), mut_args)?;
+      let r_ty = get_graph_type(args.to_node(&mul.right), mut_args)?;
+
+      if l_ty.is_unknown() || r_ty.is_unknown() {
+        AscriptType::Undefined
+      } else if l_ty.is_numeric() && r_ty.is_numeric() {
+        let l_scalar = l_ty.as_scalar().unwrap();
+        let r_scalar = r_ty.as_scalar().unwrap();
+
+        (l_scalar.precedence() > r_scalar.precedence()).then_some(l_ty).unwrap_or(r_ty)
+      } else {
+        AscriptType::Undefined
+      }
+    }
+    ASTNode::AST_Token(..) => AscriptType::Scalar(AscriptScalarType::Token),
+    ASTNode::AST_String(str) => AscriptType::Scalar(AscriptScalarType::String(None)),
+    ASTNode::AST_Bool(bool) => AscriptType::Scalar(AscriptScalarType::Bool(false)),
+    ASTNode::AST_U8(val) => AscriptType::Scalar(AscriptScalarType::U8(None)),
+    ASTNode::AST_U16(val) => AscriptType::Scalar(AscriptScalarType::U16(None)),
+    ASTNode::AST_U32(val) => AscriptType::Scalar(AscriptScalarType::U32(None)),
+    ASTNode::AST_U64(val) => AscriptType::Scalar(AscriptScalarType::U64(None)),
+    ASTNode::AST_I8(val) => AscriptType::Scalar(AscriptScalarType::I8(None)),
+    ASTNode::AST_I16(val) => AscriptType::Scalar(AscriptScalarType::I16(None)),
+    ASTNode::AST_I32(val) => AscriptType::Scalar(AscriptScalarType::I32(None)),
+    ASTNode::AST_I64(val) => AscriptType::Scalar(AscriptScalarType::I64(None)),
+    ASTNode::AST_F32(val) => AscriptType::Scalar(AscriptScalarType::F32(None)),
+    ASTNode::AST_F64(val) => AscriptType::Scalar(AscriptScalarType::F64(None)),
+    #[cfg(debug_assertions)]
+    node => todo!("handle graph type resolve of node {node:#?}"),
+    _ => panic!("Unresolved node type"),
+  };
+  Ok(ty)
+}
+
+/// Resolves AST expression nodes into AscriptGraph nodes.
+///
+/// # Invariant:
+/// Any type incompatibilities will have been reported before we
+/// start building graph nodes. We should be able to assign nodes with having to
+/// verify whether there are type conflicts.
+fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -> Result<GraphNode, DBNonTermKey> {
+  match args.node {
+    ASTNode::AST_Vector(vec) => {
+      let mut ty = AscriptType::Undefined;
+      let mut initializers = vec![];
+
+      for node in vec.initializer.iter() {
+        let node = create_graph_node(args.to_node(node), mut_args)?;
+        ty = get_resolved_type(node.get_type(), &ty, mut_args.any_indices, mut_args.any_maps, "__TEMP___").unwrap();
         initializers.push(node);
       }
 
@@ -748,8 +926,9 @@ fn create_graph_node(
     }
 
     ASTNode::AST_Map(map) => {
-      let key = create_graph_node(db, &map.key, item, nonterm_types, selected_indices, any_indices, any_maps)?;
-      let val = create_graph_node(db, &map.val, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+      let key = create_graph_node(args.to_node(&map.key), mut_args)?;
+
+      let val = create_graph_node(args.to_node(&map.val), mut_args)?;
 
       let ascript_type = AscriptType::Aggregate(AscriptAggregateType::Map {
         key_type: key.get_type().as_scalar().unwrap(),
@@ -759,14 +938,20 @@ fn create_graph_node(
       Ok(GraphNode::Map(Rc::new(key), Rc::new(val), ascript_type))
     }
 
-    ASTNode::AST_NamedReference(rf) => match get_item_at_sym_ref(item, db, |_, sym| sym.annotation == rf.value.to_token()) {
-      Some(item) => Ok(graph_node_from_item(item, db, nonterm_types, selected_indices)?),
-      None => Ok(GraphNode::Undefined(AscriptType::Undefined)),
-    },
+    ASTNode::AST_NamedReference(rf) => {
+      match get_item_at_sym_ref(args.item, args.db, |_, sym| sym.annotation == rf.value.to_token()) {
+        Some(item) => {
+          Ok(graph_node_from_item(item, args.db, args.nonterm_types, mut_args.selected_indices, args.default_nonterm_type)?)
+        }
+        None => Ok(GraphNode::Undefined(AscriptType::Undefined)),
+      }
+    }
 
     ASTNode::AST_IndexReference(rf) => {
-      match get_item_at_sym_ref(item, db, |_, sym| sym.original_index as isize == (rf.value - 1) as isize) {
-        Some(item) => graph_node_from_item(item, db, nonterm_types, selected_indices),
+      match get_item_at_sym_ref(args.item, args.db, |_, sym| sym.original_index as isize == (rf.value - 1) as isize) {
+        Some(item) => {
+          graph_node_from_item(item, args.db, args.nonterm_types, mut_args.selected_indices, args.default_nonterm_type)
+        }
         None => Ok(GraphNode::Undefined(AscriptType::Undefined)),
       }
     }
@@ -786,41 +971,66 @@ fn create_graph_node(
       }
     }
 
-    ASTNode::AST_Add(add) => {
-      let l = create_graph_node(db, &add.left, item, nonterm_types, selected_indices, any_indices, any_maps)?;
-      let r = create_graph_node(db, &add.right, item, nonterm_types, selected_indices, any_indices, any_maps)?;
-      match l.get_type() {
-        AscriptType::Scalar(l_type) => match l_type {
-          _ => todo!("resolve add of {l_type:?} {r:?}"),
-        },
-        AscriptType::Aggregate(l_type) => match l_type {
-          _ => todo!("resolve add of {l_type:?} {r:?}"),
-        },
-        _ => unreachable!(),
-      }
-    }
-
-    ASTNode::AST_STRING(str) => {
+    ASTNode::AST_String(str) => {
       if let Some(init) = &str.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Str(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::String(None))))
       } else {
         Ok(GraphNode::Str(None, AscriptType::Scalar(AscriptScalarType::String(None))))
       }
     }
 
-    ASTNode::AST_BOOL(bool) => {
+    ASTNode::AST_Add(add) => {
+      let l = create_graph_node(args.to_node(&add.left), mut_args)?;
+      let r = create_graph_node(args.to_node(&add.right), mut_args)?;
+      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.any_indices, mut_args.any_maps, "TEST").unwrap();
+      Ok(GraphNode::Add(Rc::new(l), Rc::new(r), ty))
+    }
+
+    ASTNode::AST_Sub(sub) => {
+      let l = create_graph_node(args.to_node(&sub.left), mut_args)?;
+      let r = create_graph_node(args.to_node(&sub.right), mut_args)?;
+      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.any_indices, mut_args.any_maps, "TEST").unwrap();
+      let (l, r) = convert_binary_op_types(l, ty, r);
+      Ok(GraphNode::Sub(Rc::new(l), Rc::new(r), ty))
+    }
+
+    ASTNode::AST_Mul(mul) => {
+      let l = create_graph_node(args.to_node(&mul.left), mut_args)?;
+      let r = create_graph_node(args.to_node(&mul.right), mut_args)?;
+      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.any_indices, mut_args.any_maps, "TEST").unwrap();
+      let (l, r) = convert_binary_op_types(l, ty, r);
+      Ok(GraphNode::Mul(Rc::new(l), Rc::new(r), ty))
+    }
+
+    ASTNode::AST_Div(div) => {
+      let l = create_graph_node(args.to_node(&div.left), mut_args)?;
+      let r = create_graph_node(args.to_node(&div.right), mut_args)?;
+      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.any_indices, mut_args.any_maps, "TEST").unwrap();
+      let (l, r) = convert_binary_op_types(l, ty, r);
+      Ok(GraphNode::Div(Rc::new(l), Rc::new(r), ty))
+    }
+
+    ASTNode::AST_Pow(sub) => {
+      todo!("Create Pow Graph node")
+    }
+
+    ASTNode::AST_Mod(sub) => {
+      todo!("Create Mod Graph node")
+    }
+
+    ASTNode::AST_Bool(bool) => {
       if let Some(init) = &bool.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Bool(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::Bool(false))))
       } else {
-        Ok(GraphNode::Bool(None, AscriptType::Scalar(AscriptScalarType::Bool(bool.value))))
+        Ok(GraphNode::Bool(None, AscriptType::Scalar(AscriptScalarType::Bool(false))))
       }
     }
 
     ASTNode::AST_U8(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U8(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U8(None))))
@@ -829,7 +1039,7 @@ fn create_graph_node(
 
     ASTNode::AST_U16(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U16(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U16(None))))
@@ -838,7 +1048,7 @@ fn create_graph_node(
 
     ASTNode::AST_U32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U32(None))))
@@ -847,7 +1057,7 @@ fn create_graph_node(
 
     ASTNode::AST_U64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U64(None))))
@@ -856,7 +1066,7 @@ fn create_graph_node(
 
     ASTNode::AST_I8(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I8(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I8(None))))
@@ -865,7 +1075,7 @@ fn create_graph_node(
 
     ASTNode::AST_I16(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I16(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I16(None))))
@@ -874,7 +1084,7 @@ fn create_graph_node(
 
     ASTNode::AST_I32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I32(None))))
@@ -883,7 +1093,7 @@ fn create_graph_node(
 
     ASTNode::AST_I64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I64(None))))
@@ -892,7 +1102,7 @@ fn create_graph_node(
 
     ASTNode::AST_F32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::F32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::F32(None))))
@@ -901,7 +1111,7 @@ fn create_graph_node(
 
     ASTNode::AST_F64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(db, &init.expression, item, nonterm_types, selected_indices, any_indices, any_maps)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::F64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::F64(None))))
@@ -912,6 +1122,13 @@ fn create_graph_node(
     node => todo!("handle graph resolve of node {node:#?}"),
     _ => panic!("Unresolved node type"),
   }
+}
+
+fn convert_binary_op_types(l: GraphNode, ty: AscriptType, r: GraphNode) -> (GraphNode, GraphNode) {
+  (
+    (l.get_type().to_cardinal() != ty.to_cardinal()).then(|| GraphNode::Num(Some(Rc::new(l.clone())), ty)).unwrap_or(l),
+    (r.get_type().to_cardinal() != ty.to_cardinal()).then(|| GraphNode::Num(Some(Rc::new(r.clone())), ty)).unwrap_or(r),
+  )
 }
 
 /// Attempts to merge two different types into a single, compatible type.

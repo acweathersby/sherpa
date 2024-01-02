@@ -215,7 +215,7 @@ pub fn basic_scanner() -> RadlrResult<()> {
     &[r#"
       IGNORE { c:sp c:nl }
 
-      <> A > "sym" [ tk:ref? "?" ?  "ref"? ]!
+      <> A > "sym" [ tk:ref? "?" ?  "ref"? ]!?
 
       <> ref > "^" id
 

@@ -127,9 +127,17 @@ EXPORT dt::escaped_string as escaped
 
 <> not_empty >
 
-    "[" sym::annotated_symbol(+)^s ']' "!"?^o
+    "[" not_empty_set^s ']' "!"?^o  
 
         :ast { t_NotEmptySet, unordered: bool($o), symbols:$s, tok }
+    
+    | "[" not_empty_set^s "]!?"^o
+
+        :ast { t_NotEmptySet, unordered: bool($o), allow_empty: bool($o), symbols:$s, tok }
+
+<> not_empty_set > 
+
+    sym::annotated_symbol(+)^s
 
 <> ignore_scope > 
       

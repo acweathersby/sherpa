@@ -21,21 +21,6 @@ fn parse_errors_when_struct_prop_type_is_redefined() -> RadlrResult<()> {
 }
 
 #[test]
-fn parse_errors_when_nonterminal_has_differing_return_types() -> RadlrResult<()> {
-  let source = r#"<> A > "1" :ast { t_Test } | 'a' "#;
-
-  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
-
-  let adb: AscriptDatabase = db.into();
-
-  assert!(adb.errors.len() > 0);
-
-  println!("{}", adb.errors[0]);
-
-  Ok(())
-}
-
-#[test]
 fn group_rules_as_vectors() -> RadlrResult<()> {
   let source = r#"<> A > ( "1" :ast u32($1) )(+"|") "#;
 
@@ -68,6 +53,30 @@ fn prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definition
 
   assert!(entry.properties.get(&StringId::from("d")).unwrap().is_optional);
   assert!(entry.properties.get(&StringId::from("o")).unwrap().is_optional);
+
+  Ok(())
+}
+
+#[test]
+fn handles_numeric_expressions() -> RadlrResult<()> {
+  let source = r#" IGNORE { c:sp c:nl }
+
+  <> statement > e            :ast { t_Result, v:$1 }
+  
+  <> e > e "+"{1} e{2}        :ast $1 + $3  
+       | e "*"{3} e{4}        :ast $1 * $3 
+       | term                   
+  
+  <> term > tk:num            :ast f64($1)  
+          | "(" e ")"         :ast $2      
+          
+  <> num > c:num(+)"#;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
 
   Ok(())
 }

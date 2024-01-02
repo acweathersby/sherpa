@@ -15,7 +15,7 @@ pub fn command() -> ArgMatches {
   Command::new("Radlr")
     .version(env!("CARGO_PKG_VERSION"))
     .author("Anthony Weathersby <acweathersby.codes@gmail.com>")
-    .about("A LL, LR, & RAD parser compiler for both deterministic and non-deterministic grammers.")
+    .about("A LL, LR, & RAD parser compiler for deterministic and non-deterministic grammers.")
     .subcommand(
         Command::new("disassemble")
         .about("Produce a disassembly file representing the bytecode of a parser for a specific grammar.")

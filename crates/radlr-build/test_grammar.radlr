@@ -1,13 +1,13 @@
 IGNORE { c:sp c:nl }
 
-<> statement > e            :ast { t_Stmt, v:$1 }
+<> statement > e            :ast { t_Result, v:$1 }
 
-<> e > e "+"{1} e{1}        :ast { t_Sum, l:$1, r:$3 }
-     | e "*"{2} e{2}        :ast { t_Mul, l:$1, r:$3 }
-     | term
+<> e > e "+"{1} e{2}        :ast $1 + $3
+     | e "*"{3} e{4}        :ast $1 * $3
+     | term                 :ast $1  
 
-<> term > tk:num            :ast { t_Num, v:u32($1) }
-        | "(" e ")"         :ast { t_Paren, exp:$2 }
+<> term > tk:num            :ast f64($1)
+        | "(" e ")"         :ast $2 
 
 <> num > c:num(+)
 

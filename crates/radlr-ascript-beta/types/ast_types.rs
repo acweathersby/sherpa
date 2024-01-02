@@ -84,6 +84,50 @@ pub enum PendingType {
 }
 
 impl AscriptType {
+  pub fn is_numeric(&self) -> bool {
+    if let Some(s) = self.as_scalar() {
+      s.is_numeric()
+    } else {
+      false
+    }
+  }
+
+  pub fn is_bool(&self) -> bool {
+    if let Some(s) = self.as_scalar() {
+      s.is_bool()
+    } else {
+      false
+    }
+  }
+
+  pub fn is_string(&self) -> bool {
+    if let Some(s) = self.as_scalar() {
+      s.is_string()
+    } else {
+      false
+    }
+  }
+
+  pub fn is_token(&self) -> bool {
+    if let Some(s) = self.as_scalar() {
+      s.is_token()
+    } else {
+      false
+    }
+  }
+
+  pub fn is_unknown(&self) -> bool {
+    matches!(self, AscriptType::Undefined)
+  }
+
+  pub fn is_map(&self) -> bool {
+    matches!(self, AscriptType::Aggregate(AscriptAggregateType::Map { .. }))
+  }
+
+  pub fn is_vector(&self) -> bool {
+    matches!(self, AscriptType::Aggregate(AscriptAggregateType::Vec { .. }))
+  }
+
   pub fn as_scalar(&self) -> Option<AscriptScalarType> {
     match self {
       Self::Scalar(scalar) => Some(*scalar),
@@ -330,6 +374,38 @@ impl AscriptScalarType {
       String(..) => String(None),
       Bool(..) => Bool(false),
       ty @ _ => *ty,
+    }
+  }
+
+  pub fn is_numeric(&self) -> bool {
+    use AscriptScalarType::*;
+    match self {
+      Bool(..) | U8(..) | U16(..) | U32(..) | U64(..) | I8(..) | I16(..) | I32(..) | I64(..) | F32(..) | F64(..) => true,
+      _ => false,
+    }
+  }
+
+  pub fn is_bool(&self) -> bool {
+    use AscriptScalarType::*;
+    match self {
+      Bool(..) => true,
+      _ => false,
+    }
+  }
+
+  pub fn is_string(&self) -> bool {
+    use AscriptScalarType::*;
+    match self {
+      String(..) => true,
+      _ => false,
+    }
+  }
+
+  pub fn is_token(&self) -> bool {
+    use AscriptScalarType::*;
+    match self {
+      TokenRange | Token => true,
+      _ => false,
     }
   }
 }

@@ -607,7 +607,7 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                 }
                 RadlrResult::Ok(())
               }
-              ASTNode::AST_Statements(box statements) => {
+              ASTNode::AST_Statement(box statements) => {
                 let mut reference = String::new();
                 let mut return_type = AScriptTypeVal::Undefined;
                 let mut refs = BTreeSet::new();
@@ -615,30 +615,28 @@ impl<'a, W: Write> AscriptWriter<'a, W> {
                 let mut stmt = w.checkpoint();
                 let mut is_local: bool = false;
 
-                for (i, statement) in statements.statements.iter().enumerate() {
-                  match stmt.utils.ast_expr_to_ref(statement, rule, &mut ref_index, i) {
-                    Some(_ref) => {
-                      refs.append(&mut _ref.get_ast_obj_indices());
-                      tokens.append(&mut _ref.get_token_indices());
-                      return_type = _ref.ast_type.clone();
-                      reference = _ref.get_ref_name();
-                      is_local = _ref.is_local();
-                      stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
-                    }
-                    _ => {
-                      #[cfg(debug_assertions)]
-                      panic!("{}", RadlrError::SourceError {
-                        loc:        statement.to_token(),
-                        id:         (ascript_error_class(), 2, "invalid-expression-value").into(),
-                        msg:        "Could not resolve this expression".to_string(),
-                        inline_msg: Default::default(),
-                        ps_msg:     Default::default(),
-                        severity:   Default::default(),
-                        path:       Default::default(),
-                      });
-                      #[cfg(not(debug_assertions))]
-                      panic!()
-                    }
+                match stmt.utils.ast_expr_to_ref(&statements.expression, rule, &mut ref_index, 0) {
+                  Some(_ref) => {
+                    refs.append(&mut _ref.get_ast_obj_indices());
+                    tokens.append(&mut _ref.get_token_indices());
+                    return_type = _ref.ast_type.clone();
+                    reference = _ref.get_ref_name();
+                    is_local = _ref.is_local();
+                    stmt.writer.write_line(&_ref.to_init_string(w.utils))?;
+                  }
+                  _ => {
+                    #[cfg(debug_assertions)]
+                    panic!("{}", RadlrError::SourceError {
+                      loc:        statements.expression.to_token(),
+                      id:         (ascript_error_class(), 2, "invalid-expression-value").into(),
+                      msg:        "Could not resolve this expression".to_string(),
+                      inline_msg: Default::default(),
+                      ps_msg:     Default::default(),
+                      severity:   Default::default(),
+                      path:       Default::default(),
+                    });
+                    #[cfg(not(debug_assertions))]
+                    panic!()
                   }
                 }
 

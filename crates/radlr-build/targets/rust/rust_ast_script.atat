@@ -448,6 +448,45 @@ use std::{collections::HashMap, marker::PhantomData};
     }
   }
 
+  #type_MulNode ref:str {
+    
+    @ref_l={ @ref + "_l" }
+    @ref_r={ @ref + "_r" }
+
+    @self.right.(@ref_r)
+    @self.left.(@ref_l)
+
+    match (self.left.agg_type, self.right.agg_type) {
+      (None, None) { let\ mut\ @ref\ =\ @ref_l\ *\ @ref_r; @; }
+    }
+  }
+
+  #type_SubNode ref:str {
+    
+    @ref_l={ @ref + "_l" }
+    @ref_r={ @ref + "_r" }
+
+    @self.right.(@ref_r)
+    @self.left.(@ref_l)
+
+    match (self.left.agg_type, self.right.agg_type) {
+      (None, None) { let\ mut\ @ref\ =\ @ref_l\ -\ @ref_r; @; }
+    }
+  }
+
+  #type_DivNode ref:str {
+    
+    @ref_l={ @ref + "_l" }
+    @ref_r={ @ref + "_r" }
+
+    @self.right.(@ref_r)
+    @self.left.(@ref_l)
+
+    match (self.left.agg_type, self.right.agg_type) {
+      (None, None) { let\ mut\ @ref\ =\ @ref_l\ /\ @ref_r; @; }
+    }
+  }
+
   #type_VecNode ref:str {
 
     #vec_elements_initializers ref:str {

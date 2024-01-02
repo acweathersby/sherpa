@@ -14,7 +14,7 @@ use crate::{
 #[test]
 fn test_full_grammar() -> RadlrResult<()> {
   let grammar_folder =
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/radlr/2.0.0").canonicalize().unwrap();
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammars/radlr/2.0.0").canonicalize().unwrap();
 
   // Build our parser;
 

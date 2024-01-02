@@ -1029,14 +1029,14 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
     },
   });
 
-  u.add_ast_handler(ASTNodeType::AST_BOOL, ASTExprHandler {
+  u.add_ast_handler(ASTNodeType::AST_Bool, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_BOOL(box AST_BOOL { value, initializer, .. }) => match initializer {
+      ASTNode::AST_Bool(box AST_Bool { initializer, .. }) => match initializer {
         None => Some(SlotRef::ast_obj(
           SlotIndex::Sym(u.bump_ref_index(ref_index)),
           type_slot,
-          format!("{}", value),
-          AScriptTypeVal::Bool(Some(*value)),
+          format!("{}", false),
+          AScriptTypeVal::Bool(Some(false)),
         )),
         Some(box init) => match u.ast_expr_to_ref(&init.expression, r, ref_index, type_slot) {
           Some(_) => Some(SlotRef::ast_obj(
@@ -1082,9 +1082,9 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
       }
     },
   });
-  u.add_ast_handler(ASTNodeType::AST_STRING, ASTExprHandler {
+  u.add_ast_handler(ASTNodeType::AST_String, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_STRING(box AST_STRING { initializer, .. }) => {
+      ASTNode::AST_String(box AST_String { initializer, .. }) => {
         match initializer {
           None => Some(SlotRef::ast_obj(
             SlotIndex::Sym(u.bump_ref_index(ref_index)),
@@ -1094,7 +1094,7 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
           )),
           Some(box init) => {
             match &init.expression {
-              ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(SlotRef::ast_obj(
+              ASTNode::AST_NumberLiteral(box AST_NumberLiteral { value, .. }) => Some(SlotRef::ast_obj(
                 SlotIndex::Sym(u.bump_ref_index(ref_index)),
                 type_slot,
                 format!("\"{}\".to_string()", value),
@@ -1213,13 +1213,13 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
     },
   });
 
-  u.add_ast_handler(ASTNodeType::AST_NUMBER, ASTExprHandler {
+  u.add_ast_handler(ASTNodeType::AST_NumberLiteral, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
-      ASTNode::AST_NUMBER(box AST_NUMBER { value }) => Some(SlotRef::ast_obj(
+      ASTNode::AST_NumberLiteral(box AST_NumberLiteral { value }) => Some(SlotRef::ast_obj(
         SlotIndex::Sym(u.bump_ref_index(ref_index)),
         type_slot,
         value.to_string() + ".0",
-        AScriptTypeVal::F64(Some(StructuredFloat(*value))),
+        AScriptTypeVal::F64(Some(StructuredFloat(*value as f64))),
       )),
       _ => None,
     },
@@ -1482,11 +1482,11 @@ fn convert_numeric<T: AScriptNumericType>(
   match init {
     None => default_value::<T>(u, ref_index, rust_type, type_slot),
     Some(init) => match &init.expression {
-      ASTNode::AST_NUMBER(box AST_NUMBER { value, .. }) => Some(SlotRef::ast_obj(
+      ASTNode::AST_NumberLiteral(box AST_NumberLiteral { value, .. }) => Some(SlotRef::ast_obj(
         SlotIndex::Sym(u.bump_ref_index(ref_index)),
         type_slot,
-        format!("{}{}", T::string_from_f64(*value), rust_type,),
-        T::from_f64(*value),
+        format!("{}{}", T::string_from_f64(*value as f64), rust_type,),
+        T::from_f64(*value as f64),
       )),
       expr => match u.ast_expr_to_ref(expr, rule, ref_index, type_slot) {
         Some(ref_) => match ref_.ast_type {

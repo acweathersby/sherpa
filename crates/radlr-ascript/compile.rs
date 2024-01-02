@@ -81,8 +81,8 @@ fn gather_ascript_info_from_grammar(
             symbol_index: 0,
           });
         }
-        ASTNode::AST_Statements(ast_stmts) => {
-          if let Some(sym) = ast_stmts.statements.last() {
+        ASTNode::AST_Statement(ast_stmts) => {
+          if let Some(sym) = Some(&ast_stmts.expression) {
             for sub_type in compile_expression_type(j, store, db, sym, rule_id) {
               add_nonterm_type(nterm_types, &rule_ref, sub_type);
             }
@@ -625,12 +625,12 @@ pub fn compile_expression_type(
         }]
       }
     }
-    ASTNode::AST_STRING(..) => vec![TaggedType {
+    ASTNode::AST_String(..) => vec![TaggedType {
       symbol_index: rule_len as u32,
       tag:          rule_id,
       type_:        String(None),
     }],
-    ASTNode::AST_BOOL(..) => vec![TaggedType {
+    ASTNode::AST_Bool(..) => vec![TaggedType {
       symbol_index: rule_len as u32,
       tag:          rule_id,
       type_:        Bool(None),
@@ -685,7 +685,7 @@ pub fn compile_expression_type(
       tag:          rule_id,
       type_:        F64(None),
     }],
-    ASTNode::AST_NUMBER(..) => vec![TaggedType {
+    ASTNode::AST_NumberLiteral(..) => vec![TaggedType {
       symbol_index: rule_len as u32,
       tag:          rule_id,
       type_:        F64(None),
