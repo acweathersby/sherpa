@@ -215,7 +215,7 @@ pub fn basic_scanner() -> RadlrResult<()> {
     &[r#"
       IGNORE { c:sp c:nl }
 
-      <> A > "sym" [ tk:ref? "?" ?  "ref"? ]!?
+      <> A > "sym" [ tk:ref? "?" ?  "ref"? ]!
 
       <> ref > "^" id
 
@@ -401,6 +401,25 @@ IGNORE { c:sp  }
 "#],
     &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
     ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn precedence_check() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> C > A | B
+
+<> A > tk:( 't' "_"{:9999} ) c:id(+) "5"
+
+<> B > tk:( ( "_" | c:id )(+) )
+
+
+"#],
+    &[("default", "t_dd5", true)],
+    ParserConfig::default().lrk(2),
   )
 }
 
@@ -619,7 +638,7 @@ fn parsing_using_trivial_custom_state() -> RadlrResult<()> {
 
 #[test]
 fn json_parser() -> RadlrResult<()> {
-  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
+  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammars/json/json.sg").canonicalize().unwrap();
   compile_and_run_grammars(
     &[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()],
     &[("entry", r##"[]"##, true), ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true)],
@@ -835,7 +854,7 @@ fn escaped_values() -> RadlrResult<()> {
 
 <> escaped_vals > c:num | c:id | c:sym | c:nl | c:sp | escaped
 
-<> escaped > '\\' ( c:num | c:id | c:sym | c:nl | c:sp )
+<> escaped > "\\" ( c:num | c:id | c:sym | c:nl | c:sp )
         "##],
     &[("default", r##"\\"##, true)],
     Default::default(),

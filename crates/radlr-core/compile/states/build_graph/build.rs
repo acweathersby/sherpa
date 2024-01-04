@@ -27,9 +27,9 @@ pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> RadlrResult<()> {
 
   handle_cst_actions(gb);
 
-  let max_precedence = handle_completed_items(gb, &mut groups)?;
+  let max_completed_precedence = handle_completed_items(gb, &mut groups)?;
 
-  let groups = handle_scanner_items(max_precedence, gb, groups)?;
+  let groups = handle_scanner_items(max_completed_precedence, gb, groups)?;
 
   handle_incomplete_items(gb, groups)?;
 
@@ -67,9 +67,9 @@ fn handle_cst_actions(gb: &mut GraphBuilder) {
   }
 }
 
-// Iterate over each item's closure and collect the terminal transition symbols
-// of each item. The item's are then catagorized by these nonterminal symbols.
-// Completed items are catagorized by the default symbol.
+/// Iterate over each item's closure and collect the terminal transition symbols
+/// of each item. The item's are then catagorized by these nonterminal symbols.
+/// Completed items are catagorized by the default symbol.
 fn get_firsts(gb: &mut GraphBuilder) -> RadlrResult<GroupedFirsts> {
   let db = gb.db();
   let state = gb.current_state();
@@ -89,27 +89,37 @@ fn get_firsts(gb: &mut GraphBuilder) -> RadlrResult<GroupedFirsts> {
   RadlrResult::Ok(groups)
 }
 
-fn handle_scanner_items(max_precedence: u16, gb: &GraphBuilder, mut groups: GroupedFirsts) -> RadlrResult<GroupedFirsts> {
+/// Removes transition pairs from groups that have lower precedences then the
+/// group max or the max precedence of completed items, and also merges groups
+/// that have occluding symbols symbols
+fn handle_scanner_items(
+  max_completed_precedence: u16,
+  gb: &GraphBuilder,
+  mut groups: GroupedFirsts,
+) -> RadlrResult<GroupedFirsts> {
   if gb.is_scanner() {
-    if max_precedence > CUSTOM_TOKEN_PRECEDENCE_BASELINE {
-      groups = groups
-        .into_iter()
-        .filter_map(|(s, (p, g))| {
-          if s == SymbolId::Default {
-            // Completed items are an automatic pass
-            Some((s, (p, g)))
-          } else {
-            let g = g.into_iter().filter(|i| i.prec >= max_precedence).collect::<Vec<_>>();
-            if g.is_empty() {
-              None
-            } else {
-              Some((s, (p, g)))
-            }
-          }
-        })
-        .collect();
-    }
+    groups = groups
+      .into_iter()
+      .filter_map(|(s, (p, g))| {
+        // Remove symbols in
+        let outer_prec =
+          (max_completed_precedence > CUSTOM_TOKEN_PRECEDENCE_BASELINE).then_some(max_completed_precedence).unwrap_or_default();
+        let inner_prec: u16 = (p > CUSTOM_TOKEN_PRECEDENCE_BASELINE).then_some(p).unwrap_or_default();
+        let prec = outer_prec.max(inner_prec);
 
+        if s == SymbolId::Default {
+          // Completed items are an automatic pass
+          Some((s, (p, g)))
+        } else {
+          let g = g.into_iter().filter(|i| i.prec >= prec).collect::<Vec<_>>();
+          if g.is_empty() {
+            None
+          } else {
+            Some((s, (p, g)))
+          }
+        }
+      })
+      .collect();
     merge_occluding_token_items(groups.clone(), &mut groups);
   }
 
