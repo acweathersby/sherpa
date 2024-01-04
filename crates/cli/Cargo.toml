@@ -1,11 +1,11 @@
 [package]
 name = "radlr-cli"
-version = "1.0.0-beta1"
+version = "1.0.1-beta1"
 edition = "2021"
 
 [[bin]]
 name = "radlr"
-path = "./main.rs"
+path = "./bin.rs"
 
 [dependencies]
 clap                = { version="4.0.29" }

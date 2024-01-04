@@ -505,7 +505,7 @@ fn process_rule_symbols(
 
         let indices = set.symbols.iter().enumerate().map(|(i, _)| i).collect::<Vec<_>>();
 
-        if indices.len() > 4 {
+        if indices.len() > 4 && set.unordered {
           todo!("Create error/warning about factorial explosions with `[]` sets greater than 4: (5+)! combinatorial explosion")
         }
 
@@ -530,7 +530,7 @@ fn process_rule_symbols(
 
         for pending_rule in pending_rules {
           // Prevent empty rules from being created, unless all permutations are allowed.
-          if pending_rule.symbols.is_empty() && !set.unordered {
+          if pending_rule.symbols.is_empty() && !set.allow_empty {
             continue;
           }
 

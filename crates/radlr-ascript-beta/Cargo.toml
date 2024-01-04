@@ -1,6 +1,6 @@
 [package]
 name = "radlr_ascript_beta"
-version = "1.0.0-beta1"
+version = "1.0.1-beta1"
 edition = "2021"
 authors = ["Anthony Weathersby <acweathersby.codes@gmail.com>"]
 

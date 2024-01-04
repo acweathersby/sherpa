@@ -3,13 +3,16 @@
 #![allow(bad_style)]
 #![allow(non_snake_case)]
 
+
 #[cfg(feature = "binary-parser")]
+#[rustfmt::skip]
 pub(crate) mod radlr;
 
 #[cfg(feature = "binary-parser")]
 pub use radlr::{Goto, Range, *};
 
 #[cfg(not(feature = "binary-parser"))]
+#[rustfmt::skip]
 pub mod radlr_bc;
 
 #[cfg(not(feature = "binary-parser"))]

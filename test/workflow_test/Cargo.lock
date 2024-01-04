@@ -12,7 +12,7 @@ dependencies = [
 
 [[package]]
 name = "radlr_ascript"
-version = "1.0.0-beta1"
+version = "1.0.1-beta1"
 dependencies = [
  "radlr_core",
  "radlr_rust_runtime",
@@ -20,7 +20,7 @@ dependencies = [
 
 [[package]]
 name = "radlr_ascript_beta"
-version = "1.0.0-beta1"
+version = "1.0.1-beta1"
 dependencies = [
  "radlr_core",
  "radlr_formatter",
@@ -41,7 +41,7 @@ dependencies = [
 
 [[package]]
 name = "radlr_bytecode"
-version = "1.0.0-beta1"
+version = "1.0.1-beta1"
 dependencies = [
  "radlr_core",
  "radlr_rust_runtime",
@@ -49,14 +49,14 @@ dependencies = [
 
 [[package]]
 name = "radlr_core"
-version = "1.0.0-beta2"
+version = "1.0.1-beta2"
 dependencies = [
  "radlr_rust_runtime",
 ]
 
 [[package]]
 name = "radlr_formatter"
-version = "1.0.0-beta1"
+version = "1.0.1-beta1"
 dependencies = [
  "radlr_core",
  "radlr_rust_runtime",
@@ -64,4 +64,4 @@ dependencies = [
 
 [[package]]
 name = "radlr_rust_runtime"
-version = "1.0.0-beta1"
+version = "1.0.1-beta1"

@@ -3,7 +3,7 @@ use radlr_rust_runtime::{
   types::{RuntimeDatabase, SharedSymbolBuffer, StringInput},
 };
 mod parser;
-use crate::parser::{ASTNode, EntryAny, ValAny};
+use crate::parser::ASTNode;
 
 fn main() {
   let db: parser::ParserDB = parser::ParserDB::new();
@@ -13,15 +13,8 @@ fn main() {
     .build_ast::<Token, _, _>(
       &mut StringInput::from(
         r###"
-{ 
-  "ts": [1,2,3,{ "taco": "legendary" },5,6,7,8,9],
-  "tree" : {  
-    "rope" : null,
-    "tree" : true
-  }, 
-  "test": 1,
-  "vest" : "test sts"
-}"###,
+        4 * (1 + 2) * 8
+        "###,
       ),
       entry,
       parser::ReduceRules::new(),
@@ -30,7 +23,7 @@ fn main() {
 
   eprintln!("{result:#?}");
 
-  if let ASTNode::JSON(json) = result {
+  /*   if let ASTNode::JSON(json) = result {
     match &json.body {
       EntryAny::Array(array) => {
         for val in &array.values {
@@ -44,7 +37,7 @@ fn main() {
       EntryAny::Object(body) => if body.values.contains_key("test") {},
       _ => {}
     }
-  }
+  } */
 }
 
 #[derive(Debug, Clone, Default, Hash)]

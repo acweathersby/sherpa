@@ -1,6 +1,6 @@
 [package]
 name = "radlr_bytecode"
-version = "1.0.0-beta1"
+version = "1.0.1-beta1"
 edition = "2021"
 authors = ["Anthony Weathersby <acweathersby.codes@gmail.com>"]
 

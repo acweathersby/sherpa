@@ -159,7 +159,7 @@ pub fn templates() -> RadlrResult<()> {
     &[r#"
     EXPORT A as A
 
-    <> A > block::<t_Chaco, "test">
+    <> A > block::<t_chaco, "test">
 
     <Aa, Bb, Cc> wrapped > Aa Bb? Cc
     
@@ -215,7 +215,7 @@ pub fn basic_scanner() -> RadlrResult<()> {
     &[r#"
       IGNORE { c:sp c:nl }
 
-      <> A > "sym" [ tk:ref? "?" ?  "ref"? ]!
+      <> A > "sym" [ tk:ref? "?" ?  "ref"? ]!?
 
       <> ref > "^" id
 

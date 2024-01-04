@@ -13,8 +13,7 @@ enum ParserType {
 
 pub fn command() -> ArgMatches {
   Command::new("Radlr")
-    .version("1.0.0-beta1")
-    
+    .version(env!("CARGO_PKG_VERSION"))
     .author("Anthony Weathersby <acweathersby.codes@gmail.com>")
     .about("A LL, LR, & RAD parser compiler for both deterministic and non-deterministic grammers.")
     .subcommand(

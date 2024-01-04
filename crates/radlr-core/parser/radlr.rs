@@ -4,7 +4,7 @@ use radlr_rust_runtime::{
 };
 /// ### `radlr` Rust Parser
 ///
-/// - **GENERATOR**: radlr 1.0.0-beta2
+/// - **GENERATOR**: radlr 1.0.1-beta2
 /// - **SOURCE**: /home/work/projects/lib_radlr/grammars/v2_0_0/grammar.sg
 ///
 /// #### WARNING:

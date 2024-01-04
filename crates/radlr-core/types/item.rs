@@ -517,6 +517,13 @@ impl Item {
   }
 
   #[inline]
+  pub fn to_penultimate(&self) -> Self {
+    let (rule_id, position) = self.index.get_parts();
+    let index: ItemIndex = (rule_id, (self.sym_len() as i32 - 1).max(0) as u16).into();
+    Self { index, ..self.clone() }
+  }
+
+  #[inline]
   /// Creates a new [ItemRef] with the same rule info as the original, but
   /// with the meta info of `other`. Resets goto metadata
   pub fn align(&self, other: &Item) -> Self {

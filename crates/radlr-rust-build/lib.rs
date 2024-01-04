@@ -50,7 +50,7 @@ pub fn compile_rust_bytecode_parser<T: ParserStore>(store: &T, pkg: &BytecodePar
   writer.stmt(
     r###"/// ### `radlr` Rust Parser
 ///
-/// - **GENERATOR**: radlr 1.0.0-beta2
+/// - **GENERATOR**: radlr 1.0.1-beta2
 /// - **SOURCE**: /home/work/projects/lib_radlr/grammars/v2_0_0/grammar.sg
 ///
 /// #### WARNING:
@@ -120,7 +120,7 @@ pub fn compile_rust_llvm_parser<T: ParserStore>(store: &T, grammar_name: &str, p
   writer.stmt(
     r###"/// ### `radlr` Rust Parser
 ///
-/// - **GENERATOR**: radlr 1.0.0-beta2
+/// - **GENERATOR**: radlr 1.0.1-beta2
 /// - **SOURCE**: /home/work/projects/lib_radlr/grammars/v2_0_0/grammar.sg
 ///
 /// #### WARNING:
