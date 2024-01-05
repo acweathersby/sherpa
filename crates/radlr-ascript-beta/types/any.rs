@@ -89,12 +89,12 @@ impl<'a> ValueObj for AscriptAnys<'a> {
     self.len
   }
 
-  fn get_index<'scope>(&'scope self, index: usize, s_store: &radlr_core::IStringStore) -> Value<'scope> {
+  fn get_index<'scope>(&'scope self, index: usize, _: &radlr_core::IStringStore) -> Value<'scope> {
     let remapped_index = self.db.any_type_lu[index];
     Value::Obj(&self.anys[remapped_index])
   }
 
-  fn get_iter<'scope>(&'scope self, s_store: &radlr_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+  fn get_iter<'scope>(&'scope self, _: &radlr_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
     self.anys.iter().filter(|i| i.used).enumerate().map(|(i, any)| (Value::Int(i as isize), Value::Obj(any))).collect()
   }
 }

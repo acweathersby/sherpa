@@ -198,7 +198,6 @@ impl ValueObj for AscriptType {
         AscriptType::Aggregate(agg) => match agg {
           AscriptAggregateType::Map { val_type, .. } => Value::Obj(val_type),
           AscriptAggregateType::Vec { val_type, .. } => Value::Obj(val_type),
-          _ => Value::None,
         },
         AscriptType::Scalar(scaler) => Value::Obj(scaler),
         _ => Value::None,

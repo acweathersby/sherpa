@@ -19,10 +19,7 @@ use radlr_core::{
   SymbolRef,
 };
 
-use crate::{
-  errors::{add_incompatible_nonterm_types_error, add_prop_redefinition_error, ascript_error_class},
-  types::*,
-};
+use crate::{errors::add_prop_redefinition_error, types::*};
 
 pub fn build_database(db: RadlrDatabase) -> AscriptDatabase {
   let mut adb = AscriptDatabase {

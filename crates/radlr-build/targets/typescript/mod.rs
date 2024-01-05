@@ -1,3 +1,4 @@
+#![allow(unused)]
 use super::common::build_ast_source;
 use crate::BuildConfig;
 use radlr_core::*;

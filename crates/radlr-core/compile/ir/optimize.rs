@@ -606,8 +606,8 @@ fn inline_states<'db>(
   Ok(garbage_collect(db, config, parse_states, None)?.0)
 }
 
-/// Merges matching branches of states that only consist of goto/push
-/// transitions.
+/// Merges matching branches of states wherein the branches are only comprised
+/// of goto/push transitions.
 fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> RadlrResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
