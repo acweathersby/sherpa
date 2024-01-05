@@ -18,7 +18,7 @@ use crate::{
     add_prop_redefinition_error,
     ascript_error_class,
   },
-  types::AScriptProp,
+  types::{AScriptProp, StructuredFloat},
 };
 use radlr_core::{
   parser::*,
@@ -635,6 +635,21 @@ pub fn compile_expression_type(
       tag:          rule_id,
       type_:        Bool(None),
     }],
+    ASTNode::AST_BoolLiteral(literal) => vec![TaggedType {
+      symbol_index: rule_len as u32,
+      tag:          rule_id,
+      type_:        Bool(Some(literal.value)),
+    }],
+    ASTNode::AST_NumberLiteral(literal) => vec![TaggedType {
+      symbol_index: rule_len as u32,
+      tag:          rule_id,
+      type_:        F64(Some(StructuredFloat(literal.value))),
+    }],
+    ASTNode::AST_StringLiteral(literal) => vec![TaggedType {
+      symbol_index: rule_len as u32,
+      tag:          rule_id,
+      type_:        String(Some(literal.value.clone())),
+    }],
     ASTNode::AST_U8(..) => vec![TaggedType {
       symbol_index: rule_len as u32,
       tag:          rule_id,
@@ -681,11 +696,6 @@ pub fn compile_expression_type(
       type_:        F32(None),
     }],
     ASTNode::AST_F64(..) => vec![TaggedType {
-      symbol_index: rule_len as u32,
-      tag:          rule_id,
-      type_:        F64(None),
-    }],
-    ASTNode::AST_NumberLiteral(..) => vec![TaggedType {
       symbol_index: rule_len as u32,
       tag:          rule_id,
       type_:        F64(None),
