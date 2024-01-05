@@ -1029,6 +1029,26 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
     },
   });
 
+  u.add_ast_handler(ASTNodeType::AST_BoolLiteral, ASTExprHandler {
+    expr: &|u: &AscriptWriterUtils<'_>, ast, r, ref_index, type_slot| match ast {
+      ASTNode::AST_BoolLiteral(box AST_BoolLiteral { value, .. }) => match value {
+        true => Some(SlotRef::ast_obj(
+          SlotIndex::Sym(u.bump_ref_index(ref_index)),
+          type_slot,
+          "true".to_string(),
+          AScriptTypeVal::Bool(Some(true)),
+        )),
+        false => Some(SlotRef::ast_obj(
+          SlotIndex::Sym(u.bump_ref_index(ref_index)),
+          type_slot,
+          "false".to_string(),
+          AScriptTypeVal::Bool(Some(false)),
+        )),
+      },
+      _ => None,
+    },
+  });
+
   u.add_ast_handler(ASTNodeType::AST_Bool, ASTExprHandler {
     expr: &|u, ast, r, ref_index, type_slot| match ast {
       ASTNode::AST_Bool(box AST_Bool { initializer, .. }) => match initializer {

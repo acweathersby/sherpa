@@ -511,7 +511,6 @@ impl AscriptAggregateType {
     match self {
       AscriptAggregateType::Map { key_type, val_type } => key_type.precedence() << 32 | val_type.precedence(),
       AscriptAggregateType::Vec { val_type } => val_type.precedence(),
-      _ => 0,
     }
   }
 

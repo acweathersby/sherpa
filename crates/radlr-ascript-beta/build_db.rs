@@ -86,6 +86,7 @@ fn fill_out_rules(adb: &mut AscriptDatabase) {
   }
 }
 
+#[allow(unused)]
 fn add_token_nodes(adb: &mut AscriptDatabase) {
   let AscriptDatabase { rules, structs, types, db, .. } = adb;
 
@@ -1243,16 +1244,16 @@ fn get_resolved_type(
               Ok(*b)
             }
           }
-          ((Bool, a_scl, a), (Int, b_scl, b)) | ((Uint, a_scl, a), (Int, b_scl, b)) => {
+          ((Bool, a_scl, _), (Int, b_scl, _)) | ((Uint, a_scl, _), (Int, b_scl, _)) => {
             match (a_scl.byte_size() + 1).max(b_scl.byte_size()) {
               1..=2 => Ok(Scalar(AscriptScalarType::I16(None))),
               3..=4 => Ok(Scalar(AscriptScalarType::I32(None))),
               _ => Ok(Scalar(AscriptScalarType::I64(None))),
             }
           }
-          ((Bool, a_scl, a), (Float, b_scl, b))
-          | ((Uint, a_scl, a), (Float, b_scl, b))
-          | ((Int, a_scl, a), (Float, b_scl, b)) => match (a_scl.byte_size() + 1).max(b_scl.byte_size()) {
+          ((Bool, a_scl, _), (Float, b_scl, _))
+          | ((Uint, a_scl, _), (Float, b_scl, _))
+          | ((Int, a_scl, _), (Float, b_scl, _)) => match (a_scl.byte_size() + 1).max(b_scl.byte_size()) {
             1..=4 => Ok(Scalar(AscriptScalarType::F32(None))),
             _ => Ok(Scalar(AscriptScalarType::F64(None))),
           },
