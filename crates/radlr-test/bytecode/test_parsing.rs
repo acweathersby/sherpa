@@ -46,6 +46,32 @@ pub fn symbol_occlusion() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn follow_symbols_in_gotos() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    IGNORE { c:sp c:nl }
+
+    <> A > (B C?)(+) 
+    
+    <> C > C "+" C     
+         | D           
+
+    <> D > R G         
+         | R           
+
+    <> G > "<" "b" ">" 
+
+    <> R > "R"         
+    
+    <> B > "<>" "A"
+
+  "#],
+    &[("default", "<> A R <> A R <b> <> A", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn temp() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r#"

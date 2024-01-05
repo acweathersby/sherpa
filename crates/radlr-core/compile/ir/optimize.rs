@@ -364,6 +364,8 @@ fn create_byte_sequences<'db>(
 }
 
 /// Inline trivial scanners.
+///
+/// Trivial scanners are those that only produce single codepoint tokens.
 fn inline_scanners<'db>(
   db: &'db ParserDatabase,
   config: &ParserConfig,
@@ -389,71 +391,74 @@ fn inline_scanners<'db>(
         .flatten()
         .collect::<Vec<_>>();
 
-      if tok_ids.iter().all(|(i, _)| match *i {
-        SymbolId::Token { val, .. } => val.to_str(db.string_store()).as_str().len() == 1,
-        sym if sym.is_class() => true,
-        SymbolId::Default => true,
-        _ => false,
-      }) {
-        // convert each match into a local branch
-        let mut id_groups = hash_group_btreemap(tok_ids, |_, (i, _)| match *i {
-          SymbolId::Default => MatchInputType::Default,
-          sym if sym.is_class() => MatchInputType::Class,
-          sym if sym.is_codepoint(db.string_store()) => MatchInputType::Codepoint,
-          _ => MatchInputType::Byte,
-        });
+      // convert each match into a local branch
+      let mut id_groups = hash_group_btreemap(tok_ids, |_, (i, _)| match *i {
+        SymbolId::Default => MatchInputType::Default,
+        sym if sym.is_class() => MatchInputType::Class,
+        sym if sym.is_codepoint(db.string_store()) => MatchInputType::Codepoint,
+        _ => MatchInputType::Byte,
+      });
 
-        // Remove the default statement if present. This will be appended to the end of
-        // the last Matches block.
-        let default = id_groups.remove(&MatchInputType::Default).and_then(|d| d.into_iter().next());
+      // Remove the default statement if present. This will be appended to the end of
+      // the last Matches block.
+      let default = id_groups.remove(&MatchInputType::Default).and_then(|d| d.into_iter().next());
 
-        fn setup_match<'db>(
-          db: &'db ParserDatabase,
-          queue: &mut VecDeque<(MatchInputType, Vec<(SymbolId, &Box<Statement>)>)>,
-          match_stmt: &mut Matches,
-          default: Option<(SymbolId, &Box<parser::Statement>)>,
-        ) {
-          if let Some((mode, group)) = queue.pop_back() {
-            match_stmt.mode = mode.to_scanless().as_str().to_string();
-            match_stmt.matches = group
-              .into_iter()
-              .map(|(val, stmt)| ASTNode::IntMatch(Box::new(IntMatch::new(stmt.clone(), vec![val.to_state_val(db) as u64]))))
-              .collect();
+      fn setup_match<'db>(
+        db: &'db ParserDatabase,
+        queue: &mut VecDeque<(MatchInputType, Vec<(SymbolId, &Box<Statement>)>)>,
+        match_stmt: &mut Matches,
+        default: Option<(SymbolId, &Box<parser::Statement>)>,
+      ) {
+        if let Some((mode, group)) = queue.pop_back() {
+          match_stmt.mode = mode.to_scanless().as_str().to_string();
+          match_stmt.matches = group
+            .into_iter()
+            .map(|(val, stmt)| ASTNode::IntMatch(Box::new(IntMatch::new(stmt.clone(), vec![val.to_state_val(db) as u64]))))
+            .collect();
 
-            if !queue.is_empty() {
-              let mut matches =
-                parser::Matches::new(Default::default(), Default::default(), Default::default(), Default::default());
+          if !queue.is_empty() {
+            let mut matches =
+              parser::Matches::new(Default::default(), Default::default(), Default::default(), Default::default());
 
-              setup_match(db, queue, &mut matches, default);
+            setup_match(db, queue, &mut matches, default);
 
-              let matches = ASTNode::Matches(Box::new(matches));
-              let stmt =
-                Box::new(parser::Statement::new(Some(matches), Default::default(), Default::default(), Default::default()));
-              let default = ASTNode::DefaultMatch(Box::new(parser::DefaultMatch::new(stmt)));
+            let matches = ASTNode::Matches(Box::new(matches));
+            let stmt =
+              Box::new(parser::Statement::new(Some(matches), Default::default(), Default::default(), Default::default()));
+            let default = ASTNode::DefaultMatch(Box::new(parser::DefaultMatch::new(stmt)));
 
-              match_stmt.matches.push(default);
-            } else if let Some((_, statement)) = default {
-              match_stmt.matches.push(ASTNode::DefaultMatch(Box::new(DefaultMatch { statement: statement.clone() })))
-            }
+            match_stmt.matches.push(default);
+          } else if let Some((_, statement)) = default {
+            match_stmt.matches.push(ASTNode::DefaultMatch(Box::new(DefaultMatch { statement: statement.clone() })))
           }
         }
-
-        let mut match_stmt = parser::Matches::new(Default::default(), Default::default(), Default::default(), Default::default());
-        let mut queue = VecDeque::from_iter(id_groups.into_iter());
-
-        setup_match(db, &mut queue, &mut match_stmt, default);
-
-        *mode = match_stmt.mode;
-        *scanner = Default::default();
-        *matches = match_stmt.matches;
       }
+
+      let mut match_stmt = parser::Matches::new(Default::default(), Default::default(), Default::default(), Default::default());
+      let mut queue = VecDeque::from_iter(id_groups.into_iter());
+
+      setup_match(db, &mut queue, &mut match_stmt, default);
+
+      *mode = match_stmt.mode;
+      *scanner = Default::default();
+      *matches = match_stmt.matches;
     }
     RadlrResult::Ok(())
   }
 
   for (_, state) in &mut parse_states {
-    if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
-      inline_scanners(db, statement)?;
+    if let Some(scanner) = state.get_scanner() {
+      if !scanner.symbols.iter().map(|s| s.tok()).chain(scanner.skipped.iter().cloned()).all(|s| match db.token(s).sym_id {
+        SymbolId::Token { val, .. } => val.to_str(db.string_store()).as_str().len() == 1,
+        sym if sym.is_class() => true,
+        SymbolId::Default => true,
+        _ => false,
+      }) {
+        continue;
+      }
+      if let Some(box parser::State { statement, .. }) = &mut state.as_mut().ast {
+        inline_scanners(db, statement)?;
+      }
     }
   }
 
