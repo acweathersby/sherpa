@@ -31,6 +31,46 @@ pub fn group_inline() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn grammar_ascript_naked_refs() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+
+    IGNORE { c:sp }
+
+    <> start > A | C
+
+    <> A > "B" :ast $1 <> C > "D"
+
+
+
+  "#],
+    &[("default", "D", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn symbol_occlusion2() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+
+    IGNORE { c:sp }
+
+
+    <> A > (B | C)(+)
+
+    <> B > ":ast" D?
+    
+    <> D > "<" c:num ">"
+
+    <> C > "<>" c:id
+
+  "#],
+    &[("default", "<> d :ast < 2 > <> r", true)],
+    ParserConfig::default(),
+  )
+}
+#[test]
 pub fn symbol_occlusion() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r#"
@@ -40,7 +80,7 @@ pub fn symbol_occlusion() -> RadlrResult<()> {
     <> C > ( c:id | c:num | c:sym )+
 
   "#],
-    &[("default", "@+ddf", false)],
+    &[("default", "@+ddf", false), ("default", "-+ddf", true)],
     ParserConfig::default(),
   )
 }

@@ -257,7 +257,7 @@ pub fn process_struct_node(
   strct: &AST_Struct,
   g_id: GrammarIdentities,
 ) -> RadlrResult<StructInitializer> {
-  let name = &strct.typ[2..];
+  let name = &strct.ty[2..];
   let struct_id = StringId::from(name);
 
   let mut initializer = StructInitializer {

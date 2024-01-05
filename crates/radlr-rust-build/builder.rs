@@ -946,7 +946,7 @@ pub(crate) fn create_rust_writer_utils<'a>(store: &'a AScriptStore, db: &'a Pars
   });
 
   u.add_type_handler(AScriptTypeVal::Bool(None), AscriptTypeHandler {
-    default: &|_, _, _| "false".into(),
+    default: &|d, v, _| "false".into(),
     name:    &|_, _, _| "bool".into(),
   });
 

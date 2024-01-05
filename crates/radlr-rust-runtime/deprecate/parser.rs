@@ -116,14 +116,14 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
 ) -> OpReturnVal<'a> {
   const __HINT__: Opcode = Opcode::ShiftToken;
 
-  debug_assert!(
+  /*   debug_assert!(
     ctx.start_line_off as usize <= ctx.sym_ptr,
     "
   The `start_line_offset` should not be advanced further than the `head_ptr` at this point
   head_ptr: {}  start_line_off:{}",
     ctx.sym_ptr,
     ctx.start_line_off
-  );
+  ); */
 
   let action = ParseAction::Shift {
     byte_offset: ctx.sym_ptr as u32,

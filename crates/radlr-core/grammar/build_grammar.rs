@@ -825,9 +825,9 @@ fn replace_template_ast(s: Option<Box<parser::Ascript>>, symbol_lookup: &Map<Str
       let mut output = s.clone();
       match &mut output.ast {
         ASTNode::AST_Struct(s) => {
-          if let Some(new_type) = symbol_lookup.get(&s.typ) {
+          if let Some(new_type) = symbol_lookup.get(&s.ty) {
             if let ASTNode::AST_STRUCT_TEMPLATE_NAME(d) = new_type {
-              s.typ = d.typ.clone();
+              s.ty = d.typ.clone();
             }
           }
         }

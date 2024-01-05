@@ -155,6 +155,7 @@ impl ValueObj for AscriptType {
   fn get_val<'scope>(&'scope self, key: &str, s_store: &radlr_core::IStringStore) -> Value<'scope> {
     fn scalar_type<'scope>(scaler: &AscriptScalarType, s_store: &radlr_core::IStringStore) -> Value<'scope> {
       match scaler {
+        AscriptScalarType::Flag(..) => Value::Str("flag".intern(s_store)),
         AscriptScalarType::Bool(_) => Value::Str("bool".intern(s_store)),
         AscriptScalarType::U8(_) => Value::Str("u8".intern(s_store)),
         AscriptScalarType::U16(_) => Value::Str("u16".intern(s_store)),
@@ -228,6 +229,9 @@ impl Hash for AscriptAnyType {
   }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct FlagId(u32);
+
 #[derive(Debug, Clone, Copy, Default)]
 pub enum AscriptScalarType {
   U8(Option<usize>),
@@ -240,6 +244,7 @@ pub enum AscriptScalarType {
   I64(Option<isize>),
   F32(Option<f64>),
   F64(Option<f64>),
+  Flag(StringId, u64),
   String(Option<IString>),
   Bool(bool),
   Struct(StringId, bool),
@@ -312,9 +317,10 @@ impl AscriptScalarType {
       Bool(..) => 11,
       Struct(..) => 12,
       Any(..) => 13,
-      Token => 14,
-      TokenRange => 15,
-      Undefined => 16,
+      Flag(..) => 14,
+      Token => 15,
+      TokenRange => 16,
+      Undefined => 17,
     }
   }
 
@@ -328,6 +334,7 @@ impl AscriptScalarType {
       String(..) => 16,
       Struct(..) => 128,
       Any(..) => 0,
+      Flag(..) => 8,
       Token => 16,
       TokenRange => 8,
       Undefined => 0,
@@ -351,6 +358,7 @@ impl AscriptScalarType {
       Bool(..) => "Bool",
       Struct(..) => "Struct",
       Any(..) => "Any",
+      Flag(..) => "Flag",
       Token => "Token",
       TokenRange => "TokenRange",
       Undefined => "Undefined",

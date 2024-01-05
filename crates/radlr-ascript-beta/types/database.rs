@@ -102,6 +102,7 @@ impl From<RadlrDatabase> for AscriptDatabase {
 #[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Debug)]
 pub struct StringId(pub(crate) IString);
 
+
 impl ToValue for StringId {
   fn into_val<'scope>(&'scope self, s_store: &radlr_core::IStringStore) -> Value<'scope> {
     self.0.into_val(s_store)

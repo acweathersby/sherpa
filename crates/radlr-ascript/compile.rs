@@ -1106,7 +1106,7 @@ pub fn get_named_body_ref(db: &ParserDatabase, rule: &Rule, val: &str) -> RefRes
 }
 
 pub fn get_struct_name_from_node(ast_struct: &AST_Struct) -> String {
-  ast_struct.typ.to_string()[2..].to_string()
+  ast_struct.ty.to_string()[2..].to_string()
 }
 
 pub fn get_struct_type_from_node(ast_struct: &AST_Struct) -> AScriptTypeVal {
