@@ -7,6 +7,8 @@ IMPORT ./token as token
 <> body 
     
     > struct 
+
+    | flag
     
     | expression
         :ast { t_AST_Statement, expression:$1, tok }
@@ -18,8 +20,7 @@ IMPORT ./token as token
 <> struct 
     
     > "{" type_identifier^t ( "," struct_prop(+",") )? '}'
-        :ast { t_AST_Struct, typ: str($t), props:$3, tok }
-
+        :ast { t_AST_Struct, ty: str($t), props:$3, tok }
 
 <> struct_prop 
 
@@ -35,9 +36,21 @@ IMPORT ./token as token
     | token
 
 
+
 <> type_identifier 
 
     > tk:( 't' "_"{:9999} ) identifier
+
+
+<> flag 
+    
+    > flag_identifier "::" identifier
+        :ast { t_AST_Flag, ty: str($1), val:$3, tok }
+
+
+<> flag_identifier 
+
+    > tk:( 'f' "_"{:9999} ) identifier
 
 
 <> expression  > expr
@@ -185,8 +198,8 @@ IMPORT ./token as token
 
     > reference 
     
-    // | reference range
-    //     :ast { t_AST_TrimmedReference, reference:$1, range:$2, tok }
+    | reference range
+        :ast { t_AST_TrimmedReference, reference:$1, range:$2, tok }
 
 <> reference > 
 
