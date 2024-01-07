@@ -1092,6 +1092,33 @@ impl GraphBuilder {
     Some(symbols)
   }
 
+  fn get_lookahead_id<'a>(&mut self, state: StateId) -> Option<OrderedSet<DBTermKey>> {
+    if self.graph.is_scanner() || state.is_invalid() {
+      return None;
+    };
+
+    let mode = self.graph.graph_type;
+    let mut symbols = OrderedSet::new();
+    for item in self.get_state(state).get_kernel_items().clone() {
+      {
+        let (follow, _) = get_follow(self, item.to_complete());
+        for item in follow {
+          if let Some(term) = item.term_index_at_sym(mode, self.db()) {
+            symbols.insert(term);
+          } else if item.is_nonterm(mode, self.db()) {
+            for item in self.db().get_closure(&item) {
+              if let Some(term) = item.term_index_at_sym(self.graph.graph_type, self.db()) {
+                symbols.insert(term);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    Some(symbols)
+  }
+
   pub fn iter_pending_states_mut(&mut self, closure: &dyn Fn(StateBuilder)) {
     for state in self.pending.clone() {
       closure(StateBuilder { builder: self, resolved: true, state_id: state })
@@ -1122,21 +1149,24 @@ impl GraphBuilder {
   }
 
   fn prepare_state(&mut self, state_id: StateId) {
-    let lookahead_id = match self.get_state_symbols(state_id) {
-      Some(lookahead_set) if !lookahead_set.is_empty() => {
-        let lookahead_id = hash_id_value_u64(&lookahead_set);
-        self.graph.symbol_sets.insert(lookahead_id, lookahead_set);
-        lookahead_id
+    let symbol_set_id = match self.get_state_symbols(state_id) {
+      Some(symbol_set) if !symbol_set.is_empty() => {
+        let symbol_set_id = hash_id_value_u64(&symbol_set);
+        self.graph.symbol_sets.insert(symbol_set_id, symbol_set);
+        symbol_set_id
       }
       _ => 0,
     };
-    let hash = if self.config.ALLOW_LOOKAHEAD_MERGE {
+
+    let lookahead_id = hash_id_value_u64(&self.get_lookahead_id(state_id));
+
+    let hash = if self.config.ALLOW_LOOKAHEAD_MERGE && false {
       Self::create_state_hash(self.get_state(state_id), 0, DefaultHasher::new())
     } else {
       Self::create_state_hash(self.get_state(state_id), lookahead_id, DefaultHasher::new())
     };
 
-    self.graph[state_id].symbol_set_id = lookahead_id;
+    self.graph[state_id].symbol_set_id = symbol_set_id;
     self.graph[state_id].canonical_hash = hash;
     self.graph[state_id].lookahead_hash = hash_id_value_u64((hash, lookahead_id));
   }
@@ -1154,7 +1184,7 @@ impl GraphBuilder {
 
         graph.state_predecessors.entry(original_state).or_default().insert(parent);
 
-        if config.ALLOW_LOOKAHEAD_MERGE {
+        if config.ALLOW_LOOKAHEAD_MERGE && false {
           let original_la_id = graph[original_state].symbol_set_id;
           let new_lookahead_id = graph[state_id].symbol_set_id;
 

@@ -91,7 +91,7 @@ pub fn follow_symbols_in_gotos() -> RadlrResult<()> {
     &[r#"
     IGNORE { c:sp c:nl }
 
-    <> A > (B C?)(+) 
+    <> A > (B | C | E)(+) 
     
     <> C > C "+" C     
          | D           
@@ -104,6 +104,8 @@ pub fn follow_symbols_in_gotos() -> RadlrResult<()> {
     <> R > "R"         
     
     <> B > "<>" "A"
+
+    <> E > "<" c:num ">" "A"
 
   "#],
     &[("default", "<> A R <> A R <b> <> A", true)],
@@ -465,30 +467,10 @@ IGNORE { c:sp  }
 <> id_tok > c:id
 
 "#],
-    &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
+    &[("default", ":t t => g :t! t!", true)],
     ParserConfig::default(),
   )
 }
-
-#[test]
-pub fn precedence_check() -> RadlrResult<()> {
-  compile_and_run_grammars(
-    &[r#"
-IGNORE { c:sp  } 
-
-<> C > A | B
-
-<> A > tk:( 't' "_"{:9999} ) c:id(+) "5"
-
-<> B > tk:( ( "_" | c:id )(+) )
-
-
-"#],
-    &[("default", "t_dd5", true)],
-    ParserConfig::default().lrk(2),
-  )
-}
-
 #[test]
 pub fn other_symbols_requiring_peek_lr2() -> RadlrResult<()> {
   compile_and_run_grammars(
@@ -508,11 +490,10 @@ IGNORE { c:sp  }
 <> id_tok > c:id
 
 "#],
-    &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
-    ParserConfig::default().lrk(2),
+    &[("default", ":t t => g :t! t!", true)],
+    ParserConfig::default().lrk(8),
   )
 }
-
 #[test]
 pub fn other_symbols_requiring_peek_ll() -> RadlrResult<()> {
   compile_and_run_grammars(
@@ -532,11 +513,30 @@ IGNORE { c:sp  }
 <> id_tok > c:id
 
 "#],
-    &[/* ("default", "t => g :t t", true), ("default", ":t t => a :t!", true), */ ("default", ":t t => g :t! t!", true)],
+    &[("default", ":t t => g :t! t!", true)],
     ParserConfig::default().llk(8),
   )
   .expect_err("Should fail to compile LL/RD parser");
   Ok(())
+}
+
+#[test]
+pub fn precedence_check() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> C > A | B
+
+<> A > tk:( 't' "_"{:9999} ) c:id(+) "5"
+
+<> B > tk:( ( "_" | c:id )(+) )
+
+
+"#],
+    &[("default", "t_dd5", true)],
+    ParserConfig::default().lrk(2),
+  )
 }
 
 #[test]
