@@ -2,7 +2,6 @@ pub(crate) mod build;
 mod errors;
 pub(crate) mod flow;
 pub mod graph;
-pub mod graph_2_beta;
 pub(crate) mod items;
 
 use self::graph::{GraphBuilder, GraphHost, GraphType};

@@ -1,0 +1,72 @@
+#![allow(unused)]
+
+use super::super::{
+  build::{GroupedFirsts, TransitionGroup},
+  graph::*,
+};
+use crate::{
+  compile::states::build_graph::graph::{GraphBuildState, StateType},
+  types::*,
+  utils::{hash_group_btree_iter, hash_group_btreemap},
+};
+use std::collections::{BTreeSet, HashSet};
+
+pub(crate) fn create_fork<'graph_iter, 'follow, I: Iterator<Item = Item>>(
+  gb: &'graph_iter mut ConcurrentGraphBuilder,
+  pred: &GraphNodeShared,
+  sym: PrecedentSymbol,
+  items: I,
+) -> RadlrResult<GraphNodeBuilder> {
+  debug_assert!(
+    gb.config().ALLOW_PEEKING && gb.config().max_k > 1,
+    "Peek states should not be created when peeking is not allowed or k=1"
+  );
+  debug_assert!(!pred.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
+
+  Ok(
+    GraphNodeBuilder::new()
+      .set_build_state(GraphBuildState::Normal)
+      .set_parent(pred.clone())
+      .set_sym(sym)
+      .set_type(StateType::ForkInitiator)
+      .set_kernel_items(items),
+  )
+}
+
+pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut ConcurrentGraphBuilder, pred: &GraphNodeShared) -> bool {
+  if matches!(pred.state_type(), StateType::ForkInitiator) {
+    for kernel_item in pred.kernel_items() {
+      GraphNodeBuilder::new()
+        .set_build_state(GraphBuildState::Normal)
+        .set_parent(pred.clone())
+        .set_sym(Default::default())
+        .set_type(StateType::ForkedState)
+        .set_kernel_items(vec![*kernel_item].into_iter())
+        .commit(gb);
+    }
+    true
+  } else {
+    false
+  }
+}
+
+pub(crate) fn convert_peek_root_state_to_fork(gb: &mut ConcurrentGraphBuilder, pred: &GraphNodeShared) -> Result<(), RadlrError> {
+  Ok(loop {
+    todo!("Convert root peek state to fork");
+    /* if matches!(pred.state_type(), StateType::Peek(INITIAL_PEEK_K)) {
+      let items = state.get_peek_resolve_items().unwrap().flat_map(|(_, items)| items.items.iter()).cloned().collect::<Vec<_>>();
+      let sym = state.get_symbol();
+      let parent = state.get_parent();
+      if gb.detach_state(state_id) {
+        let mut state = create_fork(gb, sym, items.into_iter())?;
+        state.set_parent(parent);
+        state.to_enqueued();
+      }
+      break;
+    } else if state_id.is_root() {
+      unreachable!()
+    } else {
+      state_id = state.get_parent()
+    } */
+  })
+}
