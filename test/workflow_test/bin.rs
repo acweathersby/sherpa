@@ -13,7 +13,7 @@ fn main() {
     .build_ast::<Token, _, _>(
       &mut StringInput::from(
         r###"
-        4 * (2.0 + 2) + 8.0001
+        4 * (-20 + 2) + 80001
         "###,
       ),
       entry,

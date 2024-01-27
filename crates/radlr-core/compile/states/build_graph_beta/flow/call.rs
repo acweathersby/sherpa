@@ -8,7 +8,7 @@ pub struct CreateCallResult {
   /// `true` if the state is a KernelCall
   pub is_kernel: bool,
   /// The new state that will perform the call
-  pub node: GraphNodeBuilder,
+  pub node: StagedNode,
   /// A list of items from the parent closure that transition on the called
   /// non-terminal.
   pub _transition_items: Items,
@@ -52,12 +52,12 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
 
           return Some(CreateCallResult {
             is_kernel: true,
-            node: GraphNodeBuilder::new()
-              .set_build_state(GraphBuildState::Normal)
-              .set_parent(node.clone())
-              .set_sym(sym)
-              .set_type(StateType::KernelCall(*nonterm))
-              .set_kernel_items(items.try_increment().iter().cloned()),
+            node: StagedNode::new()
+              .build_state(GraphBuildState::Normal)
+              .parent(node.clone())
+              .sym(sym)
+              .ty(StateType::KernelCall(*nonterm))
+              .kernel_items(items.try_increment().iter().cloned()),
             _transition_items: items,
           });
         }
@@ -74,12 +74,12 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
   if let Some((nonterm, items)) = climb_nonterms(gb, node, group) {
     return Some(CreateCallResult {
       is_kernel: false,
-      node: GraphNodeBuilder::new()
-        .set_build_state(GraphBuildState::Normal)
-        .set_parent(node.clone())
-        .set_sym(sym)
-        .set_type(StateType::InternalCall(nonterm))
-        .set_kernel_items(items.try_increment().iter().cloned()),
+      node: StagedNode::new()
+        .build_state(GraphBuildState::Normal)
+        .parent(node.clone())
+        .sym(sym)
+        .ty(StateType::InternalCall(nonterm))
+        .kernel_items(items.try_increment().iter().cloned()),
       _transition_items: items,
     });
   } else {

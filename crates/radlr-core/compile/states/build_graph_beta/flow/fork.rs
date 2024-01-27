@@ -16,7 +16,7 @@ pub(crate) fn create_fork<'graph_iter, 'follow, I: Iterator<Item = Item>>(
   pred: &GraphNodeShared,
   sym: PrecedentSymbol,
   items: I,
-) -> RadlrResult<GraphNodeBuilder> {
+) -> RadlrResult<StagedNode> {
   debug_assert!(
     gb.config().ALLOW_PEEKING && gb.config().max_k > 1,
     "Peek states should not be created when peeking is not allowed or k=1"
@@ -24,24 +24,24 @@ pub(crate) fn create_fork<'graph_iter, 'follow, I: Iterator<Item = Item>>(
   debug_assert!(!pred.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
 
   Ok(
-    GraphNodeBuilder::new()
-      .set_build_state(GraphBuildState::Normal)
-      .set_parent(pred.clone())
-      .set_sym(sym)
-      .set_type(StateType::ForkInitiator)
-      .set_kernel_items(items),
+    StagedNode::new()
+      .build_state(GraphBuildState::Normal)
+      .parent(pred.clone())
+      .sym(sym)
+      .ty(StateType::ForkInitiator)
+      .kernel_items(items),
   )
 }
 
 pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut ConcurrentGraphBuilder, pred: &GraphNodeShared) -> bool {
   if matches!(pred.state_type(), StateType::ForkInitiator) {
     for kernel_item in pred.kernel_items() {
-      GraphNodeBuilder::new()
-        .set_build_state(GraphBuildState::Normal)
-        .set_parent(pred.clone())
-        .set_sym(Default::default())
-        .set_type(StateType::ForkedState)
-        .set_kernel_items(vec![*kernel_item].into_iter())
+      StagedNode::new()
+        .build_state(GraphBuildState::Normal)
+        .parent(pred.clone())
+        .sym(Default::default())
+        .ty(StateType::ForkedState)
+        .kernel_items(vec![*kernel_item].into_iter())
         .commit(gb);
     }
     true

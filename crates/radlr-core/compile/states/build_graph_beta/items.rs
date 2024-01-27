@@ -103,6 +103,7 @@ pub(crate) fn get_follow_internal(
         let closure_state_id = c_item.origin_state;
         let origin = c_item.origin;
 
+        
         let state = node.get_predecessor(c_item.origin_state).unwrap();
 
         let closure = state

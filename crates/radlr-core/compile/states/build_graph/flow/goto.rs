@@ -180,8 +180,9 @@ fn increment_gotos(gb: &mut GraphBuilder) {
       .state_ref()
       .get_peek_resolve_items()
       .map(|i| i.map(|(i, PeekGroup { items, is_oos })| (i, *is_oos, items.clone())).collect::<Vec<_>>());
+
     if let Some(peek_resolve_items) = peek_items {
-      let old_kernel_items = sb.state_ref().get_kernel_items().clone();
+      /*      let old_kernel_items = sb.state_ref().get_kernel_items().clone();
       let mut new_kernel_items: Items = Default::default();
       for (v, is_oos, items) in peek_resolve_items {
         let old_origin = Origin::Peek(v);
@@ -193,7 +194,7 @@ fn increment_gotos(gb: &mut GraphBuilder) {
         new_kernel_items.extend(old_kernel_items.iter().filter(|i| i.origin == old_origin).map(|i| i.to_origin(origin)));
       }
 
-      sb.set_kernel_items(new_kernel_items.into_iter());
+      sb.set_kernel_items(new_kernel_items.into_iter()); */
     } else {
       let items = sb
         .state_ref()

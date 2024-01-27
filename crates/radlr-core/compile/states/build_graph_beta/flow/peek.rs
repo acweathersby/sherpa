@@ -26,22 +26,34 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
   sym: PrecedentSymbol,
   incomplete_items: Pairs,
   completed_pairs: Option<Pairs>,
-) -> RadlrResult<GraphNodeBuilder> {
+) -> RadlrResult<StagedNode> {
   debug_assert!(
     gb.config().ALLOW_PEEKING && gb.config().max_k > 1,
     "Peek states should not be created when peeking is not allowed or k=1"
   );
   debug_assert!(!node.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
 
+  debug_assert!(
+    !incomplete_items.clone().any(|i| matches!(i.kernel.origin, Origin::Peek(..))),
+    "Peek states should not be in the resolution"
+  );
+
+  let mut state = StagedNode::new().build_state(GraphBuildState::Normal).sym(sym).ty(StateType::Peek(INITIAL_PEEK_K));
+
+  let state_id = node.id();
+
+  let incomplete_items = incomplete_items.into_iter().cloned().collect::<Vec<_>>();
+  let completed_pairs = completed_pairs.map(|c| c.into_iter().cloned().collect::<Vec<_>>());
+
+  let existing_items = incomplete_items.iter().to_next().heritage();
+
+  let mut follow_sets = Vec::new();
+  let mut nonterm_sets = Vec::new();
+
   let mut kernel_items = Array::default();
 
-  let existing_items = incomplete_items.clone().to_next().heritage();
-
-  let mut state =
-    GraphNodeBuilder::new().set_build_state(GraphBuildState::Normal).set_sym(sym).set_type(StateType::Peek(INITIAL_PEEK_K));
-
   if let Some(completed_pairs) = completed_pairs {
-    let pairs: BTreeSet<TransitionPair> = completed_pairs.into_iter().cloned().collect::<BTreeSet<_>>();
+    let pairs: BTreeSet<TransitionPair> = completed_pairs.iter().cloned().collect::<BTreeSet<_>>();
 
     // All items here complete the same nonterminal, so we group them all into one
     // goal index.
@@ -55,35 +67,74 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
         .collect();
 
       if !follow.is_empty() {
-        let origin = gb.set_peek_resolve_state(items.iter().to_kernel().cloned(), is_oos);
-        for follow in follow {
-          kernel_items.push(follow.to_origin(origin));
+        for follow in &follow {
+          kernel_items.push(*follow);
         }
+        follow_sets.push((follow, items, is_oos));
       }
     }
   }
 
-  for (_, nonterms) in hash_group_btree_iter::<Lookaheads, _, _, _, _>(incomplete_items.clone(), |_, i| i.is_out_of_scope()) {
-    let origin =
-      gb.set_peek_resolve_state(nonterms.iter().to_kernel().cloned(), nonterms.iter().any(|i| i.kernel.origin.is_out_of_scope()));
-
+  for (_, nonterms) in
+    hash_group_btree_iter::<Lookaheads, _, _, _, _>(incomplete_items.iter().clone(), |_, i| i.is_out_of_scope())
+  {
     for nonterm in &nonterms {
-      kernel_items.push(nonterm.next.to_origin(origin));
+      kernel_items.push(nonterm.next);
     }
+    nonterm_sets.push(nonterms);
   }
 
-  debug_assert!(
-    !incomplete_items.clone().any(|i| matches!(i.kernel.origin, Origin::Peek(..))),
-    "Peek states should not be in the resolution"
-  );
-  debug_assert!(
-    !incomplete_items.clone().any(|i| matches!(i.kernel.origin, Origin::Peek(..))),
-    "Peek states should not be in the resolution"
-  );
+  state = state.kernel_items(kernel_items.try_increment().iter().cloned());
 
-  state = state.set_kernel_items(kernel_items.try_increment().iter().cloned());
+  state = state.finalizer(Box::new(move |state, gb, is_goto_state: bool| {
+    let mut kernel_items = Array::default();
+
+    for (follow, items, is_oos) in follow_sets {
+      let items = items.iter().to_kernel().map(|i| {
+        if is_goto_state {
+          if i.origin_state.0 == state_id.0 {
+            i.as_goto_origin()
+          } else {
+            i.increment_goto()
+          }
+        } else {
+          i.clone()
+        }
+      });
+      let origin = gb.set_peek_resolve_state(items, is_oos);
+      for follow in follow {
+        kernel_items.push(follow.to_origin(origin));
+      }
+    }
+
+    for nonterms in nonterm_sets {
+      let items = nonterms.iter().to_kernel().map(|i| {
+        if is_goto_state {
+          if i.origin_state.0 == state_id.0 {
+            i.as_goto_origin()
+          } else {
+            i.increment_goto()
+          }
+        } else {
+          i.clone()
+        }
+      });
+
+      let origin = gb.set_peek_resolve_state(items, nonterms.iter().any(|i| i.kernel.origin.is_out_of_scope()));
+
+      for nonterm in &nonterms {
+        kernel_items.push(nonterm.next.to_origin(origin));
+      }
+    }
+
+    state.kernel = kernel_items.try_increment().iter().cloned().collect();
+  }));
 
   Ok(state)
+}
+
+fn build_peek_nodes(node: GraphNode, builder: &mut ConcurrentGraphBuilder) -> GraphNode {
+  node
 }
 
 fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair>>(
@@ -95,11 +146,11 @@ fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair>>(
   let (index, PeekGroup { items, .. }) = get_kernel_items_from_peek_origin(gb, node, resolved.next().unwrap().kernel.origin);
   let staged = items.clone();
 
-  GraphNodeBuilder::new()
-    .set_sym(sym)
-    .set_build_state(GraphBuildState::NormalGoto)
-    .set_type(StateType::PeekEndComplete(index))
-    .set_kernel_items(staged.into_iter())
+  StagedNode::new()
+    .sym(sym)
+    .build_state(GraphBuildState::NormalGoto)
+    .ty(StateType::PeekEndComplete(index))
+    .kernel_items(staged.into_iter())
     .commit(gb);
 
   Ok(())
@@ -189,53 +240,53 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           let (origin_index, PeekGroup { items, .. }) = incpl_targets.unwrap().into_iter().next().unwrap();
           let staged = items.clone();
 
-          GraphNodeBuilder::new()
-            .set_sym(prec_sym)
-            .set_build_state(GraphBuildState::NormalGoto)
-            .set_type(StateType::PeekEndComplete(origin_index))
-            .set_kernel_items(staged.into_iter())
+          StagedNode::new()
+            .sym(prec_sym)
+            .build_state(GraphBuildState::NormalGoto)
+            .ty(StateType::PeekEndComplete(origin_index))
+            .kernel_items(staged.into_iter())
             .commit(gb);
         }
         (_, 0, 1) => {
           // Can do any number of shifts
           let (origin_index, PeekGroup { items, .. }) = incpl_targets.unwrap().into_iter().next().unwrap();
           let staged = items.clone();
-          GraphNodeBuilder::new()
-            .set_sym(prec_sym)
-            .set_build_state(GraphBuildState::NormalGoto)
-            .set_type(StateType::PeekEndComplete(origin_index))
-            .set_kernel_items(staged.into_iter())
+          StagedNode::new()
+            .sym(prec_sym)
+            .build_state(GraphBuildState::NormalGoto)
+            .ty(StateType::PeekEndComplete(origin_index))
+            .kernel_items(staged.into_iter())
             .commit(gb);
         }
         (_, 1, 0) => {
           let (origin_index, PeekGroup { items, .. }) = cmpl_targets.unwrap().into_iter().next().unwrap();
           let staged = items.clone();
-          GraphNodeBuilder::new()
-            .set_sym(prec_sym)
-            .set_build_state(GraphBuildState::NormalGoto)
-            .set_type(StateType::PeekEndComplete(origin_index))
-            .set_kernel_items(staged.into_iter())
+          StagedNode::new()
+            .sym(prec_sym)
+            .build_state(GraphBuildState::NormalGoto)
+            .ty(StateType::PeekEndComplete(origin_index))
+            .kernel_items(staged.into_iter())
             .commit(gb);
         }
         (1.., 0, 0) => {
           let (origin_index, PeekGroup { items, .. }) = _oos_targets.unwrap().into_iter().next().unwrap();
           let staged = items.clone();
-          GraphNodeBuilder::new()
-            .set_sym(prec_sym)
-            .set_build_state(GraphBuildState::NormalGoto)
-            .set_type(StateType::PeekEndComplete(origin_index))
-            .set_kernel_items(staged.into_iter())
+          StagedNode::new()
+            .sym(prec_sym)
+            .build_state(GraphBuildState::NormalGoto)
+            .ty(StateType::PeekEndComplete(origin_index))
+            .kernel_items(staged.into_iter())
             .commit(gb);
         }
         _ => {
           if !prec_sym.sym().is_default() {
             // Continue peeking
 
-            GraphNodeBuilder::new()
-              .set_sym(prec_sym)
-              .set_build_state(GraphBuildState::Normal)
-              .set_type(StateType::Peek(level + 1))
-              .set_kernel_items(follows.iter().map(|f| f.next.to_origin(f.kernel.origin)).try_increment().iter().cloned())
+            StagedNode::new()
+              .sym(prec_sym)
+              .build_state(GraphBuildState::Normal)
+              .ty(StateType::Peek(level + 1))
+              .kernel_items(follows.iter().map(|f| f.next.to_origin(f.kernel.origin)).try_increment().iter().cloned())
               .commit(gb);
           }
         }
@@ -249,11 +300,11 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
         panic!("Cannot disambiguate using peek!!!");
       } else {
         // create a new peek state with the follow items.
-        GraphNodeBuilder::new()
-          .set_sym(prec_sym)
-          .set_build_state(GraphBuildState::Normal)
-          .set_type(StateType::Peek(level + 1))
-          .set_kernel_items(
+        StagedNode::new()
+          .sym(prec_sym)
+          .build_state(GraphBuildState::Normal)
+          .ty(StateType::Peek(level + 1))
+          .kernel_items(
             group
               .iter()
               .to_next()
@@ -282,11 +333,11 @@ pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
   if peek_items_are_from_same_origin(gb, &group) {
     resolve_peek(gb, node, group.iter(), prec_sym)?;
   } else {
-    GraphNodeBuilder::new()
-      .set_sym(prec_sym)
-      .set_build_state(GraphBuildState::Normal)
-      .set_type(StateType::Peek(level + 1))
-      .set_kernel_items(group.iter().to_next().try_increment().iter().cloned())
+    StagedNode::new()
+      .sym(prec_sym)
+      .build_state(GraphBuildState::Normal)
+      .ty(StateType::Peek(level + 1))
+      .kernel_items(group.iter().to_next().try_increment().iter().cloned())
       .commit(gb);
   }
   RadlrResult::Ok(())

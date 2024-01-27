@@ -23,10 +23,11 @@ pub(crate) fn handle_completed_item<'follow>(
   let first = completed[0];
 
   if first.kernel.origin == Origin::GoalCompleteOOS {
-    GraphNodeBuilder::new()
-      .set_type(StateType::NonTermCompleteOOS)
-      .set_build_state(GraphBuildState::Normal)
-      .set_sym(sym)
+    StagedNode::new()
+      .parent(node.clone())
+      .ty(StateType::NonTermCompleteOOS)
+      .build_state(GraphBuildState::Normal)
+      .sym(sym)
       .make_leaf()
       .commit(gb);
   } else if ____is_scan____ {
@@ -54,13 +55,14 @@ fn complete_regular(
   #[cfg(debug_assertions)]
   debug_assert!(!root_item.from_goto_origin || root_item.goto_distance > 0, "{:?}", root_item);
 
-  GraphNodeBuilder::new()
-    .set_type(StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize - (root_item.from_goto_origin as usize)))
-    .set_build_state(GraphBuildState::Normal)
-    .set_sym(sym)
+  StagedNode::new()
+    .parent(node.clone())
+    .ty(StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize - (root_item.from_goto_origin as usize)))
+    .build_state(GraphBuildState::Normal)
+    .sym(sym)
     .make_leaf()
     .set_reduce_item(root_item)
-    .set_kernel_items([root_item].into_iter())
+    .kernel_items([root_item].into_iter())
     .commit(gb);
   //  }
 }
@@ -82,17 +84,18 @@ fn complete_scan(
   let is_continue = !follow.is_empty();
   let completes_goal = !goals.is_empty();
 
-  let state = GraphNodeBuilder::new()
-    .set_type(match (is_continue, goals.first().map(|d| d.origin)) {
+  let state = StagedNode::new()
+    .parent(node.clone())
+    .ty(match (is_continue, goals.first().map(|d| d.origin)) {
       (true, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignAndFollow(tok_id),
       (false, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignToken(tok_id),
       (true, _) => StateType::Follow,
       (false, _) => StateType::CompleteToken,
     })
-    .set_build_state(GraphBuildState::Normal)
-    .set_sym(sym)
+    .build_state(GraphBuildState::Normal)
+    .sym(sym)
     .set_reduce_item(first.kernel)
-    .set_kernel_items(follow.iter().cloned());
+    .kernel_items(follow.iter().cloned());
 
   let _ = if is_continue {
     if completes_goal {

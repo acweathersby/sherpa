@@ -1,5 +1,4 @@
 use super::{
-  errors::peek_not_allowed_error,
   flow::{
     handle_fork,
     handle_nonterminal_shift,
@@ -27,7 +26,7 @@ pub(crate) fn handle_kernel_items(gb: &mut ConcurrentGraphBuilder, pred: &GraphN
     return Ok(());
   }
 
-  handle_cst_actions(gb, pred);
+  handle_cst_actions(gb, pred)?;
 
   let max_completed_precedence = handle_completed_items(gb, pred, &mut groups, pred.is_scanner())?;
 
@@ -35,24 +34,28 @@ pub(crate) fn handle_kernel_items(gb: &mut ConcurrentGraphBuilder, pred: &GraphN
 
   handle_incomplete_items(gb, pred, groups)?;
 
-  handle_nonterminal_shift(gb, pred)?;
+  let update_gotos = handle_nonterminal_shift(gb, pred)?;
+
+  gb.commit(update_gotos, pred.id());
 
   Ok(())
 }
 
 /// Insert non-terminal shift actions
-fn handle_cst_actions(gb: &mut ConcurrentGraphBuilder, pred: &GraphNodeShared) {
+fn handle_cst_actions(gb: &mut ConcurrentGraphBuilder, pred: &GraphNodeShared) -> RadlrResult<()> {
   if gb.config().ALLOW_CST_NONTERM_SHIFT && pred.build_state() == GraphBuildState::Normal {
     let d = &gb.db_rc();
     let mode = pred.graph_type();
     for nonterm in pred.kernel_items().iter().filter(|i| i.is_nonterm(mode, d)) {
-      GraphNodeBuilder::new()
-        .set_build_state(GraphBuildState::Normal)
+      StagedNode::new()
+        .parent(pred.clone())
+        .build_state(GraphBuildState::Normal)
         .add_kernel_items([nonterm.try_increment()].into_iter())
-        .set_type(StateType::CSTNodeAccept(nonterm.nonterm_index_at_sym(mode, d).unwrap()))
+        .ty(StateType::CSTNodeAccept(nonterm.nonterm_index_at_sym(mode, d).unwrap()))
         .commit(gb);
     }
   }
+  Ok(())
 }
 
 /// Iterate over each item's closure and collect the terminal transition symbols

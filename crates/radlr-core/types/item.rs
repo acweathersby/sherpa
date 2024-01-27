@@ -425,6 +425,16 @@ impl Item {
     }
   }
 
+  pub fn precedent_db_key_at_sym(&self, mode: GraphType, db: &ParserDatabase) -> Option<PrecedentDBTerm> {
+    match self.sym_id(db) {
+      SymbolId::DBNonTerminalToken { sym_key, .. } if mode == GraphType::Parser => {
+        sym_key.map(|sym_key| (sym_key, self.token_precedence(db), false).into())
+      }
+      SymbolId::DBToken { key: index } => Some((index, self.token_precedence(db), false).into()),
+      _ => None,
+    }
+  }
+
   #[inline]
   /// The non-terminal the rule reduces to
   pub fn nonterm_index(&self, db: &ParserDatabase) -> DBNonTermKey {
@@ -724,7 +734,7 @@ fn item_attributes() -> RadlrResult<()> {
 
   assert_eq!(item.is_canonical(), true);
 
-  let item = item.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(StateId(0));
+  let item = item.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(StateId(0, GraphIdSubType::Root));
 
   assert_eq!(item.is_canonical(), false);
 

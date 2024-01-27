@@ -32,15 +32,19 @@ pub(crate) fn handle_nonterminal_shift(gb: &mut ConcurrentGraphBuilder, pred: &G
     closure
   }));
 
-  let out_items = gb.get_pending_items();
+  let out_items: ItemSet = gb
+    .get_pending_items()
+    .into_iter()
+    .filter(|i| i.origin_state == parent_id && (!kernel_base.contains(i) || i.is_initial()))
+    .collect();
 
   let is_at_root = parent_id.is_root();
 
-  let out_items: ItemSet = if false && parent_id.is_root() {
+  /*   let out_items: ItemSet = if false && parent_id.is_root() {
     out_items
   } else {
     out_items.into_iter().filter(|i| i.origin_state == parent_id && (!kernel_base.contains(i) || i.is_initial())).collect()
-  };
+  }; */
 
   if out_items.is_empty() {
     return Ok(false);
@@ -114,37 +118,36 @@ pub(crate) fn handle_nonterminal_shift(gb: &mut ConcurrentGraphBuilder, pred: &G
     // A State following a goto point must either end with a return to that GOTO or
     // a completion of the gotos kernel items.
 
-    let state = GraphNodeBuilder::new()
-      .set_build_state(GraphBuildState::NormalGoto)
-      .set_parent(pred.clone())
-      .set_sym((target_nonterm.to_sym(), 0).into())
-      .set_type(nterm_shift_type)
-      .set_kernel_items(incremented_items.into_iter().map(|i| i))
-      .commit(gb)?;
-
-    if are_shifting_a_goal_nonterm && !contains_completed_kernel_items {
-      GraphNodeBuilder::new()
-        .set_build_state(GraphBuildState::Leaf)
-        .set_parent(state)
-        .set_sym((SymbolId::Default, 0).into())
-        .set_type(StateType::NonTermCompleteOOS)
-        .make_leaf()
-        .commit(gb)?;
-    }
+    StagedNode::new()
+      .build_state(GraphBuildState::NormalGoto)
+      .parent(pred.clone())
+      .sym((target_nonterm.to_sym(), 0).into())
+      .ty(nterm_shift_type)
+      .pnc(
+        Box::new(move |s, _, _| {
+          vec![StagedNode::new()
+            .build_state(GraphBuildState::Leaf)
+            .parent(s.clone())
+            .sym((SymbolId::Default, 0).into())
+            .ty(StateType::NonTermCompleteOOS)
+            .make_leaf()]
+        }),
+        PostNodeConstructorData::None,
+      )
+      .kernel_items(incremented_items.into_iter().map(|i| i))
+      .commit(gb);
   }
 
   // The remaining non-terminals are comprised of accept items for this state.
   for nonterm_id in kernel_nterm_ids {
-    GraphNodeBuilder::new()
-      .set_build_state(GraphBuildState::Leaf)
-      .set_parent(pred.clone())
-      .set_sym((nonterm_id.to_sym(), 0).into())
-      .set_type(StateType::NonTerminalComplete)
+    StagedNode::new()
+      .build_state(GraphBuildState::Leaf)
+      .parent(pred.clone())
+      .sym((nonterm_id.to_sym(), 0).into())
+      .ty(StateType::NonTerminalComplete)
       .make_leaf()
       .commit(gb);
   }
-
-  increment_gotos(gb, pred);
 
   RadlrResult::Ok(true)
 }
@@ -173,37 +176,4 @@ fn get_used_nonterms(
   }
 
   used_nterm_items
-}
-
-fn increment_gotos(gb: &mut ConcurrentGraphBuilder, node: &GraphNodeShared) {
-  let current_id = node.id();
-
-  gb.iter_pending_states_mut(&mut |sb| {
-    /*     let peek_items = sb
-      .get_peek_resolve_items()
-      .map(|i| i.map(|(i, PeekGroup { items, is_oos })| (i, *is_oos, items.clone())).collect::<Vec<_>>());
-    if let Some(peek_resolve_items) = peek_items {
-      let old_kernel_items = sb.state_ref().get_kernel_items().clone();
-      let mut new_kernel_items: Items = Default::default();
-      for (v, is_oos, items) in peek_resolve_items {
-        let old_origin = Origin::Peek(v);
-        let new_items =
-          items.iter().map(|i| if i.origin_state.0 == current_id.0 { i.as_goto_origin() } else { i.increment_goto() });
-
-        let origin = sb.set_peek_resolve_state(new_items, is_oos);
-
-        new_kernel_items.extend(old_kernel_items.iter().filter(|i| i.origin == old_origin).map(|i| i.to_origin(origin)));
-      }
-
-      sb.set_kernel_items(new_kernel_items.into_iter());
-    } else { */
-    let items = sb
-      .get_kernel_items()
-      .iter()
-      .map(|i| if i.origin_state.0 == current_id.0 { i.as_goto_origin() } else { i.increment_goto() })
-      .collect::<Items>();
-
-    sb.set_kernel_items_mut(items.into_iter());
-    //  }
-  });
 }

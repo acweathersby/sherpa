@@ -655,7 +655,7 @@ impl IndexMut<StateId> for GraphHost {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct StateId(pub usize, GraphIdSubType);
+pub struct StateId(pub usize, pub GraphIdSubType);
 
 impl Debug for StateId {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -724,6 +724,10 @@ impl StateId {
 
   pub fn is_root(&self) -> bool {
     self.subtype() == GraphIdSubType::Root && self.index() == 0
+  }
+
+  pub fn is_rootish(&self) -> bool {
+    self.subtype() == GraphIdSubType::Root
   }
 
   pub fn is_post_reduce(&self) -> bool {

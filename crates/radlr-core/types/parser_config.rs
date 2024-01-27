@@ -1,6 +1,7 @@
 #[derive(Clone, Copy)]
 #[allow(non_snake_case)]
 /// Settings for configuring the type of parser Radlr will generate.
+#[derive(Debug)] 
 pub struct ParserConfig {
   /// When enable, recursive descent style `Call` states will be generated
   pub ALLOW_CALLS: bool,
@@ -270,7 +271,7 @@ impl std::ops::Add for &ParserClassification {
 
 impl ParserClassification {
   /// Returns the classification as algorithm acronym string.
-  ///
+  /// 
   /// This can be one of `LL | LR | RD | RAD | GLL | GLR | GRD | GRAD`.
   ///
   /// The string may also be postfixed with the maximum level of token
