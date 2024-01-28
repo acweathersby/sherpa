@@ -1,13 +1,18 @@
 use super::super::graph::*;
 use crate::{
   compile::states::build_graph::graph::{GraphBuildState, Origin, StateType},
+  journal::config,
   types::*,
   utils::hash_group_btreemap,
 };
 use std::collections::{BTreeSet, VecDeque};
 
-pub(crate) fn handle_nonterminal_shift(gb: &mut ConcurrentGraphBuilder, pred: &GraphNodeShared) -> RadlrResult<bool> {
-  if pred.is_scanner() || !gb.config().ALLOW_LR || pred.state_type().currently_peeking() {
+pub(crate) fn handle_nonterminal_shift(
+  gb: &mut ConcurrentGraphBuilder,
+  pred: &SharedGraphNode,
+  config: &ParserConfig,
+) -> RadlrResult<bool> {
+  if pred.is_scanner() || !config.ALLOW_LR || pred.state_type().currently_peeking() {
     return Ok(false);
   };
 
@@ -118,14 +123,14 @@ pub(crate) fn handle_nonterminal_shift(gb: &mut ConcurrentGraphBuilder, pred: &G
     // A State following a goto point must either end with a return to that GOTO or
     // a completion of the gotos kernel items.
 
-    StagedNode::new()
+    StagedNode::new(gb)
       .build_state(GraphBuildState::NormalGoto)
       .parent(pred.clone())
       .sym((target_nonterm.to_sym(), 0).into())
       .ty(nterm_shift_type)
       .pnc(
-        Box::new(move |s, _, _| {
-          vec![StagedNode::new()
+        Box::new(move |s, b, _| {
+          vec![StagedNode::new(b)
             .build_state(GraphBuildState::Leaf)
             .parent(s.clone())
             .sym((SymbolId::Default, 0).into())
@@ -140,7 +145,7 @@ pub(crate) fn handle_nonterminal_shift(gb: &mut ConcurrentGraphBuilder, pred: &G
 
   // The remaining non-terminals are comprised of accept items for this state.
   for nonterm_id in kernel_nterm_ids {
-    StagedNode::new()
+    StagedNode::new(gb)
       .build_state(GraphBuildState::Leaf)
       .parent(pred.clone())
       .sym((nonterm_id.to_sym(), 0).into())
@@ -154,7 +159,7 @@ pub(crate) fn handle_nonterminal_shift(gb: &mut ConcurrentGraphBuilder, pred: &G
 
 fn get_used_nonterms(
   gb: &ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   out_items: BTreeSet<Item>,
   nterm_items: BTreeSet<Item>,
   kernel_base: &BTreeSet<Item>,

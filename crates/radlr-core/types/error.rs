@@ -1,4 +1,4 @@
-use crate::proxy::Array;
+use crate::{compile::states::build_states_beta::StateConstructionError, proxy::Array};
 use radlr_rust_runtime::{
   deprecate::RadlrParseError,
   types::{BlameColor, ParserError, Token},
@@ -24,6 +24,7 @@ pub enum ErrorClass {
   ForbiddenFork,
   GraphConstruction,
   Formatting,
+  StateConstructionError,
   Extended(u32),
 }
 
@@ -151,6 +152,9 @@ pub enum RadlrError {
 
   /// Plaintext error message
   StaticText(&'static str),
+
+  /// Error Occured During parse state construction
+  StateConstructionError(StateConstructionError),
 
   /// Multiple Errors
   Multi(Vec<RadlrError>),
@@ -313,6 +317,7 @@ impl std::fmt::Display for RadlrError {
 impl std::fmt::Debug for RadlrError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
+      StateConstructionError(err) => err.fmt(f),
       SourceError { msg, id, inline_msg, loc, path, ps_msg, .. } => f.write_fmt(format_args!(
         "\n{} [{}:{}]\n{}\n\n{}\n\n{}\n",
         id.to_string(),

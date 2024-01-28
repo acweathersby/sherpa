@@ -45,7 +45,8 @@ pub(super) enum ReduceReduceConflictResolution {
 
 pub(super) fn resolve_reduce_reduce_conflict(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   prec_sym: PrecedentSymbol,
   follow_pairs: Lookaheads,
 ) -> RadlrResult<ReduceReduceConflictResolution> {
@@ -54,8 +55,8 @@ pub(super) fn resolve_reduce_reduce_conflict(
   } else {
     match calculate_k_multi(gb, node, follow_pairs.iter().map(|i| [i].into_iter()).collect(), MAX_EVAL_K_RR) {
       KCalcResults::K(k) => {
-        if !gb.config().ALLOW_PEEKING || k >= MAX_EVAL_K_RR {
-          if gb.config().ALLOW_CONTEXT_SPLITTING {
+        if !config.ALLOW_PEEKING || k >= MAX_EVAL_K_RR {
+          if config.ALLOW_CONTEXT_SPLITTING {
             return Ok(ReduceReduceConflictResolution::Fork(follow_pairs));
           }
           return peek_not_allowed_error(
@@ -63,13 +64,13 @@ pub(super) fn resolve_reduce_reduce_conflict(
             follow_pairs.into_iter().map(|i| vec![i]).collect::<Vec<_>>().as_slice(),
             &format!("Either peeking or forking must be enabled to resolve this ambiguity, which requires a lookahead of k={k}"),
           );
-        } else if k > gb.config().max_k {
+        } else if k > config.max_k {
           return peek_not_allowed_error(
             gb,
             follow_pairs.into_iter().map(|i| vec![i]).collect::<Vec<_>>().as_slice(),
             &format!(
               "A lookahead of k={k} is required, but lookahead cannot be greater than k={} with the current configuration",
-              gb.config().max_k
+              config.max_k
             ),
           );
         }
@@ -114,7 +115,8 @@ pub(super) fn resolve_reduce_reduce_conflict(
 
 pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   shifts: T,
   reduces: T,
 ) -> RadlrResult<ShiftReduceConflictResolution> {
@@ -173,8 +175,8 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
   /// the goal non-terminal
   match calculate_k(gb, node, reduces.clone(), shifts.clone(), MAX_EVAL_K_SR) {
     KCalcResults::K(k) => {
-      if !gb.config().ALLOW_PEEKING {
-        if gb.config().ALLOW_CONTEXT_SPLITTING {
+      if !config.ALLOW_PEEKING {
+        if config.ALLOW_CONTEXT_SPLITTING {
           Ok(ShiftReduceConflictResolution::Fork)
         } else {
           peek_not_allowed_error(
@@ -183,14 +185,14 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
             &format!("Either peeking or forking must be enabled to resolve this ambiguity, which requires a lookahead of k={k}"),
           )
         }
-      } else if k > gb.config().max_k {
+      } else if k > config.max_k {
         peek_not_allowed_error(gb, &[shifts.cloned().collect(), reduces.cloned().collect()], "")
       } else {
         Ok(ShiftReduceConflictResolution::Peek(k as u16))
       }
     }
     KCalcResults::RecursiveAt(k) => {
-      if gb.config().ALLOW_CONTEXT_SPLITTING {
+      if config.ALLOW_CONTEXT_SPLITTING {
         Ok(ShiftReduceConflictResolution::Fork)
       } else {
         gb.declare_recursive_peek_error();
@@ -202,8 +204,8 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
       }
     }
     KCalcResults::LargerThanMaxLimit(k) => {
-      if !gb.config().ALLOW_PEEKING {
-        if gb.config().ALLOW_CONTEXT_SPLITTING {
+      if !config.ALLOW_PEEKING {
+        if config.ALLOW_CONTEXT_SPLITTING {
           return Ok(ShiftReduceConflictResolution::Fork);
         }
         peek_not_allowed_error(
@@ -218,7 +220,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
       Ok(ShiftReduceConflictResolution::Peek(k as u16))
     }
     KCalcResults::Unpeekable => {
-      if gb.config().ALLOW_CONTEXT_SPLITTING {
+      if config.ALLOW_CONTEXT_SPLITTING {
         return Ok(ShiftReduceConflictResolution::Fork);
       } else {
         peek_not_allowed_error(
@@ -248,7 +250,7 @@ enum KCalcResults {
 fn get_conflict_follow_artifacts(
   i_reduce: &Vec<Item>,
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
 ) -> (OrderedSet<Item>, OrderedSet<DBTermKey>) {
   let mut out = OrderedSet::default();
   let mut syms = OrderedSet::default();
@@ -271,7 +273,7 @@ fn get_conflict_follow_artifacts(
 
 fn calculate_k<'a, A: TransitionPairRefIter<'a> + Clone, B: TransitionPairRefIter<'a> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   reduces: B,
   shifts: A,
   max_eval: usize,
@@ -323,7 +325,7 @@ fn calculate_k<'a, A: TransitionPairRefIter<'a> + Clone, B: TransitionPairRefIte
 
 fn calculate_k_multi<'a, T: TransitionPairRefIter<'a> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   transition_groups: Vec<T>,
   max_eval: usize,
 ) -> KCalcResults {
@@ -373,7 +375,8 @@ fn calculate_k_multi<'a, T: TransitionPairRefIter<'a> + Clone>(
 
 pub(crate) fn resolve_conflicting_tokens<'a, T: TransitionPairRefIter<'a> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   sym: SymbolId,
   completed: T,
 ) -> RadlrResult<()> {
@@ -396,7 +399,7 @@ pub(crate) fn resolve_conflicting_tokens<'a, T: TransitionPairRefIter<'a> + Clon
     }
 
     if let Some(completed_items) = _completed {
-      handle_completed_item(gb, node, completed_items.clone(), (sym, 0).into())
+      handle_completed_item(gb, node, config, completed_items.clone(), (sym, 0).into())
     } else {
       Err(conflicting_symbols_error(gb, node, groups))
     }

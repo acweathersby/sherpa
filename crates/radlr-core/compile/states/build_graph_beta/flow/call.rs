@@ -6,9 +6,9 @@ use crate::{
 
 pub struct CreateCallResult {
   /// `true` if the state is a KernelCall
-  pub is_kernel: bool,
+  pub is_kernel:         bool,
   /// The new state that will perform the call
-  pub node: StagedNode,
+  pub node:              StagedNode,
   /// A list of items from the parent closure that transition on the called
   /// non-terminal.
   pub _transition_items: Items,
@@ -21,14 +21,15 @@ pub struct CreateCallResult {
 /// )
 pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   group: T,
   sym: PrecedentSymbol,
 ) -> Option<CreateCallResult> {
   let db = gb.db();
   let ____is_scan____ = node.is_scanner();
-  let ____allow_rd____: bool = gb.config().ALLOW_CALLS || ____is_scan____;
-  let ____allow_ra____: bool = gb.config().ALLOW_LR || ____is_scan____;
+  let ____allow_rd____: bool = config.ALLOW_CALLS || ____is_scan____;
+  let ____allow_ra____: bool = config.ALLOW_LR || ____is_scan____;
 
   if
   /* TODO(anthony) remove this after scan peek is implemented >>> */
@@ -51,8 +52,8 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
           let items = group.to_kernel().to_vec();
 
           return Some(CreateCallResult {
-            is_kernel: true,
-            node: StagedNode::new()
+            is_kernel:         true,
+            node:              StagedNode::new(gb)
               .build_state(GraphBuildState::Normal)
               .parent(node.clone())
               .sym(sym)
@@ -73,8 +74,8 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
 
   if let Some((nonterm, items)) = climb_nonterms(gb, node, group) {
     return Some(CreateCallResult {
-      is_kernel: false,
-      node: StagedNode::new()
+      is_kernel:         false,
+      node:              StagedNode::new(gb)
         .build_state(GraphBuildState::Normal)
         .parent(node.clone())
         .sym(sym)

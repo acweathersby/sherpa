@@ -3,8 +3,8 @@ use_small_heuristics = "Max"
 # Line Widths
 max_width = 130
 
-enum_discrim_align_threshold = 10
-struct_field_align_threshold = 10
+enum_discrim_align_threshold = 20
+struct_field_align_threshold = 20
 newline_style = "Unix"
 tab_spaces = 2
 

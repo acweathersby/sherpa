@@ -13,18 +13,16 @@ use std::collections::{BTreeSet, HashSet};
 
 pub(crate) fn create_fork<'graph_iter, 'follow, I: Iterator<Item = Item>>(
   gb: &'graph_iter mut ConcurrentGraphBuilder,
-  pred: &GraphNodeShared,
+  pred: &SharedGraphNode,
+  config: &ParserConfig,
   sym: PrecedentSymbol,
   items: I,
 ) -> RadlrResult<StagedNode> {
-  debug_assert!(
-    gb.config().ALLOW_PEEKING && gb.config().max_k > 1,
-    "Peek states should not be created when peeking is not allowed or k=1"
-  );
+  debug_assert!(config.ALLOW_PEEKING && config.max_k > 1, "Peek states should not be created when peeking is not allowed or k=1");
   debug_assert!(!pred.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
 
   Ok(
-    StagedNode::new()
+    StagedNode::new(gb)
       .build_state(GraphBuildState::Normal)
       .parent(pred.clone())
       .sym(sym)
@@ -33,10 +31,10 @@ pub(crate) fn create_fork<'graph_iter, 'follow, I: Iterator<Item = Item>>(
   )
 }
 
-pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut ConcurrentGraphBuilder, pred: &GraphNodeShared) -> bool {
+pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode) -> bool {
   if matches!(pred.state_type(), StateType::ForkInitiator) {
     for kernel_item in pred.kernel_items() {
-      StagedNode::new()
+      StagedNode::new(gb)
         .build_state(GraphBuildState::Normal)
         .parent(pred.clone())
         .sym(Default::default())
@@ -50,7 +48,7 @@ pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut ConcurrentGraphBuilder, pred: &G
   }
 }
 
-pub(crate) fn convert_peek_root_state_to_fork(gb: &mut ConcurrentGraphBuilder, pred: &GraphNodeShared) -> Result<(), RadlrError> {
+pub(crate) fn convert_peek_root_state_to_fork(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode) -> Result<(), RadlrError> {
   Ok(loop {
     todo!("Convert root peek state to fork");
     /* if matches!(pred.state_type(), StateType::Peek(INITIAL_PEEK_K)) {

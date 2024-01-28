@@ -201,15 +201,15 @@ impl StateType {
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct GraphState {
-  id: StateId,
-  build_state: GraphBuildState,
-  parent: StateId,
-  t_type: StateType,
+  id:             StateId,
+  build_state:    GraphBuildState,
+  parent:         StateId,
+  t_type:         StateType,
   canonical_hash: u64,
   lookahead_hash: u64,
-  symbol_set_id: u64,
-  leaf_state: bool,
-  used: bool,
+  symbol_set_id:  u64,
+  leaf_state:     bool,
+  used:           bool,
 }
 
 impl<'graph> GraphState {
@@ -408,10 +408,10 @@ impl<'graph> GraphStateReference<'graph> for GraphStateRef<'graph> {
 
 #[derive(Clone, Copy)]
 pub struct GotoGraphStateRef<'graph> {
-  pub id: StateId,
-  pub goto_id: StateId,
-  pub graph: &'graph GraphHost,
-  pub nonterm_items: &'graph ItemSet,
+  pub id:             StateId,
+  pub goto_id:        StateId,
+  pub graph:          &'graph GraphHost,
+  pub nonterm_items:  &'graph ItemSet,
   pub canonical_hash: u64,
 }
 
@@ -501,19 +501,19 @@ pub struct PeekGroup {
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct GraphHost {
-  pub leaf_states: OrderedSet<StateId>,
-  pub states: Array<GraphState>,
+  pub leaf_states:        OrderedSet<StateId>,
+  pub states:             Array<GraphState>,
   pub peek_resolve_items: OrderedMap<u32, PeekGroup>,
-  pub peek_resolve_ids: OrderedMap<StateId, Vec<u32>>,
+  pub peek_resolve_ids:   OrderedMap<StateId, Vec<u32>>,
   pub state_predecessors: OrderedMap<StateId, OrderedSet<StateId>>,
-  pub term_symbol: OrderedMap<StateId, PrecedentSymbol>,
-  pub reduce_item: OrderedMap<StateId, Item>,
-  pub kernel_items: OrderedMap<StateId, ItemSet>,
-  pub nonterm_items: OrderedMap<StateId, ItemSet>,
-  pub db: SharedParserDatabase,
-  pub name: IString,
-  pub graph_type: GraphType,
-  pub symbol_sets: Map<u64, OrderedSet<DBTermKey>>,
+  pub term_symbol:        OrderedMap<StateId, PrecedentSymbol>,
+  pub reduce_item:        OrderedMap<StateId, Item>,
+  pub kernel_items:       OrderedMap<StateId, ItemSet>,
+  pub nonterm_items:      OrderedMap<StateId, ItemSet>,
+  pub db:                 SharedParserDatabase,
+  pub name:               IString,
+  pub graph_type:         GraphType,
+  pub symbol_sets:        Map<u64, OrderedSet<DBTermKey>>,
 }
 
 impl<'follow: 'follow> GraphHost {
@@ -1484,11 +1484,11 @@ pub struct GraphIterator<'reversed> {
 impl<'reversed> GraphIterator<'reversed> {
   fn get_result(&self) -> (GraphStateRef<'reversed>, Option<&'reversed ScannerData>, Vec<GraphStateRef<'reversed>>) {
     let state = self.internal.queue[self.cursor as usize];
-    let reveresed = self.internal;
-    let graph = &reveresed.graph;
+    let reversed = self.internal;
+    let graph = &reversed.graph;
     (
       graph[state].as_ref(graph),
-      reveresed.scanner_links.get(&state).and_then(|s| reveresed.scanners.get(s)),
+      reversed.scanner_links.get(&state).and_then(|s| reversed.scanners.get(s)),
       self.internal.links.get(&state).unwrap_or(&self.internal.empty_hash).iter().map(|s| graph[*s].as_ref(graph)).collect(),
     )
   }

@@ -385,13 +385,13 @@ impl RadlrGraph {
 // ----------------------------------------------------------------------------------------
 
 pub struct RadlrIRParser {
-  j: Journal,
-  db: SharedParserDatabase,
-  config: ParserConfig,
-  states: ParseStatesVec,
+  j:              Journal,
+  db:             SharedParserDatabase,
+  config:         ParserConfig,
+  states:         ParseStatesVec,
   classification: ParserClassification,
-  is_optimized: bool,
-  pub report: OptimizationReport,
+  is_optimized:   bool,
+  pub report:     OptimizationReport,
 }
 
 impl JournalReporter for RadlrIRParser {
@@ -449,11 +449,11 @@ pub fn empty_source_path() -> RadlrResult<()> {
 }
 
 pub struct TestPackage {
-  pub journal: Journal,
-  pub states: ParseStatesVec,
-  pub db: SharedParserDatabase,
-  pub config: ParserConfig,
-  pub report: OptimizationReport,
+  pub journal:        Journal,
+  pub states:         ParseStatesVec,
+  pub db:             SharedParserDatabase,
+  pub config:         ParserConfig,
+  pub report:         OptimizationReport,
   pub classification: ParserClassification,
 }
 
@@ -492,11 +492,11 @@ impl ParserStore for TestPackage {
 impl From<RadlrIRParser> for TestPackage {
   fn from(value: RadlrIRParser) -> Self {
     TestPackage {
-      config: value.config,
-      journal: value.j.transfer(),
-      states: value.states.into_iter().collect(),
-      db: value.db,
-      report: value.report,
+      config:         value.config,
+      journal:        value.j.transfer(),
+      states:         value.states.into_iter().collect(),
+      db:             value.db,
+      report:         value.report,
       classification: value.classification,
     }
   }

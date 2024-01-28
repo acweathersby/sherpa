@@ -14,7 +14,8 @@ use crate::{
 
 pub(crate) fn handle_completed_item<'follow>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   completed: Lookaheads,
   sym: PrecedentSymbol,
 ) -> RadlrResult<()> {
@@ -23,7 +24,7 @@ pub(crate) fn handle_completed_item<'follow>(
   let first = completed[0];
 
   if first.kernel.origin == Origin::GoalCompleteOOS {
-    StagedNode::new()
+    StagedNode::new(gb)
       .parent(node.clone())
       .ty(StateType::NonTermCompleteOOS)
       .build_state(GraphBuildState::Normal)
@@ -33,7 +34,7 @@ pub(crate) fn handle_completed_item<'follow>(
   } else if ____is_scan____ {
     complete_scan(completed, gb, node, sym, first)
   } else {
-    complete_regular(completed, gb, node, sym)
+    complete_regular(completed, gb, node, config, sym)
   }
 
   RadlrResult::Ok(())
@@ -42,20 +43,21 @@ pub(crate) fn handle_completed_item<'follow>(
 fn complete_regular(
   completed: Vec<TransitionPair>,
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   sym: PrecedentSymbol,
 ) {
   let root_item = completed[0].kernel;
   let ____is_scan____ = node.is_scanner();
-  let ____allow_rd____: bool = gb.config().ALLOW_CALLS || ____is_scan____;
-  let ____allow_ra____: bool = gb.config().ALLOW_LR || ____is_scan____;
-  let ____allow_fork____: bool = gb.config().ALLOW_CONTEXT_SPLITTING && false; // Forking is disabled
-  let ____allow_peek____: bool = gb.config().ALLOW_PEEKING;
+  let ____allow_rd____: bool = config.ALLOW_CALLS || ____is_scan____;
+  let ____allow_ra____: bool = config.ALLOW_LR || ____is_scan____;
+  let ____allow_fork____: bool = config.ALLOW_CONTEXT_SPLITTING && false; // Forking is disabled
+  let ____allow_peek____: bool = config.ALLOW_PEEKING;
 
   #[cfg(debug_assertions)]
   debug_assert!(!root_item.from_goto_origin || root_item.goto_distance > 0, "{:?}", root_item);
 
-  StagedNode::new()
+  StagedNode::new(gb)
     .parent(node.clone())
     .ty(StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize - (root_item.from_goto_origin as usize)))
     .build_state(GraphBuildState::Normal)
@@ -70,7 +72,7 @@ fn complete_regular(
 fn complete_scan(
   completed: Vec<TransitionPair>,
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   sym: PrecedentSymbol,
   first: TransitionPair,
 ) {
@@ -84,7 +86,7 @@ fn complete_scan(
   let is_continue = !follow.is_empty();
   let completes_goal = !goals.is_empty();
 
-  let state = StagedNode::new()
+  let state = StagedNode::new(gb)
     .parent(node.clone())
     .ty(match (is_continue, goals.first().map(|d| d.origin)) {
       (true, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignAndFollow(tok_id),

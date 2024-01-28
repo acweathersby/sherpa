@@ -34,7 +34,7 @@ use crate::{
 
 fn create_out_of_scope_complete_state<'a, T: TransitionPairRefIter<'a> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
-  pred: &GraphNodeShared,
+  pred: &SharedGraphNode,
   out_of_scope: T,
   sym: PrecedentSymbol,
 ) {
@@ -44,7 +44,7 @@ fn create_out_of_scope_complete_state<'a, T: TransitionPairRefIter<'a> + Clone>(
       _ => StateType::NonTermCompleteOOS,
     };
 
-    StagedNode::new()
+    StagedNode::new(gb)
       .parent(pred.clone())
       .sym(sym)
       .ty(transition_type)
@@ -56,11 +56,11 @@ fn create_out_of_scope_complete_state<'a, T: TransitionPairRefIter<'a> + Clone>(
 
 pub(crate) fn handle_regular_incomplete_items(
   gb: &mut ConcurrentGraphBuilder,
-  pred: &GraphNodeShared,
+  pred: &SharedGraphNode,
+  config: &ParserConfig,
   prec_sym: PrecedentSymbol,
   (prec, group): TransitionGroup,
 ) -> RadlrResult<()> {
-  let config = gb.config();
   let ____is_scan____ = pred.is_scanner();
   let ____allow_rd____: bool = config.ALLOW_CALLS || ____is_scan____;
   let ____allow_lr____: bool = config.ALLOW_LR || ____is_scan____;
@@ -82,12 +82,12 @@ pub(crate) fn handle_regular_incomplete_items(
       if !____allow_peek____ {
         peek_not_allowed_error(gb, &[out_of_scope.cloned().collect(), in_scope.cloned().collect()], "")?;
       } else {
-        create_peek(gb, pred, prec_sym, group.iter(), None)?;
+        create_peek(gb, pred, config, prec_sym, group.iter(), None)?;
       }
     }
     (len, _) => {
       if let Some(CreateCallResult { is_kernel, node, _transition_items }) =
-        ____allow_rd____.then(|| create_call(gb, pred, in_scope.clone(), prec_sym)).flatten()
+        ____allow_rd____.then(|| create_call(gb, pred, config, in_scope.clone(), prec_sym)).flatten()
       {
         if is_kernel {
           node.commit(gb);
@@ -100,7 +100,7 @@ pub(crate) fn handle_regular_incomplete_items(
       } else {
         // If can't create call, do LR shift, or peek, or warn about k=1 conflicts.
         if group.iter().all(|p| p.is_kernel_terminal()) {
-          StagedNode::new()
+          StagedNode::new(gb)
             .parent(pred.clone())
             .sym(prec_sym)
             .build_state(GraphBuildState::Normal)
@@ -119,14 +119,14 @@ pub(crate) fn handle_regular_incomplete_items(
               } else {
                 let p = pred.clone();
                 let kernel_item = kernel_item.clone();
-                StagedNode::new()
+                StagedNode::new(gb)
                   .parent(pred.clone())
                   .sym(prec_sym)
                   .build_state(GraphBuildState::Normal)
                   .ty(StateType::Shift)
                   .pnc(
                     Box::new(move |s: &std::sync::Arc<GraphNode>, builder, _| {
-                      vec![StagedNode::new()
+                      vec![StagedNode::new(builder)
                         .parent(p)
                         .sym((kernel_item.sym_id(builder.db()), 0).into())
                         .build_state(GraphBuildState::Normal)
@@ -139,7 +139,7 @@ pub(crate) fn handle_regular_incomplete_items(
                   .commit(gb)
               }
             } else {
-              StagedNode::new()
+              StagedNode::new(gb)
                 .parent(pred.clone())
                 .sym(prec_sym)
                 .build_state(GraphBuildState::Normal)
@@ -149,7 +149,7 @@ pub(crate) fn handle_regular_incomplete_items(
                 .commit(gb);
             }
           } else {
-            StagedNode::new()
+            StagedNode::new(gb)
               .sym(prec_sym)
               .build_state(GraphBuildState::Normal)
               .parent(pred.clone())
@@ -161,7 +161,7 @@ pub(crate) fn handle_regular_incomplete_items(
         } else if ____allow_lr____ {
           let items = in_scope.to_next().try_increment();
 
-          StagedNode::new()
+          StagedNode::new(gb)
             .parent(pred.clone())
             .sym(prec_sym)
             .build_state(GraphBuildState::Normal)
@@ -192,9 +192,10 @@ pub(crate) fn handle_regular_incomplete_items(
 fn single_shift_allowed<'a, T: TransitionPairRefIter<'a> + Clone>(
   in_scope: &T,
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: ParserConfig,
 ) -> bool {
-  let ____allow_lr____: bool = gb.config().ALLOW_LR || node.is_scanner();
+  let ____allow_lr____: bool = config.ALLOW_LR || node.is_scanner();
 
   if ____allow_lr____ {
   } else if let Some(non_term) =
@@ -211,47 +212,48 @@ fn single_shift_allowed<'a, T: TransitionPairRefIter<'a> + Clone>(
 
 pub(crate) fn handle_regular_complete_groups(
   gb: &mut ConcurrentGraphBuilder,
-  pred: &GraphNodeShared,
+  pred: &SharedGraphNode,
+  config: &ParserConfig,
   shift_groups: &mut GroupedFirsts,
   prec_sym: PrecedentSymbol,
   mut lookahead_pairs: Lookaheads,
 ) -> RadlrResult<()> {
   let ____is_scan____ = pred.is_scanner();
-  let ____allow_peek____ = gb.config().ALLOW_PEEKING;
+  let ____allow_peek____ = config.ALLOW_PEEKING;
   let mut cmpl = lookahead_pairs.iter().to_next().to_vec();
   let sym = prec_sym.sym();
   // Non-Peeking States
   match (lookahead_pairs.len(), shift_groups.remove(&prec_sym.sym())) {
     (1, None) => {
-      handle_completed_item(gb, pred, lookahead_pairs, prec_sym)?;
+      handle_completed_item(gb, pred, config, lookahead_pairs, prec_sym)?;
     }
     (2.., None) => {
       if ____is_scan____ {
         // We may be able to continue parsing using follow items, after we
         // determine whether we have symbol ambiguities.
-        resolve_conflicting_tokens(gb, pred, sym, lookahead_pairs.iter())?;
+        resolve_conflicting_tokens(gb, pred, config, sym, lookahead_pairs.iter())?;
       } else if prec_sym.sym() == SymbolId::Default {
         if lookahead_pairs.iter().to_kernel().items_are_the_same_rule() {
-          handle_completed_item(gb, pred, lookahead_pairs, prec_sym)?;
+          handle_completed_item(gb, pred, config, lookahead_pairs, prec_sym)?;
         } else {
           todo!("(anthony) Handle default completed item conflicts (e.i. kernel goal items)")
         }
       } else if lookahead_pairs.iter().to_kernel().indices().len() == 1 {
         // The same non-terminal is generated from this completed item, regardless
         // of the origins. This is a valid outcome.
-        handle_completed_item(gb, pred, lookahead_pairs, prec_sym)?;
+        handle_completed_item(gb, pred, config, lookahead_pairs, prec_sym)?;
       } else if lookahead_pairs.iter().all(|p| p.is_out_of_scope()) {
         let item: Item = *o_to_r(cmpl.first(), "Item list is empty")?;
-        handle_completed_item(gb, pred, vec![(item, item, pred.graph_type(), gb.db()).into()], prec_sym)?;
+        handle_completed_item(gb, pred, config, vec![(item, item, pred.graph_type(), gb.db()).into()], prec_sym)?;
       } else {
-        match resolve_reduce_reduce_conflict(gb, pred, prec_sym, lookahead_pairs)? {
+        match resolve_reduce_reduce_conflict(gb, pred, config, prec_sym, lookahead_pairs)? {
           ReduceReduceConflictResolution::Nothing => {}
           ReduceReduceConflictResolution::Fork(lookahead_pairs) => {
-            create_fork(gb, pred, prec_sym, lookahead_pairs.iter().map(|i| i.kernel))?.goto_inc().commit(gb);
+            create_fork(gb, pred, config, prec_sym, lookahead_pairs.iter().map(|i| i.kernel))?.goto_inc().commit(gb);
           }
           ReduceReduceConflictResolution::Reduce(item) => todo!("Handle reduce result from reduce-reduce conflict resolution"),
           ReduceReduceConflictResolution::Peek(max_k, follow_pairs) => {
-            create_peek(gb, pred, prec_sym, [].iter(), Some(follow_pairs.iter()))?.commit(gb);
+            create_peek(gb, pred, config, prec_sym, [].iter(), Some(follow_pairs.iter()))?.commit(gb);
           }
         }
       }
@@ -260,22 +262,22 @@ pub(crate) fn handle_regular_complete_groups(
       if ____is_scan____ {
         let item: Item = cmpl[0];
         lookahead_pairs.extend(group);
-        handle_completed_item(gb, pred, lookahead_pairs, prec_sym)?;
+        handle_completed_item(gb, pred, config, lookahead_pairs, prec_sym)?;
       } else if group.iter().all(|i| i.is_out_of_scope()) && lookahead_pairs.iter().all(|i| i.is_out_of_scope()) {
         create_out_of_scope_complete_state(gb, pred, lookahead_pairs.iter(), prec_sym);
       } else {
-        match resolve_shift_reduce_conflict(gb, pred, group.iter(), lookahead_pairs.iter())? {
+        match resolve_shift_reduce_conflict(gb, pred, config, group.iter(), lookahead_pairs.iter())? {
           ShiftReduceConflictResolution::Shift => {
             shift_groups.insert(sym, (prec, group));
           }
           ShiftReduceConflictResolution::Reduce => {
-            handle_completed_groups(gb, pred, &mut Default::default(), sym, lookahead_pairs)?;
+            handle_completed_groups(gb, pred, config, &mut Default::default(), sym, lookahead_pairs)?;
           }
           ShiftReduceConflictResolution::Peek(max_k) => {
-            create_peek(gb, pred, prec_sym, group.iter(), Some(lookahead_pairs.iter()))?.commit(gb);
+            create_peek(gb, pred, config, prec_sym, group.iter(), Some(lookahead_pairs.iter()))?.commit(gb);
           }
           ShiftReduceConflictResolution::Fork => {
-            create_fork(gb, pred, prec_sym, lookahead_pairs.into_iter().chain(group.into_iter()).map(|i| i.kernel))?
+            create_fork(gb, pred, config, prec_sym, lookahead_pairs.into_iter().chain(group.into_iter()).map(|i| i.kernel))?
               .goto_inc()
               .commit(gb);
           }

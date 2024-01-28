@@ -22,15 +22,13 @@ const INITIAL_PEEK_K: u32 = 2;
 
 pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   sym: PrecedentSymbol,
   incomplete_items: Pairs,
   completed_pairs: Option<Pairs>,
 ) -> RadlrResult<StagedNode> {
-  debug_assert!(
-    gb.config().ALLOW_PEEKING && gb.config().max_k > 1,
-    "Peek states should not be created when peeking is not allowed or k=1"
-  );
+  debug_assert!(config.ALLOW_PEEKING && config.max_k > 1, "Peek states should not be created when peeking is not allowed or k=1");
   debug_assert!(!node.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
 
   debug_assert!(
@@ -38,7 +36,7 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
     "Peek states should not be in the resolution"
   );
 
-  let mut state = StagedNode::new().build_state(GraphBuildState::Normal).sym(sym).ty(StateType::Peek(INITIAL_PEEK_K));
+  let mut state = StagedNode::new(gb).build_state(GraphBuildState::Normal).sym(sym).ty(StateType::Peek(INITIAL_PEEK_K));
 
   let state_id = node.id();
 
@@ -139,14 +137,14 @@ fn build_peek_nodes(node: GraphNode, builder: &mut ConcurrentGraphBuilder) -> Gr
 
 fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair>>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   mut resolved: T,
   sym: PrecedentSymbol,
 ) -> RadlrResult<()> {
   let (index, PeekGroup { items, .. }) = get_kernel_items_from_peek_origin(gb, node, resolved.next().unwrap().kernel.origin);
   let staged = items.clone();
 
-  StagedNode::new()
+  StagedNode::new(gb)
     .sym(sym)
     .build_state(GraphBuildState::NormalGoto)
     .ty(StateType::PeekEndComplete(index))
@@ -158,7 +156,7 @@ fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair>>(
 
 pub(crate) fn get_kernel_items_from_peek_origin<'graph, 'db: 'graph>(
   gb: &'graph mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   peek_origin: Origin,
 ) -> (u32, PeekGroup) {
   let Origin::Peek(peek_index) = peek_origin else {
@@ -170,7 +168,7 @@ pub(crate) fn get_kernel_items_from_peek_origin<'graph, 'db: 'graph>(
 
 pub(crate) fn get_kernel_items_from_peek_item<'graph, 'db: 'graph>(
   gb: &'graph mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   peek_item: &Item,
 ) -> PeekGroup {
   let Origin::Peek(peek_index) = peek_item.origin else {
@@ -188,7 +186,8 @@ enum PeekOriginType {
 
 pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   groups: &mut GroupedFirsts,
   prec_sym: PrecedentSymbol,
   follows: Lookaheads,
@@ -235,12 +234,12 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
       let incpl_targets_len = incpl_targets.as_ref().map(|t| t.len()).unwrap_or_default();
 
       match (__oos_targets_len, cmpl_targets_len, incpl_targets_len) {
-        (_, 0, 1..) if gb.config().ALLOW_LR => {
+        (_, 0, 1..) if config.ALLOW_LR => {
           // Can do any number of shifts
           let (origin_index, PeekGroup { items, .. }) = incpl_targets.unwrap().into_iter().next().unwrap();
           let staged = items.clone();
 
-          StagedNode::new()
+          StagedNode::new(gb)
             .sym(prec_sym)
             .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
@@ -251,7 +250,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           // Can do any number of shifts
           let (origin_index, PeekGroup { items, .. }) = incpl_targets.unwrap().into_iter().next().unwrap();
           let staged = items.clone();
-          StagedNode::new()
+          StagedNode::new(gb)
             .sym(prec_sym)
             .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
@@ -261,7 +260,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
         (_, 1, 0) => {
           let (origin_index, PeekGroup { items, .. }) = cmpl_targets.unwrap().into_iter().next().unwrap();
           let staged = items.clone();
-          StagedNode::new()
+          StagedNode::new(gb)
             .sym(prec_sym)
             .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
@@ -271,7 +270,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
         (1.., 0, 0) => {
           let (origin_index, PeekGroup { items, .. }) = _oos_targets.unwrap().into_iter().next().unwrap();
           let staged = items.clone();
-          StagedNode::new()
+          StagedNode::new(gb)
             .sym(prec_sym)
             .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
@@ -282,7 +281,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           if !prec_sym.sym().is_default() {
             // Continue peeking
 
-            StagedNode::new()
+            StagedNode::new(gb)
               .sym(prec_sym)
               .build_state(GraphBuildState::Normal)
               .ty(StateType::Peek(level + 1))
@@ -300,7 +299,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
         panic!("Cannot disambiguate using peek!!!");
       } else {
         // create a new peek state with the follow items.
-        StagedNode::new()
+        StagedNode::new(gb)
           .sym(prec_sym)
           .build_state(GraphBuildState::Normal)
           .ty(StateType::Peek(level + 1))
@@ -325,7 +324,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
 
 pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   prec_sym: PrecedentSymbol,
   (prec, group): TransitionGroup,
   level: u32,
@@ -333,7 +332,7 @@ pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
   if peek_items_are_from_same_origin(gb, &group) {
     resolve_peek(gb, node, group.iter(), prec_sym)?;
   } else {
-    StagedNode::new()
+    StagedNode::new(gb)
       .sym(prec_sym)
       .build_state(GraphBuildState::Normal)
       .ty(StateType::Peek(level + 1))
@@ -343,7 +342,7 @@ pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
   RadlrResult::Ok(())
 }
 
-fn peek_items_are_from_oos(gb: &mut ConcurrentGraphBuilder, node: &GraphNodeShared, follows: &Lookaheads) -> bool {
+fn peek_items_are_from_oos(gb: &mut ConcurrentGraphBuilder, node: &SharedGraphNode, follows: &Lookaheads) -> bool {
   follows
     .iter()
     .to_kernel()

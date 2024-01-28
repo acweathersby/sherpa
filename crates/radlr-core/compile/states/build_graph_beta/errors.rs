@@ -30,7 +30,7 @@ pub(super) fn _create_reduce_reduce_error(_gb: &ConcurrentGraphBuilder, _end_ite
 }
 
 /// Produces errors that result from the banning of LR states.
-pub(super) fn lr_disabled_error(gb: &ConcurrentGraphBuilder, node: &GraphNodeShared, lr_items: Items) -> RadlrResult<()> {
+pub(super) fn lr_disabled_error(gb: &ConcurrentGraphBuilder, node: &SharedGraphNode, lr_items: Items) -> RadlrResult<()> {
   let db = gb.db();
 
   let s_store = db.string_store();
@@ -73,7 +73,7 @@ pub(super) fn lr_disabled_error(gb: &ConcurrentGraphBuilder, node: &GraphNodeSha
 
 pub(crate) fn conflicting_symbols_error(
   gb: &ConcurrentGraphBuilder,
-  node: &GraphNodeShared,
+  node: &SharedGraphNode,
   groups: OrderedMap<(u16, SymbolId), Lookaheads>,
 ) -> RadlrError {
   let d = gb.db();

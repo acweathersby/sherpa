@@ -1,25 +1,24 @@
 #[derive(Clone, Copy)]
 #[allow(non_snake_case)]
+
 /// Settings for configuring the type of parser Radlr will generate.
-#[derive(Debug)] 
+#[derive(Debug)]
 pub struct ParserConfig {
   /// When enable, recursive descent style `Call` states will be generated
-  pub ALLOW_CALLS: bool,
+  pub ALLOW_CALLS:   bool,
   /// When enable, LR style states may be produced. In general, this
   /// allows more advanced grammar constructs to be parsed, such
   /// as left recursive rules.
   ///
   /// When disabled, grammars with rules that require LR style parse states
   /// will be rejected, and relevant errors will be reported.
-  pub ALLOW_LR: bool,
+  pub ALLOW_LR:      bool,
   /// When enabled, unrestricted lookahead states states will be generated
   ///
   /// When disabled, grammars with rules that require a lookahead that is
   ///  `k>1` will be rejected, and relevant errors will be reported.
   pub ALLOW_PEEKING: bool,
-  /// The maximum number of lookead symbols allowed before parser construction
-  /// is aborted or a different disambiguating strategy is employed.
-  pub max_k: usize,
+
   /// Allow merging of states that only differ in their look ahead sets. This
   /// will lead to a decrease in accuracy of error messages.
   pub ALLOW_LOOKAHEAD_MERGE: bool,
@@ -50,9 +49,12 @@ pub struct ParserConfig {
   /// Parsers created with this type of optimization tend to perform poorly when
   /// used for error correcting.
   pub ALLOW_ANONYMOUS_NONTERM_INLINING: bool,
-  /// Enables using wide data types ( u16 | u32 | u64 | u128+ ) to recognize a
-  /// sequence of bytes.
+  /// Enables using wide data types ( u16 | u32 | u64 | u128 ) to recognize a
+  /// sequence of characters.
   pub ALLOW_BYTE_SEQUENCES: bool,
+  /// The maximum number of lookead symbols allowed before parser construction
+  /// is aborted or a different disambiguating strategy is employed.
+  pub max_k: usize,
 }
 
 /// Configuration for the creation of a grammar from grammar sources.
@@ -271,7 +273,7 @@ impl std::ops::Add for &ParserClassification {
 
 impl ParserClassification {
   /// Returns the classification as algorithm acronym string.
-  /// 
+  ///
   /// This can be one of `LL | LR | RD | RAD | GLL | GLR | GRD | GRAD`.
   ///
   /// The string may also be postfixed with the maximum level of token
