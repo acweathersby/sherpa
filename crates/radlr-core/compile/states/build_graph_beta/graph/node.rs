@@ -1,28 +1,38 @@
 use crate::{
   compile::states::build_graph::graph::{GraphBuildState, GraphType, StateId, StateType},
   proxy::OrderedSet,
-  types::{ItemSet, PrecedentSymbol, SharedParserDatabase},
+  types::{ItemIndex, ItemSet, PrecedentSymbol, SharedParserDatabase},
+  DBNonTermKey,
+  IString,
   Item,
 };
 use std::{self, fmt::Debug, sync::Arc};
 
 use super::ScannerData;
 
+#[derive(Clone, Copy)]
+pub(crate) struct RootData {
+  pub is_root:   bool,
+  pub root_name: IString,
+  pub db_key:    DBNonTermKey,
+}
+
 #[derive(Clone)]
 pub(crate) struct GraphNode {
   pub id:          StateId,
   pub build_state: GraphBuildState,
-  pub is_leaf:     bool,
   pub ty:          StateType,
   pub sym:         PrecedentSymbol,
   pub hash_id:     u64,
   pub kernel:      OrderedSet<Item>,
-  pub reduce_item: Option<Item>,
   pub graph_type:  GraphType,
+  pub reduce_item: Option<ItemIndex>,
   pub predecessor: Option<SharedGraphNode>,
   pub symbol_set:  Option<Arc<ScannerData>>,
   pub db:          SharedParserDatabase,
+  pub is_leaf:     bool,
   pub is_goto:     bool,
+  pub root_data:   RootData,
 }
 
 impl Debug for GraphNode {
@@ -51,7 +61,7 @@ items:
 {:=>128}",
         header,
         self.ty,
-        self.reduce_item.map(|f| f._debug_string_w_db_(db)),
+        self.reduce_item.map(|f| Into::<Item>::into((f, db.as_ref()))._debug_string_w_db_(db)),
         self.predecessor.as_ref().map(|i| i.id()),
         self.kernel.iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join("\n"),
         ""
@@ -121,7 +131,7 @@ impl GraphNode {
   }
 
   pub fn is_root(&self) -> bool {
-    self.id.is_rootish()
+    self.root_data.is_root
   }
 
   pub fn kernel_items(&self) -> &OrderedSet<Item> {

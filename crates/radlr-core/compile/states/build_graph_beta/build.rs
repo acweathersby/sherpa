@@ -12,7 +12,6 @@ use super::{
 };
 use crate::{
   compile::states::build_graph::graph::{GraphBuildState, StateType},
-  journal::config,
   types::*,
   utils::hash_group_btree_iter,
 };
@@ -41,12 +40,20 @@ pub(crate) fn handle_kernel_items(
 
   let update_gotos = handle_nonterminal_shift(gb, pred, &config)?;
 
-  gb.commit(update_gotos, pred.id(), config, true);
+  let states_queued = gb.commit(update_gotos, Some(pred), config, true, false)?;
 
-  // Todo(anthony) : if peeking, determine if the peek has terminated in a
-  // non-deterministic way. If so, produce a NonDeterministicPeek error.
+  if pred.state_type().is_peek() && pred.state_type().peek_level() > 0 && states_queued == 0 {
+    // Todo(anthony) : if peeking, determine if the peek has terminated in a
+    // non-deterministic way. If so, produce a NonDeterministicPeek error.
 
-  Ok(())
+    let root_data = pred.root_data.db_key;
+
+    Err(RadlrError::StateConstructionError(
+      crate::compile::states::build_states_beta::StateConstructionError::NonDeterministicPeek(root_data),
+    ))
+  } else {
+    Ok(())
+  }
 }
 
 /// Insert non-terminal shift actions

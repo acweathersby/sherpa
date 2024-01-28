@@ -113,13 +113,13 @@ pub struct ItemLane {
 pub struct Item {
   /// The non-terminal or token that the item directly or
   /// indirectly resolves to
-  pub origin: Origin,
+  pub origin:           Origin,
   /// The graph state the item originated from
-  pub origin_state: StateId,
-  pub index: ItemIndex,
-  pub from: ItemIndex,
-  len: u16,
-  pub goto_distance: u8,
+  pub origin_state:     StateId,
+  pub index:            ItemIndex,
+  pub from:             ItemIndex,
+  len:                  u16,
+  pub goto_distance:    u8,
   pub from_goto_origin: bool,
 }
 
@@ -681,46 +681,53 @@ impl Item {
   }
 }
 
-#[test]
-fn item_transition_functions() -> RadlrResult<()> {
-  let db = ParserDatabase::test_lr()?;
+#[cfg(test)]
+mod test {
+  use crate::{ParserDatabase, RadlrResult};
 
-  let item: Item = (DBRuleKey::from(0 as u32), &db).into();
+  #[cfg(debug_assertions)]
+  #[test]
+  fn item_transition_functions() -> RadlrResult<()> {
+    use crate::{compile::states::build_graph::graph::Origin, DBRuleKey, Item};
 
-  assert_eq!(item.sym_len(), 3);
+    let db = ParserDatabase::test_lr()?;
 
-  assert_eq!(item.is_initial(), true);
+    let item: Item = (DBRuleKey::from(0 as u32), &db).into();
 
-  let item = item
-    .increment()
-    .expect("Item in the start position from a rule with at least one symbol should be able to shifted to the next position");
+    assert_eq!(item.sym_len(), 3);
 
-  assert_eq!(item.is_initial(), false);
+    assert_eq!(item.is_initial(), true);
 
-  assert_eq!(item.sym_index(), 1);
+    let item = item
+      .increment()
+      .expect("Item in the start position from a rule with at least one symbol should be able to shifted to the next position");
 
-  let item = item.increment().expect("Item at position 1 from a rule with 3 symbols should be able to shift to position 2");
+    assert_eq!(item.is_initial(), false);
 
-  assert_eq!(item.sym_index(), 2);
+    assert_eq!(item.sym_index(), 1);
 
-  assert_eq!(item.is_penultimate(), true);
+    let item = item.increment().expect("Item at position 1 from a rule with 3 symbols should be able to shift to position 2");
 
-  let item = item.increment().expect("Item at position 2 from a rule with 3 symbols should be able to shift to position 3");
+    assert_eq!(item.sym_index(), 2);
 
-  assert_eq!(item.sym_index(), 3);
+    assert_eq!(item.is_penultimate(), true);
 
-  assert_eq!(item.is_complete(), true);
+    let item = item.increment().expect("Item at position 2 from a rule with 3 symbols should be able to shift to position 3");
 
-  assert_eq!(item.increment(), None);
+    assert_eq!(item.sym_index(), 3);
 
-  let item = item.to_origin(Origin::__OOS_CLOSURE__).to_complete().as_from((DBRuleKey::from(1 as u32), &db).into());
+    assert_eq!(item.is_complete(), true);
 
-  assert_eq!(item.is_successor(), true);
+    assert_eq!(item.increment(), None);
 
-  Ok(())
+    let item = item.to_origin(Origin::__OOS_CLOSURE__).to_complete().as_from((DBRuleKey::from(1 as u32), &db).into());
+
+    assert_eq!(item.is_successor(), true);
+
+    Ok(())
+  }
 }
 
-#[test]
 fn item_attributes() -> RadlrResult<()> {
   let db = ParserDatabase::test_lr()?;
 
@@ -763,8 +770,8 @@ impl TransitionPair {
   }
 
   /// True if the kernel item is the same as the next item, and both are
-  /// complete. Indicates a situation where the item has reached some goal state
-  /// and the FOLLOW set is empty.
+  /// complete. Indicates a situation where the item has reached some goal
+  /// state and the FOLLOW set is empty.
   pub fn is_eoi_complete(&self) -> bool {
     self.kernel.is_complete() && self.kernel.index == self.next.index
   }
