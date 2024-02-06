@@ -72,30 +72,30 @@ fn complete_regular(
 fn complete_scan(
   completed: Vec<TransitionPair>,
   gb: &mut ConcurrentGraphBuilder,
-  node: &SharedGraphNode,
+  pred: &SharedGraphNode,
   sym: PrecedentSymbol,
   first: TransitionPair,
 ) {
   let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-    completed.iter().into_iter().map(|i| get_follow_internal(gb, node, i.kernel, FollowType::ScannerCompleted)).unzip();
+    completed.iter().into_iter().map(|i| get_follow_internal(gb, pred, i.kernel, FollowType::ScannerCompleted)).unzip();
 
   let follow = follow.into_iter().flatten().collect::<Items>();
   let completed_items = completed_items.into_iter().flatten().collect::<Items>();
 
-  let goals = get_goal_items_from_completed(&completed_items, gb, &node);
+  let goals = get_goal_items_from_completed(&completed_items, gb, &pred);
   let is_continue = !follow.is_empty();
   let completes_goal = !goals.is_empty();
 
   let state = StagedNode::new(gb)
-    .parent(node.clone())
+    .parent(pred.clone())
+    .build_state(GraphBuildState::Normal)
+    .sym(sym)
     .ty(match (is_continue, goals.first().map(|d| d.origin)) {
       (true, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignAndFollow(tok_id),
       (false, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignToken(tok_id),
       (true, _) => StateType::Follow,
       (false, _) => StateType::CompleteToken,
     })
-    .build_state(GraphBuildState::Normal)
-    .sym(sym)
     .set_reduce_item(first.kernel)
     .kernel_items(follow.iter().cloned());
 

@@ -82,7 +82,8 @@ pub(crate) fn handle_regular_incomplete_items(
       if !____allow_peek____ {
         peek_not_allowed_error(gb, &[out_of_scope.cloned().collect(), in_scope.cloned().collect()], "")?;
       } else {
-        create_peek(gb, pred, config, prec_sym, group.iter(), None)?;
+        panic!("CREATING PEEK");
+        create_peek(gb, pred, config, prec_sym, group.iter(), None)?.include_with_goto_state().commit(gb);
       }
     }
     (len, _) => {
@@ -95,7 +96,7 @@ pub(crate) fn handle_regular_incomplete_items(
           if !____allow_lr____ {
             return lr_disabled_error(gb, pred, _transition_items);
           }
-          node.commit(gb);
+          node.include_with_goto_state().commit(gb);
         }
       } else {
         // If can't create call, do LR shift, or peek, or warn about k=1 conflicts.
@@ -145,7 +146,7 @@ pub(crate) fn handle_regular_incomplete_items(
                 .build_state(GraphBuildState::Normal)
                 .ty(StateType::Shift)
                 .kernel_items(items.into_iter())
-                .goto_inc()
+                .include_with_goto_state()
                 .commit(gb);
             }
           } else {
@@ -155,7 +156,7 @@ pub(crate) fn handle_regular_incomplete_items(
               .parent(pred.clone())
               .ty(StateType::Shift)
               .kernel_items(items.into_iter())
-              .goto_inc()
+              .include_with_goto_state()
               .commit(gb);
           }
         } else if ____allow_lr____ {
@@ -167,7 +168,7 @@ pub(crate) fn handle_regular_incomplete_items(
             .build_state(GraphBuildState::Normal)
             .ty(StateType::Shift)
             .kernel_items(items.into_iter())
-            .goto_inc()
+            .include_with_goto_state()
             .commit(gb);
         } else {
           /// If forking is allowed then use that. Other wise this grammar is no
@@ -249,11 +250,13 @@ pub(crate) fn handle_regular_complete_groups(
         match resolve_reduce_reduce_conflict(gb, pred, config, prec_sym, lookahead_pairs)? {
           ReduceReduceConflictResolution::Nothing => {}
           ReduceReduceConflictResolution::Fork(lookahead_pairs) => {
-            create_fork(gb, pred, config, prec_sym, lookahead_pairs.iter().map(|i| i.kernel))?.goto_inc().commit(gb);
+            create_fork(gb, pred, config, prec_sym, lookahead_pairs.iter().map(|i| i.kernel))?
+              .include_with_goto_state()
+              .commit(gb);
           }
           ReduceReduceConflictResolution::Reduce(item) => todo!("Handle reduce result from reduce-reduce conflict resolution"),
           ReduceReduceConflictResolution::Peek(max_k, follow_pairs) => {
-            create_peek(gb, pred, config, prec_sym, [].iter(), Some(follow_pairs.iter()))?.commit(gb);
+            create_peek(gb, pred, config, prec_sym, [].iter(), Some(follow_pairs.iter()))?.include_with_goto_state().commit(gb);
           }
         }
       }
@@ -274,11 +277,13 @@ pub(crate) fn handle_regular_complete_groups(
             handle_completed_groups(gb, pred, config, &mut Default::default(), sym, lookahead_pairs)?;
           }
           ShiftReduceConflictResolution::Peek(max_k) => {
-            create_peek(gb, pred, config, prec_sym, group.iter(), Some(lookahead_pairs.iter()))?.commit(gb);
+            create_peek(gb, pred, config, prec_sym, group.iter(), Some(lookahead_pairs.iter()))?
+              .include_with_goto_state()
+              .commit(gb);
           }
           ShiftReduceConflictResolution::Fork => {
             create_fork(gb, pred, config, prec_sym, lookahead_pairs.into_iter().chain(group.into_iter()).map(|i| i.kernel))?
-              .goto_inc()
+              .include_with_goto_state()
               .commit(gb);
           }
         }

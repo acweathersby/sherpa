@@ -26,7 +26,7 @@ NAME json
 
 <> num > tk:number                              :ast { t_Number, v:f64($1) }
 
-<> number > ( '+' | '-' )? c:num(+) ( "." c:num(+) )? ( ( 'e' | 'E' ) ( '+' | 'i' ) c:num(+) )?
+<> number > ( '+' | '-' )? c:num(+) ( "." c:num(+) )? ( ( 'e' | 'E' ) ( '+' | 'i' )? c:num(+) )?
 
 <> string > "\"" ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) "\""
 

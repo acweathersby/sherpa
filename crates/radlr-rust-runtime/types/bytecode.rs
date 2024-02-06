@@ -548,34 +548,33 @@ pub const TOKEN_ASSIGN_FLAG: u32 = 0x04000000;
 pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 
 /// Internal input types used in IR [parser::Matches] statements.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy, Hash)]
 #[repr(u32)]
 pub enum MatchInputType {
   /// Matches the last reduced nonterminal id
-  NonTerminal = 0,
+  NonTerminal       = 0,
   /// Matches the token id set from a scanner call
-  Token     = 1,
+  Token             = 1,
   /// Matches the class of a character in the input
-  Class     = 2,
+  Class             = 2,
   /// Matches a utf8 codepoint byte sequence in the input
-  Codepoint = 3,
+  Codepoint         = 3,
   /// Matches a byte in the input
-  Byte      = 4,
+  Byte              = 4,
   /// Matches the virtual $eof token in the input stream
-  EndOfFile = 5,
+  EndOfFile         = 5,
   /// Matches anything
-  Default   = 6,
+  Default           = 6,
   /// Matches a byte in the input
-  ByteScanless = 7,
+  ByteScanless      = 7,
   /// Matches a utf8 codepoint byte sequence in the input
   CodepointScanless = 8,
   /// Matches the class of a character in the input
-  ClassScanless = 9,
+  ClassScanless     = 9,
   /// Matches a distinct sequence of bytes.
-  ByteSequence = 10,
+  ByteSequence      = 10,
   /// Matches the top node on the output stack.
-  CSTNode   = 11,
+  CSTNode           = 11,
 }
 
 impl MatchInputType {

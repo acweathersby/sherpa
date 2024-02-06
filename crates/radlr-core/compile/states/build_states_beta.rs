@@ -1,18 +1,21 @@
 use super::{
-  build_graph::graph::{GraphType, Origin, StateId, StateType},
+  build_graph::graph::{GraphType, Origin, StateType},
   build_graph_beta::{
     build::handle_kernel_items,
-    graph::{ConcurrentGraphBuilder, Graphs, StagedNode},
+    graph::{ConcurrentGraphBuilder, Graphs, SharedGraphNode, StagedNode},
   },
 };
 use crate::types::{worker_pool::WorkerPool, *};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Hash)]
-pub enum StateConstructionError {
-  NonDeterministicPeek(DBNonTermKey),
+pub(crate) enum StateConstructionError {
+  NonDeterministicPeek(SharedGraphNode, Box<RadlrError>),
   OtherErrors(Vec<RadlrError>),
 }
+
+const NORMAL_GRAPH: i16 = 0;
+const LR_ONLY_GRAPH: i16 = 1;
 
 /// Add a root node to the graph queue. This type of node is also added to the
 /// global pending root nodes pool.
@@ -28,7 +31,7 @@ pub fn add_root(
     .kernel_items(kernel_items.to_vec().into_iter())
     .ty(StateType::Start)
     .graph_ty(graph_type)
-    .make_root(name, db_nt_key)
+    .make_root(name, db_nt_key, NORMAL_GRAPH)
     .commit(builder);
 
   builder.commit(false, None, &config, false, false)?;
@@ -56,12 +59,12 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
   }
 
   #[cfg(not(feature = "wasm-target"))]
-  let pool: worker_pool::StandardPool = crate::types::worker_pool::StandardPool::new(8).unwrap();
+  let pool: worker_pool::StandardPool = crate::types::worker_pool::StandardPool::new(20).unwrap();
 
   #[cfg(feature = "wasm-target")]
   let pool = crate::types::worker_pool::SingleThreadPool {};
 
-  let sync_tracker = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+  let sync_tracker = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(1));
 
   pool.run(|_num_of_threads_| {
     let mut gb = gb.clone();
@@ -80,7 +83,7 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
           }
 
           match handle_kernel_items(&mut gb, &node, &config) {
-            Err(RadlrError::StateConstructionError(StateConstructionError::NonDeterministicPeek(non_term))) => {
+            Err(RadlrError::StateConstructionError(StateConstructionError::NonDeterministicPeek(root, err))) => {
               //-----------------------------------------------------------------------------------
               // This non-terminal is invalid. If this is a root entry state
               // then we can't construct a parser for it.
@@ -118,14 +121,9 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
               let root_data = node.root_data;
               let nonterm_key = root_data.db_key;
               if config.ALLOW_LR {
-                match gb.poison_nonterminal(nonterm_key) {
-                  Err(err) => {
-                    sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
-                    return Err(err);
-                  }
-                  _ => {}
-                }
                 let db = gb.db_rc().clone();
+
+                let mut poisoned = vec![root.root_data.db_key];
 
                 if db.entry_nterm_map().contains_key(&nonterm_key) {
                   // Ensures all other threads are halted when the active queue is exhausted.
@@ -135,27 +133,43 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
                   );
                 } else {
                   if let Some(nonterms) = db.get_nonterminal_predecessors(nonterm_key) {
-                    for nt_id in nonterms {
+                    poisoned.extend(nonterms.iter());
+
+                    match gb.invalidate_nonterms(&poisoned, NORMAL_GRAPH) {
+                      Err(err) => {
+                        sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+                        return Err(err);
+                      }
+                      _ => {
+                        println!("Non-terminal {} has been poisoned", db.nonterm_friendly_name_string(nonterm_key));
+                      }
+                    };
+
+                    for new_nt_key in nonterms {
+                      println!("New terminal {} has been created from poisoning", db.nonterm_friendly_name_string(*new_nt_key));
                       let mut new_config = config;
                       new_config.ALLOW_LR = true;
                       new_config.ALLOW_CALLS = false;
 
-                      let kernel_items = ItemSet::start_items(*nt_id, &db).to_origin(Origin::NonTermGoal(*nt_id));
+                      let kernel_items = ItemSet::start_items(*new_nt_key, &db).to_origin(Origin::NonTermGoal(*new_nt_key));
 
                       StagedNode::new(&gb)
                         .kernel_items(kernel_items.to_vec().into_iter())
                         .ty(StateType::Start)
                         .graph_ty(node.graph_type())
-                        .make_root(db.nonterm_guid_name(*nt_id), *nt_id)
+                        .make_root(db.nonterm_guid_name(*new_nt_key), *new_nt_key, LR_ONLY_GRAPH)
                         .commit(&mut gb);
 
-                      gb.commit(false, None, &new_config, false, false)?;
+                      gb.commit(false, None, &new_config, true, false)?;
                     }
+                  } else {
+                    sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+                    panic!("Somehow encountered an orphaned non-terminal");
                   }
                 }
               }
             }
-            Err(err) => {
+            Err(_) => {
               // Ensures all other threads are halted when the active queue is exhausted.
               sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
               return Err("Todo: Report critical failure during compilation: {err}".into());
@@ -193,29 +207,73 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
 
 #[cfg(test)]
 mod test {
+  #![allow(unused)]
+  use radlr_rust_runtime::types::StringInput;
+  use std::path::PathBuf;
+
   use super::compile_parser_states;
   use crate::{
     compile::{ir::optimize, ir_beta::build_ir_from_graph},
     ParserConfig,
     RadlrGrammar,
     RadlrResult,
+    TestPackage,
   };
 
   #[test]
-  fn test_build_graph() -> RadlrResult<()> {
+  fn build_json_graph() -> RadlrResult<()> {
     let mut config = ParserConfig::default();
     config.ALLOW_BYTE_SEQUENCES = true;
     let db = RadlrGrammar::new()
+      .add_source_from_string(include_str!("../../../../grammars/json/json.sg"), "", false)
+      .unwrap()
+      .build_db("", config)
+      .unwrap()
+      .into_internal();
+
+    let graph = compile_parser_states(db.clone(), config)?;
+
+    let mut ir = build_ir_from_graph(config, &db, &graph)?;
+
+    for (_, ir) in &mut ir.1 {
+      ir.build_ast(&db)?;
+      // println!("{}", ir.print(&db, true)?);
+    }
+
+    let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
+
+    println!("{}", ir.1.to_string());
+
+    for (_, ir) in &ir.0 {
+      println!("{}", ir.print(&db, true)?);
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  pub fn peek_hybrid_graph() -> RadlrResult<()> {
+    let mut config = ParserConfig::default();
+    config.ALLOW_BYTE_SEQUENCES = false;
+    config.ALLOW_SCANNER_INLINING = false;
+    let db = RadlrGrammar::new()
       .add_source_from_string(
-        r###"
-  IGNORE { c:sp }
-  
-
-  <> C > A "dd"
-
-  <> A > "test" "d"
-  
-  "###,
+        r#"
+      IGNORE { c:sp  } 
+      
+      <> A > ( B | ":" C )(+)
+      
+      <> B > id "=>" c:id
+      
+      <> C > a_id(+)
+      
+      <> a_id > id "!"? 
+      
+      <> id > tk:id_tok
+      
+      <> id_tok > c:id
+      
+      "#,
         "",
         false,
       )
@@ -228,10 +286,7 @@ mod test {
 
     let mut ir = build_ir_from_graph(config, &db, &graph)?;
 
-    for (_, ir) in &mut ir.1 {
-      ir.build_ast(&db)?;
-      println!("{}", ir.print(&db, true)?);
-    }
+    //return Ok(());
 
     let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
 

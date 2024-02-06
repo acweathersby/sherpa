@@ -6,18 +6,23 @@ use crate::{
   IString,
   Item,
 };
-use std::{self, fmt::Debug, sync::Arc};
+use std::{
+  self,
+  fmt::Debug,
+  hash::Hash,
+  sync::{atomic::AtomicBool, Arc},
+};
 
 use super::ScannerData;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash)]
 pub(crate) struct RootData {
-  pub is_root:   bool,
-  pub root_name: IString,
   pub db_key:    DBNonTermKey,
+  pub root_name: IString,
+  pub version:   i16,
+  pub is_root:   bool,
 }
 
-#[derive(Clone)]
 pub(crate) struct GraphNode {
   pub id:          StateId,
   pub build_state: GraphBuildState,
@@ -33,6 +38,11 @@ pub(crate) struct GraphNode {
   pub is_leaf:     bool,
   pub is_goto:     bool,
   pub root_data:   RootData,
+  pub invalid:     std::sync::atomic::AtomicBool,
+}
+
+impl Hash for GraphNode {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {}
 }
 
 impl Debug for GraphNode {
@@ -53,6 +63,7 @@ impl Debug for GraphNode {
 == LEAF {:=<120}
 
 ty         : {:?}
+sym        : {}
 reduce on  : {:?}
 prime pred : {:?}
 items:
@@ -61,6 +72,7 @@ items:
 {:=>128}",
         header,
         self.ty,
+        self.sym.sym().debug_string(db),
         self.reduce_item.map(|f| Into::<Item>::into((f, db.as_ref()))._debug_string_w_db_(db)),
         self.predecessor.as_ref().map(|i| i.id()),
         self.kernel.iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join("\n"),
@@ -69,12 +81,14 @@ items:
     } else if self.is_root() {
       f.write_fmt(format_args!(
         "
-## ROOT {:#<120}
+## {} [{}] {:#<120}
 
 items:
 {}
 {scanner}
 {:#>128}",
+        if self.invalid.load(std::sync::atomic::Ordering::Relaxed) { "!!POISONED!! ROOT" } else { "ROOT" },
+        db.nonterm_friendly_name_string(self.root_data.db_key),
         header,
         self.kernel.iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join("\n"),
         ""
@@ -113,12 +127,36 @@ impl GraphNode {
     }
   }
 
+  pub fn get_root_shared(self: &SharedGraphNode) -> SharedGraphNode {
+    if self.is_root() {
+      self.clone()
+    } else {
+      self.predecessor.as_ref().map(|s| s.get_root_shared()).expect("Graph node should either be a root or have a predecessor")
+    }
+  }
+
   pub fn is_goto(&self) -> bool {
     self.is_goto
   }
 
   pub fn to_goto(&self) -> SharedGraphNode {
-    Arc::new(Self { is_goto: true, ..self.clone() })
+    Arc::new(Self {
+      is_goto:     true,
+      build_state: self.build_state,
+      db:          self.db.clone(),
+      graph_type:  self.graph_type,
+      hash_id:     self.hash_id,
+      id:          self.id,
+      invalid:     AtomicBool::new(false),
+      is_leaf:     self.is_leaf,
+      kernel:      self.kernel.clone(),
+      predecessor: None,
+      reduce_item: self.reduce_item.clone(),
+      root_data:   self.root_data,
+      sym:         self.sym,
+      symbol_set:  self.symbol_set.clone(),
+      ty:          self.ty,
+    })
   }
 
   pub fn goal_items(&self) -> &ItemSet {
@@ -162,12 +200,22 @@ impl GraphNode {
     self.graph_type == GraphType::Scanner
   }
 
-  pub fn get_predecessor<'a>(&'a self, id: StateId) -> Option<&'a SharedGraphNode> {
+  pub fn get_predecessor<'a>(self: &'a GraphNode, id: StateId) -> Option<&'a GraphNode> {
+    if id == self.id {
+      Some(self)
+    } else if let Some(pred) = self.predecessor.as_ref() {
+      pred.get_predecessor(id)
+    } else {
+      None
+    }
+  }
+
+  pub fn get_predecessor_old<'a>(&'a self, id: StateId) -> Option<&'a SharedGraphNode> {
     if let Some(pred) = self.predecessor.as_ref() {
       if pred.id == id {
         Some(pred)
       } else {
-        pred.get_predecessor(id)
+        pred.get_predecessor_old(id)
       }
     } else {
       None

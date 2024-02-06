@@ -1,7 +1,7 @@
 use crate::{proxy::OrderedSet, types::PrecedentDBTerm, CachedString, DBTermKey, IString, ParserDatabase};
 
 #[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Hash)]
 pub struct ScannerData {
   pub hash:    u64,
   pub symbols: OrderedSet<PrecedentDBTerm>,

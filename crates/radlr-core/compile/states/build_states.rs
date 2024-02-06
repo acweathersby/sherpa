@@ -203,6 +203,7 @@ pub(crate) fn compile_parser_states(
                     }
 
                     Err(StateConstructionError::NonDeterministicPeek(work, errors)) => {
+                      //panic!("NonDeterministicPeek encounterred");
                       //-----------------------------------------------------------------------------------
                       // This non-terminal is invalid. If this is a root entry state then we can't
                       // construct a parser for it. Otherwise, we can mark the parser for this

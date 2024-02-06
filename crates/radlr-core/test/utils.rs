@@ -70,6 +70,29 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   }
 }
 
+pub fn build_parse_states_from_multi_sources_beta<'a, T>(
+  sources: &[&str],
+  source_path: PathBuf,
+  optimize: bool,
+  test_fn: &dyn Fn(TestPackage) -> RadlrResult<T>,
+  config: ParserConfig,
+) -> RadlrResult<T> {
+  let mut grammar = RadlrGrammar::new();
+
+  for (index, source) in sources.iter().enumerate() {
+    let source_path = source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index).unwrap().to_string());
+    grammar.add_source_from_string(source, source_path, false)?;
+  }
+
+  let root_path = source_path.join("A");
+
+  if optimize {
+    test_fn(grammar.build_db(root_path, config)?.build_states_beta(config)?.build_ir_parser(true, false)?.into())
+  } else {
+    test_fn(grammar.build_db(root_path, config)?.build_states_beta(config)?.build_ir_parser(false, false)?.into())
+  }
+}
+
 /// Compile a parser Data base
 pub fn build_parse_db_from_source_str<'a, T>(
   source: &str,

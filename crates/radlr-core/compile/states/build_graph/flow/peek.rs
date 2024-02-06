@@ -1,4 +1,4 @@
- #![allow(unused)]
+#![allow(unused)]
 
 use super::{
   super::{
@@ -82,9 +82,6 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
   );
 
   state.add_kernel_items(kernel_items.try_increment().iter().cloned());
-
-  
-  
 
   Ok(state.to_state())
 }

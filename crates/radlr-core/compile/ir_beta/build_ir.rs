@@ -59,6 +59,10 @@ pub fn build_ir_from_graph(
     }
   }
 
+  for (_, state) in &mut states {
+    state.build_ast(db)?;
+  }
+
   RadlrResult::Ok((classification, states))
 }
 
@@ -349,6 +353,11 @@ fn add_match_expr<'graph: 'graph>(
 
   if let Some(((_, input_type), successors)) = branches.pop_front() {
     if matches!(input_type, MatchInputType::Default) {
+      if successors.len() > 1 {
+        println!("\n\nToo many default successors for state {:?} \n successors: {:?}", state, successors);
+      }
+      // debug_assert!(successors.len() == 1, "Too many default successors for state
+      // {:?} \n successors: {:?}", state, successors);
       let successor = successors.into_iter().next().unwrap();
 
       let string = build_body(state, &successor, goto_state_id).join(" then ");
@@ -363,7 +372,11 @@ fn add_match_expr<'graph: 'graph>(
         w = w
           + ":"
           + scanner_data
-            .expect("Token matches should have accompanying scanner")
+            .expect(&format!(
+              "Matches on {input_type:?} should have accompanying scanner {}{state:?} {}",
+              state.hash_id,
+              successors.iter().map(|s| format!("{s:?}")).collect::<Vec<_>>().join("\n")
+            ))
             .create_scanner_name(db)
             .to_str(db.string_store())
             .as_str();
@@ -374,12 +387,16 @@ fn add_match_expr<'graph: 'graph>(
       // Sort successors
       let peeking = successors.iter().any(|s| matches!(s.ty, StateType::PeekEndComplete(_) | StateType::Peek(_)));
 
-      for (state_val, s) in successors.iter().map(|s| (s.sym.sym().to_state_val(db), s)).collect::<OrderedMap<_, _>>() {
-        if state_val == CodePointClass::Any as u32 {
+      for (match_val, s) in successors.iter().map(|s| (s.sym.sym().to_state_val(db), s)).collect::<OrderedMap<_, _>>() {
+        if match_val == CodePointClass::Any as u32 {
           w = w + "\n\ndefault { ";
           w = w + build_body(state, s, goto_state_id).join(" then ") + " }";
         } else {
-          w = w + "\n\n( " + state_val.to_string() + " ){ ";
+          debug_assert!(
+            match_val < 100_000_000,
+            "Got a invalid match value of {match_val} in {state:?} \n with successor: {s:?}",
+          );
+          w = w + "\n\n( " + match_val.to_string() + " ){ ";
           w = w + build_body(state, s, goto_state_id).join(" then ") + " }";
         }
       }

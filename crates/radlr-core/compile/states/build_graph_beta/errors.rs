@@ -94,7 +94,7 @@ pub(crate) fn conflicting_symbols_error(
   }
 }
 
-pub(crate) fn peek_not_allowed_error<'db, T>(
+pub(crate) fn peek_not_allowed_error<T>(
   gb: &ConcurrentGraphBuilder,
   conflicting_groups: &[Vec<TransitionPair>],
   submessage: &str,

@@ -22,14 +22,14 @@ const INITIAL_PEEK_K: u32 = 2;
 
 pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &SharedGraphNode,
+  pred: &SharedGraphNode,
   config: &ParserConfig,
   sym: PrecedentSymbol,
   incomplete_items: Pairs,
   completed_pairs: Option<Pairs>,
 ) -> RadlrResult<StagedNode> {
   debug_assert!(config.ALLOW_PEEKING && config.max_k > 1, "Peek states should not be created when peeking is not allowed or k=1");
-  debug_assert!(!node.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
+  debug_assert!(!pred.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
 
   debug_assert!(
     !incomplete_items.clone().any(|i| matches!(i.kernel.origin, Origin::Peek(..))),
@@ -38,7 +38,9 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
 
   let mut state = StagedNode::new(gb).build_state(GraphBuildState::Normal).sym(sym).ty(StateType::Peek(INITIAL_PEEK_K));
 
-  let state_id = node.id();
+  state = state.parent(pred.clone());
+
+  let state_id = pred.id();
 
   let incomplete_items = incomplete_items.into_iter().cloned().collect::<Vec<_>>();
   let completed_pairs = completed_pairs.map(|c| c.into_iter().cloned().collect::<Vec<_>>());
@@ -84,49 +86,52 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
 
   state = state.kernel_items(kernel_items.try_increment().iter().cloned());
 
-  state = state.finalizer(Box::new(move |state, gb, is_goto_state: bool| {
-    let mut kernel_items = Array::default();
+  let mut kernel_items = Array::default();
 
-    for (follow, items, is_oos) in follow_sets {
-      let items = items.iter().to_kernel().map(|i| {
-        if is_goto_state {
-          if i.origin_state.0 == state_id.0 {
-            i.as_goto_origin()
-          } else {
-            i.increment_goto()
-          }
+  let is_goto_state = false;
+  for (follow, items, is_oos) in follow_sets {
+    let items = items.iter().to_kernel().map(|i| {
+      if is_goto_state && false {
+        if i.origin_state.0 == state_id.0 {
+          i.as_goto_origin()
         } else {
-          i.clone()
+          i.increment_goto()
         }
-      });
-      let origin = gb.set_peek_resolve_state(items, is_oos);
-      for follow in follow {
-        kernel_items.push(follow.to_origin(origin));
+      } else {
+        i.clone()
       }
+    });
+    let origin = gb.set_peek_resolve_state(items, is_oos);
+    for follow in follow {
+      kernel_items.push(follow.to_origin(origin));
     }
+  }
 
-    for nonterms in nonterm_sets {
-      let items = nonterms.iter().to_kernel().map(|i| {
-        if is_goto_state {
-          if i.origin_state.0 == state_id.0 {
-            i.as_goto_origin()
-          } else {
-            i.increment_goto()
-          }
+  for nonterms in nonterm_sets {
+    let items = nonterms.iter().to_kernel().map(|i| {
+      if is_goto_state && false {
+        if i.origin_state.0 == state_id.0 {
+          i.as_goto_origin()
         } else {
-          i.clone()
+          i.increment_goto()
         }
-      });
-
-      let origin = gb.set_peek_resolve_state(items, nonterms.iter().any(|i| i.kernel.origin.is_out_of_scope()));
-
-      for nonterm in &nonterms {
-        kernel_items.push(nonterm.next.to_origin(origin));
+      } else {
+        i.clone()
       }
-    }
+    });
 
+    let origin = gb.set_peek_resolve_state(items, nonterms.iter().any(|i| i.kernel.origin.is_out_of_scope()));
+
+    for nonterm in &nonterms {
+      kernel_items.push(nonterm.next.to_origin(origin));
+    }
+  }
+
+  let state = state.kernel_items(kernel_items.try_increment().into_iter());
+
+  /*   state = state.finalizer(Box::new(move |state, gb, is_goto_state: bool| {
     state.kernel = kernel_items.try_increment().iter().cloned().collect();
-  }));
+  })); */
 
   Ok(state)
 }
@@ -137,15 +142,16 @@ fn build_peek_nodes(node: GraphNode, builder: &mut ConcurrentGraphBuilder) -> Gr
 
 fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair>>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &SharedGraphNode,
+  pred: &SharedGraphNode,
   mut resolved: T,
   sym: PrecedentSymbol,
 ) -> RadlrResult<()> {
-  let (index, PeekGroup { items, .. }) = get_kernel_items_from_peek_origin(gb, node, resolved.next().unwrap().kernel.origin);
+  let (index, PeekGroup { items, .. }) = get_kernel_items_from_peek_origin(gb, pred, resolved.next().unwrap().kernel.origin);
   let staged = items.clone();
 
   StagedNode::new(gb)
     .sym(sym)
+    .parent(pred.clone())
     .build_state(GraphBuildState::NormalGoto)
     .ty(StateType::PeekEndComplete(index))
     .kernel_items(staged.into_iter())
@@ -186,22 +192,22 @@ enum PeekOriginType {
 
 pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &SharedGraphNode,
+  pred: &SharedGraphNode,
   config: &ParserConfig,
   groups: &mut GroupedFirsts,
   prec_sym: PrecedentSymbol,
   follows: Lookaheads,
   level: u32,
 ) -> RadlrResult<()> {
-  let ____is_scan____ = node.is_scanner();
+  let ____is_scan____ = pred.is_scanner();
   let mut cmpl = follows.iter().to_next();
 
   match (follows.len(), groups.remove(&prec_sym.sym())) {
     (1, None) => {
-      resolve_peek(gb, node, follows.iter(), prec_sym)?;
+      resolve_peek(gb, pred, follows.iter(), prec_sym)?;
     }
-    (_, None) if peek_items_are_from_oos(gb, node, &follows) || peek_items_are_from_same_origin(gb, &follows) => {
-      resolve_peek(gb, node, follows.iter(), prec_sym)?;
+    (_, None) if peek_items_are_from_oos(gb, pred, &follows) || peek_items_are_from_same_origin(gb, &follows) => {
+      resolve_peek(gb, pred, follows.iter(), prec_sym)?;
     }
     // More than one completed items from peeking.
     (_, None) => {
@@ -213,7 +219,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           .map(|i| i.kernel.origin)
           .collect::<Set<_>>()
           .into_iter()
-          .map(|origin| get_kernel_items_from_peek_origin(gb, node, origin)),
+          .map(|origin| get_kernel_items_from_peek_origin(gb, pred, origin)),
         |_, (_, PeekGroup { items, is_oos })| {
           if *is_oos {
             PeekOriginType::Oos
@@ -241,6 +247,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
 
           StagedNode::new(gb)
             .sym(prec_sym)
+            .parent(pred.clone())
             .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
             .kernel_items(staged.into_iter())
@@ -252,6 +259,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           let staged = items.clone();
           StagedNode::new(gb)
             .sym(prec_sym)
+            .parent(pred.clone())
             .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
             .kernel_items(staged.into_iter())
@@ -262,6 +270,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           let staged = items.clone();
           StagedNode::new(gb)
             .sym(prec_sym)
+            .parent(pred.clone())
             .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
             .kernel_items(staged.into_iter())
@@ -272,6 +281,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           let staged = items.clone();
           StagedNode::new(gb)
             .sym(prec_sym)
+            .parent(pred.clone())
             .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
             .kernel_items(staged.into_iter())
@@ -283,6 +293,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
 
             StagedNode::new(gb)
               .sym(prec_sym)
+              .parent(pred.clone())
               .build_state(GraphBuildState::Normal)
               .ty(StateType::Peek(level + 1))
               .kernel_items(follows.iter().map(|f| f.next.to_origin(f.kernel.origin)).try_increment().iter().cloned())
@@ -301,6 +312,7 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
         // create a new peek state with the follow items.
         StagedNode::new(gb)
           .sym(prec_sym)
+          .parent(pred.clone())
           .build_state(GraphBuildState::Normal)
           .ty(StateType::Peek(level + 1))
           .kernel_items(
@@ -324,16 +336,17 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
 
 pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
   gb: &mut ConcurrentGraphBuilder,
-  node: &SharedGraphNode,
+  pred: &SharedGraphNode,
   prec_sym: PrecedentSymbol,
   (prec, group): TransitionGroup,
   level: u32,
 ) -> RadlrResult<()> {
   if peek_items_are_from_same_origin(gb, &group) {
-    resolve_peek(gb, node, group.iter(), prec_sym)?;
+    resolve_peek(gb, pred, group.iter(), prec_sym)?;
   } else {
     StagedNode::new(gb)
       .sym(prec_sym)
+      .parent(pred.clone())
       .build_state(GraphBuildState::Normal)
       .ty(StateType::Peek(level + 1))
       .kernel_items(group.iter().to_next().try_increment().iter().cloned())

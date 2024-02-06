@@ -1,6 +1,10 @@
 use crate::debug::{file_debugger, PrintConfig};
 use radlr_bytecode::compile_bytecode;
-use radlr_core::{proxy::OrderedMap, test::utils::build_parse_states_from_multi_sources, *};
+use radlr_core::{
+  proxy::OrderedMap,
+  test::utils::{build_parse_states_from_multi_sources, build_parse_states_from_multi_sources_beta},
+  *,
+};
 use radlr_rust_runtime::{
   kernel::{disassemble_bytecode, ByteCodeParserNew},
   types::{AstObjectNew, BytecodeParserDB, ParserInput, ParserProducer, ReducerNew, RuntimeDatabase, StringInput},
@@ -77,7 +81,60 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
   build_parse_states_from_multi_sources(
     source,
     "".into(),
-    true,
+    false,
+    &|tp| {
+      #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
+      _write_states_to_temp_file_(&tp)?;
+
+      let pkg = compile_bytecode(&tp, true)?;
+      let TestPackage { db, .. } = tp;
+
+      _write_disassembly_to_temp_file_(&pkg, &db)?;
+
+      let mut parser = pkg.get_parser().unwrap();
+
+      for (entry_name, input, should_pass) in inputs {
+        let entry = pkg.get_entry_data_from_name(entry_name).expect(&format!(
+          "\nCan't find entry offset for entry point [{entry_name}].\nValid entry names are\n    {}\n",
+          db.entry_points().iter().map(|e| { e.entry_name.to_string(db.string_store()) }).collect::<Vec<_>>().join(" | ")
+        ));
+
+        parser.set_debugger(file_debugger(
+          db.as_ref().clone(),
+          PrintConfig {
+            display_scanner_output: true,
+            display_instruction: true,
+            display_input_data: true,
+            display_state: true,
+            ..Default::default()
+          },
+          pkg.address_to_state_name.clone(),
+        ));
+
+        let result = parser.as_mut().recognize(&mut StringInput::from(*input), entry);
+
+        if result.is_ok() != *should_pass {
+          if result.is_err() {
+            result?;
+          }
+          panic!(
+            "\n\nParsing of input\n   \"{input}\"\nthrough entry point [{entry_name}] should {}.\n",
+            if *should_pass { "pass" } else { "fail" }
+          );
+        }
+      }
+
+      RadlrResult::Ok(())
+    },
+    config,
+  )
+}
+
+pub fn compile_and_run_grammars_beta(source: &[&str], inputs: &[(&str, &str, bool)], config: ParserConfig) -> RadlrResult<()> {
+  build_parse_states_from_multi_sources_beta(
+    source,
+    "".into(),
+    false,
     &|tp| {
       #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
       _write_states_to_temp_file_(&tp)?;

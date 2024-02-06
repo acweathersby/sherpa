@@ -73,15 +73,15 @@ pub struct BuildConfig<'a> {
 impl<'a> BuildConfig<'a> {
   pub fn new(root_grammar: &'a Path) -> Self {
     BuildConfig {
-      ast_struct_name: "ASTNode",
-      lib_out: &root_grammar.parent().unwrap(),
-      source_out: &root_grammar.parent().unwrap(),
-      build_ast: true,
+      ast_struct_name:       "ASTNode",
+      lib_out:               &root_grammar.parent().unwrap(),
+      source_out:            &root_grammar.parent().unwrap(),
+      build_ast:             true,
       include_debug_symbols: false,
-      root_grammar_path: root_grammar,
-      parser_type: ParserType::Bytecode,
-      include_paths: &[],
-      rust: Default::default(),
+      root_grammar_path:     root_grammar,
+      parser_type:           ParserType::Bytecode,
+      include_paths:         &[],
+      rust:                  Default::default(),
     }
   }
 }

@@ -80,3 +80,57 @@ fn handles_numeric_expressions() -> RadlrResult<()> {
 
   Ok(())
 }
+
+#[test]
+fn builds_json() -> RadlrResult<()> {
+  let source = r#"IGNORE {c:sp c:nl}
+
+  <> json 
+  
+    > entry                 :ast { t_JSON, body: $1, tok }
+  
+  <> entry 
+  
+    > obj | array
+    
+  <> obj 
+    
+    > "{" key_val(+",") "}" :ast { t_Object, values: $2, tok }
+  
+  <> array
+    
+    > "[" val(+",") "]"     :ast { t_Array, values: $2, tok }
+  
+  
+  <> key_val 
+  
+    > key ":" val           :ast map($1, $3)
+  
+  
+  <> key 
+  
+    > tk:string             :ast str(tok<1,1>)
+  
+  
+  <> val 
+    > tk:string :ast str(tok<1,1>)
+    | c:num     :ast f64($1)
+    | obj
+    | array
+    | "true"    :ast bool($1)
+    | "false"   :ast bool
+    | "null"    :ast {t_Null}
+  
+  
+  <> string 
+    > "\""  ( c:id | c:sp |  c:num | c:sym )(*)  "\""
+   "#;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
+
+  Ok(())
+}

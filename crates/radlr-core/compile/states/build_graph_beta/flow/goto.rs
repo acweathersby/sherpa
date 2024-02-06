@@ -1,7 +1,6 @@
 use super::super::graph::*;
 use crate::{
   compile::states::build_graph::graph::{GraphBuildState, Origin, StateType},
-  journal::config,
   types::*,
   utils::hash_group_btreemap,
 };
@@ -38,7 +37,7 @@ pub(crate) fn handle_nonterminal_shift(
   }));
 
   let out_items: ItemSet = gb
-    .get_pending_items()
+    .get_goto_pending_items()
     .into_iter()
     .filter(|i| i.origin_state == parent_id && (!kernel_base.contains(i) || i.is_initial()))
     .collect();
@@ -71,7 +70,7 @@ pub(crate) fn handle_nonterminal_shift(
     return Ok(false);
   }
 
-  gb.set_nonterm_items(pred.id().0 as u64, used_nterm_items.clone());
+  gb.set_nonterm_items(pred.hash_id as u64, used_nterm_items.clone());
 
   let used_nterm_groups = hash_group_btreemap(used_nterm_items, |_, t| t.nonterm_index_at_sym(mode, db).unwrap_or_default());
 
@@ -128,14 +127,21 @@ pub(crate) fn handle_nonterminal_shift(
       .parent(pred.clone())
       .sym((target_nonterm.to_sym(), 0).into())
       .ty(nterm_shift_type)
+      .include_with_goto_state()
       .pnc(
         Box::new(move |s, b, _| {
-          vec![StagedNode::new(b)
-            .build_state(GraphBuildState::Leaf)
-            .parent(s.clone())
-            .sym((SymbolId::Default, 0).into())
-            .ty(StateType::NonTermCompleteOOS)
-            .make_leaf()]
+          if are_shifting_a_goal_nonterm && !contains_completed_kernel_items {
+            // Add a default action that pops the current goto off the
+            // state stack.
+            vec![StagedNode::new(b)
+              .build_state(GraphBuildState::Leaf)
+              .parent(s.clone())
+              .sym((SymbolId::Default, 0).into())
+              .ty(StateType::NonTermCompleteOOS)
+              .make_leaf()]
+          } else {
+            Default::default()
+          }
         }),
         PostNodeConstructorData::None,
       )

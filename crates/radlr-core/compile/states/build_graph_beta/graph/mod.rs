@@ -24,13 +24,17 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
   let db = builder.db_rc();
   let db = &db;
 
+  let mut skipped = OrderedSet::new();
+
   let mut scanner_data = ScannerData { hash: 0, ..Default::default() };
 
   for item in node.kernel_items().clone() {
     if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
+      skipped.extend(item.get_skipped(db));
       scanner_data.symbols.insert(sym);
     } else if item.is_nonterm(mode, db) {
       for item in db.get_closure(&item) {
+        skipped.extend(item.get_skipped(db));
         if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
           scanner_data.symbols.insert(sym);
         }
@@ -39,30 +43,39 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
       let (follow, _) = get_follow_internal(builder, node, item.to_complete(), FollowType::AllItems);
       for item in follow {
         if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
+          skipped.extend(item.get_skipped(db));
           scanner_data.follow.insert(sym);
+        } else if item.is_nonterm(mode, db) {
+          for item in db.get_closure(&item) {
+            skipped.extend(item.get_skipped(db));
+            if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
+              scanner_data.follow.insert(sym);
+            }
+          }
         }
       }
     }
   }
+
   let syms = scanner_data.symbols.iter().map(|s| s.tok()).collect::<OrderedSet<_>>();
 
-  scanner_data.skipped.extend(
-    if node.ty.is_peek() {
-      todo!("Handle peeked symbols")
-    } else {
-      node.kernel_items().iter().filter_map(|i| i.get_skipped(db)).flatten().collect::<Vec<_>>()
-    }
-    .into_iter()
-    .filter_map(|s| {
-      let id = s.tok_db_key().unwrap();
-      (!syms.contains(&id)).then_some(id)
-    }),
-  );
+  if !(node.kernel.len() == 1 && node.kernel.first().unwrap().is_complete()) {
+    let skipped_candidates = skipped.into_iter().flat_map(|s| {
+      s.iter().filter_map(|s| {
+        let id = s.tok_db_key().unwrap();
+        (!syms.contains(&id)).then_some(id)
+      })
+    });
+
+    scanner_data.skipped.extend(skipped_candidates)
+  }
 
   if scanner_data.follow.is_empty() && scanner_data.symbols.is_empty() {
     None
   } else {
-    let hash = hash_id_value_u64((&scanner_data.skipped, &scanner_data.symbols, &scanner_data.follow));
+    let mut hash_symbols = scanner_data.symbols.clone();
+    hash_symbols.extend(scanner_data.follow.iter());
+    let hash = hash_id_value_u64((&scanner_data.skipped, hash_symbols));
     scanner_data.hash = hash;
     Some(scanner_data)
   }
@@ -104,6 +117,8 @@ fn create_lookahead_hash<'a, H: std::hash::Hasher>(builder: &mut ConcurrentGraph
 fn create_state_hash<'a, H: std::hash::Hasher>(state: &GraphNode, lookahead: u64, mut hasher: H) -> u64 {
   let hasher = &mut hasher;
 
+  state.root_data.hash(hasher);
+
   match state.ty {
     StateType::Peek(_) => "peek".hash(hasher),
     _ => state.ty.hash(hasher),
@@ -136,14 +151,14 @@ pub type Finalizer = Box<dyn FnOnce(&mut GraphNode, &mut ConcurrentGraphBuilder,
 /// Temporary Represention of a graph node before goto transformations are
 /// applied
 pub struct StagedNode {
-  node:                 GraphNode,
+  node:                    GraphNode,
   /// Post processor that finalizes the configuration of this node, right before
   /// it is converted into a read-only node
-  pnc_constructor:      Option<PostNodeConstructor>,
-  pnc_data:             PostNodeConstructorData,
-  finalizer:            Option<Finalizer>,
-  enqueued_leaf:        bool,
-  allow_goto_increment: bool,
+  pnc_constructor:         Option<PostNodeConstructor>,
+  pnc_data:                PostNodeConstructorData,
+  finalizer:               Option<Finalizer>,
+  enqueued_leaf:           bool,
+  include_with_goto_state: bool,
 }
 
 impl Debug for StagedNode {
@@ -163,7 +178,7 @@ impl AsRef<GraphNode> for StagedNode {
 impl StagedNode {
   pub fn new(gb: &ConcurrentGraphBuilder) -> Self {
     Self {
-      node:                 GraphNode {
+      node:                    GraphNode {
         build_state: GraphBuildState::Normal,
         graph_type:  GraphType::Parser,
         hash_id:     0,
@@ -178,17 +193,19 @@ impl StagedNode {
         symbol_set:  None,
         db:          gb.db_rc().clone(),
         is_goto:     false,
+        invalid:     Default::default(),
         root_data:   RootData {
           db_key:    DBNonTermKey::default(),
           is_root:   false,
           root_name: Default::default(),
+          version:   -1,
         },
       },
-      allow_goto_increment: false,
-      pnc_constructor:      None,
-      finalizer:            None,
-      pnc_data:             PostNodeConstructorData::None,
-      enqueued_leaf:        false,
+      include_with_goto_state: false,
+      pnc_constructor:         None,
+      finalizer:               None,
+      pnc_data:                PostNodeConstructorData::None,
+      enqueued_leaf:           false,
     }
   }
 
@@ -197,8 +214,8 @@ impl StagedNode {
     self
   }
 
-  pub fn goto_inc(mut self) -> Self {
-    self.allow_goto_increment = true;
+  pub fn include_with_goto_state(mut self) -> Self {
+    self.include_with_goto_state = true;
     self
   }
 
@@ -243,8 +260,8 @@ impl StagedNode {
     self
   }
 
-  pub fn make_root(mut self, root_name: IString, db_key: DBNonTermKey) -> Self {
-    self.node.root_data = RootData { db_key, is_root: true, root_name };
+  pub fn make_root(mut self, root_name: IString, db_key: DBNonTermKey, version: i16) -> Self {
+    self.node.root_data = RootData { db_key, is_root: true, root_name, version: version.min(i16::MAX) };
     self
   }
 
@@ -276,6 +293,7 @@ impl StagedNode {
     self
   }
 
+  /*
   fn to_goto(self, state_id: StateId) -> StagedNode {
     Self {
       node: GraphNode {
@@ -289,12 +307,13 @@ impl StagedNode {
       },
       ..self
     }
-  }
+  } */
 
   pub fn commit(self, builder: &mut ConcurrentGraphBuilder) {
     if self.node.is_root() {
       builder.pre_stage.push(self);
     } else {
+      debug_assert!(self.node.predecessor.is_some(), "Nodes that are not root should have at least one predecessor");
       builder.pre_stage.push(self);
     }
   }
@@ -306,10 +325,10 @@ type RootStateData = (GraphType, SharedGraphNode, ParserConfig);
 
 type RootStates = Map<u64, RootStateData>;
 
-#[derive(Debug)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct ConcurrentGraphBuilder {
   queue:          SharedRW<VecDeque<(SharedGraphNode, ParserConfig)>>,
-  poisoned:       SharedRW<Set<DBNonTermKey>>,
+  poisoned:       SharedRW<Vec<SharedGraphNode>>,
   root_states:    SharedRW<RootStates>,
   state_nonterms: SharedRW<Map<u64, ItemSet>>,
   peek_resolves:  SharedRW<Map<u64, PeekGroup>>,
@@ -322,6 +341,7 @@ pub struct ConcurrentGraphBuilder {
   state_lookups:  Map<u64, SharedGraphNode>,
   db:             SharedParserDatabase,
   pre_stage:      Vec<StagedNode>,
+  recursive_peek: bool,
 }
 
 unsafe impl Send for ConcurrentGraphBuilder {}
@@ -344,6 +364,7 @@ impl Clone for ConcurrentGraphBuilder {
       oos_roots:      Default::default(),
       state_lookups:  Default::default(),
       pre_stage:      Default::default(),
+      recursive_peek: false,
     }
   }
 }
@@ -365,6 +386,7 @@ impl ConcurrentGraphBuilder {
       oos_closures: Default::default(),
       state_lookups: Default::default(),
       pre_stage: Default::default(),
+      recursive_peek: false,
     }
   }
 
@@ -390,10 +412,16 @@ impl ConcurrentGraphBuilder {
     }
   }
 
-  pub fn poison_nonterminal(&mut self, nonterm_key: DBNonTermKey) -> RadlrResult<()> {
-    match self.poisoned.write() {
+  pub fn invalidate_nonterms(&mut self, invalidate_nonterms: &[DBNonTermKey], graph_version: i16) -> RadlrResult<()> {
+    let set = invalidate_nonterms.iter().cloned().collect::<OrderedSet<_>>();
+    match self.root_states.write() {
       Ok(mut nt) => {
-        nt.insert(nonterm_key);
+        for (nt, (_, node, _)) in nt.iter() {
+          if set.contains(&node.root_data.db_key) && node.root_data.version == graph_version {
+            node.invalid.store(true, std::sync::atomic::Ordering::Release);
+          }
+        }
+
         Ok(())
       }
       Err(err) => Err(err.into()),
@@ -409,14 +437,14 @@ impl ConcurrentGraphBuilder {
     }
   }
 
-  pub fn declare_recursive_peek_error(&self) {
-    todo!("Handle this");
+  pub fn declare_recursive_peek_error(&mut self) {
+    self.recursive_peek = true;
   }
 
-  pub fn get_pending_items(&self) -> ItemSet {
+  pub fn get_goto_pending_items(&self) -> ItemSet {
     let mut items: std::collections::BTreeSet<Item> = ItemSet::default();
 
-    for item in self.pre_stage.iter().map(|i| &i.node.kernel) {
+    for item in self.pre_stage.iter().filter_map(|i| i.include_with_goto_state.then_some(&i.node.kernel)) {
       items.extend(item)
     }
 
@@ -434,7 +462,7 @@ impl ConcurrentGraphBuilder {
     self.enqueue_state_for_processing_kernel(state, parser_config, true);
   }
 
-  pub fn enqueue_state_for_processing_kernel(&mut self, state: SharedGraphNode, parser_config: ParserConfig, allow_local: bool) {
+  fn enqueue_state_for_processing_kernel(&mut self, state: SharedGraphNode, parser_config: ParserConfig, allow_local: bool) {
     if self.local_next.is_none() && allow_local {
       {
         self.local_next = Some((state, parser_config));
@@ -450,12 +478,35 @@ impl ConcurrentGraphBuilder {
   }
 
   pub fn get_local_work(&mut self) -> Option<(SharedGraphNode, ParserConfig)> {
-    self.local_next.take()
+    self.recursive_peek = false;
+    match self.local_next.take() {
+      Some(work) => {
+        if work.0.get_root().invalid.load(std::sync::atomic::Ordering::Acquire) {
+          println!("Terminating tree B");
+          None
+        } else {
+          Some(work)
+        }
+      }
+      _ => None,
+    }
   }
 
   pub fn get_global_work(&mut self) -> Option<(SharedGraphNode, ParserConfig)> {
+    self.recursive_peek = false;
     match self.queue.write() {
-      Ok(mut queue) => queue.pop_front(),
+      Ok(mut queue) => {
+        return queue.pop_front();
+        /* while let Some(work) = queue.pop_front() {
+          if work.0.get_root().invalid.load(std::sync::atomic::Ordering::Acquire) {
+            println!("Terminating tree A");
+          } else {
+            return Some(work);
+          }
+        } */
+
+        return None;
+      }
       Err(_) => panic!("queue has been poisoned"),
     }
   }
@@ -496,7 +547,7 @@ impl ConcurrentGraphBuilder {
         .kernel_items(closure)
         .sym(Default::default());
 
-      let mut state = self.append_state_hashes(pending.node.is_root(), pending.node);
+      let mut state = pending.node;
 
       state.hash_id = hash_id_value_u64(nterm);
 
@@ -534,7 +585,7 @@ impl ConcurrentGraphBuilder {
         .parent(self.get_state(origin).unwrap())
         .sym(Default::default());
 
-      let mut state = self.append_state_hashes(pending.node.is_root(), pending.node);
+      let mut state = pending.node;
 
       state.hash_id = hash_id_value_u64(item);
 
@@ -555,10 +606,17 @@ impl ConcurrentGraphBuilder {
     force: bool,
   ) -> RadlrResult<u32> {
     let mut nodes = self.pre_stage.drain(..).collect::<VecDeque<_>>();
-
     let mut queued = 0;
-
     let pred_id = pred.map(|d| d.id).unwrap_or_default().0;
+
+    // Ensure we are still working on a valid graph.
+
+    if let Some(pred) = pred {
+      if pred.get_root().invalid.load(std::sync::atomic::Ordering::Acquire) {
+        //println!("Terminating tree");
+        return Ok(u32::MAX);
+      }
+    }
 
     while let Some(StagedNode {
       node,
@@ -566,10 +624,10 @@ impl ConcurrentGraphBuilder {
       pnc_data,
       finalizer,
       enqueued_leaf,
-      allow_goto_increment,
+      include_with_goto_state: allow_goto_increment,
     }) = nodes.pop_front()
     {
-      let mut state = if increment_goto && allow_goto_increment {
+      let mut state = if increment_goto && allow_goto_increment && !node.ty.is_peek() {
         GraphNode {
           kernel: node
             .kernel
@@ -586,12 +644,9 @@ impl ConcurrentGraphBuilder {
         finalizer(&mut state, self, increment_goto);
       }
 
-      if !state.root_data.is_root {
-        state.root_data = pred.expect("Non-root states should have a predecessor").root_data;
-        state.root_data.is_root = false;
-      }
+      let is_root = update_root_info(&mut state, pred);
 
-      state = self.append_state_hashes(state.root_data.is_root, state);
+      state = self.append_state_hashes(is_root, state);
 
       let key = state.hash_id;
 
@@ -608,21 +663,22 @@ impl ConcurrentGraphBuilder {
               .iter()
               .chain(scanner_data.follow.iter())
               .map(|s| {
-                ItemSet::start_items(db.token(s.tok()).nonterm_id, db).to_origin(Origin::TerminalGoal(s.tok(), s.precedence()))
+                ItemSet::start_items(db.token(s.tok()).nonterm_id, db)
+                  .to_origin_state(StateId::default())
+                  .to_origin(Origin::TerminalGoal(s.tok(), s.precedence()))
               })
-              .chain(
-                scanner_data
-                  .skipped
-                  .iter()
-                  .map(|s| ItemSet::start_items(db.token(*s).nonterm_id, db).to_origin(Origin::TerminalGoal(*s, 0))),
-              )
+              .chain(scanner_data.skipped.iter().map(|s| {
+                ItemSet::start_items(db.token(*s).nonterm_id, db)
+                  .to_origin_state(StateId::default())
+                  .to_origin(Origin::TerminalGoal(*s, 0))
+              }))
               .flatten();
 
             let scanner_root = StagedNode::new(self)
               .kernel_items(start_items)
               .ty(StateType::Start)
               .graph_ty(GraphType::Scanner)
-              .make_root(scanner_data.create_scanner_name(db), DBNonTermKey::default())
+              .make_root(scanner_data.create_scanner_name(db), DBNonTermKey::default(), 0)
               .id(StateId(sym_set_id as usize, GraphIdSubType::Root));
 
             nodes.push_back(scanner_root);
@@ -634,43 +690,44 @@ impl ConcurrentGraphBuilder {
         }
       }
 
-      let already_commited = match self.predecessors.read() {
-        Ok(preds) => {
-          if preds.contains_key(&state.hash_id) {
-            drop(preds);
-            if let Some(parent) = state.parent() {
-              match self.predecessors.write() {
-                Ok(mut preds) => {
-                  preds.entry(key).or_default().push(parent.clone());
+      let already_commited = /* !is_root
+        && */ match self.predecessors.read() {
+          Ok(preds) => {
+            if preds.contains_key(&state.hash_id) {
+              drop(preds);
+              if let Some(parent) = state.parent() {
+                match self.predecessors.write() {
+                  Ok(mut preds) => {
+                    preds.entry(key).or_default().push(parent.clone());
+                  }
+                  Err(err) => return Err(err.into()),
                 }
-                Err(err) => return Err(err.into()),
               }
-            }
-            true
-          } else {
-            drop(preds);
-            if let Some(parent) = state.parent() {
-              match self.predecessors.write() {
-                Ok(mut preds) => {
-                  preds.entry(key).or_default().push(parent.clone());
+              true
+            } else {
+              drop(preds);
+              if let Some(parent) = state.parent() {
+                match self.predecessors.write() {
+                  Ok(mut preds) => {
+                    preds.entry(key).or_default().push(parent.clone());
+                  }
+                  Err(err) => return Err(err.into()),
                 }
-                Err(err) => return Err(err.into()),
               }
-            }
 
-            false
+              false
+            }
           }
-        }
-        Err(err) => return Err(err.into()),
-      };
+          Err(err) => return Err(err.into()),
+        };
+
+      let state = Arc::new(state);
+
+      if let Some(finalizer) = pnc_constructor {
+        nodes.extend(finalizer(&state, self, pnc_data));
+      }
 
       if !already_commited || force {
-        let state = Arc::new(state);
-
-        if let Some(finalizer) = pnc_constructor {
-          nodes.extend(finalizer(&state, self, pnc_data));
-        }
-
         match state.ty {
           StateType::Start => {
             match self.root_states.write() {
@@ -681,8 +738,8 @@ impl ConcurrentGraphBuilder {
             }
             self.enqueue_state_for_processing_kernel(state.clone(), *parser_config, allow_local_queueing);
           }
-          _ => {
-            if state.is_leaf {
+          _ => match state.is_leaf {
+            true => {
               match self.leaf_states.write() {
                 Ok(mut leaf_states) => {
                   leaf_states.push(state.clone());
@@ -693,10 +750,11 @@ impl ConcurrentGraphBuilder {
               if enqueued_leaf {
                 self.enqueue_state_for_processing_kernel(state.clone(), *parser_config, allow_local_queueing);
               }
-            } else {
+            }
+            _ => {
               self.enqueue_state_for_processing_kernel(state.clone(), *parser_config, allow_local_queueing);
             }
-          }
+          },
         }
         queued += 1;
       }
@@ -705,6 +763,9 @@ impl ConcurrentGraphBuilder {
     Ok(queued)
   }
 
+  /// Create hash id's for the given state.
+  ///
+  /// WARNING: Ensure the state's root_data is set before calling this method.
   fn append_state_hashes(&mut self, is_root: bool, mut state: GraphNode) -> GraphNode {
     let lookahead =
       if is_root { 0 } else { create_lookahead_hash(self, &state, std::collections::hash_map::DefaultHasher::new()) };
@@ -729,9 +790,19 @@ impl ConcurrentGraphBuilder {
   }
 }
 
+fn update_root_info(state: &mut GraphNode, pred: Option<&Arc<GraphNode>>) -> bool {
+  let is_root = if !state.root_data.is_root {
+    state.root_data = pred.expect("Non-root states should have a predecessor").root_data;
+    state.root_data.is_root = false;
+    false
+  } else {
+    true
+  };
+  is_root
+}
+
 pub struct Graphs {
   root_states:    RootStates,
-  poisoned:       Set<DBNonTermKey>,
   leaf_states:    Vec<SharedGraphNode>,
   predecessors:   Map<u64, Vec<SharedGraphNode>>,
   state_nonterms: Map<u64, ItemSet>,
@@ -749,10 +820,9 @@ impl Debug for Graphs {
 
 impl From<ConcurrentGraphBuilder> for Graphs {
   fn from(value: ConcurrentGraphBuilder) -> Self {
-    assert!(value.queue.read().unwrap().is_empty());
+    debug_assert!(value.queue.read().unwrap().is_empty());
     Self {
       root_states:    value.root_states.read().unwrap().clone(),
-      poisoned:       value.poisoned.read().unwrap().clone(),
       leaf_states:    value.leaf_states.read().unwrap().clone(),
       predecessors:   value.predecessors.read().unwrap().clone(),
       state_nonterms: value.state_nonterms.read().unwrap().clone(),
@@ -764,15 +834,11 @@ impl Graphs {
   pub fn create_ir_precursors<'a>(&'a self) -> IrPrecursorData<'a> {
     // Collect all leaf states that are part of a valid source
 
-    let mut successors: BTreeMap<u64, IRPrecursorGroup> = BTreeMap::new();
+    let mut successors = BTreeMap::new();
 
     let mut queue = VecDeque::from_iter(self.leaf_states.iter().cloned());
 
     for leaf_state in queue.iter() {
-      if self.poisoned.contains(&leaf_state.root_data.db_key) {
-        continue;
-      }
-
       successors.insert(leaf_state.hash_id, IRPrecursorGroup {
         state:         leaf_state.clone(),
         successors:    Default::default(),
@@ -781,32 +847,56 @@ impl Graphs {
       });
     }
 
+    let mut seen: HashSet<_> = Set::new();
+
     while let Some(node) = queue.pop_front() {
-      if self.poisoned.contains(&node.root_data.db_key) {
-        continue;
-      }
+      if seen.insert(node.id()) {
+        for predecessors in self.predecessors.get(&node.hash_id).into_iter() {
+          for predecessor in predecessors {
+            let map = successors.entry(predecessor.hash_id).or_insert(IRPrecursorGroup {
+              state:         predecessor.clone(),
+              successors:    BTreeMap::new(),
+              non_terminals: self.state_nonterms.get(&predecessor.hash_id).cloned(),
+              root_name:     predecessor.is_root().then(|| predecessor.root_data.root_name),
+            });
 
-      for predecessors in self.predecessors.get(&node.hash_id).into_iter() {
-        for predecessor in predecessors {
-          let map = successors.entry(predecessor.hash_id).or_insert(IRPrecursorGroup {
-            state:         predecessor.clone(),
-            successors:    BTreeMap::new(),
-            non_terminals: self.state_nonterms.get(&predecessor.hash_id).cloned(),
-            root_name:     predecessor.is_root().then(|| predecessor.root_data.root_name),
-          });
-
-          let node_hash = node.hash_id;
-          map.successors.insert(node_hash, node.clone());
-          queue.push_back(predecessor.clone());
+            let node_hash = node.hash_id;
+            map.successors.insert(node_hash, node.clone());
+            queue.push_back(predecessor.clone());
+          }
         }
       }
     }
 
-    IrPrecursorData { graph: self, precursors: successors }
+    // Walk the graph in the other direction to prune all nodes that are unreachable
+
+    let mut queue = VecDeque::from_iter(self.root_states.values().map(|(_, n, _)| n).cloned());
+
+    let mut precursors = BTreeMap::new();
+
+    while let Some(node) = queue.pop_front() {
+      if node.is_root() && node.invalid.load(std::sync::atomic::Ordering::Acquire) {
+        continue;
+      }
+
+      let key = node.hash_id;
+
+      if !precursors.contains_key(&key) {
+        if let Some(data) = successors.remove(&key) {
+          for (_, successor) in &data.successors {
+            queue.push_back(successor.clone());
+          }
+          precursors.insert(node.hash_id, data);
+        }
+      }
+    }
+
+    IrPrecursorData { graph: self, precursors }
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct IRPrecursorGroup {
   pub state:         SharedGraphNode,
   pub successors:    BTreeMap<u64, SharedGraphNode>,
@@ -814,10 +904,18 @@ pub struct IRPrecursorGroup {
   pub root_name:     Option<IString>,
 }
 
-#[derive(Debug)]
 pub struct IrPrecursorData<'a> {
   graph:      &'a Graphs,
   precursors: BTreeMap<u64, IRPrecursorGroup>,
+}
+
+#[cfg(debug_assertions)]
+impl<'a> Debug for IrPrecursorData<'a> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut s = f.debug_struct("IrPrecursorData");
+    s.field("precursors", &self.precursors);
+    s.finish()
+  }
 }
 
 impl<'a> IrPrecursorData<'a> {
@@ -833,20 +931,18 @@ pub struct GraphIterator<'a> {
 
 impl<'a: 'b, 'b> From<&'b IrPrecursorData<'a>> for GraphIterator<'b> {
   fn from(value: &'b IrPrecursorData<'a>) -> Self {
-    let graph = value.graph;
-    let mut seen = HashSet::new();
-    let mut out_queue = VecDeque::with_capacity(value.precursors.len());
-    let mut process_queue = VecDeque::from_iter(graph.root_states.iter().map(|s| s.1 .1.hash_id));
+    let mut out_queue = VecDeque::new();
+    let mut process_queue = VecDeque::from_iter(value.precursors.iter());
 
-    while let Some(id) = process_queue.pop_front() {
-      if seen.insert(id) {
-        out_queue.push_back(id);
+    while let Some((id, _)) = process_queue.pop_front() {
+      out_queue.push_back(*id);
+      /* if seen.insert(id) {
         if let Some(IRPrecursorGroup { successors, .. }) = value.precursors.get(&id).as_ref() {
           for successor in successors.values() {
             process_queue.push_back(successor.hash_id)
           }
         }
-      }
+      } */
     }
 
     Self { precursors: value, queue: out_queue }

@@ -365,7 +365,7 @@ fn create_byte_sequences<'db>(
 
 /// Inline trivial scanners.
 ///
-/// Trivial scanners are those that only produce single codepoint tokens.
+/// Trivial scanners are those that only produce single CODEPOINT tokens.
 fn inline_scanners<'db>(
   db: &'db ParserDatabase,
   config: &ParserConfig,
@@ -396,7 +396,7 @@ fn inline_scanners<'db>(
         SymbolId::Default => MatchInputType::Default,
         sym if sym.is_class() => MatchInputType::Class,
         sym if sym.is_codepoint(db.string_store()) => MatchInputType::Codepoint,
-        _ => MatchInputType::Byte,
+        sym => MatchInputType::Byte,
       });
 
       // Remove the default statement if present. This will be appended to the end of

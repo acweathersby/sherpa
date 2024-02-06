@@ -1,4 +1,5 @@
 use crate::{Initializer, StructInitializer};
+use radlr_core::DBRuleKey;
 use radlr_formatter::*;
 use std::fmt::Debug;
 
@@ -12,6 +13,19 @@ pub enum AscriptRule {
   ListContinue(usize, Initializer),
   LastSymbol(usize, Initializer),
   Invalid(usize),
+}
+
+impl AscriptRule {
+  pub fn get_db_key(&self) -> DBRuleKey {
+    match self {
+      AscriptRule::Struct(id, ..)
+      | AscriptRule::Expression(id, ..)
+      | AscriptRule::ListInitial(id, ..)
+      | AscriptRule::ListContinue(id, ..)
+      | AscriptRule::LastSymbol(id, ..)
+      | AscriptRule::Invalid(id, ..) => DBRuleKey::from(*id as u32),
+    }
+  }
 }
 
 impl ValueObj for AscriptRule {

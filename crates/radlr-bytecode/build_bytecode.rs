@@ -39,15 +39,15 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> R
   let mut state_name_to_proxy = OrderedMap::new();
 
   let mut pkg = BytecodeParserDB {
-    bytecode: Array::from_iter(bytecode_header()),
-    nonterm_name_to_id: Default::default(),
-    ir_token_lookup: Default::default(),
-    state_name_to_address: Default::default(),
-    address_to_state_name: Default::default(),
-    nonterm_id_to_address: Default::default(),
+    bytecode:               Array::from_iter(bytecode_header()),
+    nonterm_name_to_id:     Default::default(),
+    ir_token_lookup:        Default::default(),
+    state_name_to_address:  Default::default(),
+    address_to_state_name:  Default::default(),
+    nonterm_id_to_address:  Default::default(),
     state_to_token_ids_map: Default::default(),
-    token_id_to_str: db.tokens().iter().map(|tok| (tok.tok_id.to_val(), tok.name.to_string(db.string_store()))).collect(),
-    default_entry: EntryPoint { nonterm_id: db.entry_nterm_keys().first().unwrap().to_val() },
+    token_id_to_str:        db.tokens().iter().map(|tok| (tok.tok_id.to_val(), tok.name.to_string(db.string_store()))).collect(),
+    default_entry:          EntryPoint { nonterm_id: db.entry_nterm_keys().first().unwrap().to_val() },
   };
 
   for (name, state) in states {

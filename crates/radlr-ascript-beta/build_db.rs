@@ -41,19 +41,19 @@ pub fn build_database(db: RadlrDatabase) -> AscriptDatabase {
 
   if adb.errors.is_empty() {
     match resolve_expressions(&mut adb, nonterm_types) {
-      Ok(()) => {}
+      Ok(()) => {
+        fill_out_rules(&mut adb);
+
+        //add_token_nodes(&mut adb);
+
+        collect_types(&mut adb);
+      }
       Err(missing_nonterm_definition) => adb.errors.push(RadlrError::Text(format!(
         "Could not resolve Node type for Non-Term [{}]",
         db.nonterm_friendly_name(missing_nonterm_definition).to_string(db.string_store())
       ))),
     }
   }
-
-  fill_out_rules(&mut adb);
-
-  //add_token_nodes(&mut adb);
-
-  collect_types(&mut adb);
 
   adb
 }
@@ -142,7 +142,9 @@ fn collect_types(adb: &mut AscriptDatabase) {
         Some(node) => {
           extract_type_data(node.get_type().to_cardinal(), types);
         }
-        None => unreachable!(),
+        None => {
+          unreachable!()
+        }
       },
 
       _ => {}
@@ -458,6 +460,8 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
     let nonterm_id = db.db_rule(rule_id).nonterm;
 
     if ty.is_unknown() {
+      queue.push_back(rule_id);
+      queue.extend(rule_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
       continue;
     }
 
@@ -481,6 +485,7 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
   resolved_nonterms
 }
 
+#[track_caller]
 fn resolve_expressions(
   adb: &mut AscriptDatabase,
   nonterm_types: OrderedMap<DBNonTermKey, AscriptType>,
@@ -512,9 +517,8 @@ fn resolve_expressions(
         init.ty = node.get_type().clone();
         init.output_graph = Some(node);
       }
-      AscriptRule::ListInitial(_, init) => {
+      AscriptRule::ListInitial(id, init) => {
         let Initializer { output_graph, ty, .. } = init;
-
         let last = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
           Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices, None)?,
           None => GraphNode::Undefined(AscriptType::Undefined),
@@ -526,7 +530,10 @@ fn resolve_expressions(
             *output_graph = Some(last);
           }
           _ => {
-            let last = GraphNode::Vec(GraphNodeVecInits(vec![last]), *ty);
+            let last = GraphNode::Vec(
+              GraphNodeVecInits(vec![last.clone()]),
+              AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: last.get_type().as_scalar().unwrap() }),
+            );
             *ty = last.get_type().clone();
             *output_graph = Some(last);
           }
@@ -545,6 +552,8 @@ fn resolve_expressions(
         };
 
         debug_assert!(matches!(first.get_type(), AscriptType::Aggregate(..)));
+
+        *ty = first.get_type().clone();
 
         let join = GraphNode::Add(Rc::new(first), Rc::new(last), *ty);
         *output_graph = Some(join);
@@ -696,10 +705,10 @@ struct GraphMutData<'a> {
 
 #[derive(Clone, Copy)]
 struct GraphResolveData<'a> {
-  item: Item,
-  db: &'a ParserDatabase,
-  node: &'a ASTNode,
-  nonterm_types: &'a OrderedMap<DBNonTermKey, AscriptType>,
+  item:                 Item,
+  db:                   &'a ParserDatabase,
+  node:                 &'a ASTNode,
+  nonterm_types:        &'a OrderedMap<DBNonTermKey, AscriptType>,
   default_nonterm_type: Option<(DBNonTermKey, &'a AscriptType)>,
 }
 

@@ -468,7 +468,7 @@ impl<'graph> GraphStateMutRef<'graph> {
 
 // Graph -------------------------------------------------------------
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Hash)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum GraphBuildState {
   #[default]
@@ -477,8 +477,7 @@ pub enum GraphBuildState {
   Leaf,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Hash, Default)]
 pub enum GraphType {
   /// Classic Recursive Descent Ascent with unlimited lookahead.
   #[default]
@@ -723,7 +722,7 @@ impl StateId {
   }
 
   pub fn is_root(&self) -> bool {
-    self.subtype() == GraphIdSubType::Root && self.index() == 0
+    self.subtype() == GraphIdSubType::Root || self.index() == 0
   }
 
   pub fn is_rootish(&self) -> bool {
@@ -759,9 +758,9 @@ pub(crate) enum EnqueResult {
 }
 
 pub struct StateBuilder<'graph_builder> {
-  state_id: StateId,
-  builder:  &'graph_builder mut GraphBuilder,
-  resolved: bool,
+  pub state_id: StateId,
+  builder:      &'graph_builder mut GraphBuilder,
+  resolved:     bool,
 }
 
 impl<'graph_iter> StateBuilder<'graph_iter> {

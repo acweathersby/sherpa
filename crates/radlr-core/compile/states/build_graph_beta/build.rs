@@ -45,11 +45,14 @@ pub(crate) fn handle_kernel_items(
   if pred.state_type().is_peek() && pred.state_type().peek_level() > 0 && states_queued == 0 {
     // Todo(anthony) : if peeking, determine if the peek has terminated in a
     // non-deterministic way. If so, produce a NonDeterministicPeek error.
-
+    panic!("Undeterministic PARSE");
     let root_data = pred.root_data.db_key;
 
     Err(RadlrError::StateConstructionError(
-      crate::compile::states::build_states_beta::StateConstructionError::NonDeterministicPeek(root_data),
+      crate::compile::states::build_states_beta::StateConstructionError::NonDeterministicPeek(
+        pred.get_root_shared(),
+        Box::new("Testing Messagine. Peek has no successors!".into()),
+      ),
     ))
   } else {
     Ok(())

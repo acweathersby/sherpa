@@ -110,6 +110,7 @@ pub struct ItemLane {
 }
 
 #[derive(Clone, Copy)]
+#[repr(align(64))]
 pub struct Item {
   /// The non-terminal or token that the item directly or
   /// indirectly resolves to
@@ -726,28 +727,36 @@ mod test {
 
     Ok(())
   }
-}
 
-fn item_attributes() -> RadlrResult<()> {
-  let db = ParserDatabase::test_lr()?;
+  #[cfg(debug_assertions)]
+  #[test]
+  fn item_attributes() -> RadlrResult<()> {
+    use crate::{
+      compile::states::build_graph::graph::{GraphIdSubType, Origin, StateId},
+      DBRuleKey,
+      Item,
+    };
 
-  let item: Item = (DBRuleKey::from(0 as u32), &db).into();
+    let db = ParserDatabase::test_lr()?;
 
-  assert_eq!(item.nonterm_name_str(db.get_internal()).as_str(), "A");
+    let item: Item = (DBRuleKey::from(0 as u32), &db).into();
 
-  assert_eq!(item.sym_len(), 3);
+    assert_eq!(item.nonterm_name_str(db.get_internal()).as_str(), "A");
 
-  assert_eq!(item.sym_index(), 0);
+    assert_eq!(item.sym_len(), 3);
 
-  assert_eq!(item.is_canonical(), true);
+    assert_eq!(item.sym_index(), 0);
 
-  let item = item.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(StateId(0, GraphIdSubType::Root));
+    assert_eq!(item.is_canonical(), true);
 
-  assert_eq!(item.is_canonical(), false);
+    let item = item.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(StateId(0, GraphIdSubType::Root));
 
-  assert_eq!(item.origin, Origin::__OOS_CLOSURE__);
+    assert_eq!(item.is_canonical(), false);
 
-  Ok(())
+    assert_eq!(item.origin, Origin::__OOS_CLOSURE__);
+
+    Ok(())
+  }
 }
 
 /// Represents either a FIRST or a FOLLOW depending on whether the root item

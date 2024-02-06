@@ -103,7 +103,10 @@ pub(crate) fn get_follow_internal(
         let closure_state_id = c_item.origin_state;
         let origin = c_item.origin;
 
-        let state = node.get_predecessor(c_item.origin_state).unwrap();
+
+        let state = node
+          .get_predecessor(c_item.origin_state)
+          .expect(&format!("Node should have a predecessors unless it is a root node {node:?}"));
 
         let closure = state
           .kernel_items()

@@ -7,8 +7,6 @@ use super::{
     build::{GroupedFirsts, TransitionGroup},
     graph::*,
   },
-  create_call,
-  create_peek,
   handle_completed_item,
   CreateCallResult,
 };
@@ -20,6 +18,7 @@ use crate::{
       errors::{conflicting_symbols_error, peek_not_allowed_error},
       items::get_follow,
     },
+    build_states_beta::StateConstructionError,
   },
   journal::config,
   parser::Shift,
@@ -196,11 +195,18 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
         Ok(ShiftReduceConflictResolution::Fork)
       } else {
         gb.declare_recursive_peek_error();
-        peek_not_allowed_error(
-          gb,
-          &[shifts.cloned().collect(), reduces.cloned().collect()],
-          &format!("This is undeterministic at k>={k}"),
-        )
+        Err(RadlrError::StateConstructionError(StateConstructionError::NonDeterministicPeek(
+          node.get_root_shared(),
+          Box::new(
+            peek_not_allowed_error::<()>(
+              gb,
+              &[shifts.cloned().collect(), reduces.cloned().collect()],
+              &format!("This is undeterministic at k>={k}"),
+            )
+            .err()
+            .unwrap(),
+          ),
+        )))
       }
     }
     KCalcResults::LargerThanMaxLimit(k) => {

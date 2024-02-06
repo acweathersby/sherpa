@@ -5,6 +5,7 @@ use crate::{
     TestParser,
     _write_disassembly_to_temp_file_,
     _write_states_to_temp_file_,
+    compile_and_run_grammars_beta,
   },
   *,
 };
@@ -86,8 +87,51 @@ pub fn symbol_occlusion() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn symbol_occlusion_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+
+    <> A > B | C 
+    <> B > tk:('@' "+")
+    <> C > ( c:id | c:num | c:sym )+
+
+  "#],
+    &[("default", "@+ddf", false), ("default", "-+ddf", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn follow_symbols_in_gotos() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r#"
+    IGNORE { c:sp c:nl }
+
+    <> A > (B | C | E)(+) 
+    
+    <> C > C "+" C     
+         | D           
+
+    <> D > R G         
+         | R           
+
+    <> G > "<" "b" ">" 
+
+    <> R > "R"         
+    
+    <> B > "<>" "A"
+
+    <> E > "<" c:num ">" "A"
+
+  "#],
+    &[("default", "<> A R <> A R <b> <> A", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn follow_symbols_in_gotos_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { c:sp c:nl }
 
@@ -131,8 +175,89 @@ pub fn temp() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn temp_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+  
+    <> dd > "test" newLine? $
+      
+    <> newLine > tk:( c:nl+ )
+
+    <> badRule > dd "}" 
+    
+    "#],
+    &[("default", "test\n", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn form() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r###"
+
+NAME ascript_formatter
+
+IGNORE { c:sp c:nl }
+
+<> ascript_form > script_statement+
+
+<> script_statement > text | function | format | call | for | object | block::<script_statement>
+
+<> function_statement > text | format | call | match | object | for | block::<function_statement+>
+
+<> function > fn_name params '{' function_statement+ "}"{kw}
+
+<> params > id ( ":" id )?
+
+<> call > fn_name args
+
+<> args > "(" ( object | text )(*) ")"
+
+<> format > "#++" | "#--" | "_" 
+
+<> text > tk:( ( c:id | c:num | c:sym )+ ) | id
+
+ <Content> block >
+        "[" Content? "]" 
+    |   "(" Content? ")" 
+    |   "{" Content? "}"
+ 
+ <> match > "#match" object "{"  match_arm*  "}"
+
+ <> match_arm > id "->" ( function_statement )+
+
+ <> for > "#for" id ":" object ( "(" function_statement+ ")" )? "{" function_statement+ "}"
+ 
+ <> fn_name > tk:( "#" id )
+
+ <> id > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )
+
+ <> object > id ("." id)+
+
+  "###],
+    &[(
+      "default",
+      r#"
+    
+#test test {
+  #++
+
+  struct { #++ test:_ test #-- }
+
+  #--
+}
+    
+  "#,
+      true,
+    )],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn form_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r###"
 
 NAME ascript_formatter
