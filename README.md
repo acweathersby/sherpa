@@ -11,15 +11,9 @@ Radlr is a general purpose parser compiler toolchain that provides a rich set of
 - Linting and formatting
 - AST and CST construction and traversal
 
-## Want To Know More?
-
 ### Docs 
 
-Details on all this and more can be found in  the 
-
 Checkout out the online documentation [here](https://rum-craft.github.io/radlr/docs).
-
-API documentation can be found here. 
 
 ## License
 
