@@ -13,7 +13,7 @@ use crate::{
   ReportType,
   TestPackage,
 };
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 /// Simple single thread compilation of a grammar source string.
 /// `test_fn` is called after a successful compilation of parse states.

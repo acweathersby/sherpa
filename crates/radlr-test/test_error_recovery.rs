@@ -41,7 +41,7 @@ pub fn construct_error_recovering_parser() -> RadlrResult<()> {
 
   let pkg = compile_bytecode(&parser_data, false)?;
 
-  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db(), config)?;
 
   pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
 
@@ -83,7 +83,7 @@ pub fn construct_error_recovering_erlang_toy() -> RadlrResult<()> {
 
   let pkg = compile_bytecode(&parser_data, false)?;
 
-  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db(), config)?;
 
   let result =
     pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
@@ -125,7 +125,7 @@ pub fn temp_lab_test() -> RadlrResult<()> {
 
   let pkg = compile_bytecode(&parser_data, false)?;
 
-  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db(), config)?;
 
   let result =
     pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;

@@ -55,6 +55,8 @@ pub struct ParserConfig {
   /// The maximum number of lookead symbols allowed before parser construction
   /// is aborted or a different disambiguating strategy is employed.
   pub max_k: usize,
+
+  __BETA__: bool,
 }
 
 /// Configuration for the creation of a grammar from grammar sources.
@@ -90,6 +92,7 @@ impl Default for ParserConfig {
       ALLOW_ANONYMOUS_NONTERM_INLINING: true,
       ALLOW_BYTE_SEQUENCES: false,
       max_k: usize::MAX,
+      __BETA__: false,
     }
   }
 }
@@ -108,6 +111,15 @@ impl ParserConfig {
       peeks_present: self.ALLOW_PEEKING,
       forks_present: self.ALLOW_CONTEXT_SPLITTING,
     }
+  }
+
+  pub fn is_beta(&self) -> bool {
+    self.__BETA__
+  }
+
+  pub fn beta(mut self) -> Self {
+    self.__BETA__ = true;
+    self
   }
 
   pub fn hybrid(self) -> Self {
@@ -284,13 +296,13 @@ impl ParserClassification {
   /// `RAD(2)` - Recursive Ascent & Descent with 2 levels of look ahead.
   pub fn to_string(&self) -> String {
     let base = if self.calls_present {
-      if self.bottom_up {
+      if self.bottom_up || self.gotos_present {
         "RAD"
       } else {
         "RD"
       }
     } else {
-      if self.gotos_present {
+      if self.gotos_present || self.bottom_up {
         "LR"
       } else {
         "LL"

@@ -32,8 +32,39 @@ pub fn group_inline() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn group_inline_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+    <> E > ( ("a" "b") "d" ( "o" ) | "b" "o" ) E | "b"
+
+  "#],
+    &[("default", "abdob", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn grammar_ascript_naked_refs() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r#"
+
+    IGNORE { c:sp }
+
+    <> start > A | C
+
+    <> A > "B" :ast $1 <> C > "D"
+
+
+
+  "#],
+    &[("default", "D", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn grammar_ascript_naked_refs_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r#"
 
     IGNORE { c:sp }
@@ -71,6 +102,29 @@ pub fn symbol_occlusion2() -> RadlrResult<()> {
     ParserConfig::default(),
   )
 }
+
+#[test]
+pub fn symbol_occlusion2_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+
+    IGNORE { c:sp }
+
+
+    <> A > (B | C)(+)
+
+    <> B > ":ast" D?
+    
+    <> D > "<" c:num ">"
+
+    <> C > "<>" c:id
+
+  "#],
+    &[("default", "<> d :ast < 2 > <> r", true)],
+    ParserConfig::default(),
+  )
+}
+
 #[test]
 pub fn symbol_occlusion() -> RadlrResult<()> {
   compile_and_run_grammars(
@@ -332,8 +386,35 @@ pub fn any_symbol() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn any_symbol_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+    <> A > c:any "d" $
+
+  "#],
+    &[("default", "$d", true)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn group_token() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r#"
+
+    IGNORE { c:sp }
+
+    <> A > tk:( "t" "est" )
+
+  "#],
+    &[("default", "test", true), ("default", "t est", false)],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
+pub fn group_token_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r#"
 
     IGNORE { c:sp }
@@ -374,6 +455,33 @@ pub fn templates() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn templates_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+    EXPORT A as A
+
+    <> A > block::<t_chaco, "test">
+
+    <Aa, Bb, Cc> wrapped > Aa Bb? Cc
+    
+    <t_T:ast, Content:sym> block >
+    wrapped::<"[", Content, "]"> :ast { t_T }
+      | wrapped::<"(", Content, ")">
+      | wrapped::<"{", Content, "}">
+      "#],
+    &[
+      ("A", "{test}", true),
+      ("A", "(test)", true),
+      ("A", "[test]", true),
+      ("A", "{}", true),
+      ("A", "()", true),
+      ("A", "[]", true),
+    ],
+    ParserConfig::default(),
+  )
+}
+
+#[test]
 pub fn right_recursive() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r#"
@@ -386,8 +494,37 @@ pub fn right_recursive() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn right_recursive_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+    <> E > "d" E | "b"
+
+  "#],
+    &[("default", "ddb", true)],
+    ParserConfig::default().llk(2),
+  )
+}
+
+#[test]
 pub fn identifier() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r#"
+      <> id > tk:identifier
+
+      <> identifier > "_"(+) ( c:id | c:num )  id_rest(*)
+          | c:id id_rest(*)
+
+      <> id_rest > c:id | c:num | '-' | '_'
+
+  "#],
+    &[("default", "a_b", true)],
+    Default::default(),
+  )
+}
+
+#[test]
+pub fn identifier_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r#"
       <> id > tk:identifier
 
@@ -423,6 +560,26 @@ pub fn basic_scanner() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn basic_scanner_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+      IGNORE { c:sp c:nl }
+
+      <> A > "sym" [ tk:ref? "?" ?  "ref"? ]!?
+
+      <> ref > "^" id
+
+      <> id > tk:id_tok
+
+      <> id_tok >  ( "-" | "_" | c:id ) ( c:id | '_' | '-' | c:num )(*)
+
+  "#],
+    &[("default", "sym?^name", true)],
+    Default::default(),
+  )
+}
+
+#[test]
 pub fn basic_left_recursion() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r#"
@@ -435,8 +592,43 @@ pub fn basic_left_recursion() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn basic_left_recursion_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+      <> A > A c:num
+          | c:num
+  "#],
+    &[("default", "123", true)],
+    Default::default(),
+  )
+}
+
+#[test]
 pub fn fork_parsing() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r#"
+      IGNORE { c:sp } 
+
+      <> E > A " A-test" | B " B-test"
+
+      <> B > R "=>" "()"
+
+      <> A > O "=>" "()"
+
+      <> O > I
+
+      <> R > I
+
+      <> I > "id"
+  "#],
+    &[("default", "id=>() B-test", true), ("default", "id=>() A-test", true)],
+    Default::default(),
+  )
+}
+
+#[test]
+pub fn fork_parsing_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r#"
       IGNORE { c:sp } 
 
@@ -476,6 +668,24 @@ pub fn construct_recursive_ascent() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn construct_recursive_ascent_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+    IGNORE { c:sp } 
+      
+    <> A > X 'c'
+         | Y 'd'
+    
+    <> X > 'x' X?
+  
+    <> Y > 'x' Y?
+"#],
+    &[("default", "xd", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
+    ParserConfig::default().lalr(),
+  )
+}
+
+#[test]
 pub fn recursive_nonterminal() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r#"
@@ -488,8 +698,44 @@ pub fn recursive_nonterminal() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn recursive_nonterminal_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+  
+      <> expr > expr "+" expr      | c:num 
+  "#],
+    &[("default", "1+2+3", true)],
+    Default::default(),
+  )
+}
+
+#[test]
 pub fn expr_term() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r#"
+
+    <> expr > expr '+' term 
+    | expr '-' term   
+    | term            
+    
+
+    <> term > '(' expr ')'   
+        | num             
+        
+
+    <> num > '0'            
+      | '1'              
+      
+
+"#],
+    &[("default", "0+(1-1)", true)],
+    Default::default(),
+  )
+}
+
+#[test]
+pub fn expr_term_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r#"
 
     <> expr > expr '+' term 
@@ -532,6 +778,26 @@ pub fn precedence_temp() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn precedence_temp_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+    IGNORE { tk:space }
+
+    <> expr > expr "+"{1} expr{1}
+            | expr "*"{3} expr{3}
+            | expr "/"{2} expr{2}
+            | expr "-"{1} expr{1}
+            | (c:num(+))
+
+    <> space > c:sp(+)
+
+"#],
+    &[("default", "11 + 2 * 2 + 2 * 2 + 1 + 1", true)],
+    Default::default(),
+  )
+}
+
+#[test]
 pub fn precedence() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r#"
@@ -553,8 +819,50 @@ pub fn precedence() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn precedence_Beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+    IGNORE { tk:space }
+
+    <> expr > expr "+"{1} expr{1}
+            | expr "^"{4} expr{4}
+            | expr "*"{3} expr{3}
+            | expr "/"{2} expr{2}
+            | expr "-"{1} expr{1}
+            | (c:num(+))
+
+    <> space > c:sp(+)
+
+"#],
+    &[("default", "11 + 2 * 2 ^ 2 + 2 * 2 + 1 + 1", true)],
+    Default::default(),
+  )
+}
+
+#[test]
 pub fn symbols_requiring_peek() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r#"
+
+IGNORE { c:sp  } 
+
+<> A > gs(+">>") ">>" ge
+
+<> gs > "t:" tk:name
+
+<> ge > "e:" tk:name
+
+<> name > c:id(+)
+
+"#],
+    &[("default", "t:a >> e:b", true)],
+    Default::default(),
+  )
+}
+
+#[test]
+pub fn symbols_requiring_peek_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r#"
 
 IGNORE { c:sp  } 
@@ -596,6 +904,31 @@ IGNORE { c:sp  }
     ParserConfig::default(),
   )
 }
+
+#[test]
+pub fn other_symbols_requiring_peek_hybrid_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> A > ( B | ":" C )(+)
+
+<> B > id "=>" c:id
+
+<> C > a_id(+)
+
+<> a_id > id "!"? 
+
+<> id > tk:id_tok
+
+<> id_tok > c:id
+
+"#],
+    &[("default", ":t t => g :t! t!", true)],
+    ParserConfig::default(),
+  )
+}
+
 #[test]
 pub fn other_symbols_requiring_peek_lr2() -> RadlrResult<()> {
   compile_and_run_grammars(
@@ -619,6 +952,31 @@ IGNORE { c:sp  }
     ParserConfig::default().lrk(8),
   )
 }
+
+#[test]
+pub fn other_symbols_requiring_peek_lr2_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> A > ( B | ":" C )(+)
+
+<> B > id "=>" c:id
+
+<> C > a_id(+)
+
+<> a_id > id "!"? 
+
+<> id > tk:id_tok
+
+<> id_tok > c:id
+
+"#],
+    &[("default", ":t t => g :t! t!", true)],
+    ParserConfig::default().lrk(8),
+  )
+}
+
 #[test]
 pub fn other_symbols_requiring_peek_ll() -> RadlrResult<()> {
   compile_and_run_grammars(
@@ -646,8 +1004,53 @@ IGNORE { c:sp  }
 }
 
 #[test]
+pub fn other_symbols_requiring_peek_ll_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> A > ( B | ":" C )(+)
+
+<> B > id "=>" c:id
+
+<> C > a_id(+)
+
+<> a_id > id "!"? 
+
+<> id > tk:id_tok
+
+<> id_tok > c:id
+
+"#],
+    &[("default", ":t t => g :t! t!", true)],
+    ParserConfig::default().llk(8),
+  )
+  .expect_err("Should fail to compile LL/RD parser");
+  Ok(())
+}
+
+#[test]
 pub fn precedence_check() -> RadlrResult<()> {
   compile_and_run_grammars(
+    &[r#"
+IGNORE { c:sp  } 
+
+<> C > A | B
+
+<> A > tk:( 't' "_"{:9999} ) c:id(+) "5"
+
+<> B > tk:( ( "_" | c:id )(+) )
+
+
+"#],
+    &[("default", "t_dd5", true)],
+    ParserConfig::default().lrk(2),
+  )
+}
+
+#[test]
+pub fn precedence_check_beta() -> RadlrResult<()> {
+  compile_and_run_grammars_beta(
     &[r#"
 IGNORE { c:sp  } 
 
@@ -1109,7 +1512,7 @@ fn simple_newline_tracking() -> RadlrResult<()> {
 
       let pkg = compile_bytecode(&tp, true)?;
 
-      _write_disassembly_to_temp_file_(&pkg, &tp.db)?;
+      _write_disassembly_to_temp_file_(&pkg, &tp.db, tp.config)?;
 
       let TestPackage { db, .. } = tp;
 

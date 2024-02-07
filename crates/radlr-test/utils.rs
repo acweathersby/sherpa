@@ -18,10 +18,17 @@ pub fn _write_debug_file_<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
   file_name: FileName,
   data: Data,
   append: bool,
+  beta: bool,
 ) -> RadlrResult<()> {
   use std::{env::*, fs::*, io::Write};
 
-  let file_dir = temp_dir().join("radlr_testing").join(db.name_string());
+  let mut file_dir = temp_dir().join("radlr_testing").join(db.name_string());
+
+  if beta {
+    file_dir = file_dir.join("beta");
+  } else {
+    file_dir = file_dir.join("alpha");
+  }
 
   let file_path = file_dir.join(file_name);
 
@@ -53,6 +60,7 @@ pub fn _write_states_to_temp_file_(builder: &impl ParserStore) -> RadlrResult<()
         builder.report().to_string()
       ),
       false,
+      builder.get_config().is_beta(),
     )?;
 
     for (i, state) in builder.get_states().enumerate() {
@@ -61,6 +69,7 @@ pub fn _write_states_to_temp_file_(builder: &impl ParserStore) -> RadlrResult<()
         "ir_states.tmp",
         format!("{i:0>5}: [{:X}] \n\n {}", state.1.get_canonical_hash(db, true)?, state.1.print(db, true)? + "\n"),
         true,
+        builder.get_config().is_beta(),
       )?;
     }
   }
@@ -69,10 +78,10 @@ pub fn _write_states_to_temp_file_(builder: &impl ParserStore) -> RadlrResult<()
 }
 
 /// Writes the parser IR states to a file in the temp directory
-pub fn _write_disassembly_to_temp_file_(pkg: &BytecodeParserDB, db: &ParserDatabase) -> RadlrResult<()> {
+pub fn _write_disassembly_to_temp_file_(pkg: &BytecodeParserDB, db: &ParserDatabase, config: ParserConfig) -> RadlrResult<()> {
   #[cfg(all(debug_assertions))]
   {
-    _write_debug_file_(db, "bc_disassembly.tmp", disassemble_bytecode(&pkg.bytecode), false)?;
+    _write_debug_file_(db, "bc_disassembly.tmp", disassemble_bytecode(&pkg.bytecode), false, config.is_beta())?;
   }
   Ok(())
 }
@@ -89,7 +98,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
       let pkg = compile_bytecode(&tp, true)?;
       let TestPackage { db, .. } = tp;
 
-      _write_disassembly_to_temp_file_(&pkg, &db)?;
+      _write_disassembly_to_temp_file_(&pkg, &db, config)?;
 
       let mut parser = pkg.get_parser().unwrap();
 
@@ -109,6 +118,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
             ..Default::default()
           },
           pkg.address_to_state_name.clone(),
+          false,
         ));
 
         let result = parser.as_mut().recognize(&mut StringInput::from(*input), entry);
@@ -131,6 +141,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
 }
 
 pub fn compile_and_run_grammars_beta(source: &[&str], inputs: &[(&str, &str, bool)], config: ParserConfig) -> RadlrResult<()> {
+  let config = config.beta();
   build_parse_states_from_multi_sources_beta(
     source,
     "".into(),
@@ -142,7 +153,7 @@ pub fn compile_and_run_grammars_beta(source: &[&str], inputs: &[(&str, &str, boo
       let pkg = compile_bytecode(&tp, true)?;
       let TestPackage { db, .. } = tp;
 
-      _write_disassembly_to_temp_file_(&pkg, &db)?;
+      _write_disassembly_to_temp_file_(&pkg, &db, config)?;
 
       let mut parser = pkg.get_parser().unwrap();
 
@@ -162,6 +173,7 @@ pub fn compile_and_run_grammars_beta(source: &[&str], inputs: &[(&str, &str, boo
             ..Default::default()
           },
           pkg.address_to_state_name.clone(),
+          true,
         ));
 
         let result = parser.as_mut().recognize(&mut StringInput::from(*input), entry);

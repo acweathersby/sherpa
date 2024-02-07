@@ -61,14 +61,15 @@ pub fn file_debugger(
   db: ParserDatabase,
   print_config: PrintConfig,
   state_lu: HashMap<u32, String>,
+  is_beta: bool,
 ) -> Option<Box<radlr_rust_runtime::types::DebugFnNew>> {
   let mut stack = vec![];
-  _write_debug_file_(&db, "parser_output.tmp", "    ", false).unwrap();
+  _write_debug_file_(&db, "parser_output.tmp", "    ", false, is_beta).unwrap();
   Some(Box::new(move |event, trk, i| {
     let string = diagram_constructor(event, i, trk, &mut stack, &db, &print_config, &state_lu);
 
     if !string.is_empty() {
-      _write_debug_file_(&db, "parser_output.tmp", string, true).unwrap();
+      _write_debug_file_(&db, "parser_output.tmp", string, true, is_beta).unwrap();
     }
   }))
 }

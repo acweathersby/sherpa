@@ -40,7 +40,7 @@ pub fn construct_forking_parser_glr() -> RadlrResult<()> {
 
   let pkg = compile_bytecode(&parser_data, false)?;
 
-  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db(), config)?;
 
   let mut parser = pkg.get_parser()?;
 

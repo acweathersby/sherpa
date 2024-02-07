@@ -33,7 +33,7 @@ pub fn construct_error_recovering_parser() -> RadlrResult<()> {
 
   let pkg = Rc::new(pkg);
 
-  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db())?;
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db(), config)?;
 
   let mut graph: EditGraph<StringInput, BytecodeParserDB> =
     EditGraph::parse(pkg.default_entrypoint(), input.to_string(), pkg.clone())?;
