@@ -16,4 +16,4 @@ Checkout out the online documentation [here](https://rum-craft.github.io/radlr/d
 
 ## License
 
-Radlr is released with a split license structure. The main toolchain is licensed under the [GNU General Public License v3](./LICENSE.md), wherease generated and runtime code is released under Apache Licenses. This allows users to use Radlr parsers however they see fit, while protecting the integrity of the core project. 
+Radlr is released with a split license structure. The main toolchain is licensed under the [GNU General Public License v3](./LICENSE.md), wherease generated and runtime code covered under MIT Licenses. This allows users to use Radlr parsers however they see fit, while protecting the integrity of the core project. 
