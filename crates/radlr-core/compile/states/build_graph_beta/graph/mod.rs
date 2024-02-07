@@ -444,7 +444,21 @@ impl ConcurrentGraphBuilder {
   pub fn get_goto_pending_items(&self) -> ItemSet {
     let mut items: std::collections::BTreeSet<Item> = ItemSet::default();
 
-    for item in self.pre_stage.iter().filter_map(|i| i.include_with_goto_state.then_some(&i.node.kernel)) {
+    for item in self.pre_stage.iter().filter_map(|i| {
+      if i.include_with_goto_state {
+        if i.node.ty.is_peek() {
+          let mut items = ItemSet::new();
+          for item in i.node.kernel_items() {
+            items.extend(get_kernel_items_from_peek_item(self, item).items);
+          }
+          Some(items)
+        } else {
+          Some(i.node.kernel.clone())
+        }
+      } else {
+        None
+      }
+    }) {
       items.extend(item)
     }
 

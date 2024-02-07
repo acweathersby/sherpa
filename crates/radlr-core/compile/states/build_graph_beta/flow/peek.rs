@@ -47,9 +47,6 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
 
   let existing_items = incomplete_items.iter().to_next().heritage();
 
-  let mut follow_sets = Vec::new();
-  let mut nonterm_sets = Vec::new();
-
   let mut kernel_items = Array::default();
 
   if let Some(completed_pairs) = completed_pairs {
@@ -67,10 +64,11 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
         .collect();
 
       if !follow.is_empty() {
-        for follow in &follow {
-          kernel_items.push(*follow);
+        let origin = gb.set_peek_resolve_state(items.iter().to_kernel().cloned(), is_oos);
+
+        for follow in follow {
+          kernel_items.push(follow.to_origin(origin));
         }
-        follow_sets.push((follow, items, is_oos));
       }
     }
   }
@@ -78,49 +76,8 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
   for (_, nonterms) in
     hash_group_btree_iter::<Lookaheads, _, _, _, _>(incomplete_items.iter().clone(), |_, i| i.is_out_of_scope())
   {
-    for nonterm in &nonterms {
-      kernel_items.push(nonterm.next);
-    }
-    nonterm_sets.push(nonterms);
-  }
-
-  state = state.kernel_items(kernel_items.try_increment().iter().cloned());
-
-  let mut kernel_items = Array::default();
-
-  let is_goto_state = false;
-  for (follow, items, is_oos) in follow_sets {
-    let items = items.iter().to_kernel().map(|i| {
-      if is_goto_state && false {
-        if i.origin_state.0 == state_id.0 {
-          i.as_goto_origin()
-        } else {
-          i.increment_goto()
-        }
-      } else {
-        i.clone()
-      }
-    });
-    let origin = gb.set_peek_resolve_state(items, is_oos);
-    for follow in follow {
-      kernel_items.push(follow.to_origin(origin));
-    }
-  }
-
-  for nonterms in nonterm_sets {
-    let items = nonterms.iter().to_kernel().map(|i| {
-      if is_goto_state && false {
-        if i.origin_state.0 == state_id.0 {
-          i.as_goto_origin()
-        } else {
-          i.increment_goto()
-        }
-      } else {
-        i.clone()
-      }
-    });
-
-    let origin = gb.set_peek_resolve_state(items, nonterms.iter().any(|i| i.kernel.origin.is_out_of_scope()));
+    let origin =
+      gb.set_peek_resolve_state(nonterms.iter().to_kernel().cloned(), nonterms.iter().any(|i| i.kernel.origin.is_out_of_scope()));
 
     for nonterm in &nonterms {
       kernel_items.push(nonterm.next.to_origin(origin));
@@ -128,10 +85,6 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
   }
 
   let state = state.kernel_items(kernel_items.try_increment().into_iter());
-
-  /*   state = state.finalizer(Box::new(move |state, gb, is_goto_state: bool| {
-    state.kernel = kernel_items.try_increment().iter().cloned().collect();
-  })); */
 
   Ok(state)
 }
@@ -173,8 +126,7 @@ pub(crate) fn get_kernel_items_from_peek_origin<'graph, 'db: 'graph>(
 }
 
 pub(crate) fn get_kernel_items_from_peek_item<'graph, 'db: 'graph>(
-  gb: &'graph mut ConcurrentGraphBuilder,
-  node: &SharedGraphNode,
+  gb: &'graph ConcurrentGraphBuilder,
   peek_item: &Item,
 ) -> PeekGroup {
   let Origin::Peek(peek_index) = peek_item.origin else {
