@@ -5,6 +5,7 @@ use crate::{
   DBNonTermKey,
   IString,
   Item,
+  ParserClassification,
 };
 use std::{
   self,
@@ -25,6 +26,7 @@ pub(crate) struct RootData {
 
 pub(crate) struct GraphNode {
   pub id:          StateId,
+  pub class:       ParserClassification,
   pub build_state: GraphBuildState,
   pub ty:          StateType,
   pub sym:         PrecedentSymbol,
@@ -142,6 +144,7 @@ impl GraphNode {
   pub fn to_goto(&self) -> SharedGraphNode {
     Arc::new(Self {
       is_goto:     true,
+      class:       self.class,
       build_state: self.build_state,
       db:          self.db.clone(),
       graph_type:  self.graph_type,
@@ -166,6 +169,10 @@ impl GraphNode {
   pub fn item_is_goal(&self, item: Item) -> bool {
     let root = self.get_root();
     root.kernel_items().iter().any(|i| i.to_canonical().to_complete() == item.to_canonical())
+  }
+
+  pub fn get_classification(&self) -> ParserClassification {
+    self.class
   }
 
   pub fn is_root(&self) -> bool {

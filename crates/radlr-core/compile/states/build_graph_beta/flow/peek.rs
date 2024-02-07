@@ -108,6 +108,7 @@ fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair>>(
     .build_state(GraphBuildState::NormalGoto)
     .ty(StateType::PeekEndComplete(index))
     .kernel_items(staged.into_iter())
+    .to_classification(ParserClassification { max_k: pred.ty.peek_level() as u16, ..Default::default() })
     .commit(gb);
 
   Ok(())

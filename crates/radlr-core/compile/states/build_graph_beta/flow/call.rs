@@ -80,6 +80,7 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
         .parent(node.clone())
         .sym(sym)
         .ty(StateType::InternalCall(nonterm))
+        .to_classification(ParserClassification { calls_present: true, ..Default::default() })
         .kernel_items(items.try_increment().iter().cloned()),
       _transition_items: items,
     });

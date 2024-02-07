@@ -1,4 +1,7 @@
-use super::items::{get_follow_internal, FollowType};
+use super::{
+  flow::get_kernel_items_from_peek_item,
+  items::{get_follow_internal, FollowType},
+};
 use crate::{
   compile::states::build_graph::graph::{GraphBuildState, GraphIdSubType, GraphType, Origin, PeekGroup, StateId, StateType},
   hash_id_value_u64,
@@ -194,6 +197,7 @@ impl StagedNode {
         db:          gb.db_rc().clone(),
         is_goto:     false,
         invalid:     Default::default(),
+        class:       Default::default(),
         root_data:   RootData {
           db_key:    DBNonTermKey::default(),
           is_root:   false,
@@ -216,6 +220,11 @@ impl StagedNode {
 
   pub fn include_with_goto_state(mut self) -> Self {
     self.include_with_goto_state = true;
+    self
+  }
+
+  pub fn to_classification(mut self, class: ParserClassification) -> Self {
+    self.node.class |= class;
     self
   }
 
@@ -292,22 +301,6 @@ impl StagedNode {
     self.finalizer = Some(finalizer);
     self
   }
-
-  /*
-  fn to_goto(self, state_id: StateId) -> StagedNode {
-    Self {
-      node: GraphNode {
-        kernel: self
-          .node
-          .kernel
-          .iter()
-          .map(|i| if i.origin_state.0 == state_id.0 { i.as_goto_origin() } else { i.increment_goto() })
-          .collect::<_>(),
-        ..self.node
-      },
-      ..self
-    }
-  } */
 
   pub fn commit(self, builder: &mut ConcurrentGraphBuilder) {
     if self.node.is_root() {
@@ -854,7 +847,7 @@ impl Graphs {
 
     for leaf_state in queue.iter() {
       successors.insert(leaf_state.hash_id, IRPrecursorGroup {
-        state:         leaf_state.clone(),
+        node:          leaf_state.clone(),
         successors:    Default::default(),
         non_terminals: Default::default(),
         root_name:     None,
@@ -868,7 +861,7 @@ impl Graphs {
         for predecessors in self.predecessors.get(&node.hash_id).into_iter() {
           for predecessor in predecessors {
             let map = successors.entry(predecessor.hash_id).or_insert(IRPrecursorGroup {
-              state:         predecessor.clone(),
+              node:          predecessor.clone(),
               successors:    BTreeMap::new(),
               non_terminals: self.state_nonterms.get(&predecessor.hash_id).cloned(),
               root_name:     predecessor.is_root().then(|| predecessor.root_data.root_name),
@@ -912,7 +905,7 @@ impl Graphs {
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct IRPrecursorGroup {
-  pub state:         SharedGraphNode,
+  pub node:          SharedGraphNode,
   pub successors:    BTreeMap<u64, SharedGraphNode>,
   pub non_terminals: Option<ItemSet>,
   pub root_name:     Option<IString>,

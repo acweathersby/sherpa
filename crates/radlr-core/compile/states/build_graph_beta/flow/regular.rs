@@ -32,6 +32,8 @@ use crate::{
   utils::{hash_group_btree_iter, hash_group_btreemap},
 };
 
+use ParserClassification as PC;
+
 fn create_out_of_scope_complete_state<'a, T: TransitionPairRefIter<'a> + Clone>(
   gb: &mut ConcurrentGraphBuilder,
   pred: &SharedGraphNode,
@@ -60,6 +62,7 @@ pub(crate) fn handle_regular_incomplete_items(
   config: &ParserConfig,
   prec_sym: PrecedentSymbol,
   (prec, group): TransitionGroup,
+  classification: ParserClassification,
 ) -> RadlrResult<()> {
   let ____is_scan____ = pred.is_scanner();
   let ____allow_rd____: bool = config.ALLOW_CALLS || ____is_scan____;
@@ -82,7 +85,6 @@ pub(crate) fn handle_regular_incomplete_items(
       if !____allow_peek____ {
         peek_not_allowed_error(gb, &[out_of_scope.cloned().collect(), in_scope.cloned().collect()], "")?;
       } else {
-        panic!("CREATING PEEK");
         create_peek(gb, pred, config, prec_sym, group.iter(), None)?.include_with_goto_state().commit(gb);
       }
     }
@@ -96,119 +98,100 @@ pub(crate) fn handle_regular_incomplete_items(
           if !____allow_lr____ {
             return lr_disabled_error(gb, pred, _transition_items);
           }
-          node.include_with_goto_state().commit(gb);
+          node.to_classification(PC { bottom_up: true, ..classification }).include_with_goto_state().commit(gb);
         }
-      } else {
-        // If can't create call, do LR shift, or peek, or warn about k=1 conflicts.
-        if group.iter().all(|p| p.is_kernel_terminal()) {
-          StagedNode::new(gb)
-            .parent(pred.clone())
-            .sym(prec_sym)
-            .build_state(GraphBuildState::Normal)
-            .ty(StateType::KernelShift)
-            .kernel_items(group.iter().to_kernel().try_increment().into_iter())
-            .commit(gb);
-        } else if len == 1 {
-          let items = in_scope.clone().to_next().try_increment();
-          let kernel_item = in_scope.clone().to_kernel().next().unwrap();
+      } else if group.iter().all(|p| p.is_kernel_terminal()) {
+        StagedNode::new(gb)
+          .parent(pred.clone())
+          .sym(prec_sym)
+          .build_state(GraphBuildState::Normal)
+          .ty(StateType::KernelShift)
+          .to_classification(classification)
+          .kernel_items(group.iter().to_kernel().try_increment().into_iter())
+          .commit(gb);
+      } else if len == 1 {
+        let items = in_scope.clone().to_next().try_increment();
+        let kernel_item = in_scope.clone().to_kernel().next().unwrap();
 
-          if !____allow_lr____ {
-            if let Some(non_term) = kernel_item.nonterm_index_at_sym(pred.graph_type(), db) {
-              // Check for left recursion. If present, the grammar is not LL
-              if gb.db().nonterm_recursion_type(non_term).is_left_recursive() {
-                return lr_disabled_error(gb, pred, in_scope.to_kernel().cloned().collect());
-              } else {
-                let p = pred.clone();
-                let kernel_item = kernel_item.clone();
-                StagedNode::new(gb)
-                  .parent(pred.clone())
-                  .sym(prec_sym)
-                  .build_state(GraphBuildState::Normal)
-                  .ty(StateType::Shift)
-                  .pnc(
-                    Box::new(move |s: &std::sync::Arc<GraphNode>, builder, _| {
-                      vec![StagedNode::new(builder)
-                        .parent(p)
-                        .sym((kernel_item.sym_id(builder.db()), 0).into())
-                        .build_state(GraphBuildState::Normal)
-                        .ty(StateType::ShiftFrom(s.id()))
-                        .kernel_items([kernel_item.try_increment()].into_iter())]
-                    }),
-                    PostNodeConstructorData::None,
-                  )
-                  .kernel_items(items.into_iter())
-                  .commit(gb)
-              }
+        if !____allow_lr____ {
+          if let Some(non_term) = kernel_item.nonterm_index_at_sym(pred.graph_type(), db) {
+            // Check for left recursion. If present, the grammar is not LL
+            if gb.db().nonterm_recursion_type(non_term).is_left_recursive() {
+              return lr_disabled_error(gb, pred, in_scope.to_kernel().cloned().collect());
             } else {
+              let p = pred.clone();
+              let kernel_item = kernel_item.clone();
               StagedNode::new(gb)
                 .parent(pred.clone())
                 .sym(prec_sym)
                 .build_state(GraphBuildState::Normal)
                 .ty(StateType::Shift)
+                .to_classification(classification)
+                .pnc(
+                  Box::new(move |s: &std::sync::Arc<GraphNode>, builder, _| {
+                    vec![StagedNode::new(builder)
+                      .parent(p)
+                      .sym((kernel_item.sym_id(builder.db()), 0).into())
+                      .build_state(GraphBuildState::Normal)
+                      .ty(StateType::ShiftFrom(s.id()))
+                      .kernel_items([kernel_item.try_increment()].into_iter())]
+                  }),
+                  PostNodeConstructorData::None,
+                )
                 .kernel_items(items.into_iter())
-                .include_with_goto_state()
-                .commit(gb);
+                .commit(gb)
             }
           } else {
             StagedNode::new(gb)
+              .parent(pred.clone())
               .sym(prec_sym)
               .build_state(GraphBuildState::Normal)
-              .parent(pred.clone())
               .ty(StateType::Shift)
+              .to_classification(classification)
               .kernel_items(items.into_iter())
               .include_with_goto_state()
               .commit(gb);
           }
-        } else if ____allow_lr____ {
-          let items = in_scope.to_next().try_increment();
-
+        } else {
           StagedNode::new(gb)
-            .parent(pred.clone())
             .sym(prec_sym)
             .build_state(GraphBuildState::Normal)
+            .parent(pred.clone())
             .ty(StateType::Shift)
+            .to_classification(classification)
             .kernel_items(items.into_iter())
             .include_with_goto_state()
             .commit(gb);
+        }
+      } else if ____allow_lr____ {
+        let items = in_scope.to_next().try_increment();
+
+        StagedNode::new(gb)
+          .parent(pred.clone())
+          .sym(prec_sym)
+          .build_state(GraphBuildState::Normal)
+          .ty(StateType::Shift)
+          .kernel_items(items.into_iter())
+          .include_with_goto_state()
+          .to_classification(ParserClassification { bottom_up: true, ..classification })
+          .commit(gb);
+      } else {
+        /// If forking is allowed then use that. Other wise this grammar is no
+        /// LL and LR and/or RD has been disabled.
+        if ____allow_fork____ {
+          return Err(RadlrError::Text("Forking has not been implemented".into()));
+        } else if !____allow_lr____ {
+          return lr_disabled_error(gb, pred, in_scope.to_kernel().cloned().collect());
         } else {
-          /// If forking is allowed then use that. Other wise this grammar is no
-          /// LL and LR and/or RD has been disabled.
-          if ____allow_fork____ {
-            return Err(RadlrError::Text("Forking has not been implemented".into()));
-          } else if !____allow_lr____ {
-            return lr_disabled_error(gb, pred, in_scope.to_kernel().cloned().collect());
-          } else {
-            return Err(RadlrError::Text(
-              "Not sure what happened, but this parser cannot be built with the current configuration".into(),
-            ));
-          }
+          return Err(RadlrError::Text(
+            "Not sure what happened, but this parser cannot be built with the current configuration".into(),
+          ));
         }
       }
     }
     _ => unreachable!(),
   }
   Ok(())
-}
-
-fn single_shift_allowed<'a, T: TransitionPairRefIter<'a> + Clone>(
-  in_scope: &T,
-  gb: &mut ConcurrentGraphBuilder,
-  node: &SharedGraphNode,
-  config: ParserConfig,
-) -> bool {
-  let ____allow_lr____: bool = config.ALLOW_LR || node.is_scanner();
-
-  if ____allow_lr____ {
-  } else if let Some(non_term) =
-    in_scope.clone().to_kernel().next().and_then(|i| i.nonterm_index_at_sym(node.graph_type(), gb.db()))
-  {
-    // Check for left recursion. If present, the grammar is not LL
-    if gb.db().nonterm_recursion_type(non_term).is_left_recursive() {
-      return false;
-    }
-  }
-
-  true
 }
 
 pub(crate) fn handle_regular_complete_groups(
@@ -223,6 +206,7 @@ pub(crate) fn handle_regular_complete_groups(
   let ____allow_peek____ = config.ALLOW_PEEKING;
   let mut cmpl = lookahead_pairs.iter().to_next().to_vec();
   let sym = prec_sym.sym();
+  let mut classification = ParserClassification { max_k: 1, ..Default::default() };
   // Non-Peeking States
   match (lookahead_pairs.len(), shift_groups.remove(&prec_sym.sym())) {
     (1, None) => {
@@ -251,6 +235,7 @@ pub(crate) fn handle_regular_complete_groups(
           ReduceReduceConflictResolution::Nothing => {}
           ReduceReduceConflictResolution::Fork(lookahead_pairs) => {
             create_fork(gb, pred, config, prec_sym, lookahead_pairs.iter().map(|i| i.kernel))?
+              .to_classification(classification | ParserClassification { forks_present: true, ..Default::default() })
               .include_with_goto_state()
               .commit(gb);
           }
@@ -278,11 +263,13 @@ pub(crate) fn handle_regular_complete_groups(
           }
           ShiftReduceConflictResolution::Peek(max_k) => {
             create_peek(gb, pred, config, prec_sym, group.iter(), Some(lookahead_pairs.iter()))?
+              .to_classification(classification)
               .include_with_goto_state()
               .commit(gb);
           }
           ShiftReduceConflictResolution::Fork => {
             create_fork(gb, pred, config, prec_sym, lookahead_pairs.into_iter().chain(group.into_iter()).map(|i| i.kernel))?
+              .to_classification(classification | ParserClassification { forks_present: true, ..Default::default() })
               .include_with_goto_state()
               .commit(gb);
           }

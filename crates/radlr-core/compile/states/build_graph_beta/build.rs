@@ -16,6 +16,8 @@ use crate::{
   utils::hash_group_btree_iter,
 };
 
+use ParserClassification as PC;
+
 pub(crate) type TransitionGroup = (u16, Vec<TransitionPair>);
 pub(crate) type GroupedFirsts = OrderedMap<SymbolId, TransitionGroup>;
 
@@ -25,6 +27,8 @@ pub(crate) fn handle_kernel_items(
   config: &ParserConfig,
 ) -> RadlrResult<()> {
   let mut groups = get_firsts(gb, pred)?;
+
+  let have_lookahead = pred.kernel_items().len() > 1;
 
   if handle_fork(gb, pred) {
     return Ok(());
@@ -36,7 +40,7 @@ pub(crate) fn handle_kernel_items(
 
   let groups = handle_scanner_items(max_completed_precedence, gb, pred, groups)?;
 
-  handle_incomplete_items(gb, pred, &config, groups)?;
+  handle_incomplete_items(gb, pred, &config, groups, PC { max_k: have_lookahead as u16, ..PC::default() })?;
 
   let update_gotos = handle_nonterminal_shift(gb, pred, &config)?;
 
@@ -140,6 +144,7 @@ fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(
   node: &SharedGraphNode,
   config: &ParserConfig,
   groups: GroupedFirsts,
+  classification: ParserClassification,
 ) -> RadlrResult<()> {
   for (sym, group) in groups {
     let ____is_scan____ = node.is_scanner();
@@ -147,7 +152,7 @@ fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(
 
     match node.state_type() {
       StateType::Peek(level) => handle_peek_incomplete_items(gb, node, prec_sym, group, level),
-      _REGULAR_ => handle_regular_incomplete_items(gb, node, config, prec_sym, group),
+      _REGULAR_ => handle_regular_incomplete_items(gb, node, config, prec_sym, group, classification),
     }?;
   }
   Ok(())

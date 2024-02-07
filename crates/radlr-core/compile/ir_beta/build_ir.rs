@@ -36,15 +36,17 @@ pub fn build_ir_from_graph(
     }
   }
 
-  for precursor in ir_precursors.iter() {
-    let entry_name = precursor.root_name.unwrap_or_default();
+  for node_state in ir_precursors.iter() {
+    classification |= node_state.node.get_classification();
 
-    let state = &precursor.state;
+    let entry_name = node_state.root_name.unwrap_or_default();
 
-    let goto_name = if let Some(_) = precursor.non_terminals.as_ref() {
-      let mut precursor = IRPrecursorGroup { ..precursor.clone() };
+    let state = &node_state.node;
 
-      precursor.state = precursor.state.to_goto();
+    let goto_name = if let Some(_) = node_state.non_terminals.as_ref() {
+      let mut precursor = IRPrecursorGroup { ..node_state.clone() };
+
+      precursor.node = precursor.node.to_goto();
 
       let goto_pair = convert_nonterm_shift_state_to_ir(&precursor)?;
       let out = Some(goto_pair.1.guid_name.clone());
@@ -54,7 +56,7 @@ pub fn build_ir_from_graph(
       None
     };
 
-    for (_, ir_state) in convert_state_to_ir(state.symbol_set.as_ref(), precursor, entry_name, goto_name)? {
+    for (_, ir_state) in convert_state_to_ir(state.symbol_set.as_ref(), node_state, entry_name, goto_name)? {
       states.entry(ir_state.guid_name).or_insert(ir_state);
     }
   }
@@ -116,7 +118,7 @@ enum SType {
 }
 
 fn convert_nonterm_shift_state_to_ir(precursor: &IRPrecursorGroup) -> RadlrResult<(StateId, Box<ParseState>)> {
-  let db = &precursor.state.db;
+  let db = &precursor.node.db;
 
   let successors =
     precursor.successors.values().filter(|s| matches!(s.ty, StateType::NonTerminalComplete | StateType::NonTerminalShiftLoop));
@@ -155,11 +157,11 @@ fn convert_nonterm_shift_state_to_ir(precursor: &IRPrecursorGroup) -> RadlrResul
 
   let _ = w.dedent() + "\n}";
 
-  let mut goto = Box::new(create_ir_state(w, &precursor.state, None)?);
+  let mut goto = Box::new(create_ir_state(w, &precursor.node, None)?);
 
-  goto.guid_name = create_ir_state_name(None, &precursor.state).intern(db.string_store());
+  goto.guid_name = create_ir_state_name(None, &precursor.node).intern(db.string_store());
 
-  RadlrResult::Ok((precursor.state.id, goto))
+  RadlrResult::Ok((precursor.node.id, goto))
 }
 
 fn convert_state_to_ir<'graph: 'graph>(
@@ -168,9 +170,9 @@ fn convert_state_to_ir<'graph: 'graph>(
   entry_name: IString,
   goto_state_id: Option<IString>,
 ) -> RadlrResult<Vec<(StateId, Box<ParseState>)>> {
-  let state = &precursor.state;
+  let state = &precursor.node;
   let state_id = state.id();
-  let db = &precursor.state.db;
+  let db = &precursor.node.db;
   let s_store = db.string_store();
 
   if matches!(state.ty, StateType::ForkInitiator) {
@@ -215,7 +217,7 @@ fn convert_state_to_ir<'graph: 'graph>(
 
       w.indent();
 
-      add_tok_expr(&precursor.state, successors, &mut w);
+      add_tok_expr(&precursor.node, successors, &mut w);
 
       let mut classes = classify_successors(successors);
 
