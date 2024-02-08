@@ -340,12 +340,12 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
       for item in follow {
         if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
           skipped.extend(item.get_skipped(db));
-          scanner_data.follow.insert(sym);
+          scanner_data.symbols.insert(sym);
         } else if item.is_nonterm(mode, db) {
           for item in db.get_closure(&item) {
             skipped.extend(item.get_skipped(db));
             if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
-              scanner_data.follow.insert(sym);
+              scanner_data.symbols.insert(sym);
             }
           }
         }
@@ -792,6 +792,10 @@ impl ConcurrentGraphBuilder {
     self.state_lookups.get(&state).cloned()
   }
 
+  pub fn abandon_uncommited(&mut self) {
+    self.pre_stage.clear()
+  }
+
   /// Creates or returns a state whose kernel items is the FOLLOW closure of the
   /// givin non-terminal, that is all items that are `_  = b A • b` for some
   /// non-terminal `A`
@@ -1060,9 +1064,16 @@ impl ConcurrentGraphBuilder {
 
 fn update_root_info(state: &mut GraphNode, pred: Option<&Arc<GraphNode>>) -> bool {
   let is_root = if !state.root_data.is_root {
-    state.root_data = pred.expect("Non-root states should have a predecessor").root_data;
-    state.root_data.is_root = false;
-    false
+    match pred {
+      Some(pred) => {
+        state.root_data = pred.root_data;
+        state.root_data.is_root = false;
+        false
+      }
+      None => {
+        panic!("Non-root states should have a predecessor\n Offending state:\n {state:?}")
+      }
+    }
   } else {
     true
   };

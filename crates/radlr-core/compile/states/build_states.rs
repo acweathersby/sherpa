@@ -120,6 +120,7 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
               if config.ALLOW_LR {
                 let db = gb.db_rc().clone();
 
+                gb.abandon_uncommited();
                 let mut poisoned = vec![root.root_data.db_key];
 
                 if db.entry_nterm_map().contains_key(&nonterm_key) {

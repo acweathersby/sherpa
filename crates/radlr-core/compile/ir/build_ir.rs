@@ -371,17 +371,18 @@ fn add_match_expr<'graph: 'graph>(
       w = w + "\nmatch: " + input_type.as_str();
 
       if input_type == MatchInputType::Token {
-        w = w
-          + ":"
-          + scanner_data
-            .expect(&format!(
-              "Matches on {input_type:?} should have accompanying scanner {}{state:?} {}",
-              state.hash_id,
-              successors.iter().map(|s| format!("{s:?}")).collect::<Vec<_>>().join("\n")
-            ))
-            .create_scanner_name(db)
-            .to_str(db.string_store())
-            .as_str();
+        w = w + ":" + {
+          match scanner_data {
+            Some(scanner_data) => scanner_data.create_scanner_name(db).to_str(db.string_store()).as_str().to_string(),
+            None => {
+              panic!(
+                "Matches on {input_type:?} should have accompanying scanner {}{state:?} {}",
+                state.hash_id,
+                successors.iter().map(|s| format!("{s:?}")).collect::<Vec<_>>().join("\n")
+              )
+            }
+          }
+        };
       }
 
       w = (w + " {").indent();
