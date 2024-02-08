@@ -3,7 +3,7 @@ use crate::types::*;
 
 use ErrorClass::*;
 
-pub(super) fn _create_reduce_reduce_error(_gb: &GraphBuilder, _end_items: ItemSet) -> RadlrError {
+pub(super) fn _create_reduce_reduce_error(_gb: &ConcurrentGraphBuilder, _end_items: ItemSet) -> RadlrError {
   /*   j.report_mut().add_error(RadlrError::SourcesError {
     id:       "reduce-conflict",
     msg:      "Unresolvable parse conflict encountered".into(),
@@ -30,7 +30,7 @@ pub(super) fn _create_reduce_reduce_error(_gb: &GraphBuilder, _end_items: ItemSe
 }
 
 /// Produces errors that result from the banning of LR states.
-pub(super) fn lr_disabled_error(gb: &GraphBuilder, lr_items: Items) -> RadlrResult<()> {
+pub(super) fn lr_disabled_error(gb: &ConcurrentGraphBuilder, node: &SharedGraphNode, lr_items: Items) -> RadlrResult<()> {
   let db = gb.db();
 
   let s_store = db.string_store();
@@ -39,7 +39,7 @@ pub(super) fn lr_disabled_error(gb: &GraphBuilder, lr_items: Items) -> RadlrResu
 
   if nonterms.len() == 1 {
     let first = nonterms.first().unwrap();
-    if first.rule_is_left_recursive(gb.get_mode(), db) {
+    if first.rule_is_left_recursive(node.graph_type(), db) {
       return Err(RadlrError::SourceError {
         loc:        first.rule(db).tok.clone(),
         path:       first.rule(db).g_id.path.to_string(s_store),
@@ -64,16 +64,19 @@ pub(super) fn lr_disabled_error(gb: &GraphBuilder, lr_items: Items) -> RadlrResu
     id:       (ForbiddenLR, 1, "goto-states-forbidden").into(),
     msg:      "Since LR parsing is disabled could not construct goto state to handle the parsing of the nonterminal ["
       .to_string()
-      + &db.nonterm_friendly_name_string(gb.graph().get_goal_nonterm_index())
+      //+ &db.nonterm_friendly_name_string(gb.graph().get_goal_nonterm_index())
       + "]",
     ps_msg:   "Consider enabling lr parsing through the parser config object".into(),
     severity: RadlrErrorSeverity::Critical,
   });
 }
 
-pub(crate) fn conflicting_symbols_error(gb: &GraphBuilder, groups: OrderedMap<(u16, SymbolId), Lookaheads>) -> RadlrError {
-  let graph = gb.graph();
-  let d = graph.get_db();
+pub(crate) fn conflicting_symbols_error(
+  gb: &ConcurrentGraphBuilder,
+  node: &SharedGraphNode,
+  groups: OrderedMap<(u16, SymbolId), Lookaheads>,
+) -> RadlrError {
+  let d = gb.db();
   RadlrError::SourcesError {
     id:       (GraphConstruction, 0, "conflicting-symbols").into(),
     msg:      "Found ".to_string() + &groups.len().to_string() + " conflicting tokens. This grammar has an ambiguous scanner",
@@ -91,8 +94,8 @@ pub(crate) fn conflicting_symbols_error(gb: &GraphBuilder, groups: OrderedMap<(u
   }
 }
 
-pub(crate) fn peek_not_allowed_error<'db, T>(
-  gb: &GraphBuilder,
+pub(crate) fn peek_not_allowed_error<T>(
+  gb: &ConcurrentGraphBuilder,
   conflicting_groups: &[Vec<TransitionPair>],
   submessage: &str,
 ) -> RadlrResult<T> {
@@ -100,7 +103,7 @@ pub(crate) fn peek_not_allowed_error<'db, T>(
 }
 
 fn peek_not_allowed_error_internal(
-  gb: &GraphBuilder,
+  gb: &ConcurrentGraphBuilder,
   conflicting_groups: &[Vec<TransitionPair>],
   submessage: &str,
 ) -> RadlrError {

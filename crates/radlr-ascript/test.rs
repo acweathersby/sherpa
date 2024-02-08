@@ -1,78 +1,136 @@
-use crate::types::{AScriptStore, AScriptTypeVal};
+use crate::{types::AscriptDatabase, AscriptAggregateType, AscriptRule, AscriptType, StringId};
+use radlr_core::{RadlrGrammar, RadlrResult};
 
-use radlr_core::{test::utils::build_parse_db_from_source_str, *};
-
-/* fn create_dummy_body(id: RuleId) -> Rule {
-  Rule { id, ..Default::default() }
-}
- */
 #[test]
 fn parse_errors_when_struct_prop_type_is_redefined() -> RadlrResult<()> {
-  build_parse_db_from_source_str(
-    r##"
+  let source = r##"
 
   <> a > "a" :ast { t_TestA, apple: u32 } |  "b"  :ast { t_TestA, apple: i64 }
 
-          "##,
-    "/test.sg".into(),
-    &|DBPackage { journal, db, .. }| {
-      let results = AScriptStore::new(journal, &db);
+          "##;
 
-      assert!(results.is_err());
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
 
-      RadlrResult::Ok(())
-    },
-  )
-}
+  let adb: AscriptDatabase = db.into();
 
-#[test]
-fn parse_errors_when_nonterminal_has_differing_return_types() -> RadlrResult<()> {
-  build_parse_db_from_source_str(
-    r#"<> A > "1" :ast { t_Test } | 'a' "#,
-    "/test.sg".into(),
-    &|DBPackage { journal, db, .. }| {
-      let results = AScriptStore::new(journal, &db);
+  assert!(adb.errors.len() > 0);
 
-      assert!(results.is_err());
+  println!("{}", adb.errors[0]);
 
-      RadlrResult::Ok(())
-    },
-  )
-}
-
-#[test]
-fn prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions() -> RadlrResult<()> {
-  build_parse_db_from_source_str(
-    r#"
-    <> start > A | B
-
-    <> A > "1234" :ast { t_R, d:str($1) }
-
-    <> B > "1234" :ast { t_R, o: u32 }"#,
-    "/test.sg".into(),
-    &|DBPackage { journal, db, .. }| {
-      let store = AScriptStore::new(journal, &db)?;
-
-      for prop in &store.props {
-        assert!(prop.1.optional)
-      }
-
-      RadlrResult::Ok(())
-    },
-  )
+  Ok(())
 }
 
 #[test]
 fn group_rules_as_vectors() -> RadlrResult<()> {
-  build_parse_db_from_source_str(
-    r#"<> A > ( "1" :ast u32($1) )(+"|") "#,
-    "/test.sg".into(),
-    &|DBPackage { journal, db, .. }| {
-      let results = AScriptStore::new(journal, &db)?;
+  let source = r#"<> A > ( "1" :ast u32($1) )(+"|") "#;
 
-      assert_eq!(results.nonterm_types.first_key_value().unwrap().1.first_key_value().unwrap().0.type_, AScriptTypeVal::U32Vec);
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
 
-      RadlrResult::Ok(())
-    },
-  )
+  let adb: AscriptDatabase = db.into();
+
+  let AscriptRule::ListInitial(_, init) = &adb.rules[2] else {
+    panic!("Expected AscriptRule::ListInitial - got {:?}", &adb.rules[2])
+  };
+
+  assert!(matches!(init.ty, AscriptType::Aggregate(AscriptAggregateType::Vec { .. })));
+
+  Ok(())
+}
+
+#[test]
+fn prop_is_made_optional_when_not_present_or_introduced_in_subsequent_definitions() -> RadlrResult<()> {
+  let source = r#" <> start > A | B
+
+  <> A > "1234" :ast { t_R, d:str($1) }
+
+  <> B > "1234" :ast { t_R, o: u32 }"#;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  let entry = adb.structs.0.first_key_value().unwrap().1;
+
+  assert!(entry.properties.get(&StringId::from("d")).unwrap().is_optional);
+  assert!(entry.properties.get(&StringId::from("o")).unwrap().is_optional);
+
+  Ok(())
+}
+
+#[test]
+fn handles_numeric_expressions() -> RadlrResult<()> {
+  let source = r#" IGNORE { c:sp c:nl }
+
+  <> statement > e            :ast { t_Result, v:$1 }
+  
+  <> e > e "+"{1} e{2}        :ast $1 + $3  
+       | e "*"{3} e{4}        :ast $1 * $3 
+       | term                   
+  
+  <> term > tk:num            :ast f64($1)  
+          | "(" e ")"         :ast $2      
+          
+  <> num > c:num(+)"#;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
+
+  Ok(())
+}
+
+#[test]
+fn builds_json() -> RadlrResult<()> {
+  let source = r#"IGNORE {c:sp c:nl}
+
+  <> json 
+  
+    > entry                 :ast { t_JSON, body: $1, tok }
+  
+  <> entry 
+  
+    > obj | array
+    
+  <> obj 
+    
+    > "{" key_val(+",") "}" :ast { t_Object, values: $2, tok }
+  
+  <> array
+    
+    > "[" val(+",") "]"     :ast { t_Array, values: $2, tok }
+  
+  
+  <> key_val 
+  
+    > key ":" val           :ast map($1, $3)
+  
+  
+  <> key 
+  
+    > tk:string             :ast str(tok<1,1>)
+  
+  
+  <> val 
+    > tk:string :ast str(tok<1,1>)
+    | c:num     :ast f64($1)
+    | obj
+    | array
+    | "true"    :ast bool($1)
+    | "false"   :ast bool
+    | "null"    :ast {t_Null}
+  
+  
+  <> string 
+    > "\""  ( c:id | c:sp |  c:num | c:sym )(*)  "\""
+   "#;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
+
+  Ok(())
 }

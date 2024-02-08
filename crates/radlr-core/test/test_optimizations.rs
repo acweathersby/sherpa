@@ -1,12 +1,5 @@
 use super::utils::build_parse_states_from_multi_sources;
-use crate::{
-  compile::ir::optimize,
-  test::utils::build_parse_states_from_source_str as build,
-  DBNonTermKey,
-  ParseStatesVec,
-  RadlrResult as R,
-  TestPackage,
-};
+use crate::{compile::ir::optimize, DBNonTermKey, ParseStatesVec, RadlrResult as R, TestPackage};
 
 #[test]
 fn basic_optimize_unknown() -> R<()> {

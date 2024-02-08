@@ -12,4 +12,3 @@ radlr_rust_runtime  = { path="../radlr-rust-runtime" }
 radlr_ascript       = { path="../radlr-ascript" }
 radlr_bytecode      = { path="../radlr-bytecode" }
 radlr_formatter     = { path="../radlr-formatter" }
-radlr_ascript_beta  = { path="../radlr-ascript-beta" }

@@ -44,38 +44,6 @@ pub fn build_parse_states_from_source_str<'a, T>(
   }
 }
 
-/// Simple single thread compilation of a grammar source string.
-/// `test_fn` is called after a successful compilation of parse states.
-pub fn build_parse_states_from_source_str_beta<'a, T>(
-  source: &str,
-  source_path: PathBuf,
-  optimize: bool,
-  test_fn: &dyn Fn(TestPackage) -> RadlrResult<T>,
-) -> RadlrResult<T> {
-  if optimize {
-    test_fn(
-      RadlrGrammar::new()
-        .add_source_from_string(source, &source_path, false)?
-        .build_db(source_path, Default::default())?
-        .build_states_beta(Default::default())?
-        .build_ir_parser(true, false)?
-        .into(),
-    )
-  } else {
-    test_fn(
-      RadlrGrammar::new()
-        .add_source_from_string(source, &source_path, false)?
-        .build_db(source_path, Default::default())?
-        .build_states_beta(Default::default())?
-        .build_ir_parser(false, false)?
-        .into(),
-    )
-  }
-}
-
-/// Builds a set of states from one or more source strings.
-/// Each _"file"_ source is mapped to a single character name in this sequence
-/// `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
 pub fn build_parse_states_from_multi_sources<'a, T>(
   sources: &[&str],
   source_path: PathBuf,
@@ -96,29 +64,6 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
     test_fn(grammar.build_db(root_path, config)?.build_states(config)?.build_ir_parser(true, false)?.into())
   } else {
     test_fn(grammar.build_db(root_path, config)?.build_states(config)?.build_ir_parser(false, false)?.into())
-  }
-}
-
-pub fn build_parse_states_from_multi_sources_beta<'a, T>(
-  sources: &[&str],
-  source_path: PathBuf,
-  optimize: bool,
-  test_fn: &dyn Fn(TestPackage) -> RadlrResult<T>,
-  config: ParserConfig,
-) -> RadlrResult<T> {
-  let mut grammar = RadlrGrammar::new();
-
-  for (index, source) in sources.iter().enumerate() {
-    let source_path = source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index).unwrap().to_string());
-    grammar.add_source_from_string(source, source_path, false)?;
-  }
-
-  let root_path = source_path.join("A");
-
-  if optimize {
-    test_fn(grammar.build_db(root_path, config)?.build_states_beta(config)?.build_ir_parser(true, false)?.into())
-  } else {
-    test_fn(grammar.build_db(root_path, config)?.build_states_beta(config)?.build_ir_parser(false, false)?.into())
   }
 }
 

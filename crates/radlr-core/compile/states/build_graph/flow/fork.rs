@@ -5,35 +5,42 @@ use super::super::{
   graph::*,
 };
 use crate::{
-  compile::states::build_graph::errors::peek_not_allowed_error,
+  compile::states::build_graph::graph::{GraphBuildState, StateType},
   types::*,
   utils::{hash_group_btree_iter, hash_group_btreemap},
 };
 use std::collections::{BTreeSet, HashSet};
 
-use GraphBuildState::*;
-
 pub(crate) fn create_fork<'graph_iter, 'follow, I: Iterator<Item = Item>>(
-  gb: &'graph_iter mut GraphBuilder,
+  gb: &'graph_iter mut ConcurrentGraphBuilder,
+  pred: &SharedGraphNode,
+  config: &ParserConfig,
   sym: PrecedentSymbol,
   items: I,
-) -> RadlrResult<StateBuilder<'graph_iter>> {
-  debug_assert!(
-    gb.config.ALLOW_PEEKING && gb.config.max_k > 1,
-    "Peek states should not be created when peeking is not allowed or k=1"
-  );
-  debug_assert!(!gb.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
-  let state_id = gb.current_state_id();
+) -> RadlrResult<StagedNode> {
+  debug_assert!(config.ALLOW_PEEKING && config.max_k > 1, "Peek states should not be created when peeking is not allowed or k=1");
+  debug_assert!(!pred.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
 
-  Ok(gb.create_state(Normal, sym, StateType::ForkInitiator, Some(items)))
+  Ok(
+    StagedNode::new(gb)
+      .build_state(GraphBuildState::Normal)
+      .parent(pred.clone())
+      .sym(sym)
+      .ty(StateType::ForkInitiator)
+      .kernel_items(items),
+  )
 }
 
-pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut GraphBuilder) -> bool {
-  if matches!(gb.current_state().get_type(), StateType::ForkInitiator) {
-    for kernel_item in gb.current_state().get_kernel_items().clone() {
-      let mut state =
-        gb.create_state::<DefaultIter>(Normal, Default::default(), StateType::ForkedState, Some(vec![kernel_item].into_iter()));
-      state.to_enqueued();
+pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode) -> bool {
+  if matches!(pred.state_type(), StateType::ForkInitiator) {
+    for kernel_item in pred.kernel_items() {
+      StagedNode::new(gb)
+        .build_state(GraphBuildState::Normal)
+        .parent(pred.clone())
+        .sym(Default::default())
+        .ty(StateType::ForkedState)
+        .kernel_items(vec![*kernel_item].into_iter())
+        .commit(gb);
     }
     true
   } else {
@@ -41,12 +48,10 @@ pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut GraphBuilder) -> bool {
   }
 }
 
-pub(crate) fn convert_peek_root_state_to_fork(gb: &mut GraphBuilder) -> Result<(), RadlrError> {
-  gb.set_classification(ParserClassification { forks_present: true, ..Default::default() });
-  let mut state_id = gb.current_state_id();
+pub(crate) fn convert_peek_root_state_to_fork(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode) -> Result<(), RadlrError> {
   Ok(loop {
-    let state = gb.get_state(state_id);
-    if matches!(state.get_type(), StateType::Peek(INITIAL_PEEK_K)) {
+    todo!("Convert root peek state to fork");
+    /* if matches!(pred.state_type(), StateType::Peek(INITIAL_PEEK_K)) {
       let items = state.get_peek_resolve_items().unwrap().flat_map(|(_, items)| items.items.iter()).cloned().collect::<Vec<_>>();
       let sym = state.get_symbol();
       let parent = state.get_parent();
@@ -60,6 +65,6 @@ pub(crate) fn convert_peek_root_state_to_fork(gb: &mut GraphBuilder) -> Result<(
       unreachable!()
     } else {
       state_id = state.get_parent()
-    }
+    } */
   })
 }

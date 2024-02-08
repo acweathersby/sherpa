@@ -10,3 +10,4 @@ path ="./lib.rs"
 [dependencies]
 radlr_core          = { path="../radlr-core" }
 radlr_rust_runtime  = { path="../radlr-rust-runtime" }
+radlr_formatter     = { path="../radlr-formatter" }

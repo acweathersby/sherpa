@@ -2,7 +2,6 @@ use clap::{arg, value_parser, ArgMatches, Command};
 use radlr_build::BuildConfig;
 use radlr_bytecode::compile_bytecode;
 use radlr_core::{JournalReporter, ParserStore, RadlrError, RadlrGrammar, RadlrResult, ParserConfig};
-use radlr_rust_build::compile_rust_bytecode_parser;
 use std::{fs::File, io::Write, path::PathBuf, default};
 
 #[derive(Clone, Debug)]
@@ -44,10 +43,6 @@ pub fn command() -> ArgMatches {
           }})
           .default_value("bytecode")
         ) 
-        .arg(
-          arg!( --beta "Use the beta toolchain" )
-          .required(false)
-        )
         .arg(
           arg!( -a --ast "Create AST code, in the target language, from AScripT definitions" )
           .required(false)
@@ -109,29 +104,26 @@ fn main() -> RadlrResult<()> {
     let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
     let name = matches.get_one::<String>("name").cloned();
 
-    let use_beta = matches.get_one::<bool>("beta").cloned().unwrap_or(false);
     let debug = matches.get_one::<bool>("debug").cloned().unwrap_or_default();
-
-    if use_beta {
-      let target_language = match true {
-        _ => radlr_build::TargetLanguage::Rust
-       };
-      let mut build_config = BuildConfig::new(&grammar_sources.as_slice()[0]);
-      build_config.include_debug_symbols = debug;
-      build_config.build_ast = matches.get_one::<bool>("ast").cloned().unwrap_or_default();
-      build_config.lib_out = &_lib_out_dir;
-      build_config.source_out = &out_dir;
-
-      build_config.parser_type = match true {
-          _ => radlr_build::ParserType::Bytecode
+    let target_language = match true {
+      _ => radlr_build::TargetLanguage::Rust
       };
+
+    let mut build_config = BuildConfig::new(&grammar_sources.as_slice()[0]);
     
-      let parser_config = ParserConfig::default();
-    
-      radlr_build::fs_build(build_config, parser_config, target_language)
-    }else { 
-      build_parser(grammar_sources.as_slice(), parser_type, name, _lib_out_dir, out_dir, debug )
-    }
+    build_config.include_debug_symbols = debug;
+    build_config.build_ast = matches.get_one::<bool>("ast").cloned().unwrap_or_default();
+    build_config.lib_out = &_lib_out_dir;
+    build_config.source_out = &out_dir;
+
+    build_config.parser_type = match true {
+        _ => radlr_build::ParserType::Bytecode
+    };
+  
+    let parser_config = ParserConfig::default();
+  
+    radlr_build::fs_build(build_config, parser_config, target_language)
+  
   } else if matches.subcommand_matches("disassemble").is_some() {
     RadlrResult::Ok(())
   } else {
@@ -140,93 +132,27 @@ fn main() -> RadlrResult<()> {
 }
 
 
-fn build_parser(
-  grammar_sources: &[PathBuf],
-  parser_type: ParserType,
-  name: Option<String>,
-  _lib_out_dir: PathBuf,
-  out_dir: PathBuf,
-  debug:bool
-) -> RadlrResult<()> {
-
-  let config = Default::default();
-
-  //debug_assert_eq!(debug, true);
-
-  let mut grammar = RadlrGrammar::new();
-
-  for path in grammar_sources {
-    grammar.add_source(path)?;
-  }
-
-  if grammar.dump_errors() {
-    panic!("Failed To parse due to the above errors")
-  }
-
-  let db = grammar.build_db(grammar_sources.first().unwrap(), config)?;
-
-  if db.dump_errors() {
-    panic!("Failed To parse due to the above errors")
-  }
-
-  let states = db.build_states(config)?;
-  
-  if debug {
-    states.write_debug_file(&out_dir)?;
-  }
-
-  let parser = states.build_ir_parser(true, false)?;
-
-  if debug {
-    //parser.write_debug_file(&out_dir)?;
-  }
-
-  eprint!("Created a {} parser", parser.get_classification().to_string());
-
-
-  if parser.dump_errors() {
-    panic!("Failed To parse due to the above errors")
-  }
-
-  eprint!("{}", parser.report.to_string());
-
-  let output = match parser_type {
-    ParserType::LLVM => {
-      #[cfg(feature = "llvm")]
-      {
-        radlr_llvm::llvm_parser_build::build_llvm_parser(&parser, &name, &_lib_out_dir, None, true)?;
-        radlr_rust_build::compile_rust_llvm_parser(&parser, &name, &name)
-      }
-      #[cfg(not(feature = "llvm"))]
-      RadlrResult::Err("Compilation not supported".into())
-    }
-    _ => {
-      let pkg = compile_bytecode(&parser, false)?;
-      compile_rust_bytecode_parser(&parser, &pkg)
-    }
-  };
-
-  let output = output?;
-
-  //Ensure out directory exists
-  std::fs::create_dir_all(&out_dir)?;
-
-  //Write to file
-  let out_filepath = out_dir.join(name.unwrap_or(db.get_internal().friendly_name_string()) + ".rs");
-
-  let mut file = File::create(out_filepath)?;
-
-  file.write_all(output.as_bytes())?;
-
-  RadlrResult::Ok(())
-}
-
 #[test]
 fn test_radlr_bytecode_bootstrap() -> RadlrResult<()> {
   let radlr_grammar =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/radlr/2.0.0/grammar.sg").canonicalize().unwrap();
 
-  build_parser(&[radlr_grammar], ParserType::Bytecode, Some("test_radlr".into()), std::env::temp_dir(), std::env::temp_dir(), false)?;
+
+    let mut build_config = BuildConfig::new(&radlr_grammar);
+    let temp_dir = std::env::temp_dir().join("radlr");
+
+    build_config.include_debug_symbols = false;
+    build_config.build_ast = true;
+    build_config.lib_out = &temp_dir;
+    build_config.source_out = &temp_dir;
+
+    build_config.parser_type = match true {
+        _ => radlr_build::ParserType::Bytecode
+    };
+    let parser_config = ParserConfig::default();
+
+  radlr_build::fs_build(build_config, parser_config, radlr_build::TargetLanguage::Rust);
+
 
   Ok(())
 }

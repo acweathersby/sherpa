@@ -2,87 +2,112 @@
 
 use super::super::graph::*;
 use crate::{
-  compile::states::build_graph::items::{get_follow, get_follow_internal, get_goal_items_from_completed, FollowType},
+  compile::states::{
+    build_graph::{
+      graph::{GraphBuildState, Origin, StateType},
+      items::get_follow,
+    },
+    build_graph::items::{get_follow_internal, get_goal_items_from_completed, FollowType},
+  },
   types::*,
 };
 
-use GraphBuildState::*;
-
 pub(crate) fn handle_completed_item<'follow>(
-  gb: &mut GraphBuilder,
+  gb: &mut ConcurrentGraphBuilder,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   completed: Lookaheads,
   sym: PrecedentSymbol,
 ) -> RadlrResult<()> {
-  let ____is_scan____ = gb.is_scanner();
+  let ____is_scan____ = node.is_scanner();
 
   let first = completed[0];
 
   if first.kernel.origin == Origin::GoalCompleteOOS {
-    gb.create_state::<DefaultIter>(Normal, sym, StateType::NonTermCompleteOOS, None).to_leaf();
+    StagedNode::new(gb)
+      .parent(node.clone())
+      .ty(StateType::NonTermCompleteOOS)
+      .build_state(GraphBuildState::Normal)
+      .sym(sym)
+      .make_leaf()
+      .commit(gb);
   } else if ____is_scan____ {
-    complete_scan(completed, gb, sym, first)
+    complete_scan(completed, gb, node, sym, first)
   } else {
-    complete_regular(completed, gb, sym)
+    complete_regular(completed, gb, node, config, sym)
   }
 
   RadlrResult::Ok(())
 }
 
-fn complete_regular(completed: Vec<TransitionPair>, gb: &mut GraphBuilder, sym: PrecedentSymbol) {
+fn complete_regular(
+  completed: Vec<TransitionPair>,
+  gb: &mut ConcurrentGraphBuilder,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
+  sym: PrecedentSymbol,
+) {
   let root_item = completed[0].kernel;
-  let ____is_scan____ = gb.is_scanner();
-  let ____allow_rd____: bool = gb.config.ALLOW_CALLS || ____is_scan____;
-  let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
-  let ____allow_fork____: bool = gb.config.ALLOW_CONTEXT_SPLITTING && false; // Forking is disabled
-  let ____allow_peek____: bool = gb.config.ALLOW_PEEKING;
+  let ____is_scan____ = node.is_scanner();
+  let ____allow_rd____: bool = config.ALLOW_CALLS || ____is_scan____;
+  let ____allow_ra____: bool = config.ALLOW_LR || ____is_scan____;
+  let ____allow_fork____: bool = config.ALLOW_CONTEXT_SPLITTING && false; // Forking is disabled
+  let ____allow_peek____: bool = config.ALLOW_PEEKING;
 
   #[cfg(debug_assertions)]
   debug_assert!(!root_item.from_goto_origin || root_item.goto_distance > 0, "{:?}", root_item);
 
-  let mut state = gb.create_state(
-    Normal,
-    sym,
-    StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize - (root_item.from_goto_origin as usize)),
-    Some([root_item].into_iter()),
-  );
-  state.set_reduce_item(root_item);
-  state.to_leaf();
+  StagedNode::new(gb)
+    .parent(node.clone())
+    .ty(StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize - (root_item.from_goto_origin as usize)))
+    .build_state(GraphBuildState::Normal)
+    .sym(sym)
+    .make_leaf()
+    .set_reduce_item(root_item)
+    .kernel_items([root_item].into_iter())
+    .commit(gb);
   //  }
 }
 
-fn complete_scan(completed: Vec<TransitionPair>, gb: &mut GraphBuilder, sym: PrecedentSymbol, first: TransitionPair) {
+fn complete_scan(
+  completed: Vec<TransitionPair>,
+  gb: &mut ConcurrentGraphBuilder,
+  pred: &SharedGraphNode,
+  sym: PrecedentSymbol,
+  first: TransitionPair,
+) {
   let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-    completed.iter().into_iter().map(|i| get_follow_internal(gb, i.kernel, FollowType::ScannerCompleted)).unzip();
+    completed.iter().into_iter().map(|i| get_follow_internal(gb, pred, i.kernel, FollowType::ScannerCompleted)).unzip();
 
   let follow = follow.into_iter().flatten().collect::<Items>();
   let completed_items = completed_items.into_iter().flatten().collect::<Items>();
 
-  let goals = get_goal_items_from_completed(&completed_items, gb.graph());
+  let goals = get_goal_items_from_completed(&completed_items, gb, &pred);
   let is_continue = !follow.is_empty();
   let completes_goal = !goals.is_empty();
 
-  let mut state = gb.create_state(
-    Normal,
-    sym,
-    match (is_continue, goals.first().map(|d| d.origin)) {
+  let state = StagedNode::new(gb)
+    .parent(pred.clone())
+    .build_state(GraphBuildState::Normal)
+    .sym(sym)
+    .ty(match (is_continue, goals.first().map(|d| d.origin)) {
       (true, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignAndFollow(tok_id),
       (false, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignToken(tok_id),
       (true, _) => StateType::Follow,
       (false, _) => StateType::CompleteToken,
-    },
-    Some(follow.iter().cloned()),
-  );
-
-  state.set_reduce_item(first.kernel);
+    })
+    .set_reduce_item(first.kernel)
+    .kernel_items(follow.iter().cloned());
 
   let _ = if is_continue {
     if completes_goal {
-      state.to_enqueued_leaf()
+      state.make_enqueued_leaf()
     } else {
-      state.to_enqueued()
+      state
     }
   } else {
     debug_assert!(completes_goal);
-    Some(state.to_leaf())
-  };
+    state.make_leaf()
+  }
+  .commit(gb);
 }

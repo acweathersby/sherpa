@@ -241,10 +241,10 @@ name = "radlr"
 version = "1.0.1-beta1"
 dependencies = [
  "radlr_ascript",
+ "radlr_build",
  "radlr_bytecode",
  "radlr_core",
  "radlr_llvm",
- "radlr_rust_build",
 ]
 
 [[package]]
@@ -253,24 +253,14 @@ version = "1.0.1-beta1"
 dependencies = [
  "clap",
  "radlr_ascript",
- "radlr_ascript_beta",
  "radlr_build",
  "radlr_bytecode",
  "radlr_core",
  "radlr_formatter",
- "radlr_rust_build",
 ]
 
 [[package]]
 name = "radlr_ascript"
-version = "1.0.1-beta1"
-dependencies = [
- "radlr_core",
- "radlr_rust_runtime",
-]
-
-[[package]]
-name = "radlr_ascript_beta"
 version = "1.0.1-beta1"
 dependencies = [
  "radlr_core",
@@ -283,7 +273,6 @@ name = "radlr_build"
 version = "0.0.0"
 dependencies = [
  "radlr_ascript",
- "radlr_ascript_beta",
  "radlr_bytecode",
  "radlr_core",
  "radlr_formatter",
@@ -318,16 +307,6 @@ name = "radlr_llvm"
 version = "1.0.1-beta1"
 dependencies = [
  "inkwell",
- "radlr_core",
- "radlr_rust_runtime",
-]
-
-[[package]]
-name = "radlr_rust_build"
-version = "1.0.1-beta1"
-dependencies = [
- "radlr_ascript",
- "radlr_bytecode",
  "radlr_core",
  "radlr_rust_runtime",
 ]

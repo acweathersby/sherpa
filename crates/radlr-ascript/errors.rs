@@ -1,8 +1,7 @@
 #![allow(unused)]
 use radlr_core::{parser::AST_Property, *};
-use radlr_rust_runtime::types::BlameColor;
+use radlr_rust_runtime::types::{BlameColor, Token};
 
-use super::types::{AScriptProp, AScriptStore, AScriptTypeVal, TaggedType};
 use crate::types::*;
 use std::{collections::BTreeSet, path::PathBuf};
 
@@ -37,25 +36,25 @@ pub const fn ascript_error_class() -> ErrorClass {
 /// # Ok(())
 /// ```
 pub(crate) fn add_prop_redefinition_error(
-  j: &mut Journal,
+  errors: &mut Vec<RadlrError>,
   db: &ParserDatabase,
   struct_type: String,
   prop_name: String,
-  existing_prop: AScriptProp,
-  new_prop: AScriptProp,
+  existing_prop: &AscriptProp,
+  (new_type, new_id, new_tok): (AscriptType, GrammarIdentities, Token),
 ) {
-  j.report_mut().add_error(RadlrError::SourcesError {
+  errors.push(RadlrError::SourcesError {
     id:       (ascript_error_class(), 1, "property-redefinition").into(),
     sources:  vec![
       (
-        existing_prop.loc.clone(),
-        PathBuf::from(existing_prop.grammar_ref.path.to_string(db.string_store())),
-        "First definition with type [".to_string() + &existing_prop.type_val.debug_string() + "]",
+        existing_prop.tok.clone(),
+        PathBuf::from(existing_prop.g_id.path.to_string(db.string_store())),
+        "First definition with type [".to_string() + &existing_prop.ty.friendly_name() + "]",
       ),
       (
-        new_prop.loc.clone(),
-        PathBuf::from(new_prop.grammar_ref.path.to_string(db.string_store())),
-        "Second definition with type [".to_string() + &new_prop.type_val.debug_string() + "]",
+        new_tok.clone(),
+        PathBuf::from(new_id.path.to_string(db.string_store())),
+        "Second definition with type [".to_string() + &new_type.friendly_name() + "]",
       ),
     ],
     msg:      "Redefinition of property ".to_string() + &prop_name + " in struct " + &struct_type,
@@ -88,45 +87,34 @@ pub(crate) fn add_prop_redefinition_error(
 ///
 /// # Ok(())
 /// ```
-pub(crate) fn add_incompatible_nonterm_scalar_types_error(
-  j: &mut Journal,
-  ast: &mut AScriptStore,
+pub(crate) fn add_incompatible_nonterm_types_error(
+  errors: &mut Vec<RadlrError>,
   db: &ParserDatabase,
-  nterm: &DBNonTermKey,
-  (type_a, rules_a): (AScriptTypeVal, Vec<DBRuleKey>),
-  (type_b, rules_b): (AScriptTypeVal, Vec<DBRuleKey>),
+  nterm: DBNonTermKey,
+  (type_a, rules_a): (AscriptType, &DBRule),
+  (type_b, rules_b): (AscriptType, &DBRule),
 ) {
-  let type_names = ast.get_type_names();
-
-  j.report_mut().add_error(RadlrError::SourcesError {
-    id:       (ascript_error_class(), 2, "incompatible-non-terminal-scalar-types").into(),
-    sources:  rules_a
-      .into_iter()
-      .map(|r| {
-        let rule = db.rule(r);
-        (
-          rule.tok.clone(),
-          PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
-          format!("Rule produces type [{}]", type_a.blame_string(&type_names)),
-        )
-      })
-      .chain(rules_b.into_iter().map(|r| {
-        let rule = db.rule(r);
-        (
-          rule.tok.clone(),
-          PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
-          format!("Rule produces type [{}]", type_b.blame_string(&type_names)),
-        )
-      }))
-      .collect(),
-    msg:      format!(
-      "Incompatible combination of scalar types are produced by non-terminal [{}]",
-      db.nonterm_friendly_name_string(*nterm)
-    ),
+  errors.push(RadlrError::SourcesError {
+    id:       (ascript_error_class(), 1, "property-redefinition").into(),
+    sources:  vec![
+      (
+        rules_a.rule.tok.clone(),
+        PathBuf::from(rules_a.rule.g_id.path.to_string(db.string_store())),
+        "Rule produces type [".to_string() + &type_a.friendly_name() + "]",
+      ),
+      (
+        rules_b.rule.tok.clone(),
+        PathBuf::from(rules_b.rule.g_id.path.to_string(db.string_store())),
+        "Rule produces type [".to_string() + &type_b.friendly_name() + "]",
+      ),
+    ],
+    msg:      "Incompatible types returned from rules of non-terminal ".to_string() + &db.nonterm_friendly_name_string(nterm),
     ps_msg:   "".into(),
     severity: RadlrErrorSeverity::Critical,
   });
 }
+
+/*
 /// Occurs when a non-terminal returns incompatible vector type values, such as
 /// numeric values and Structs, or Strings and Tokens.
 ///
@@ -190,7 +178,7 @@ pub(crate) fn add_incompatible_nonterm_vector_types_error(
 /// # Example
 /// ### HC Grammar
 /// ```hcg
-/// 
+///
 /// <> A > \r :{ t_TypeA, prop: str }  // <- This rule produces a struct
 ///      | \t (+)                    // <- This rule produces a Vector of Tokens
 /// ```
@@ -252,7 +240,7 @@ pub(crate) fn add_incompatible_nonterm_types_error(
 pub(crate) fn add_unmatched_prop_error(j: &mut Journal, rule: &Rule, db: &ParserDatabase, prop: &AST_Property) {
   j.report_mut().add_error(RadlrError::SourceError {
     id:         (ascript_error_class(), 5, "unmatched-valueless-prop").into(),
-    path:       rule.g_id.path.clone().to_string(db.string_store()),
+    path:       PathBuf::from(rule.g_id.path.clone().to_string(db.string_store())),
     inline_msg: Default::default(),
     loc:        prop.tok.clone(),
     msg:        format!("This property does nor resolve to a symbol within it's associated rule",),
@@ -268,3 +256,4 @@ pub(crate) fn add_unmatched_prop_error(j: &mut Journal, rule: &Rule, db: &Parser
     severity:   RadlrErrorSeverity::Critical,
   });
 }
+*/

@@ -55,8 +55,6 @@ pub struct ParserConfig {
   /// The maximum number of lookead symbols allowed before parser construction
   /// is aborted or a different disambiguating strategy is employed.
   pub max_k: usize,
-
-  __BETA__: bool,
 }
 
 /// Configuration for the creation of a grammar from grammar sources.
@@ -92,7 +90,6 @@ impl Default for ParserConfig {
       ALLOW_ANONYMOUS_NONTERM_INLINING: true,
       ALLOW_BYTE_SEQUENCES: false,
       max_k: usize::MAX,
-      __BETA__: false,
     }
   }
 }
@@ -111,15 +108,6 @@ impl ParserConfig {
       peeks_present: self.ALLOW_PEEKING,
       forks_present: self.ALLOW_CONTEXT_SPLITTING,
     }
-  }
-
-  pub fn is_beta(&self) -> bool {
-    self.__BETA__
-  }
-
-  pub fn beta(mut self) -> Self {
-    self.__BETA__ = true;
-    self
   }
 
   pub fn hybrid(self) -> Self {

@@ -1,4 +1,4 @@
-use crate::{compile::states::build_states_beta::StateConstructionError, proxy::Array};
+use crate::{compile::states::build_states::StateConstructionError, proxy::Array};
 use radlr_rust_runtime::{
   deprecate::RadlrParseError,
   types::{BlameColor, ParserError, Token},

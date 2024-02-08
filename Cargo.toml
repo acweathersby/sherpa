@@ -3,16 +3,14 @@
 members = [
     "./crates/cli",
     "./crates/radlr",
-    "./crates/radlr-rust-build",
     "./crates/radlr-build",
     "./crates/radlr-core", 
-    "./crates/radlr-ascript",
     "./crates/radlr-bytecode",
     #"./crates/radlr-x86",
     "./crates/radlr-rust-runtime",
     "./crates/radlr-test",
     "./crates/radlr-formatter",
-    "./crates/radlr-ascript-beta",
+    "./crates/radlr-ascript",
 ]
 
 exclude = [

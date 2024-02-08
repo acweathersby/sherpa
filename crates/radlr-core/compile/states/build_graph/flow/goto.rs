@@ -1,27 +1,33 @@
 use super::super::graph::*;
-use crate::{types::*, utils::hash_group_btreemap};
+use crate::{
+  compile::states::build_graph::graph::{GraphBuildState, Origin, StateType},
+  types::*,
+  utils::hash_group_btreemap,
+};
 use std::collections::{BTreeSet, VecDeque};
 
-use GraphBuildState::*;
-
-pub(crate) fn handle_nonterminal_shift(gb: &mut GraphBuilder) -> RadlrResult<bool> {
-  if gb.is_scanner() || !gb.config.ALLOW_LR || gb.current_state().get_type().currently_peeking() {
+pub(crate) fn handle_nonterminal_shift(
+  gb: &mut ConcurrentGraphBuilder,
+  pred: &SharedGraphNode,
+  config: &ParserConfig,
+) -> RadlrResult<bool> {
+  if pred.is_scanner() || !config.ALLOW_LR || pred.state_type().currently_peeking() {
     return Ok(false);
   };
 
-  let mode = gb.get_mode();
+  let mode = pred.graph_type();
   let db = &gb.db_rc();
-  let kernel_base: ItemSet = gb.current_state().get_kernel_items().iter().inscope_items();
+  let kernel_base: ItemSet = pred.kernel_items().iter().inscope_items();
 
-  let indices = if gb.current_state_id().is_root() { kernel_base.iter().indices() } else { Default::default() };
+  let indices = if pred.is_root() { kernel_base.iter().indices() } else { Default::default() };
   let indices = &indices; // Make a reference to allow its use within closures.
 
-  let state_id = gb.current_state_id();
-  let origin = Origin::Goto(state_id);
+  let parent_id = pred.id();
+  let origin = Origin::Goto(parent_id);
 
   let mut nterm_items = kernel_base.iter().nonterm_items::<ItemSet>(mode, db);
   nterm_items.extend(kernel_base.iter().filter(|i| !i.is_complete()).flat_map(|i| {
-    let basis = i.to_origin(origin).to_origin_state(state_id);
+    let basis = i.to_origin(origin).to_origin_state(parent_id);
     let closure = i
       .closure_iter_align_with_lane_split(basis, db)
       .filter(move |i| i.is_nonterm(mode, db) && !indices.contains(&i.index()))
@@ -30,16 +36,13 @@ pub(crate) fn handle_nonterminal_shift(gb: &mut GraphBuilder) -> RadlrResult<boo
     closure
   }));
 
-  let out_items = gb.get_pending_items();
+  let out_items: ItemSet = gb
+    .get_goto_pending_items()
+    .into_iter()
+    .filter(|i| i.origin_state == parent_id && (!kernel_base.contains(i) || i.is_initial()))
+    .collect();
 
-  let parent_id = gb.current_state_id();
   let is_at_root = parent_id.is_root();
-
-  let out_items: ItemSet = if false && parent_id.is_root() {
-    out_items
-  } else {
-    out_items.into_iter().filter(|i| i.origin_state == parent_id && (!kernel_base.contains(i) || i.is_initial())).collect()
-  };
 
   if out_items.is_empty() {
     return Ok(false);
@@ -54,18 +57,19 @@ pub(crate) fn handle_nonterminal_shift(gb: &mut GraphBuilder) -> RadlrResult<boo
 
   let filter_nterms = false;
 
-  let used_nterm_items = if filter_nterms { get_used_nonterms(gb, out_items, nterm_items, &kernel_base) } else { nterm_items };
+  let used_nterm_items =
+    if filter_nterms { get_used_nonterms(gb, pred, out_items, nterm_items, &kernel_base) } else { nterm_items };
 
   if used_nterm_items.is_empty() {
     return Ok(false);
   }
 
-  gb.current_state_mut().set_nonterm_items(&used_nterm_items);
+  gb.set_nonterm_items(pred.hash_id as u64, used_nterm_items.clone());
 
   let used_nterm_groups = hash_group_btreemap(used_nterm_items, |_, t| t.nonterm_index_at_sym(mode, db).unwrap_or_default());
 
   for (target_nonterm, items) in &used_nterm_groups {
-    let are_shifting_a_goal_nonterm = is_at_root && gb.graph().goal_items().iter().rule_nonterm_ids(db).contains(&target_nonterm);
+    let are_shifting_a_goal_nonterm = is_at_root && pred.goal_items().iter().rule_nonterm_ids(db).contains(&target_nonterm);
     let contains_completed_kernel_items = items.iter().any(|i| kernel_base.contains(i) && i.is_penultimate());
     let contains_completed_items = items.iter().any(|i| i.is_penultimate());
 
@@ -112,43 +116,52 @@ pub(crate) fn handle_nonterminal_shift(gb: &mut GraphBuilder) -> RadlrResult<boo
     // A State following a goto point must either end with a return to that GOTO or
     // a completion of the gotos kernel items.
 
-    if let Some(state) = gb
-      .create_state(
-        NormalGoto,
-        (target_nonterm.to_sym(), 0).into(),
-        nterm_shift_type,
-        Some(incremented_items.into_iter().map(|i| i)),
+    StagedNode::new(gb)
+      .build_state(GraphBuildState::NormalGoto)
+      .parent(pred.clone())
+      .sym((target_nonterm.to_sym(), 0).into())
+      .ty(nterm_shift_type)
+      .include_with_goto_state()
+      .to_classification(ParserClassification { gotos_present: true, ..Default::default() })
+      .pnc(
+        Box::new(move |s, b, _| {
+          if are_shifting_a_goal_nonterm && !contains_completed_kernel_items {
+            // Add a default action that pops the current goto off the
+            // state stack.
+            vec![StagedNode::new(b)
+              .build_state(GraphBuildState::Leaf)
+              .parent(s.clone())
+              .sym((SymbolId::Default, 0).into())
+              .ty(StateType::NonTermCompleteOOS)
+              .make_leaf()]
+          } else {
+            Default::default()
+          }
+        }),
+        PostNodeConstructorData::None,
       )
-      .to_pending()
-    {
-      if are_shifting_a_goal_nonterm && !contains_completed_kernel_items {
-        let mut new_state = gb.create_state::<DefaultIter>(
-          GraphBuildState::Leaf,
-          (SymbolId::Default, 0).into(),
-          StateType::NonTermCompleteOOS,
-          None,
-        );
-        new_state.set_parent(state);
-        new_state.to_leaf();
-      }
-    }
+      .kernel_items(incremented_items.into_iter().map(|i| i))
+      .commit(gb);
   }
 
   // The remaining non-terminals are comprised of accept items for this state.
   for nonterm_id in kernel_nterm_ids {
-    gb.create_state::<DefaultIter>(GraphBuildState::Leaf, (nonterm_id.to_sym(), 0).into(), StateType::NonTerminalComplete, None)
-      .to_leaf();
+    StagedNode::new(gb)
+      .build_state(GraphBuildState::Leaf)
+      .parent(pred.clone())
+      .sym((nonterm_id.to_sym(), 0).into())
+      .ty(StateType::NonTerminalComplete)
+      .to_classification(ParserClassification { gotos_present: true, ..Default::default() })
+      .make_leaf()
+      .commit(gb);
   }
-
-  increment_gotos(gb);
-
-  gb.set_classification(ParserClassification { gotos_present: true, bottom_up: true, ..Default::default() });
 
   RadlrResult::Ok(true)
 }
 
 fn get_used_nonterms(
-  gb: &GraphBuilder,
+  gb: &ConcurrentGraphBuilder,
+  node: &SharedGraphNode,
   out_items: BTreeSet<Item>,
   nterm_items: BTreeSet<Item>,
   kernel_base: &BTreeSet<Item>,
@@ -160,7 +173,7 @@ fn get_used_nonterms(
 
   while let Some(nterm) = queue.pop_front() {
     if seen.insert(nterm) {
-      for item in nterm_items.iter().filter(|i| i.nonterm_index_at_sym(gb.get_mode(), db).unwrap() == nterm) {
+      for item in nterm_items.iter().filter(|i| i.nonterm_index_at_sym(node.graph_type(), db).unwrap() == nterm) {
         used_nterm_items.insert(*item);
         if !kernel_base.contains(item) || item.is_initial() {
           queue.push_back(item.nonterm_index(db));
@@ -170,40 +183,4 @@ fn get_used_nonterms(
   }
 
   used_nterm_items
-}
-
-fn increment_gotos(gb: &mut GraphBuilder) {
-  let current_id = gb.current_state_id();
-
-  gb.iter_pending_states_mut(&|mut sb| {
-    let peek_items = sb
-      .state_ref()
-      .get_peek_resolve_items()
-      .map(|i| i.map(|(i, PeekGroup { items, is_oos })| (i, *is_oos, items.clone())).collect::<Vec<_>>());
-
-    if let Some(peek_resolve_items) = peek_items {
-      /*      let old_kernel_items = sb.state_ref().get_kernel_items().clone();
-      let mut new_kernel_items: Items = Default::default();
-      for (v, is_oos, items) in peek_resolve_items {
-        let old_origin = Origin::Peek(v);
-        let new_items =
-          items.iter().map(|i| if i.origin_state.0 == current_id.0 { i.as_goto_origin() } else { i.increment_goto() });
-
-        let origin = sb.set_peek_resolve_state(new_items, is_oos);
-
-        new_kernel_items.extend(old_kernel_items.iter().filter(|i| i.origin == old_origin).map(|i| i.to_origin(origin)));
-      }
-
-      sb.set_kernel_items(new_kernel_items.into_iter()); */
-    } else {
-      let items = sb
-        .state_ref()
-        .get_kernel_items()
-        .iter()
-        .map(|i| if i.origin_state.0 == current_id.0 { i.as_goto_origin() } else { i.increment_goto() })
-        .collect::<Items>();
-
-      sb.set_kernel_items(items.into_iter());
-    }
-  });
 }

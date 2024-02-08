@@ -1,14 +1,14 @@
 use super::super::graph::*;
-use crate::types::*;
-
-use GraphBuildState::*;
-use StateType::*;
+use crate::{
+  compile::states::build_graph::graph::{GraphBuildState, StateId, StateType},
+  types::*,
+};
 
 pub struct CreateCallResult {
   /// `true` if the state is a KernelCall
   pub is_kernel:         bool,
   /// The new state that will perform the call
-  pub state_id:          StateId,
+  pub node:              StagedNode,
   /// A list of items from the parent closure that transition on the called
   /// non-terminal.
   pub _transition_items: Items,
@@ -20,14 +20,16 @@ pub struct CreateCallResult {
 ///   is_ker
 /// )
 pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
-  gb: &mut GraphBuilder,
+  gb: &mut ConcurrentGraphBuilder,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   group: T,
   sym: PrecedentSymbol,
 ) -> Option<CreateCallResult> {
   let db = gb.db();
-  let ____is_scan____ = gb.is_scanner();
-  let ____allow_rd____: bool = gb.config.ALLOW_CALLS || ____is_scan____;
-  let ____allow_ra____: bool = gb.config.ALLOW_LR || ____is_scan____;
+  let ____is_scan____ = node.is_scanner();
+  let ____allow_rd____: bool = config.ALLOW_CALLS || ____is_scan____;
+  let ____allow_ra____: bool = config.ALLOW_LR || ____is_scan____;
 
   if
   /* TODO(anthony) remove this after scan peek is implemented >>> */
@@ -38,8 +40,7 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
   // if all kernels are on same nonterminal symbol then we can do a call, provided
   // the nonterminal is not left recursive.
 
-  let kernel_symbol = group.clone().kernel_nonterm_sym(gb.get_mode(), db);
-
+  let kernel_symbol = group.clone().kernel_nonterm_sym(node.graph_type(), db);
   if kernel_symbol.len() == 1 {
     if let Some(Some(nonterm)) = kernel_symbol.first() {
       match db.nonterm_recursion_type(*nonterm) {
@@ -49,13 +50,15 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
         _ => {
           // Create call on the kernel items.
           let items = group.to_kernel().to_vec();
-          gb.set_classification(ParserClassification { calls_present: true, ..Default::default() });
 
           return Some(CreateCallResult {
             is_kernel:         true,
-            state_id:          gb
-              .create_state(Normal, sym, KernelCall(*nonterm), Some(items.try_increment().iter().cloned()))
-              .to_state(),
+            node:              StagedNode::new(gb)
+              .build_state(GraphBuildState::Normal)
+              .parent(node.clone())
+              .sym(sym)
+              .ty(StateType::KernelCall(*nonterm))
+              .kernel_items(items.try_increment().iter().cloned()),
             _transition_items: items,
           });
         }
@@ -69,14 +72,16 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
     return None;
   };
 
-  if let Some((nonterm, items)) = climb_nonterms(gb, group) {
-    gb.set_classification(ParserClassification { calls_present: true, ..Default::default() });
-
+  if let Some((nonterm, items)) = climb_nonterms(gb, node, group) {
     return Some(CreateCallResult {
       is_kernel:         false,
-      state_id:          gb
-        .create_state(Normal, sym, InternalCall(nonterm), Some(items.try_increment().iter().cloned()))
-        .to_state(),
+      node:              StagedNode::new(gb)
+        .build_state(GraphBuildState::Normal)
+        .parent(node.clone())
+        .sym(sym)
+        .ty(StateType::InternalCall(nonterm))
+        .to_classification(ParserClassification { calls_present: true, ..Default::default() })
+        .kernel_items(items.try_increment().iter().cloned()),
       _transition_items: items,
     });
   } else {
@@ -85,7 +90,8 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
 }
 
 fn climb_nonterms<'a, T: TransitionPairRefIter<'a> + Clone>(
-  gb: &mut GraphBuilder,
+  gb: &mut ConcurrentGraphBuilder,
+  node: &GraphNode,
   group: T,
 ) -> Option<(DBNonTermKey, Vec<Item>)> {
   let db = gb.db();
@@ -102,16 +108,16 @@ fn climb_nonterms<'a, T: TransitionPairRefIter<'a> + Clone>(
       .flat_map(|p| {
         p.kernel
           .closure_iter(db)
-          .filter(|i| match i.nonterm_index_at_sym(gb.get_mode(), db) {
+          .filter(|i| match i.nonterm_index_at_sym(node.graph_type(), db) {
             Some(id) => id == nterm && i.nonterm_index(db) != nterm,
             _ => false,
           })
-          .map(|i| -> TransitionPair { (p.kernel, i.align(&p.next), gb.get_mode(), db).into() })
+          .map(|i| -> TransitionPair { (p.kernel, i.align(&p.next), node.graph_type(), db).into() })
       })
       .collect::<Vec<_>>();
 
     // There may be a superior candidate. evaluate that.
-    if let Some(candidate) = climb_nonterms(gb, climbed_firsts.iter()) {
+    if let Some(candidate) = climb_nonterms(gb, node, climbed_firsts.iter()) {
       return Some(candidate);
     }
 

@@ -4,7 +4,6 @@ mod conflict;
 mod fork;
 mod goto;
 mod peek;
-mod peg;
 mod regular;
 
 pub(super) use call::*;

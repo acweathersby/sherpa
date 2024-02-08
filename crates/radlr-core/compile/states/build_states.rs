@@ -1,472 +1,295 @@
 use super::build_graph::{
-  build,
-  graph::{GraphType, Origin, ReversedGraph, ScannerData},
+  build::handle_kernel_items,
+  graph::{ConcurrentGraphBuilder, GraphType, Graphs, Origin, SharedGraphNode, StagedNode, StateType},
 };
-use crate::{
-  journal::Journal,
-  types::{worker_pool::WorkerPool, *},
-  utils::create_u64_hash,
-};
-use std::sync::{Arc, RwLock};
+use crate::types::{worker_pool::WorkerPool, *};
+use std::sync::Arc;
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub struct NonTermGraph {
-  pub(crate) name:           IString,
-  pub(crate) is_root_goal:   bool,
-  pub(crate) nonterm_id:     DBNonTermKey,
-  pub(crate) graph:          Option<ReversedGraph>,
-  pub(crate) lr_only:        bool,
-  pub(crate) classification: ParserClassification,
-  pub(crate) start_items:    OrderedSet<Item>,
+#[derive(Debug, Clone, Hash)]
+pub(crate) enum StateConstructionError {
+  NonDeterministicPeek(SharedGraphNode, Box<RadlrError>),
+  OtherErrors(Vec<RadlrError>),
 }
 
-#[allow(unused)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub struct ScannerGraph {
-  pub(crate) name:           IString,
-  pub(crate) data:           Arc<ScannerData>,
-  pub(crate) graph:          Option<ReversedGraph>,
-  pub(crate) classification: ParserClassification,
-  pub(crate) start_items:    OrderedSet<Item>,
+const NORMAL_GRAPH: i16 = 0;
+const LR_ONLY_GRAPH: i16 = 1;
+
+/// Add a root node to the graph queue. This type of node is also added to the
+/// global pending root nodes pool.
+pub fn add_root(
+  db_nt_key: DBNonTermKey,
+  name: IString,
+  graph_type: GraphType,
+  kernel_items: ItemSet,
+  builder: &mut ConcurrentGraphBuilder,
+  config: &ParserConfig,
+) -> RadlrResult<()> {
+  StagedNode::new(builder)
+    .kernel_items(kernel_items.to_vec().into_iter())
+    .ty(StateType::Start)
+    .graph_ty(graph_type)
+    .make_root(name, db_nt_key, NORMAL_GRAPH)
+    .commit(builder);
+
+  builder.commit(false, None, &config, false, false)?;
+  Ok(())
 }
 
-pub enum StateConstructionError<T> {
-  NonDeterministicPeek(T, Vec<RadlrError>),
-  OtherErrors(T, Vec<RadlrError>),
-}
+pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfig) -> RadlrResult<Graphs> {
+  // Create entry nodes.
 
-#[derive(Clone, Copy)]
-struct NonTermGraphJob {
-  nonterm_id:    DBNonTermKey,
-  lr_only:       bool,
-  is_root_entry: bool,
-  created:       usize,
-  completed:     usize,
-  valid:         bool,
-  is_scanner:    bool,
-}
+  let mut gb = ConcurrentGraphBuilder::new(db.clone(), config);
 
-#[repr(align(64))]
-#[derive(Default)]
-struct NonTermGraphJobEntry(Option<std::sync::RwLock<NonTermGraphJob>>);
-
-#[repr(align(64))]
-#[derive(Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-struct NonTermGraphResultEntry(std::sync::RwLock<Option<Box<NonTermGraph>>>);
-
-pub(crate) fn compile_parser_states(
-  mut j: Journal,
-  db: Arc<ParserDatabase>,
-  config: ParserConfig,
-) -> RadlrResult<(Arc<Vec<Box<NonTermGraph>>>, Arc<Vec<Box<ScannerGraph>>>)> {
-  j.set_active_report("States Compile", crate::ReportType::AnyNonTermCompile);
-
-  #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
-  crate::test::utils::write_debug_file(&db, "parse_graph.tmp", "", false)?;
-
-  #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
-  crate::test::utils::write_debug_file(&db, "scanner_graph.tmp", "", false)?;
-
-  let entry_points = db.entry_nterm_map();
-  let (nonterm_job_board, nonterm_results) = db
-    .nonterms()
-    .iter()
-    .enumerate()
-    .map(|(index, sym)| {
-      let id = DBNonTermKey::from(index);
-      if db.custom_state(id).is_some() {
-        (Default::default(), Default::default())
-      } else {
-        let result = NonTermGraphJob {
-          created:       1,
-          completed:     0,
-          is_root_entry: entry_points.get(&id).is_some_and(|e| e.is_export),
-          lr_only:       config.ALLOW_LR && !config.ALLOW_CALLS,
-          nonterm_id:    id,
-          valid:         true,
-          is_scanner:    sym.is_term(),
-        };
-        if sym.is_term() {
-          //TODO: We'll process scanners separately.
-          (NonTermGraphJobEntry(Some(RwLock::new(result))), Default::default())
-        } else {
-          if !config.ALLOW_CALLS {
-            // If we can't make calls to another non-terminal parse graph then it
-            // doesn't make sense to create parse graphs for non-terminals
-            // that are not exported by the grammar, as the root of thos e graphs
-            // will be unreachable.
-            if db.entry_nterm_keys().contains(&id) {
-              (NonTermGraphJobEntry(Some(std::sync::RwLock::new(result))), Default::default())
-            } else {
-              (Default::default(), Default::default())
-            }
-          } else {
-            (NonTermGraphJobEntry(Some(RwLock::new(result))), Default::default())
-          }
-        }
-      }
-    })
-    .unzip::<_, _, Array<NonTermGraphJobEntry>, Array<NonTermGraphResultEntry>>();
-
-  let scanner_inbox = Arc::new(RwLock::new(OrderedMap::<u64, Arc<ScannerData>>::new()));
-  let scanners = Arc::new(RwLock::new(Array::new()));
-
-  let nonterm_job_board = Arc::new(nonterm_job_board);
-  let parsers = Arc::new(nonterm_results);
-
-  let generation = Arc::new(std::sync::atomic::AtomicU32::new(1));
+  for result in db.nonterms().iter().enumerate().map(|(index, sym)| {
+    let nt_id: DBNonTermKey = (index as u32).into();
+    let kernel_items = ItemSet::start_items(nt_id, &db).to_origin(Origin::NonTermGoal(nt_id));
+    add_root(
+      nt_id,
+      db.nonterm_guid_name(nt_id),
+      sym.is_term().then_some(GraphType::Scanner).unwrap_or(GraphType::Parser),
+      kernel_items,
+      &mut gb,
+      &config,
+    )
+  }) {
+    result?;
+  }
 
   #[cfg(not(feature = "wasm-target"))]
-  let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
+  let pool: worker_pool::StandardPool = crate::types::worker_pool::StandardPool::new(20).unwrap();
 
   #[cfg(feature = "wasm-target")]
   let pool = crate::types::worker_pool::SingleThreadPool {};
 
-  let pool = crate::types::worker_pool::SingleThreadPool {};
+  let sync_tracker = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(1));
 
-  while generation.load(std::sync::atomic::Ordering::Acquire) > 0 {
-    generation.store(0, std::sync::atomic::Ordering::Release);
-    let indexer = Arc::new(std::sync::atomic::AtomicU32::new(0));
-    pool.run(|_num_of_threads_| {
-      let job_board = nonterm_job_board.clone();
-      let results = parsers.clone();
-      let indexer = indexer.clone();
-      let generation = generation.clone();
-      let db = db.clone();
-      let scanner_inbox = scanner_inbox.clone();
-      let scanners = scanners.clone();
-      move |thread_id| {
-        let mut local_scanner_inbox = OrderedMap::new();
-        let indexer = indexer.as_ref();
-        let generation = generation.as_ref();
-        let board_size = job_board.len();
-        let db_ref = db.as_ref();
-        let mut job_errors = vec![];
-        let mut local_scanners = Array::new();
-        loop {
-          // acquire the next pointer
-          let job_index = indexer.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as usize;
-
-          if job_index < board_size {
-            // We have a job! let's go ahead and process it.
-            if let NonTermGraphJobEntry(Some(job_flyer)) = &job_board[job_index] {
-              let Ok(pending_job) = job_flyer.write().map(|mut d| {
-                if d.created > d.completed && d.valid {
-                  d.completed = d.created;
-                  Some(*d)
-                } else {
-                  None
-                }
-              }) else {
-                return Err(RadlrError::Text(
-                  "Graph compiler worker [".to_string() + &thread_id.to_string() + "] encountered a poisoned job. Exiting",
-                ));
-              };
-
-              if let Some(NonTermGraphJob { nonterm_id, lr_only, is_root_entry: is_root_goal, is_scanner, .. }) = pending_job {
-                if !is_scanner {
-                  let graph = Box::new(NonTermGraph {
-                    name: db_ref.nonterm_guid_name(nonterm_id),
-                    is_root_goal,
-                    nonterm_id,
-                    graph: None,
-                    lr_only,
-                    classification: Default::default(),
-                    start_items: ItemSet::start_items(nonterm_id, db_ref).to_origin(Origin::NonTermGoal(nonterm_id)),
-                  });
-
-                  match process_nonterm_states(&db, config, graph) {
-                    Ok(graph) => {
-                      // we should make sure we don't need to rebuild this.
-                      if let Some(graph) = &graph.graph {
-                        for scanner in graph.iter_scanners() {
-                          local_scanner_inbox.insert(scanner.hash, Arc::new(scanner.clone()));
-                        }
-                      }
-
-                      if results[job_index]
-                        .0
-                        .write()
-                        .and_then(move |mut f| {
-                          *f = Some(graph);
-                          Ok(())
-                        })
-                        .is_err()
-                      {
-                        return Err(RadlrError::Text(
-                          "Graph compiler worker [".to_string()
-                            + &thread_id.to_string()
-                            + "] encountered a poisoned job. Exiting",
-                        ));
-                      }
-                    }
-
-                    Err(StateConstructionError::NonDeterministicPeek(work, errors)) => {
-                      //panic!("NonDeterministicPeek encounterred");
-                      //-----------------------------------------------------------------------------------
-                      // This non-terminal is invalid. If this is a root entry state then we can't
-                      // construct a parser for it. Otherwise, we can mark the parser for this
-                      // non-term as invalid, And then proceed to "collapse" the general parser, if
-                      // LR parsing is enabled.
-                      //
-                      // This involves the following:
-
-                      // let A = the non-terminal whose peek has failed.
-                      //
-                      // Dropping all states of A; this will results in a parser that is not
-                      // enterable at A. Then, mark all exported non-terminals which contains at least
-                      // one rule that, directly or indirectly, references an A in the right side as
-                      // "LR only", preventing states with call transitions from being created.
-                      // Rebuild the states of the effected non-terminals. Repeat this process for any
-                      // non-terminal, marked as "LR only", that fails to generate states due to
-                      // undeterministic peek.
-                      //
-                      // If ,during this iterative process, a non-terminal is encountered that is "LR
-                      // only", is non-deterministic during peeking, and is a root
-                      // entry point for the parser, then we have failed to generate a minimum
-                      // acceptable parser for this grammar configuration. Report parser as failed
-                      // and produce relevant diagnostic messages.
-                      //
-                      // If LR style parsing is disabled, then we cannot perform this process. Report
-                      // parser construction as failed and produce relevant diagnostic messages.
-                      //-----------------------------------------------------------------------------------
-
-                      // Invalidate the job we currently have.
-                      if let NonTermGraphJobEntry(Some(job_flyer)) = &job_board[job_index] {
-                        let Ok(_) = job_flyer.write().map(|mut d| {
-                          d.valid = false;
-                          ()
-                        }) else {
-                          return Err(RadlrError::Text(
-                            "Graph compiler worker [".to_string()
-                              + &thread_id.to_string()
-                              + "] encountered a poisoned job. Exiting",
-                          ));
-                        };
-                      }
-
-                      // Proceed to update all non-terminals that reference the one we currently have.
-                      if config.ALLOW_LR {
-                        if work.is_root_goal {
-                          job_errors.extend(errors.into_iter());
-                        } else {
-                          if let Some(nonterms) = db_ref.get_nonterminal_predecessors(nonterm_id) {
-                            for nonterm_id in nonterms {
-                              let job_index = nonterm_id.to_val() as usize;
-                              if let NonTermGraphJobEntry(Some(job_flyer)) = &job_board[job_index] {
-                                let Ok(_) = job_flyer.write().map(|mut d| {
-                                  d.created += 2;
-                                  d.lr_only = true;
-                                }) else {
-                                  return Err(RadlrError::Text(
-                                    "Graph compiler worker [".to_string()
-                                      + &thread_id.to_string()
-                                      + "] encountered a poisoned job. Exiting",
-                                  ));
-                                };
-                              }
-                              generation.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-                            }
-                          }
-                        }
-                      } else {
-                        job_errors.extend(errors.into_iter());
-                      }
-                    }
-
-                    Err(StateConstructionError::OtherErrors(_, errors)) => {
-                      job_errors.extend(errors.into_iter());
-                    }
-                  }
-                } else {
-                  let hash = create_u64_hash(nonterm_id);
-                  let graph: Box<ScannerGraph> = Box::new(ScannerGraph {
-                    classification: Default::default(),
-                    name:           db.nonterm_guid_name(nonterm_id),
-                    data:           Arc::new(ScannerData {
-                      hash,
-                      symbols: Default::default(),
-                      skipped: Default::default(),
-                      follow: Default::default(),
-                    }),
-                    start_items:    ItemSet::start_items(nonterm_id, db_ref).to_origin(Origin::NonTermGoal(nonterm_id)),
-                    graph:          None,
-                  });
-
-                  match process_scanner_states(&db, config, graph) {
-                    Ok(graph) => {
-                      local_scanners.push(graph);
-                    }
-                    Err(StateConstructionError::OtherErrors(_, errors)) => {
-                      job_errors.extend(errors.into_iter());
-                    }
-                    Err(StateConstructionError::NonDeterministicPeek(..)) => {
-                      unreachable!();
-                    }
-                  }
-                }
-              }
-            }
-          } else {
-            if local_scanners.len() > 0 {
-              if scanners
-                .write()
-                .map(|mut d| {
-                  d.extend(local_scanners.into_iter());
-                })
-                .is_err()
-              {
-                return Err(RadlrError::Text(
-                  "Graph compiler worker [".to_string() + &thread_id.to_string() + "] encountered a poisoned job. Exiting",
-                ));
-              }
-            }
-            if local_scanner_inbox.len() > 0 {
-              if scanner_inbox
-                .write()
-                .map(|mut d| {
-                  d.extend(local_scanner_inbox.into_iter());
-                })
-                .is_err()
-              {
-                return Err(RadlrError::Text(
-                  "Graph compiler worker [".to_string() + &thread_id.to_string() + "] encountered a poisoned job. Exiting",
-                ));
-              }
-            }
-            if job_errors.len() > 0 {
-              return Err(RadlrError::Multi(job_errors).flattened_multi());
-            } else {
-              return Ok(());
-            }
-          }
-        }
-      }
-    })?;
-  }
-
-  let indexer = Arc::new(std::sync::atomic::AtomicU32::new(0));
-  let scanner_inbox = Arc::new(Arc::into_inner(scanner_inbox).unwrap().into_inner().unwrap().into_values().collect::<Array<_>>());
   pool.run(|_num_of_threads_| {
-    let scanner_inbox = scanner_inbox.clone();
-    let indexer = indexer.clone();
-    let scanners = scanners.clone();
-    let db = db.clone();
-    let mut job_errors = vec![];
-    move |thread_id| {
-      let indexer = indexer.as_ref();
-      let board_size = scanner_inbox.len();
-      let db_ref = db.as_ref();
-      let mut local_scanners = Array::new();
+    let mut gb = gb.clone();
+
+    let sync_tracker = sync_tracker.clone();
+
+    move |_| {
+      let mut retries = 0;
       loop {
-        // acquire the next pointer
-        let job_index = indexer.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as usize;
+        if let Some(((node, config), _is_local_work)) =
+          gb.get_local_work().map(|w| (w, true)).or_else(|| gb.get_global_work().map(|w| (w, false)))
+        {
+          if retries > 0 {
+            retries = 0;
+            sync_tracker.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+          }
 
-        if job_index < board_size {
-          let scanner = scanner_inbox[job_index].clone();
+          match handle_kernel_items(&mut gb, &node, &config) {
+            Err(RadlrError::StateConstructionError(StateConstructionError::NonDeterministicPeek(root, err))) => {
+              //-----------------------------------------------------------------------------------
+              // This non-terminal is invalid. If this is a root entry state
+              // then we can't construct a parser for it.
+              // Otherwise, we can mark the parser for this
+              // non-term as invalid, And then proceed to "collapse" the general
+              // parser, if LR parsing is enabled.
+              //
+              // This involves the following:
 
-          let graph: Box<ScannerGraph> = Box::new(ScannerGraph {
-            classification: Default::default(),
-            name:           get_scanner_name(&scanner, db_ref),
-            data:           scanner.clone(),
-            graph:          None,
-            start_items:    scanner
-              .symbols
-              .iter()
-              .flat_map(|s| {
-                debug_assert!(!db.token(s.tok()).sym_id.is_default(), "Default symbols should not be in scanners");
-                ItemSet::start_items(db.token(s.tok()).nonterm_id, db_ref)
-                  .to_origin(Origin::TerminalGoal(s.tok(), s.precedence()))
-              })
-              .collect::<ItemSet>(),
-          });
+              // let A = the non-terminal whose peek has failed.
+              //
+              // Dropping all states of A; this will results in a parser that is
+              // not enterable at A. Then, mark all exported
+              // non-terminals which contains at least
+              // one rule that, directly or indirectly, references an A in the
+              // right side as "LR only", preventing states with
+              // call transitions from being created. Rebuild the
+              // states of the effected non-terminals. Repeat this process for
+              // any non-terminal, marked as "LR only", that fails
+              // to generate states due to undeterministic peek.
+              //
+              // If, during this iterative process, a non-terminal is
+              // encountered that is "LR only", is non-deterministic during
+              // peeking, and is a root entry point for the
+              // parser, then we have failed to generate a minimum
+              // acceptable parser for this grammar configuration.
+              // Report parser as failed and produce relevant
+              // diagnostic messages.
+              //
+              // If LR style parsing is disabled, then we cannot perform this
+              // process. Report parser construction as failed and
+              // produce relevant diagnostic messages.
+              //-----------------------------------------------------------------------------------
 
-          match process_scanner_states(&db, config, graph) {
-            Ok(graph) => {
-              local_scanners.push(graph);
+              let root_data = node.root_data;
+              let nonterm_key = root_data.db_key;
+              if config.ALLOW_LR {
+                let db = gb.db_rc().clone();
+
+                let mut poisoned = vec![root.root_data.db_key];
+
+                if db.entry_nterm_map().contains_key(&nonterm_key) {
+                  // Ensures all other threads are halted when the active queue is exhausted.
+                  sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+                  return Err(
+                    format!("Entry parser {} is non-deterministic", db.nonterm_friendly_name_string(nonterm_key),).into(),
+                  );
+                } else {
+                  if let Some(nonterms) = db.get_nonterminal_predecessors(nonterm_key) {
+                    poisoned.extend(nonterms.iter());
+
+                    match gb.invalidate_nonterms(&poisoned, NORMAL_GRAPH) {
+                      Err(err) => {
+                        sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+                        return Err(err);
+                      }
+                      _ => {}
+                    };
+
+                    for new_nt_key in nonterms {
+                      let mut new_config = config;
+                      new_config.ALLOW_LR = true;
+                      new_config.ALLOW_CALLS = false;
+
+                      let kernel_items = ItemSet::start_items(*new_nt_key, &db).to_origin(Origin::NonTermGoal(*new_nt_key));
+
+                      StagedNode::new(&gb)
+                        .kernel_items(kernel_items.to_vec().into_iter())
+                        .ty(StateType::Start)
+                        .graph_ty(node.graph_type())
+                        .make_root(db.nonterm_guid_name(*new_nt_key), *new_nt_key, LR_ONLY_GRAPH)
+                        .commit(&mut gb);
+
+                      gb.commit(false, None, &new_config, true, false)?;
+                    }
+                  } else {
+                    sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+                    panic!("Somehow encountered an orphaned non-terminal");
+                  }
+                }
+              }
             }
-            Err(StateConstructionError::OtherErrors(_, errors)) => {
-              job_errors.extend(errors.into_iter());
+            Err(_) => {
+              // Ensures all other threads are halted when the active queue is exhausted.
+              sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+              return Err("Todo: Report critical failure during compilation: {err}".into());
             }
-            Err(StateConstructionError::NonDeterministicPeek(..)) => {
-              unreachable!();
-            }
+            _ => {}
           }
         } else {
-          if local_scanners.len() > 0 {
-            if scanners
-              .write()
-              .map(|mut d| {
-                d.extend(local_scanners.into_iter());
-              })
-              .is_err()
-            {
-              return Err(RadlrError::Text(
-                "Graph compiler worker [".to_string() + &thread_id.to_string() + "] encountered a poisoned job. Exiting",
-              ));
-            }
-          }
-          if job_errors.len() > 0 {
-            return Err(RadlrError::Multi(job_errors).flattened_multi());
+          let num_of_waiting_threads = if retries == 0 {
+            let val = sync_tracker.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            val + 1
           } else {
-            return Ok(());
+            sync_tracker.load(std::sync::atomic::Ordering::Relaxed)
+          };
+
+          if num_of_waiting_threads >= _num_of_threads_ {
+            break;
           }
+
+          retries += 1;
+
+          let sleep_dur = std::time::Duration::from_micros((num_of_waiting_threads as u64 >> 1).max(1));
+
+          std::thread::sleep(sleep_dur);
+
+          std::hint::spin_loop()
         }
       }
+
+      Ok(())
     }
   })?;
 
-  Ok((
-    Arc::new(Arc::into_inner(parsers).unwrap().into_iter().filter_map(|e| e.0.into_inner().unwrap()).collect::<Array<_>>()),
-    Arc::new(Arc::into_inner(scanners).unwrap().into_inner().unwrap()),
-  ))
+  Ok(gb.into())
 }
 
-pub fn get_scanner_name(scanner: &ScannerData, db: &ParserDatabase) -> IString {
-  ("scan".to_string() + &scanner.hash.to_string()).intern(db.string_store())
-}
+#[cfg(test)]
+mod test {
+  #![allow(unused)]
+  use radlr_rust_runtime::types::StringInput;
+  use std::path::PathBuf;
 
-fn process_nonterm_states(
-  db: &SharedParserDatabase,
-  mut config: ParserConfig,
-  mut work: Box<NonTermGraph>,
-) -> Result<Box<NonTermGraph>, StateConstructionError<Box<NonTermGraph>>> {
-  let nterm_key = work.nonterm_id;
+  use super::compile_parser_states;
+  use crate::{
+    compile::ir::{build_ir_from_graph, optimize},
+    ParserConfig,
+    RadlrGrammar,
+    RadlrResult,
+    TestPackage,
+  };
 
-  if work.lr_only {
-    config.ALLOW_CALLS = false;
+  #[test]
+  fn build_json_graph() -> RadlrResult<()> {
+    let mut config = ParserConfig::default();
+    config.ALLOW_BYTE_SEQUENCES = true;
+    let db = RadlrGrammar::new()
+      .add_source_from_string(include_str!("../../../../grammars/json/json.sg"), "", false)
+      .unwrap()
+      .build_db("", config)
+      .unwrap()
+      .into_internal();
+
+    let graph = compile_parser_states(db.clone(), config)?;
+
+    let mut ir = build_ir_from_graph(config, &db, &graph)?;
+
+    for (_, ir) in &mut ir.1 {
+      ir.build_ast(&db)?;
+      // println!("{}", ir.print(&db, true)?);
+    }
+
+    let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
+
+    println!("{}", ir.1.to_string());
+
+    for (_, ir) in &ir.0 {
+      println!("{}", ir.print(&db, true)?);
+    }
+
+    Ok(())
   }
 
-  match build(db.nonterm_guid_name(nterm_key), GraphType::Parser, work.start_items.clone(), db, config) {
-    Ok((class, graph)) => {
-      work.classification |= class;
+  #[test]
+  pub fn peek_hybrid_graph() -> RadlrResult<()> {
+    let mut config = ParserConfig::default();
+    config.ALLOW_BYTE_SEQUENCES = false;
+    config.ALLOW_SCANNER_INLINING = false;
+    let db = RadlrGrammar::new()
+      .add_source_from_string(
+        r#"
+      IGNORE { c:sp  } 
+      
+      <> A > ( B | ":" C )(+)
+      
+      <> B > id "=>" c:id
+      
+      <> C > a_id(+)
+      
+      <> a_id > id "!"? 
+      
+      <> id > tk:id_tok
+      
+      <> id_tok > c:id
+      
+      "#,
+        "",
+        false,
+      )
+      .unwrap()
+      .build_db("", config)
+      .unwrap()
+      .into_internal();
 
-      work.graph = Some(ReversedGraph::new(graph));
+    let graph = compile_parser_states(db.clone(), config)?;
 
-      Ok(work)
-    }
-    Err(StateConstructionError::NonDeterministicPeek(_, errors)) => {
-      Err(StateConstructionError::NonDeterministicPeek(work, errors))
-    }
-    Err(StateConstructionError::OtherErrors(_, errors)) => Err(StateConstructionError::OtherErrors(work, errors)),
-  }
-}
+    let mut ir = build_ir_from_graph(config, &db, &graph)?;
 
-fn process_scanner_states(
-  db: &SharedParserDatabase,
-  config: ParserConfig,
-  mut work: Box<ScannerGraph>,
-) -> Result<Box<ScannerGraph>, StateConstructionError<Box<ScannerGraph>>> {
-  match build(work.name, GraphType::Scanner, work.start_items.clone(), db, config) {
-    Ok((_, graph)) => {
-      work.graph = Some(ReversedGraph::new(graph));
+    //return Ok(());
 
-      Ok(work)
+    let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
+
+    println!("{}", ir.1.to_string());
+
+    for (_, ir) in &ir.0 {
+      println!("{}", ir.print(&db, true)?);
     }
-    Err(StateConstructionError::NonDeterministicPeek(_, errors)) => {
-      Err(StateConstructionError::NonDeterministicPeek(work, errors))
-    }
-    Err(StateConstructionError::OtherErrors(_, errors)) => Err(StateConstructionError::OtherErrors(work, errors)),
+
+    Ok(())
   }
 }

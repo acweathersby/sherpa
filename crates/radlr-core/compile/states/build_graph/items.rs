@@ -2,7 +2,10 @@ use super::{
   build::{GroupedFirsts, TransitionGroup},
   graph::*,
 };
-use crate::types::*;
+use crate::{
+  compile::states::build_graph::graph::{GraphType, Origin, StateId},
+  types::*,
+};
 use radlr_rust_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
 use std::collections::VecDeque;
 
@@ -10,19 +13,23 @@ use std::collections::VecDeque;
 /// the terminals from the closure of the item, including completed items, in
 /// which the closure of all non-terminal items that transition on the item is
 /// taken after performing the non-term shift
-pub(crate) fn get_follow_symbols<'a, 'db: 'a>(gb: &'a mut GraphBuilder, item: Item) -> impl Iterator<Item = DBTermKey> + 'a {
-  get_follow_internal(gb, item, FollowType::AllItems)
+pub(crate) fn get_follow_symbols<'a, 'db: 'a>(
+  gb: &'a mut ConcurrentGraphBuilder,
+  node: &'a GraphNode,
+  item: Item,
+) -> impl Iterator<Item = DBTermKey> + 'a {
+  get_follow_internal(gb, node, item, FollowType::AllItems)
     .0
     .into_iter()
-    .flat_map(|i| i.closure_iter(gb.db()).filter_map(|i| i.term_index_at_sym(gb.get_mode(), gb.db())))
+    .flat_map(|i| i.closure_iter(gb.db()).filter_map(|i| i.term_index_at_sym(node.graph_type(), gb.db())))
 }
 
 /// Returns a tuple comprised of a vector of all items that follow the given
 /// item, provided the given item is in a complete state, and a list of a all
 /// items that are completed from directly or indirectly transitioning on the
 /// nonterminal of the given item.
-pub(crate) fn get_follow(gb: &mut GraphBuilder, item: Item) -> (Items, Items) {
-  get_follow_internal(gb, item, FollowType::AllItems)
+pub(crate) fn get_follow(gb: &mut ConcurrentGraphBuilder, node: &GraphNode, item: Item) -> (Items, Items) {
+  get_follow_internal(gb, node, item, FollowType::AllItems)
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -36,17 +43,22 @@ pub enum FollowType {
 /// item, provided the given item is in a complete state, and a list of a all
 /// items that are completed from directly or indirectly transitioning on the
 /// nonterminal of the given item.
-pub(crate) fn get_follow_internal(gb: &mut GraphBuilder, item: Item, caller_type: FollowType) -> (Items, Items) {
+pub(crate) fn get_follow_internal(
+  gb: &mut ConcurrentGraphBuilder,
+  node: &GraphNode,
+  item: Item,
+  caller_type: FollowType,
+) -> (Items, Items) {
   if !item.is_complete() {
     return (vec![item], vec![]);
   }
 
-  let ____is_scan____ = gb.graph().graph_type == GraphType::Scanner;
+  let ____is_scan____ = node.graph_type() == GraphType::Scanner;
   let mut completed = OrderedSet::new();
   let mut follow = OrderedSet::new();
   let mut oos_follow = OrderedSet::new();
   let mut queue = VecDeque::from_iter(vec![item]);
-  let mode = gb.graph().graph_type;
+  let mode = node.graph_type();
   let db = &gb.db_rc();
   let root_nterm = item.nonterm_index(db);
   let mut seen_nonterminal_extents = OrderedSet::new();
@@ -63,18 +75,17 @@ pub(crate) fn get_follow_internal(gb: &mut GraphBuilder, item: Item, caller_type
         if c_item.origin_state.is_oos_entry() {
           // Create or retrieve a new OOS state for this set of items.
           if seen_nonterminal_extents.insert(nterm) {
-            let state_id = gb.get_oos_root_state(nterm);
-            let state = gb.get_state(state_id);
-            let closure = state.get_kernel_items().iter().cloned();
+            let closure_state = gb.get_oos_root_state(nterm);
+            let closure = closure_state.kernel_items().iter().cloned();
             process_closure(db, closure, &mut queue, &mut follow)
           } else {
             None
           }
         } else {
           let state = gb.get_oos_closure_state(c_item);
-          let state = gb.get_state(state);
+
           let mut closure = state
-            .get_kernel_items()
+            .kernel_items()
             .iter()
             .filter(|i| i.nonterm_index_at_sym(mode, db) == Some(nterm))
             .cloned()
@@ -92,10 +103,13 @@ pub(crate) fn get_follow_internal(gb: &mut GraphBuilder, item: Item, caller_type
         let closure_state_id = c_item.origin_state;
         let origin = c_item.origin;
 
-        let state = gb.get_state(c_item.origin_state);
+
+        let state = node
+          .get_predecessor(c_item.origin_state)
+          .expect(&format!("Node should have a predecessors unless it is a root node {node:?}"));
 
         let closure = state
-          .get_kernel_items()
+          .kernel_items()
           .iter()
           .filter(|k_i| c_item.is_successor_of(k_i))
           .flat_map(|k_i| k_i.closure_iter_align(k_i.to_origin(origin).to_origin_state(closure_state_id), db))
@@ -112,9 +126,8 @@ pub(crate) fn get_follow_internal(gb: &mut GraphBuilder, item: Item, caller_type
         }
       } else {
         if !c_item.origin_state.is_root() && !c_item.origin_state.is_oos() {
-          let parent_state = gb.get_state(c_item.origin_state).get_parent();
-          if !parent_state.is_invalid() {
-            queue.push_back(c_item.to_origin_state(parent_state));
+          if let Some(parent_state) = node.get_predecessor(c_item.origin_state).unwrap().parent() {
+            queue.push_back(c_item.to_origin_state(parent_state.id()));
           }
         } else if !____is_scan____ && !c_item.origin_state.is_oos_entry() {
           queue.push_back(c_item.to_origin_state(StateId::extended_entry_base()));
@@ -153,7 +166,8 @@ fn process_closure(
 }
 
 pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<'a>>(
-  gb: &mut GraphBuilder,
+  gb: &mut ConcurrentGraphBuilder,
+  pred: &GraphNode,
   completed: T,
 ) -> RadlrResult<CompletedItemArtifacts> {
   let db = &gb.db_rc();
@@ -170,7 +184,7 @@ pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<
   }
 
   for k_i in completed {
-    let (f, d) = get_follow_internal(gb, *k_i, FollowType::AllItems);
+    let (f, d) = get_follow_internal(gb, pred, *k_i, FollowType::AllItems);
 
     if f.is_empty() {
       debug_assert!(!d.is_empty());
@@ -180,9 +194,7 @@ pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<
       for k_follow in f {
         if let Origin::__OOS_CLOSURE__ = k_follow.origin {
           let state = gb.get_oos_closure_state(k_follow);
-          follow_pairs.extend(
-            gb.get_state(state).get_kernel_items().iter().filter(|i| !i.is_complete()).map(|i| create_pair(*k_i, *i, db)),
-          );
+          follow_pairs.extend(state.kernel_items().iter().filter(|i| !i.is_complete()).map(|i| create_pair(*k_i, *i, db)));
         } else {
           follow_pairs.extend(k_follow.closure_iter_align(k_follow.to_origin(k_i.origin), db).map(|i| create_pair(*k_i, i, db)))
         }
@@ -193,8 +205,12 @@ pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<
   RadlrResult::Ok(CompletedItemArtifacts { lookahead_pairs: follow_pairs, default_only: default_only_items })
 }
 
-pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items, graph: &GraphHost) -> ItemSet {
-  items.iter().filter(|i| graph.item_is_goal(*i)).cloned().collect()
+pub(super) fn get_goal_items_from_completed<'db, 'follow>(
+  items: &Items,
+  graph: &ConcurrentGraphBuilder,
+  node: &GraphNode,
+) -> ItemSet {
+  items.iter().filter(|i| node.item_is_goal(**i)).cloned().collect()
 }
 
 pub(super) fn merge_occluding_token_items(from_groups: GroupedFirsts, into_groups: &mut GroupedFirsts) {

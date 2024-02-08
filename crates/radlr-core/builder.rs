@@ -8,10 +8,7 @@ use std::{
 use crate::{
   compile::{
     ir::{build_ir_from_graph, sweep},
-    states::{
-      build_graph_beta::graph::Graphs,
-      build_states::{compile_parser_states, NonTermGraph, ScannerGraph},
-    },
+    states::build_graph::graph::Graphs,
   },
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut, utils::resolve_grammar_path},
   o_to_r,
@@ -266,35 +263,14 @@ impl RadlrDatabase {
   }
 
   /// Constructs parser and scanner graphs for this variant of the grammar.
-  pub fn build_states(&self, config: ParserConfig) -> RadlrResult<RadlrGraph> {
+  pub fn build_states(&self, config: ParserConfig) -> RadlrResult<RadlrParseGraph> {
     let RadlrDatabase { j, db } = self;
 
-    match compile_parser_states(j.transfer(), db.clone(), config) {
-      Ok((parsers, scanners)) => {
-        j.transfer().flush_reports();
-
-        Ok(RadlrGraph { parsers, scanners, j: j.transfer(), db: db.clone(), config })
-      }
-      Err(err) => {
-        let mut errors = err.flatten();
-        if errors.len() > 1 {
-          Err(errors.into_iter().dedup::<Array<_>>().into_iter().into_multi())
-        } else {
-          Err(errors.pop().unwrap())
-        }
-      }
-    }
-  }
-
-  /// Constructs parser and scanner graphs for this variant of the grammar.
-  pub fn build_states_beta(&self, config: ParserConfig) -> RadlrResult<RadlrGraphBeta> {
-    let RadlrDatabase { j, db } = self;
-
-    match crate::compile::states::build_states_beta::compile_parser_states(db.clone(), config) {
+    match crate::compile::states::build_states::compile_parser_states(db.clone(), config) {
       Ok(graph) => {
         j.transfer().flush_reports();
 
-        Ok(RadlrGraphBeta { graph, j: j.transfer(), db: db.clone(), config })
+        Ok(RadlrParseGraph { graph, j: j.transfer(), db: db.clone(), config })
       }
       Err(err) => {
         let mut errors = err.flatten();
@@ -321,86 +297,22 @@ impl RadlrDatabase {
 // ----------------------------------------------------------------------------------------
 
 /// Comprised of the parser and scanner graphs for the given grammar
-pub struct RadlrGraphBeta {
+pub struct RadlrParseGraph {
   pub(crate) j:      Journal,
   pub(crate) db:     SharedParserDatabase,
   pub(crate) config: ParserConfig,
   pub(crate) graph:  Graphs,
 }
 
-impl JournalReporter for RadlrGraphBeta {
+impl JournalReporter for RadlrParseGraph {
   fn get_journal(&self) -> &Journal {
     &self.j
   }
 }
 
-impl RadlrGraphBeta {
+impl RadlrParseGraph {
   pub fn build_ir_parser(&self, optimize: bool, optimize_for_debugging: bool) -> RadlrResult<RadlrIRParser> {
-    match crate::compile::ir_beta::build_ir_from_graph(self.config, &self.db, &self.graph) {
-      Ok((classification, ir_states)) => {
-        let Self { config, db, .. } = self;
-        let mut j = self.j.transfer();
-        j.flush_reports();
-
-        let (states, report): (Vec<_>, _) = if optimize {
-          crate::compile::ir::optimize(db, config, ir_states, optimize_for_debugging)?
-        } else {
-          sweep(db, config, ir_states, optimize_for_debugging)?
-        };
-
-        Ok(RadlrIRParser {
-          classification,
-          config: *config,
-          db: db.clone(),
-          states,
-          is_optimized: optimize,
-          report,
-          j,
-        })
-      }
-      Err(err) => {
-        let mut errors = err.flatten();
-        if errors.len() > 1 {
-          Err(errors.into_iter().dedup::<Array<_>>().into_iter().into_multi())
-        } else {
-          Err(errors.pop().unwrap())
-        }
-      }
-    }
-  }
-}
-
-// ----------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------
-
-/// Comprised of the parser and scanner graphs for the given grammar
-pub struct RadlrGraph {
-  pub(crate) j:        Journal,
-  pub(crate) db:       SharedParserDatabase,
-  pub(crate) config:   ParserConfig,
-  pub(crate) parsers:  Arc<Vec<Box<NonTermGraph>>>,
-  pub(crate) scanners: Arc<Vec<Box<ScannerGraph>>>,
-}
-
-impl JournalReporter for RadlrGraph {
-  fn get_journal(&self) -> &Journal {
-    &self.j
-  }
-}
-
-impl RadlrGraph {
-  /// Construct an IR parser from the parse states.
-  ///
-  /// # Args
-  ///
-  /// - optimize - Perform optimization passes on the IR states
-  ///
-  /// - optimize_for_debugging - Rewrite states to improve source mapping within
-  ///   debuggers
-  ///  
-  pub fn build_ir_parser(&self, optimize: bool, optimize_for_debugging: bool) -> RadlrResult<RadlrIRParser> {
-    match build_ir_from_graph(self) {
+    match crate::compile::ir::build_ir_from_graph(self.config, &self.db, &self.graph) {
       Ok((classification, ir_states)) => {
         let Self { config, db, .. } = self;
         let mut j = self.j.transfer();
@@ -438,23 +350,13 @@ impl RadlrGraph {
 
     let mut file = OpenOptions::new().truncate(true).write(true).create(true).open(file_path)?;
 
-    for parser_state in self.parsers.iter() {
-      if let Some(graph) = &parser_state.graph {
-        file.write_all(graph.internal()._debug_string_().as_str().as_bytes())?;
-      }
+    for parser_state in self.graph.create_ir_precursors().iter() {
+      file.write_all(format!("{:?}", parser_state.node).as_bytes())?;
     }
 
     file.flush()?;
 
     Ok(())
-  }
-
-  pub fn build_parse_table(&self) {
-    todo!("Generate parser table");
-  }
-
-  pub fn get_parser_graph(&self) -> Option<&NonTermGraph> {
-    todo!("Generate parser table");
   }
 }
 

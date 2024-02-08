@@ -9,7 +9,7 @@ use crate::{
   *,
 };
 use radlr_bytecode::compile_bytecode;
-use radlr_core::{test::utils::build_parse_states_from_source_str as build_states, *};
+use radlr_core::{test::utils::build_parse_states_from_source_str, *};
 use radlr_rust_runtime::types::{ASTConstructor, AstSlotNew, EntryPoint, ParserInitializer, StringInput};
 use std::{path::PathBuf, rc::Rc};
 
@@ -970,7 +970,7 @@ fn simple_newline_tracking_sanity() -> RadlrResult<()> {
 /// Bytecode counterpart to radlr_llvm::test::compile::simple_newline_tracking
 #[test]
 fn simple_newline_tracking() -> RadlrResult<()> {
-  build_states(
+  build_parse_states_from_source_str(
     r##"
     IGNORE { c:sp c:nl }
 

@@ -2,7 +2,7 @@ use radlr_rust_runtime::types::bytecode::MatchInputType;
 
 use super::*;
 use crate::{
-  compile::states::{build_graph::graph::ScannerData, build_states::get_scanner_name},
+  compile::states::build_graph::graph::ScannerData,
   parser::{self, ASTNode, State},
   writer::code_writer::CodeWriter,
 };
@@ -22,15 +22,15 @@ use std::{
 
 /// The intermediate representation of a radlr parser
 pub struct ParseState {
-  pub guid_name: IString,
-  pub precedence: u32,
-  pub comment: String,
-  pub code: String,
-  pub ast: Option<Box<State>>,
-  pub compile_error: Option<RadlrError>,
+  pub guid_name:      IString,
+  pub precedence:     u32,
+  pub comment:        String,
+  pub code:           String,
+  pub ast:            Option<Box<State>>,
+  pub compile_error:  Option<RadlrError>,
   /// Collections of scanner based on TOKEN match statements
   pub(crate) scanner: Option<ScannerData>,
-  pub root: bool,
+  pub root:           bool,
 }
 
 impl<'db> ParseState {
@@ -151,7 +151,7 @@ impl ParseState {
       self.guid_name.to_string(db.string_store()),
       &self.code.split("\n").collect::<Vec<_>>().join("\n    "),
       &self.get_ast(),
-      self.scanner.as_ref().map(|scanner| { get_scanner_name(scanner, db) })
+      self.scanner.as_ref().map(|scanner| { scanner.create_scanner_name(db) })
     )
   }
 }

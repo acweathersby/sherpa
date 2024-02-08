@@ -1,5 +1,4 @@
 use super::{
-  errors::peek_not_allowed_error,
   flow::{
     handle_fork,
     handle_nonterminal_shift,
@@ -11,74 +10,87 @@ use super::{
   graph::*,
   items::{get_completed_item_artifacts, merge_occluding_token_items},
 };
-use crate::{types::*, utils::hash_group_btree_iter};
+use crate::{
+  compile::states::build_graph::graph::{GraphBuildState, StateType},
+  types::*,
+  utils::hash_group_btree_iter,
+};
 
-use GraphBuildState::*;
+use ParserClassification as PC;
 
 pub(crate) type TransitionGroup = (u16, Vec<TransitionPair>);
 pub(crate) type GroupedFirsts = OrderedMap<SymbolId, TransitionGroup>;
 
-pub(crate) fn handle_kernel_items(gb: &mut GraphBuilder) -> RadlrResult<()> {
-  let mut groups = get_firsts(gb)?;
+pub(crate) fn handle_kernel_items(
+  gb: &mut ConcurrentGraphBuilder,
+  pred: &SharedGraphNode,
+  config: &ParserConfig,
+) -> RadlrResult<()> {
+  let mut groups = get_firsts(gb, pred)?;
 
-  if handle_fork(gb) {
+  let have_lookahead = pred.kernel_items().len() > 1;
+
+  if handle_fork(gb, pred) {
     return Ok(());
   }
 
-  handle_cst_actions(gb);
+  handle_cst_actions(gb, pred, &config)?;
 
-  let max_completed_precedence = handle_completed_items(gb, &mut groups)?;
+  let max_completed_precedence = handle_completed_items(gb, pred, &config, &mut groups, pred.is_scanner())?;
 
-  let groups = handle_scanner_items(max_completed_precedence, gb, groups)?;
+  let groups = handle_scanner_items(max_completed_precedence, gb, pred, groups)?;
 
-  handle_incomplete_items(gb, groups)?;
+  handle_incomplete_items(gb, pred, &config, groups, PC { max_k: have_lookahead as u16, ..PC::default() })?;
 
-  handle_nonterminal_shift(gb)?;
+  let update_gotos = handle_nonterminal_shift(gb, pred, &config)?;
 
-  if gb.process_successors() == 0 {
-    let peek_level = gb.current_state().get_type().peek_level();
-    if gb.current_state().get_type().peek_level() > 0 {
-      if gb.get_child_count() == 0 {
-        gb.declare_recursive_peek_error();
-        return peek_not_allowed_error(gb, &[], &format!("This is undeterministic at k>={peek_level}"));
-      }
-    }
+  let states_queued = gb.commit(update_gotos, Some(pred), config, true, false)?;
+
+  if pred.state_type().is_peek() && pred.state_type().peek_level() > 0 && states_queued == 0 {
+    // Todo(anthony) : if peeking, determine if the peek has terminated in a
+    // non-deterministic way. If so, produce a NonDeterministicPeek error.
+    panic!("Undeterministic PARSE");
+    let root_data = pred.root_data.db_key;
+
+    Err(RadlrError::StateConstructionError(
+      crate::compile::states::build_states::StateConstructionError::NonDeterministicPeek(
+        pred.get_root_shared(),
+        Box::new("Testing Messagine. Peek has no successors!".into()),
+      ),
+    ))
+  } else {
+    Ok(())
   }
-
-  Ok(())
 }
 
 /// Insert non-terminal shift actions
-fn handle_cst_actions(gb: &mut GraphBuilder) {
-  if gb.config.ALLOW_CST_NONTERM_SHIFT && gb.current_state().build_state() == GraphBuildState::Normal {
+fn handle_cst_actions(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode, config: &ParserConfig) -> RadlrResult<()> {
+  if config.ALLOW_CST_NONTERM_SHIFT && pred.build_state() == GraphBuildState::Normal {
     let d = &gb.db_rc();
-    let state = gb.current_state();
-    let items = state.get_kernel_items().clone();
-    let mode = gb.get_mode();
-    for nonterm in items.iter().filter(|i| i.is_nonterm(mode, d)) {
-      gb.create_state(
-        Normal,
-        (nonterm.sym_id(d), 0).into(),
-        StateType::CSTNodeAccept(nonterm.nonterm_index_at_sym(gb.get_mode(), d).unwrap()),
-        Some([nonterm.try_increment()].into_iter()),
-      )
-      .to_enqueued();
+    let mode = pred.graph_type();
+    for nonterm in pred.kernel_items().iter().filter(|i| i.is_nonterm(mode, d)) {
+      StagedNode::new(gb)
+        .parent(pred.clone())
+        .build_state(GraphBuildState::Normal)
+        .add_kernel_items([nonterm.try_increment()].into_iter())
+        .ty(StateType::CSTNodeAccept(nonterm.nonterm_index_at_sym(mode, d).unwrap()))
+        .commit(gb);
     }
   }
+  Ok(())
 }
 
 /// Iterate over each item's closure and collect the terminal transition symbols
 /// of each item. The item's are then catagorized by these nonterminal symbols.
 /// Completed items are catagorized by the default symbol.
-fn get_firsts(gb: &mut GraphBuilder) -> RadlrResult<GroupedFirsts> {
+fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode) -> RadlrResult<GroupedFirsts> {
   let db = gb.db();
-  let state = gb.current_state();
-  let iter = state.get_kernel_items().iter().flat_map(|k_i| {
-    let basis = k_i.to_origin_state(gb.current_state_id());
+  let iter = pred.kernel_items().iter().flat_map(|k_i| {
+    let basis = k_i.to_origin_state(pred.id());
     k_i
       .closure_iter_align_with_lane_split(basis, db)
-      .term_items_iter(gb.is_scanner(), db)
-      .map(|t_item| -> TransitionPair { (*k_i, t_item, gb.get_mode(), db).into() })
+      .term_items_iter(pred.is_scanner(), db)
+      .map(|t_item| -> TransitionPair { (*k_i, t_item, pred.graph_type(), db).into() })
   });
 
   let groups = hash_group_btree_iter::<Vec<_>, _, _, _, _>(iter, |_, first| first.sym);
@@ -94,10 +106,11 @@ fn get_firsts(gb: &mut GraphBuilder) -> RadlrResult<GroupedFirsts> {
 /// that have occluding symbols symbols
 fn handle_scanner_items(
   max_completed_precedence: u16,
-  gb: &GraphBuilder,
+  gb: &ConcurrentGraphBuilder,
+  node: &SharedGraphNode,
   mut groups: GroupedFirsts,
 ) -> RadlrResult<GroupedFirsts> {
-  if gb.is_scanner() {
+  if node.is_scanner() {
     groups = groups
       .into_iter()
       .filter_map(|(s, (p, g))| {
@@ -126,27 +139,39 @@ fn handle_scanner_items(
   Ok(groups)
 }
 
-fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(gb: &mut GraphBuilder, groups: GroupedFirsts) -> RadlrResult<()> {
+fn handle_incomplete_items<'nt_set, 'db: 'nt_set>(
+  gb: &mut ConcurrentGraphBuilder,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
+  groups: GroupedFirsts,
+  classification: ParserClassification,
+) -> RadlrResult<()> {
   for (sym, group) in groups {
-    let ____is_scan____ = gb.is_scanner();
+    let ____is_scan____ = node.is_scanner();
     let prec_sym: PrecedentSymbol = (sym, group.0).into();
 
-    match gb.current_state().get_type() {
-      StateType::Peek(level) => handle_peek_incomplete_items(gb, prec_sym, group, level),
-      _REGULAR_ => handle_regular_incomplete_items(gb, prec_sym, group),
+    match node.state_type() {
+      StateType::Peek(level) => handle_peek_incomplete_items(gb, node, prec_sym, group, level),
+      _REGULAR_ => handle_regular_incomplete_items(gb, node, config, prec_sym, group, classification),
     }?;
   }
   Ok(())
 }
 
-fn handle_completed_items(gb: &mut GraphBuilder, groups: &mut GroupedFirsts) -> RadlrResult<u16> {
-  let ____is_scan____ = gb.is_scanner();
+fn handle_completed_items(
+  gb: &mut ConcurrentGraphBuilder,
+  pred: &SharedGraphNode,
+  config: &ParserConfig,
+  groups: &mut GroupedFirsts,
+  ____is_scan____: bool,
+) -> RadlrResult<u16> {
   let mut max_precedence = 0;
 
   if let Some(completed) = groups.remove(&SymbolId::Default) {
     max_precedence = max_precedence.max(completed.0);
 
-    let CompletedItemArtifacts { lookahead_pairs, .. } = get_completed_item_artifacts(gb, completed.1.iter().map(|i| &i.kernel))?;
+    let CompletedItemArtifacts { lookahead_pairs, .. } =
+      get_completed_item_artifacts(gb, pred, completed.1.iter().map(|i| &i.kernel))?;
 
     if !lookahead_pairs.is_empty() {
       // Create reduce states for follow items that have not already been covered.
@@ -155,7 +180,7 @@ fn handle_completed_items(gb: &mut GraphBuilder, groups: &mut GroupedFirsts) -> 
           //ItemType::Completed(_) => {
           //  unreachable!("Should be handled outside this path")
           //}
-          ItemType::TokenNonTerminal(_, sym) if !gb.is_scanner() => sym,
+          ItemType::TokenNonTerminal(_, sym) if !____is_scan____ => sym,
           ItemType::Terminal(sym) => sym,
           _ => SymbolId::Undefined,
         });
@@ -163,7 +188,7 @@ fn handle_completed_items(gb: &mut GraphBuilder, groups: &mut GroupedFirsts) -> 
       completed_groups.remove(&SymbolId::Undefined);
 
       for (sym, follow_pairs) in completed_groups {
-        handle_completed_groups(gb, groups, sym, follow_pairs)?;
+        handle_completed_groups(gb, pred, config, groups, sym, follow_pairs)?;
       }
     }
 
@@ -181,7 +206,7 @@ fn handle_completed_items(gb: &mut GraphBuilder, groups: &mut GroupedFirsts) -> 
     };
 
     if default.len() > 0 {
-      handle_completed_groups(gb, groups, SymbolId::Default, default)?;
+      handle_completed_groups(gb, pred, config, groups, SymbolId::Default, default)?;
     } else {
       debug_assert!(!lookahead_pairs.is_empty())
     }
@@ -191,16 +216,18 @@ fn handle_completed_items(gb: &mut GraphBuilder, groups: &mut GroupedFirsts) -> 
 }
 
 pub(crate) fn handle_completed_groups(
-  gb: &mut GraphBuilder,
+  gb: &mut ConcurrentGraphBuilder,
+  node: &SharedGraphNode,
+  config: &ParserConfig,
   groups: &mut GroupedFirsts,
   sym: SymbolId,
   follow_pairs: Lookaheads,
 ) -> RadlrResult<()> {
-  let ____is_scan____ = gb.is_scanner();
+  let ____is_scan____ = node.is_scanner();
   let prec_sym: PrecedentSymbol = (sym, follow_pairs.iter().max_precedence()).into();
 
-  match gb.current_state().get_type() {
-    StateType::Peek(level) => handle_peek_complete_groups(gb, groups, prec_sym, follow_pairs, level),
-    _REGULAR_ => handle_regular_complete_groups(gb, groups, prec_sym, follow_pairs),
+  match node.state_type() {
+    StateType::Peek(level) => handle_peek_complete_groups(gb, node, config, groups, prec_sym, follow_pairs, level),
+    _REGULAR_ => handle_regular_complete_groups(gb, node, config, groups, prec_sym, follow_pairs),
   }
 }

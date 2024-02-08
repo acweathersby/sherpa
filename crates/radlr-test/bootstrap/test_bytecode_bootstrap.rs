@@ -56,7 +56,6 @@ fn test_full_grammar() -> RadlrResult<()> {
       ..Default::default()
     },
     pkg.address_to_state_name.clone(),
-    false,
   ));
 
   let entry = pkg.get_entry_data_from_name("grammar").expect("Grammar export should be enterable");
