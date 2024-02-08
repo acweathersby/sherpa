@@ -1,6 +1,6 @@
 use crate::{
   utils::{
-    compile_and_run_grammars,
+    compile_and_run_grammars_beta,
     map_reduce_function,
     TestParser,
     _write_disassembly_to_temp_file_,
@@ -9,18 +9,21 @@ use crate::{
   *,
 };
 use radlr_bytecode::compile_bytecode;
-use radlr_core::{test::utils::build_parse_states_from_source_str as build_states, *};
+use radlr_core::{
+  test::utils::{build_parse_states_from_source_str as build_states, build_parse_states_from_source_str_beta},
+  *,
+};
 use radlr_rust_runtime::types::{ASTConstructor, AstSlotNew, EntryPoint, ParserInitializer, StringInput};
 use std::{path::PathBuf, rc::Rc};
 
 #[test]
 pub fn construct_trivial_parser() -> RadlrResult<()> {
-  compile_and_run_grammars(&[r#"<> A > 'hello' ' ' 'world' "#], &[("default", "hello world", true)], Default::default())
+  compile_and_run_grammars_beta(&[r#"<> A > 'hello' ' ' 'world' "#], &[("default", "hello world", true)], Default::default())
 }
 
 #[test]
 pub fn group_inline() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     <> E > ( ("a" "b") "d" ( "o" ) | "b" "o" ) E | "b"
 
@@ -32,7 +35,7 @@ pub fn group_inline() -> RadlrResult<()> {
 
 #[test]
 pub fn grammar_ascript_naked_refs() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 
     IGNORE { c:sp }
@@ -51,7 +54,7 @@ pub fn grammar_ascript_naked_refs() -> RadlrResult<()> {
 
 #[test]
 pub fn symbol_occlusion2() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 
     IGNORE { c:sp }
@@ -73,7 +76,7 @@ pub fn symbol_occlusion2() -> RadlrResult<()> {
 
 #[test]
 pub fn symbol_occlusion() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 
     <> A > B | C 
@@ -88,7 +91,7 @@ pub fn symbol_occlusion() -> RadlrResult<()> {
 
 #[test]
 pub fn follow_symbols_in_gotos() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { c:sp c:nl }
 
@@ -116,7 +119,7 @@ pub fn follow_symbols_in_gotos() -> RadlrResult<()> {
 
 #[test]
 pub fn temp() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
   
     <> dd > "test" newLine? $
@@ -133,7 +136,7 @@ pub fn temp() -> RadlrResult<()> {
 
 #[test]
 pub fn form() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r###"
 
 NAME ascript_formatter
@@ -197,7 +200,7 @@ IGNORE { c:sp c:nl }
 
 #[test]
 pub fn any_symbol() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     <> A > c:any "d" $
 
@@ -209,7 +212,7 @@ pub fn any_symbol() -> RadlrResult<()> {
 
 #[test]
 pub fn group_token() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 
     IGNORE { c:sp }
@@ -224,7 +227,7 @@ pub fn group_token() -> RadlrResult<()> {
 
 #[test]
 pub fn templates() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     EXPORT A as A
 
@@ -251,7 +254,7 @@ pub fn templates() -> RadlrResult<()> {
 
 #[test]
 pub fn right_recursive() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     <> E > "d" E | "b"
 
@@ -263,7 +266,7 @@ pub fn right_recursive() -> RadlrResult<()> {
 
 #[test]
 pub fn identifier() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
       <> id > tk:identifier
 
@@ -280,7 +283,7 @@ pub fn identifier() -> RadlrResult<()> {
 
 #[test]
 pub fn basic_scanner() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
       IGNORE { c:sp c:nl }
 
@@ -300,7 +303,7 @@ pub fn basic_scanner() -> RadlrResult<()> {
 
 #[test]
 pub fn basic_left_recursion() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
       <> A > A c:num
           | c:num
@@ -312,7 +315,7 @@ pub fn basic_left_recursion() -> RadlrResult<()> {
 
 #[test]
 pub fn fork_parsing() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
       IGNORE { c:sp } 
 
@@ -335,7 +338,7 @@ pub fn fork_parsing() -> RadlrResult<()> {
 
 #[test]
 pub fn construct_recursive_ascent() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { c:sp } 
       
@@ -353,7 +356,7 @@ pub fn construct_recursive_ascent() -> RadlrResult<()> {
 
 #[test]
 pub fn recursive_nonterminal() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
   
       <> expr > expr "+" expr      | c:num 
@@ -365,7 +368,7 @@ pub fn recursive_nonterminal() -> RadlrResult<()> {
 
 #[test]
 pub fn expr_term() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 
     <> expr > expr '+' term 
@@ -389,7 +392,7 @@ pub fn expr_term() -> RadlrResult<()> {
 
 #[test]
 pub fn precedence_temp() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { tk:space }
 
@@ -409,7 +412,7 @@ pub fn precedence_temp() -> RadlrResult<()> {
 
 #[test]
 pub fn precedence() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { tk:space }
 
@@ -430,7 +433,7 @@ pub fn precedence() -> RadlrResult<()> {
 
 #[test]
 pub fn symbols_requiring_peek() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 
 IGNORE { c:sp  } 
@@ -451,7 +454,7 @@ IGNORE { c:sp  }
 
 #[test]
 pub fn other_symbols_requiring_peek_hybrid() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 IGNORE { c:sp  } 
 
@@ -475,7 +478,7 @@ IGNORE { c:sp  }
 
 #[test]
 pub fn other_symbols_requiring_peek_lr2() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 IGNORE { c:sp  } 
 
@@ -499,7 +502,7 @@ IGNORE { c:sp  }
 
 #[test]
 pub fn other_symbols_requiring_peek_ll() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 IGNORE { c:sp  } 
 
@@ -525,7 +528,7 @@ IGNORE { c:sp  }
 
 #[test]
 pub fn precedence_check() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
 IGNORE { c:sp  } 
 
@@ -544,7 +547,7 @@ IGNORE { c:sp  }
 
 #[test]
 pub fn construct_basic_recursive_descent() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"<> A > B ' ' C <> B > 'hello' <> C > 'world' "#],
     &[("default", "hello world", true)],
     Default::default(),
@@ -553,7 +556,7 @@ pub fn construct_basic_recursive_descent() -> RadlrResult<()> {
 
 #[test]
 pub fn construct_descent_on_scanner_symbol() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { c:sp  } 
 
@@ -572,7 +575,7 @@ pub fn construct_descent_on_scanner_symbol() -> RadlrResult<()> {
 
 #[test]
 pub fn tokens_with_hyphens_and_underscores() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     <> id > tk:id_tok{100} " a"
 
@@ -585,7 +588,7 @@ pub fn tokens_with_hyphens_and_underscores() -> RadlrResult<()> {
 
 #[test]
 pub fn local_rule_append() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { c:sp } 
       
@@ -600,7 +603,7 @@ pub fn local_rule_append() -> RadlrResult<()> {
 
 #[test]
 pub fn cross_source_rule_append() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[
       r#"
 IMPORT B as B
@@ -621,7 +624,7 @@ IMPORT A as A
 
 #[test]
 pub fn cross_source_symbol_lookup() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[
       r#"
 IMPORT B as B
@@ -646,7 +649,7 @@ IGNORE { c:sp }
 
 #[test]
 pub fn skipped_symbol() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { "A" } 
       
@@ -659,7 +662,7 @@ pub fn skipped_symbol() -> RadlrResult<()> {
 
 #[test]
 pub fn skipped_nonterm_token_symbol() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
     IGNORE { tk:vowels } 
       
@@ -680,7 +683,7 @@ pub fn skipped_nonterm_token_symbol() -> RadlrResult<()> {
 
 #[test]
 fn parser_of_grammar_with_append_nonterminals() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r#"
   <> A > "B"
   +> A >  "C"
@@ -693,7 +696,7 @@ fn parser_of_grammar_with_append_nonterminals() -> RadlrResult<()> {
 
 #[test]
 fn parsing_using_trivial_custom_state() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
   A => match : BYTE (65 /* A */ | 66 /* B */) { goto B }
 
@@ -708,7 +711,7 @@ fn parsing_using_trivial_custom_state() -> RadlrResult<()> {
 #[test]
 fn json_parser() -> RadlrResult<()> {
   let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammars/json/json.sg").canonicalize().unwrap();
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()],
     &[("entry", r##"[]"##, true), ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true)],
     Default::default(),
@@ -717,7 +720,7 @@ fn json_parser() -> RadlrResult<()> {
 
 #[test]
 fn handles_grammars_that_utilize_eof_symbol() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
 EXPORT A as A
 EXPORT B as B
@@ -733,7 +736,7 @@ EXPORT B as B
 
 #[test]
 pub fn test_sgml_like_grammar_parsing() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
 IGNORE { c:sp c:nl }
 
@@ -778,7 +781,7 @@ IGNORE { c:sp c:nl }
 
 #[test]
 fn generic_grammar() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
 IGNORE { c:sp c:nl } 
 
@@ -821,7 +824,7 @@ IGNORE { c:sp c:nl }
 
 #[test]
 pub fn intermediate_exclusive_symbols() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
 
 <> R > tk:A "ly"
@@ -835,7 +838,7 @@ pub fn intermediate_exclusive_symbols() -> RadlrResult<()> {
 
 #[test]
 pub fn c_style_comment_blocks() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
     <> A > tk:comment
     
@@ -857,7 +860,7 @@ pub fn c_style_comment_blocks() -> RadlrResult<()> {
 
 #[test]
 pub fn recursive_skipped_comments() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
     IGNORE { tk:comment c:sp }
 
@@ -878,7 +881,7 @@ pub fn recursive_skipped_comments() -> RadlrResult<()> {
 
 #[test]
 fn json_object_with_specialized_key() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
     IGNORE { c:sp c:nl }
     
@@ -904,7 +907,7 @@ fn json_object_with_specialized_key() -> RadlrResult<()> {
 
 #[test]
 fn scientific_number() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
     <> sci_number > tk:number
     
@@ -917,7 +920,7 @@ fn scientific_number() -> RadlrResult<()> {
 
 #[test]
 fn escaped_values() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
 <> escaped_string > ( escaped_vals  )(+)
 
@@ -932,7 +935,7 @@ fn escaped_values() -> RadlrResult<()> {
 
 #[test]
 fn escaped_string() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
         <> string > tk:string_tk "a"
         
@@ -952,7 +955,7 @@ fn escaped_string() -> RadlrResult<()> {
 
 #[test]
 fn simple_newline_tracking_sanity() -> RadlrResult<()> {
-  compile_and_run_grammars(
+  compile_and_run_grammars_beta(
     &[r##"
     IGNORE { c:sp c:nl }
 
@@ -970,7 +973,7 @@ fn simple_newline_tracking_sanity() -> RadlrResult<()> {
 /// Bytecode counterpart to radlr_llvm::test::compile::simple_newline_tracking
 #[test]
 fn simple_newline_tracking() -> RadlrResult<()> {
-  build_states(
+  build_parse_states_from_source_str_beta(
     r##"
     IGNORE { c:sp c:nl }
 

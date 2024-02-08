@@ -32,12 +32,14 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
   let mut scanner_data = ScannerData { hash: 0, ..Default::default() };
 
   for item in node.kernel_items().clone() {
+    skipped.extend(item.get_skipped(db));
+
     if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
-      skipped.extend(item.get_skipped(db));
       scanner_data.symbols.insert(sym);
     } else if item.is_nonterm(mode, db) {
       for item in db.get_closure(&item) {
         skipped.extend(item.get_skipped(db));
+
         if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
           scanner_data.symbols.insert(sym);
         }
@@ -62,7 +64,9 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
 
   let syms = scanner_data.symbols.iter().map(|s| s.tok()).collect::<OrderedSet<_>>();
 
-  if !(node.kernel.len() == 1 && node.kernel.first().unwrap().is_complete()) {
+  let is_uncontested_reduce_state = node.kernel.len() == 1 && node.kernel.first().unwrap().is_complete();
+
+  if !is_uncontested_reduce_state {
     let skipped_candidates = skipped.into_iter().flat_map(|s| {
       s.iter().filter_map(|s| {
         let id = s.tok_db_key().unwrap();

@@ -61,6 +61,26 @@ pub fn build_ir_from_graph(
     }
   }
 
+  // Build custom states ------------------------------------------------------
+  for i in 0..db.nonterms_len() {
+    let nonterm_key = DBNonTermKey::from(i);
+    if let Some(custom_state) = db.custom_state(nonterm_key) {
+      let name = db.nonterm_guid_name(nonterm_key);
+
+      let state = ParseState {
+        guid_name:     name,
+        comment:       "Custom State".into(),
+        code:          custom_state.tok.to_string(),
+        ast:           Some(Box::new(custom_state.clone())),
+        compile_error: None,
+        scanner:       None,
+        root:          true,
+        precedence:    0,
+      };
+      states.insert(name, Box::new(state));
+    }
+  }
+
   for (_, state) in &mut states {
     state.build_ast(db)?;
   }
