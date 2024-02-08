@@ -761,7 +761,6 @@ impl ConcurrentGraphBuilder {
     match self.local_next.take() {
       Some(work) => {
         if work.0.get_root().invalid.load(std::sync::atomic::Ordering::Acquire) {
-          println!("Terminating tree B");
           None
         } else {
           Some(work)
@@ -883,7 +882,6 @@ impl ConcurrentGraphBuilder {
 
     if let Some(pred) = pred {
       if pred.get_root().invalid.load(std::sync::atomic::Ordering::Acquire) {
-        //println!("Terminating tree");
         return Ok(u32::MAX);
       }
     }
