@@ -396,7 +396,7 @@ fn inline_scanners<'db>(
         SymbolId::Default => MatchInputType::Default,
         sym if sym.is_class() => MatchInputType::Class,
         sym if sym.is_codepoint(db.string_store()) => MatchInputType::Codepoint,
-        sym => MatchInputType::Byte,
+        _ => MatchInputType::Byte,
       });
 
       // Remove the default statement if present. This will be appended to the end of

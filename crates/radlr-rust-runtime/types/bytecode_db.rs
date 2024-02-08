@@ -8,15 +8,15 @@ use std::{
 
 #[derive(Clone, Default)]
 pub struct BytecodeParserDB {
-  pub bytecode: Vec<u8>,
-  pub ir_token_lookup: BTreeMap<u32, Token>,
-  pub nonterm_name_to_id: HashMap<String, u32>,
-  pub state_name_to_address: HashMap<String, u32>,
-  pub address_to_state_name: HashMap<u32, String>,
-  pub nonterm_id_to_address: HashMap<u32, u32>,
+  pub bytecode:               Vec<u8>,
+  pub ir_token_lookup:        BTreeMap<u32, Token>,
+  pub nonterm_name_to_id:     HashMap<String, u32>,
+  pub state_name_to_address:  HashMap<String, u32>,
+  pub address_to_state_name:  HashMap<u32, String>,
+  pub nonterm_id_to_address:  HashMap<u32, u32>,
   pub state_to_token_ids_map: HashMap<u32, Vec<u32>>,
-  pub token_id_to_str: HashMap<u32, String>,
-  pub default_entry: EntryPoint,
+  pub token_id_to_str:        HashMap<u32, String>,
+  pub default_entry:          EntryPoint,
 }
 
 impl BytecodeParserDB {

@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, marker::PhantomData, ops::Deref, rc::Rc};
+use std::{marker::PhantomData, rc::Rc};
 
 use crate::types::{CSTNode, CSTStore, EditNode, EntryPoint, NodeTraits, ParserError, Printer};
 

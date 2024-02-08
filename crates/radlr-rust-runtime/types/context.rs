@@ -114,26 +114,26 @@ pub struct ParserContext {
 impl Default for ParserContext {
   fn default() -> Self {
     ParserContext {
-      stack: vec![],
-      begin_ptr: 0,
-      anchor_ptr: 0,
-      sym_ptr: 0,
-      input_ptr: 0,
-      end_ptr: 0,
-      tok_byte_len: 0,
-      byte_len: 0,
-      chkp_line_num: 0,
-      chkp_line_off: 0,
-      end_line_num: 0,
-      end_line_off: 0,
-      nonterm: 0,
-      start_line_num: 0,
-      start_line_off: 0,
-      tok_id: 0,
+      stack:           vec![],
+      begin_ptr:       0,
+      anchor_ptr:      0,
+      sym_ptr:         0,
+      input_ptr:       0,
+      end_ptr:         0,
+      tok_byte_len:    0,
+      byte_len:        0,
+      chkp_line_num:   0,
+      chkp_line_off:   0,
+      end_line_num:    0,
+      end_line_off:    0,
+      nonterm:         0,
+      start_line_num:  0,
+      start_line_off:  0,
+      tok_id:          0,
       recovery_tok_id: 0,
-      goal_nonterm: u32::MAX,
-      is_finished: false,
-      node: None,
+      goal_nonterm:    u32::MAX,
+      is_finished:     false,
+      node:            None,
     }
   }
 }
@@ -244,11 +244,11 @@ pub fn create_recovery_ctx<I: ParserInput, DB: ParserProducer<I>>(
   entry: EntryPoint,
 ) -> Result<RecCTX, ParserError> {
   Ok(Box::new(RecoverableContext {
-    offset: 0,
-    entropy: input.len() as isize * CHAR_USAGE_SCORE,
-    symbols: vec![],
-    ctx: parser.init(entry)?,
-    mode: RecoveryMode::Normal,
+    offset:            0,
+    entropy:           input.len() as isize * CHAR_USAGE_SCORE,
+    symbols:           vec![],
+    ctx:               parser.init(entry)?,
+    mode:              RecoveryMode::Normal,
     last_failed_state: Default::default(),
   }))
 }
@@ -256,11 +256,11 @@ pub fn create_recovery_ctx<I: ParserInput, DB: ParserProducer<I>>(
 #[derive(Clone)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct RecoverableContext {
-  pub(crate) offset: usize,
-  pub entropy: isize,
-  pub ctx: ParserContext,
-  pub symbols: Vec<(ParserState, Rc<CSTNode>)>,
-  pub mode: RecoveryMode,
+  pub(crate) offset:     usize,
+  pub entropy:           isize,
+  pub ctx:               ParserContext,
+  pub symbols:           Vec<(ParserState, Rc<CSTNode>)>,
+  pub mode:              RecoveryMode,
   pub last_failed_state: ParserState,
 }
 

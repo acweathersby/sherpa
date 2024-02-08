@@ -126,7 +126,7 @@ fn add_token_nodes(adb: &mut AscriptDatabase) {
 
 /// Collect non-struct type information
 fn collect_types(adb: &mut AscriptDatabase) {
-  let AscriptDatabase { rules, structs, types, db, .. } = adb;
+  let AscriptDatabase { rules, structs, types, .. } = adb;
 
   for (_, str) in &structs.0 {
     for (_, prop) in &str.properties.0 {
@@ -314,7 +314,7 @@ pub fn process_struct_node(
           g_id,
         });
       }
-      ast @ ASTNode::AST_Token(tok) => {
+      ast @ ASTNode::AST_Token(..) => {
         let tok_id = StringId::from("tok");
         initializer.props.insert(tok_id, Initializer {
           ty: AscriptType::Undefined,
@@ -415,13 +415,10 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
         id.name,
         adb.structs.get(&id.name).map(|a| a.properties.len() == 0).unwrap_or_default(),
       )),
-      Some(AscriptRule::LastSymbol(id, node)) => {
-        match graph_type_from_item(item.to_penultimate(), db, &resolved_nonterms, None) {
-          (ty, _) => ty,
-          _ => AscriptType::Undefined,
-        }
-      }
-      Some(AscriptRule::Expression(id, node)) => match get_graph_type(
+      Some(AscriptRule::LastSymbol(..)) => match graph_type_from_item(item.to_penultimate(), db, &resolved_nonterms, None) {
+        (ty, _) => ty,
+      },
+      Some(AscriptRule::Expression(_, node)) => match get_graph_type(
         GraphResolveData {
           db,
           item,
@@ -517,7 +514,7 @@ fn resolve_expressions(
         init.ty = node.get_type().clone();
         init.output_graph = Some(node);
       }
-      AscriptRule::ListInitial(id, init) => {
+      AscriptRule::ListInitial(_, init) => {
         let Initializer { output_graph, ty, .. } = init;
         let last = match get_item_at_sym_ref(item, db, |item, _| item.is_penultimate()) {
           Some(item) => graph_node_from_item(item, db, &nonterm_types, selected_indices, None)?,
@@ -627,7 +624,7 @@ fn resolve_expressions(
           }
         }
       }
-      r => todo!("handle rule {{r:?}}"),
+      _r => todo!("handle rule {{_r:?}}"),
     }
   }
 
@@ -656,7 +653,7 @@ fn graph_type_from_item(
       Some(ty) => (*ty, Some(nonterm_id)),
       None => match default_type {
         Some((id, ty)) => {
-          if (id == nonterm_id) {
+          if id == nonterm_id {
             (*ty, Some(nonterm_id))
           } else {
             (AscriptType::Undefined, Some(nonterm_id))
@@ -683,7 +680,7 @@ fn graph_node_from_item(
       Some(ty) => Ok(GraphNode::Sym(index, selected_indices.insert(index), *ty)),
       None => match default_type {
         Some((id, ty)) => {
-          if (id == nonterm_id) {
+          if id == nonterm_id {
             Ok(GraphNode::Sym(index, selected_indices.insert(index), *ty))
           } else {
             Err(nonterm_id)
@@ -720,7 +717,7 @@ impl<'a> GraphResolveData<'a> {
 
 /// Returns the type of the root node in ascript node graph;
 fn get_nonterm_refs<'a>(args: GraphResolveData<'a>, nonterms: &mut OrderedSet<DBNonTermKey>) {
-  let ty = match args.node {
+  match args.node {
     ASTNode::AST_NamedReference(rf) => {
       match get_item_at_sym_ref(args.item, args.db, |_, sym| sym.annotation == rf.value.to_token()) {
         Some(item) => match graph_type_from_item(item, args.db, args.nonterm_types, args.default_nonterm_type) {
@@ -778,6 +775,7 @@ fn get_nonterm_refs<'a>(args: GraphResolveData<'a>, nonterms: &mut OrderedSet<DB
     | ASTNode::AST_F64(..) => {}
     #[cfg(debug_assertions)]
     node => todo!("handle graph type resolve of node {node:#?}"),
+    #[cfg(not(debug_assertions))]
     _ => panic!("Unresolved node type"),
   };
 }
@@ -879,20 +877,21 @@ fn get_graph_type<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -
       }
     }
     ASTNode::AST_Token(..) => AscriptType::Scalar(AscriptScalarType::Token),
-    ASTNode::AST_String(str) => AscriptType::Scalar(AscriptScalarType::String(None)),
-    ASTNode::AST_Bool(bool) => AscriptType::Scalar(AscriptScalarType::Bool(false)),
-    ASTNode::AST_U8(val) => AscriptType::Scalar(AscriptScalarType::U8(None)),
-    ASTNode::AST_U16(val) => AscriptType::Scalar(AscriptScalarType::U16(None)),
-    ASTNode::AST_U32(val) => AscriptType::Scalar(AscriptScalarType::U32(None)),
-    ASTNode::AST_U64(val) => AscriptType::Scalar(AscriptScalarType::U64(None)),
-    ASTNode::AST_I8(val) => AscriptType::Scalar(AscriptScalarType::I8(None)),
-    ASTNode::AST_I16(val) => AscriptType::Scalar(AscriptScalarType::I16(None)),
-    ASTNode::AST_I32(val) => AscriptType::Scalar(AscriptScalarType::I32(None)),
-    ASTNode::AST_I64(val) => AscriptType::Scalar(AscriptScalarType::I64(None)),
-    ASTNode::AST_F32(val) => AscriptType::Scalar(AscriptScalarType::F32(None)),
-    ASTNode::AST_F64(val) => AscriptType::Scalar(AscriptScalarType::F64(None)),
+    ASTNode::AST_String(..) => AscriptType::Scalar(AscriptScalarType::String(None)),
+    ASTNode::AST_Bool(..) => AscriptType::Scalar(AscriptScalarType::Bool(false)),
+    ASTNode::AST_U8(..) => AscriptType::Scalar(AscriptScalarType::U8(None)),
+    ASTNode::AST_U16(..) => AscriptType::Scalar(AscriptScalarType::U16(None)),
+    ASTNode::AST_U32(..) => AscriptType::Scalar(AscriptScalarType::U32(None)),
+    ASTNode::AST_U64(..) => AscriptType::Scalar(AscriptScalarType::U64(None)),
+    ASTNode::AST_I8(..) => AscriptType::Scalar(AscriptScalarType::I8(None)),
+    ASTNode::AST_I16(..) => AscriptType::Scalar(AscriptScalarType::I16(None)),
+    ASTNode::AST_I32(..) => AscriptType::Scalar(AscriptScalarType::I32(None)),
+    ASTNode::AST_I64(..) => AscriptType::Scalar(AscriptScalarType::I64(None)),
+    ASTNode::AST_F32(..) => AscriptType::Scalar(AscriptScalarType::F32(None)),
+    ASTNode::AST_F64(..) => AscriptType::Scalar(AscriptScalarType::F64(None)),
     #[cfg(debug_assertions)]
     node => todo!("handle graph type resolve of node {node:#?}"),
+    #[cfg(not(debug_assertions))]
     _ => panic!("Unresolved node type"),
   };
   Ok(ty)
@@ -1018,11 +1017,11 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
       Ok(GraphNode::Div(Rc::new(l), Rc::new(r), ty))
     }
 
-    ASTNode::AST_Pow(sub) => {
+    ASTNode::AST_Pow(..) => {
       todo!("Create Pow Graph node")
     }
 
-    ASTNode::AST_Mod(sub) => {
+    ASTNode::AST_Mod(..) => {
       todo!("Create Mod Graph node")
     }
 
@@ -1127,6 +1126,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     #[cfg(debug_assertions)]
     node => todo!("handle graph resolve of node {node:#?}"),
+    #[cfg(not(debug_assertions))]
     _ => panic!("Unresolved node type"),
   }
 }
@@ -1280,7 +1280,6 @@ fn get_resolved_type(
 
             return Ok(AscriptType::Scalar(AscriptScalarType::Any(index)));
           }
-          _ => Err(RadlrError::StaticText("Incompatible Types")),
         }
       }
       Aggregate(a_gg) => match b_scalar {
@@ -1291,9 +1290,4 @@ fn get_resolved_type(
     },
     _ => todo!("Resolve types ty:{a:?} ty:{b:?}"),
   }
-}
-
-enum ResolveError {
-  MissingNTDefinition(DBNonTermKey),
-  IncompatibleType,
 }

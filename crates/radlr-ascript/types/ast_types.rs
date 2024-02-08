@@ -153,7 +153,7 @@ impl ValueObj for AscriptType {
   }
 
   fn get_val<'scope>(&'scope self, key: &str, s_store: &radlr_core::IStringStore) -> Value<'scope> {
-    fn scalar_type<'scope>(scaler: &AscriptScalarType, s_store: &radlr_core::IStringStore) -> Value<'scope> {
+    fn _scalar_type<'scope>(scaler: &AscriptScalarType, s_store: &radlr_core::IStringStore) -> Value<'scope> {
       match scaler {
         AscriptScalarType::Flag(..) => Value::Str("flag".intern(s_store)),
         AscriptScalarType::Bool(_) => Value::Str("bool".intern(s_store)),

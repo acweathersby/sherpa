@@ -5,7 +5,6 @@ use radlr_rust_runtime::{
   kernel::{disassemble_bytecode, ByteCodeParserNew},
   types::{AstObjectNew, BytecodeParserDB, ParserInput, ParserProducer, ReducerNew, RuntimeDatabase, StringInput},
 };
-use std::fmt::format;
 pub type TestParser = ByteCodeParserNew;
 
 /// Writes to a debug file for testing

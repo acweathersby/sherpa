@@ -7,25 +7,25 @@ use super::{
 #[derive(Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct TableHeaderData<'a> {
-  pub input_type: MatchInputType,
-  pub table_length: u32,
-  pub table_meta: u32,
+  pub input_type:             MatchInputType,
+  pub table_length:           u32,
+  pub table_meta:             u32,
   /// The instruction of the scanner state, if this table has
   /// one.
   pub scan_block_instruction: bytecode::Instruction<'a>,
   /// The absolute address of start of the instruction data.
-  pub default_block: bytecode::Instruction<'a>,
+  pub default_block:          bytecode::Instruction<'a>,
   /// The absolute address of start of the table data.
   ///
   /// For both Hash and Vector tables, the table data section is
   /// a [\[u32; table_length\]] buffer.
-  pub table_start: usize,
+  pub table_start:            usize,
   /// A ByteCodeIterator positioned at the absolute address of the table data
   /// section.
-  pub table_start_iter: ByteCodeIterator<'a>,
+  pub table_start_iter:       ByteCodeIterator<'a>,
   /// The absolute address of the first instruction block following the
   /// table data.
-  pub parse_block_address: usize,
+  pub parse_block_address:    usize,
 }
 
 impl<'a> From<Instruction<'a>> for TableHeaderData<'a> {

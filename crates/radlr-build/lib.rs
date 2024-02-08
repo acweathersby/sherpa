@@ -128,7 +128,6 @@ pub fn fs_build<'b>(
     TargetLanguage::Llvm => {
       todo!("Build Llvm: Not yet supported")
     }
-    _ => {}
   }
 
   Ok(())

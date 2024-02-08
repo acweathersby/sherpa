@@ -5,16 +5,16 @@ pub type CharLUType = [u8; JMPTBLE_BYTE_SIZE];
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub enum CodePointClass {
-  EndOfInput = 1,
-  Symbol     = 2,
-  Identifier = 3,
-  Number     = 4,
-  NewLine    = 5,
-  Space      = 6,
-  HorizontalTab = 7,
+  EndOfInput     = 1,
+  Symbol         = 2,
+  Identifier     = 3,
+  Number         = 4,
+  NewLine        = 5,
+  Space          = 6,
+  HorizontalTab  = 7,
   UnicodeIdStart = 32,
-  UnicodeIdCont = 64,
-  Any        = u32::MAX as isize,
+  UnicodeIdCont  = 64,
+  Any            = u32::MAX as isize,
 }
 
 impl Into<u32> for CodePointClass {

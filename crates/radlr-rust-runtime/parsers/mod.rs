@@ -1,9 +1,4 @@
-use self::{
-  ast::{Node, Tk},
-  fork::ForkableParser,
-  recognizer::Recognizer,
-  token::TokenProducer,
-};
+use self::{fork::ForkableParser, recognizer::Recognizer, token::TokenProducer};
 use crate::types::{ParserInitializer, ParserInput, ParserIterator};
 
 pub mod ast;

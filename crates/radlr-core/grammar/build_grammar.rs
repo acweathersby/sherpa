@@ -27,12 +27,12 @@ pub struct RuleData<'a> {
 /// Temporary structure to host non-terminal data during
 /// construction.
 pub struct NonTermData<'a> {
-  root_nterm: NonTermId,
-  root_g_name: IString,
-  root_f_name: IString,
-  symbols: &'a mut OrderedSet<SymbolId>,
+  root_nterm:       NonTermId,
+  root_g_name:      IString,
+  root_f_name:      IString,
+  symbols:          &'a mut OrderedSet<SymbolId>,
   sub_nonterminals: &'a mut Array<Box<SubNonTerminal>>,
-  rules: &'a mut Array<Rule>,
+  rules:            &'a mut Array<Rule>,
 }
 
 impl<'b> NonTermData<'b> {
@@ -54,11 +54,11 @@ impl<'b> NonTermData<'b> {
 /// Intermediate structure to host grammar data during
 /// construction.
 pub struct GrammarData {
-  pub id: GrammarIdentities,
-  pub imports: Map<IString, GrammarIdentities>,
-  pub exports: Array<(IString, (NonTermId, Token))>,
+  pub id:             GrammarIdentities,
+  pub imports:        Map<IString, GrammarIdentities>,
+  pub exports:        Array<(IString, (NonTermId, Token))>,
   pub global_skipped: Array<ASTNode>,
-  pub grammar: Box<Grammar>,
+  pub grammar:        Box<Grammar>,
 }
 
 pub fn convert_grammar_data_to_header(import_id: GrammarIdentities, g_data: GrammarData) -> Box<GrammarHeader> {

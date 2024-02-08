@@ -17,15 +17,11 @@ use super::{
   ShiftReduceConflictResolution,
 };
 use crate::{
-  compile::states::{
-    build_graph::{
-      graph::{GraphBuildState, StateType},
-      items::{get_follow, get_follow_symbols},
-    },
-    build_graph::{
-      build::handle_completed_groups,
-      errors::{lr_disabled_error, peek_not_allowed_error},
-    },
+  compile::states::build_graph::{
+    build::handle_completed_groups,
+    errors::{lr_disabled_error, peek_not_allowed_error},
+    graph::{GraphBuildState, StateType},
+    items::{get_follow, get_follow_symbols},
   },
   parser::Shift,
   types::*,

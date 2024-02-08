@@ -273,12 +273,12 @@ impl<T: ByteReader, M> ParseContext<T, M> {
   #[inline(always)]
   pub fn get_shift_data(&self) -> ParseAction {
     ParseAction::Shift {
-      byte_offset: self.get_token_offset(),
-      byte_length: self.get_token_length(),
-      token_line_offset: self.get_curr_line_offset(),
-      token_line_count: self.get_curr_line_num(),
-      token_id: self.tok_id,
-      emitting_state: Default::default(),
+      byte_offset:              self.get_token_offset(),
+      byte_length:              self.get_token_length(),
+      token_line_offset:        self.get_curr_line_offset(),
+      token_line_count:         self.get_curr_line_num(),
+      token_id:                 self.tok_id,
+      emitting_state:           Default::default(),
       next_instruction_address: Default::default(),
     }
   }
@@ -503,24 +503,24 @@ pub trait RadlrParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool
           }
 
           return Err(RadlrParseError {
-            inline_message: "Unrecognized Token".into(),
+            inline_message:   "Unrecognized Token".into(),
             last_nonterminal: 0,
-            loc: TokenRange {
+            loc:              TokenRange {
               line_num: last_input.line_num,
               line_off: last_input.line_off,
               len:      (end - start) as u32,
               off:      start as u32,
             }
             .to_token(self.get_reader_mut()),
-            message: "Unrecognized Token".into(),
+            message:          "Unrecognized Token".into(),
           });
         }
         _ => {
           return Err(RadlrParseError {
-            inline_message: Default::default(),
+            inline_message:   Default::default(),
             last_nonterminal: 0,
-            loc: Default::default(),
-            message: "Unrecognized Token".into(),
+            loc:              Default::default(),
+            message:          "Unrecognized Token".into(),
           });
         }
       }
@@ -541,17 +541,17 @@ pub trait RadlrParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool
         ParseAction::Accept { nonterminal_id, .. } => {
           break if !self.head_at_end() {
             Err(RadlrParseError {
-              inline_message: format!("Failed to read entire input {} {}", self.get_ctx().end_ptr, self.get_ctx().sym_ptr),
+              inline_message:   format!("Failed to read entire input {} {}", self.get_ctx().end_ptr, self.get_ctx().sym_ptr),
               last_nonterminal: nonterminal_id,
-              loc: Default::default(),
-              message: "Failed to read entire input".to_string(),
+              loc:              Default::default(),
+              message:          "Failed to read entire input".to_string(),
             })
           } else if nonterminal_id != target_nonterminal_id {
             Err(RadlrParseError {
-              inline_message: "Top symbol did not match the target nonterminal".to_string(),
+              inline_message:   "Top symbol did not match the target nonterminal".to_string(),
               last_nonterminal: nonterminal_id,
-              loc: Default::default(),
-              message: "CST is incorrect".to_string(),
+              loc:              Default::default(),
+              message:          "CST is incorrect".to_string(),
             })
           } else {
             Ok(())
@@ -582,9 +582,9 @@ pub trait RadlrParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool
           let mut token: Token = last_input.to_token(self.get_reader_mut());
           token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
           break Err(RadlrParseError {
-            message: "Could not recognize the following input:".to_string(),
-            inline_message: "".to_string(),
-            loc: token,
+            message:          "Could not recognize the following input:".to_string(),
+            inline_message:   "".to_string(),
+            loc:              token,
             last_nonterminal: self.get_nonterminal_id(),
           });
         }
@@ -622,10 +622,10 @@ pub trait RadlrParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool
             }
           } else if !self.head_at_end() {
             ShiftsAndSkipsResult::FailedParse(RadlrParseError {
-              inline_message: "Failed to read entire input".to_string(),
+              inline_message:   "Failed to read entire input".to_string(),
               last_nonterminal: nonterminal_id,
-              loc: Default::default(),
-              message: "Failed to read entire input".to_string(),
+              loc:              Default::default(),
+              message:          "Failed to read entire input".to_string(),
             })
           } else {
             ShiftsAndSkipsResult::Accepted { shifts, skips }
@@ -641,9 +641,9 @@ pub trait RadlrParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool
 
           token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
           break ShiftsAndSkipsResult::FailedParse(RadlrParseError {
-            message: "Could not recognize the following input:".to_string(),
-            inline_message: "".to_string(),
-            loc: token,
+            message:          "Could not recognize the following input:".to_string(),
+            inline_message:   "".to_string(),
+            loc:              token,
             last_nonterminal: self.get_nonterminal_id(),
           });
         }

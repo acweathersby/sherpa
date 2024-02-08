@@ -21,7 +21,7 @@ pub enum Value<'scope> {
 }
 
 impl<'a> ToValue for Value<'a> {
-  fn into_val<'scope>(&'scope self, s_store: &IStringStore) -> Value<'scope> {
+  fn into_val<'scope>(&'scope self, _: &IStringStore) -> Value<'scope> {
     *self
   }
 }
@@ -108,7 +108,7 @@ pub trait ValueObj: Debug {
 
   /// Return an iterable object that can be used in `.iter#<fn_name>()` property
   /// calls. Returning an empty vec disables this property.
-  fn get_iter<'scope>(&'scope self, s_store: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
+  fn get_iter<'scope>(&'scope self, _: &IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
     Default::default()
   }
 
@@ -118,7 +118,7 @@ pub trait ValueObj: Debug {
 }
 
 impl<T: ValueObj> ToValue for T {
-  fn into_val<'scope>(&'scope self, s_store: &IStringStore) -> Value<'scope> {
+  fn into_val<'scope>(&'scope self, _: &IStringStore) -> Value<'scope> {
     Value::Obj(self)
   }
 }
@@ -189,7 +189,7 @@ impl<'a, K: ToValue + From<String> + Debug + Ord, T: ToValue + Debug> ValueObj f
   }
 
   fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
-    match self.iter().enumerate().find(|(i, s_store)| *i == index) {
+    match self.iter().enumerate().find(|(i, _)| *i == index) {
       None => Value::None,
       Some((_, (_, val))) => val.into_val(s_store),
     }
@@ -231,7 +231,7 @@ impl<'a, T: ToValue + Debug> ValueObj for Vec<T> {
 }
 
 impl<'a, T: ToValue + Debug + Default> ValueObj for OrderedSet<T> {
-  fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
+  fn get_index<'scope>(&'scope self, _: usize, _: &IStringStore) -> Value<'scope> {
     Value::None
   }
 
@@ -249,7 +249,7 @@ impl<'a, T: ToValue + Debug + Default> ValueObj for OrderedSet<T> {
 }
 
 impl<'a, T: ToValue + Debug + Default> ValueObj for HashSet<T> {
-  fn get_index<'scope>(&'scope self, index: usize, s_store: &IStringStore) -> Value<'scope> {
+  fn get_index<'scope>(&'scope self, _: usize, _: &IStringStore) -> Value<'scope> {
     Value::None
   }
 

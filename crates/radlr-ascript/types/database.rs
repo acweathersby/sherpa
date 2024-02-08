@@ -1,4 +1,4 @@
-use crate::{build_db, AscriptAny, AscriptAnys, AscriptRules, AscriptScalarType, AscriptStructs, AscriptType, AscriptTypes};
+use crate::{build_db, AscriptAnys, AscriptRules, AscriptScalarType, AscriptStructs, AscriptTypes};
 use radlr_core::{proxy::OrderedSet, CachedString, IString, ParserDatabase, RadlrDatabase, RadlrError, RadlrResult};
 use radlr_formatter::*;
 use std::{fmt::Debug, io::Write, sync::Arc};
@@ -101,7 +101,6 @@ impl From<RadlrDatabase> for AscriptDatabase {
 
 #[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Debug)]
 pub struct StringId(pub(crate) IString);
-
 
 impl ToValue for StringId {
   fn into_val<'scope>(&'scope self, s_store: &radlr_core::IStringStore) -> Value<'scope> {

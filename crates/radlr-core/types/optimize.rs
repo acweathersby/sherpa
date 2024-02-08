@@ -2,8 +2,8 @@ use crate::types::*;
 
 #[derive(Clone, Copy, Default)]
 pub struct OptimizationReport {
-  pub start: ComplexityMarker,
-  pub end: ComplexityMarker,
+  pub start:            ComplexityMarker,
+  pub end:              ComplexityMarker,
   pub canonical_rounds: usize,
 }
 

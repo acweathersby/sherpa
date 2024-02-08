@@ -38,7 +38,7 @@ pub fn add_root(
 pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfig) -> RadlrResult<Graphs> {
   // Create entry nodes.
 
-  let mut gb = ConcurrentGraphBuilder::new(db.clone(), config);
+  let mut gb = ConcurrentGraphBuilder::new(db.clone());
 
   for result in db.nonterms().iter().enumerate().map(|(index, sym)| {
     let nt_id: DBNonTermKey = (index as u32).into();
@@ -80,7 +80,7 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
           }
 
           match handle_kernel_items(&mut gb, &node, &config) {
-            Err(RadlrError::StateConstructionError(StateConstructionError::NonDeterministicPeek(root, err))) => {
+            Err(RadlrError::StateConstructionError(StateConstructionError::NonDeterministicPeek(root, _err))) => {
               //-----------------------------------------------------------------------------------
               // This non-terminal is invalid. If this is a root entry state
               // then we can't construct a parser for it.

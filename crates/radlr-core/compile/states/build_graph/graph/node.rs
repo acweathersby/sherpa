@@ -44,7 +44,7 @@ pub(crate) struct GraphNode {
 }
 
 impl Hash for GraphNode {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {}
+  fn hash<H: std::hash::Hasher>(&self, _: &mut H) {}
 }
 
 impl Debug for GraphNode {
@@ -212,18 +212,6 @@ impl GraphNode {
       Some(self)
     } else if let Some(pred) = self.predecessor.as_ref() {
       pred.get_predecessor(id)
-    } else {
-      None
-    }
-  }
-
-  pub fn get_predecessor_old<'a>(&'a self, id: StateId) -> Option<&'a SharedGraphNode> {
-    if let Some(pred) = self.predecessor.as_ref() {
-      if pred.id == id {
-        Some(pred)
-      } else {
-        pred.get_predecessor_old(id)
-      }
     } else {
       None
     }

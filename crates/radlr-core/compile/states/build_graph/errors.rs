@@ -73,7 +73,7 @@ pub(super) fn lr_disabled_error(gb: &ConcurrentGraphBuilder, node: &SharedGraphN
 
 pub(crate) fn conflicting_symbols_error(
   gb: &ConcurrentGraphBuilder,
-  node: &SharedGraphNode,
+  _node: &SharedGraphNode,
   groups: OrderedMap<(u16, SymbolId), Lookaheads>,
 ) -> RadlrError {
   let d = gb.db();

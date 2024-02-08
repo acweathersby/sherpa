@@ -9,8 +9,6 @@ use crate::{
 use radlr_rust_runtime::{types::bytecode::MatchInputType, utf8::lookup_table::CodePointClass};
 use std::{collections::BTreeMap, sync::Arc};
 
-type States = OrderedMap<IString, Box<ParseState>>;
-
 use super::super::states::build_graph::flow::resolve_token_assign_id;
 
 pub fn build_ir_from_graph(

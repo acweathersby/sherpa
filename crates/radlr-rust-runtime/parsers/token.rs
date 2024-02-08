@@ -19,17 +19,17 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
         ParseAction::Accept { nonterminal_id, final_offset } => {
           return if final_offset != input.len() {
             Err(ParserError::InputError {
-              inline_message: format!("Failed to read entire input {} {}", input.len(), final_offset),
+              inline_message:   format!("Failed to read entire input {} {}", input.len(), final_offset),
               last_nonterminal: nonterminal_id,
-              loc: Default::default(),
-              message: "Failed to read entire input".to_string(),
+              loc:              Default::default(),
+              message:          "Failed to read entire input".to_string(),
             })
           } else if nonterminal_id != entry.nonterm_id {
             Err(ParserError::InputError {
-              inline_message: "Top symbol did not match the target nonterminal".to_string(),
+              inline_message:   "Top symbol did not match the target nonterminal".to_string(),
               last_nonterminal: nonterminal_id,
-              loc: Default::default(),
-              message: "CST is incorrect".to_string(),
+              loc:              Default::default(),
+              message:          "CST is incorrect".to_string(),
             })
           } else {
             return Ok(Tokens { shifts, skips });

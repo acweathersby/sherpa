@@ -45,15 +45,15 @@ pub(crate) fn resolve_grammar_path(path: &Path, current_grammar_dir: &Path, exte
 
 #[derive(Default)]
 pub struct SymbolData<'a> {
-  pub annotation: String,
-  pub is_list: bool,
-  pub is_group: bool,
-  pub is_optional: bool,
-  pub is_shift_nothing: bool,
-  pub is_eof: bool,
+  pub annotation:        String,
+  pub is_list:           bool,
+  pub is_group:          bool,
+  pub is_optional:       bool,
+  pub is_shift_nothing:  bool,
+  pub is_eof:            bool,
   pub symbol_precedence: u16,
-  pub token_precedence: u16,
-  pub sym_atom: Option<&'a ASTNode>,
+  pub token_precedence:  u16,
+  pub sym_atom:          Option<&'a ASTNode>,
 }
 
 /// Get a flattened view of a symbol's immediate AST

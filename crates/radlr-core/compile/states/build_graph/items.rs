@@ -103,7 +103,6 @@ pub(crate) fn get_follow_internal(
         let closure_state_id = c_item.origin_state;
         let origin = c_item.origin;
 
-
         let state = node
           .get_predecessor(c_item.origin_state)
           .expect(&format!("Node should have a predecessors unless it is a root node {node:?}"));
@@ -205,11 +204,7 @@ pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<
   RadlrResult::Ok(CompletedItemArtifacts { lookahead_pairs: follow_pairs, default_only: default_only_items })
 }
 
-pub(super) fn get_goal_items_from_completed<'db, 'follow>(
-  items: &Items,
-  graph: &ConcurrentGraphBuilder,
-  node: &GraphNode,
-) -> ItemSet {
+pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items, node: &GraphNode) -> ItemSet {
   items.iter().filter(|i| node.item_is_goal(**i)).cloned().collect()
 }
 

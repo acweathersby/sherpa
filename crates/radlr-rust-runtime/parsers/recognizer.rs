@@ -13,22 +13,22 @@ pub trait Recognizer<T: ParserInput>: ParserIterator<T> + ParserInitializer {
         ParseAction::Accept { nonterminal_id, final_offset } => {
           return if final_offset != input.len() {
             Err(ParserError::InputError {
-              inline_message: format!(
+              inline_message:   format!(
                 "\nFailed to read entire input \"{}\" \n     end pos: {} \n     expected end pos: {}",
                 input.string_range(0..input.len()),
                 final_offset,
                 input.len(),
               ),
               last_nonterminal: nonterminal_id,
-              loc: Default::default(),
-              message: "Failed to read entire input".to_string(),
+              loc:              Default::default(),
+              message:          "Failed to read entire input".to_string(),
             })
           } else if nonterminal_id != entry.nonterm_id {
             Err(ParserError::InputError {
-              inline_message: "Top symbol did not match the target nonterminal".to_string(),
+              inline_message:   "Top symbol did not match the target nonterminal".to_string(),
               last_nonterminal: nonterminal_id,
-              loc: Default::default(),
-              message: "CST is incorrect".to_string(),
+              loc:              Default::default(),
+              message:          "CST is incorrect".to_string(),
             })
           } else {
             Ok(())

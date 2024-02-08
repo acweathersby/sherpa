@@ -13,8 +13,8 @@ use super::{
 use crate::{
   compile::states::{
     build_graph,
-    build_graph::build::handle_completed_groups,
     build_graph::{
+      build::handle_completed_groups,
       errors::{conflicting_symbols_error, peek_not_allowed_error},
       items::get_follow,
     },

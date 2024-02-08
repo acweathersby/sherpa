@@ -126,12 +126,12 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
   ); */
 
   let action = ParseAction::Shift {
-    byte_offset: ctx.sym_ptr as u32,
-    byte_length: ctx.tok_len as u32,
-    token_line_count: ctx.start_line_num,
-    token_line_offset: ctx.start_line_off,
-    token_id: ctx.tok_id,
-    emitting_state: Default::default(),
+    byte_offset:              ctx.sym_ptr as u32,
+    byte_length:              ctx.tok_len as u32,
+    token_line_count:         ctx.start_line_num,
+    token_line_offset:        ctx.start_line_off,
+    token_id:                 ctx.tok_id,
+    emitting_state:           Default::default(),
     next_instruction_address: Default::default(),
   };
 

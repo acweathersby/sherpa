@@ -1,8 +1,7 @@
 use clap::{arg, value_parser, ArgMatches, Command};
 use radlr_build::BuildConfig;
-use radlr_bytecode::compile_bytecode;
-use radlr_core::{JournalReporter, ParserStore, RadlrError, RadlrGrammar, RadlrResult, ParserConfig};
-use std::{fs::File, io::Write, path::PathBuf, default};
+use radlr_core::{ParserConfig, RadlrError, RadlrResult};
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 enum ParserType {
@@ -42,7 +41,7 @@ pub fn command() -> ArgMatches {
             _ => Ok(ParserType::Bytecode)
           }})
           .default_value("bytecode")
-        ) 
+        )
         .arg(
           arg!( -a --ast "Create AST code, in the target language, from AScripT definitions" )
           .required(false)
@@ -100,30 +99,29 @@ fn main() -> RadlrResult<()> {
   let matches = command();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-    let (parser_type, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
+    let (_, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
     let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
     let name = matches.get_one::<String>("name").cloned();
 
     let debug = matches.get_one::<bool>("debug").cloned().unwrap_or_default();
     let target_language = match true {
-      _ => radlr_build::TargetLanguage::Rust
-      };
+      _ => radlr_build::TargetLanguage::Rust,
+    };
 
     let mut build_config = BuildConfig::new(&grammar_sources.as_slice()[0]);
-    
+
     build_config.include_debug_symbols = debug;
     build_config.build_ast = matches.get_one::<bool>("ast").cloned().unwrap_or_default();
     build_config.lib_out = &_lib_out_dir;
     build_config.source_out = &out_dir;
 
     build_config.parser_type = match true {
-        _ => radlr_build::ParserType::Bytecode
+      _ => radlr_build::ParserType::Bytecode,
     };
-  
+
     let parser_config = ParserConfig::default();
-  
+
     radlr_build::fs_build(build_config, parser_config, target_language)
-  
   } else if matches.subcommand_matches("disassemble").is_some() {
     RadlrResult::Ok(())
   } else {
@@ -131,28 +129,23 @@ fn main() -> RadlrResult<()> {
   }
 }
 
-
 #[test]
 fn test_radlr_bytecode_bootstrap() -> RadlrResult<()> {
   let radlr_grammar =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/radlr/2.0.0/grammar.sg").canonicalize().unwrap();
 
+  let mut build_config = BuildConfig::new(&radlr_grammar);
+  let temp_dir = std::env::temp_dir().join("radlr");
 
-    let mut build_config = BuildConfig::new(&radlr_grammar);
-    let temp_dir = std::env::temp_dir().join("radlr");
+  build_config.include_debug_symbols = false;
+  build_config.build_ast = true;
+  build_config.lib_out = &temp_dir;
+  build_config.source_out = &temp_dir;
 
-    build_config.include_debug_symbols = false;
-    build_config.build_ast = true;
-    build_config.lib_out = &temp_dir;
-    build_config.source_out = &temp_dir;
+  build_config.parser_type = match true {
+    _ => radlr_build::ParserType::Bytecode,
+  };
+  let parser_config = ParserConfig::default();
 
-    build_config.parser_type = match true {
-        _ => radlr_build::ParserType::Bytecode
-    };
-    let parser_config = ParserConfig::default();
-
-  radlr_build::fs_build(build_config, parser_config, radlr_build::TargetLanguage::Rust);
-
-
-  Ok(())
+  radlr_build::fs_build(build_config, parser_config, radlr_build::TargetLanguage::Rust)
 }

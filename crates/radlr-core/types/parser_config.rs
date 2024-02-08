@@ -1,5 +1,5 @@
+#![allow(non_snake_case, unused)]
 #[derive(Clone, Copy)]
-#[allow(non_snake_case)]
 
 /// Settings for configuring the type of parser Radlr will generate.
 #[derive(Debug)]

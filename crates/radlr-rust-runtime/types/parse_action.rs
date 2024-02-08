@@ -41,13 +41,13 @@ pub enum ParseAction {
     node: Rc<CSTNode>,
   },
   Shift {
-    byte_offset: u32,
-    byte_length: u32,
-    token_line_offset: u32,
-    token_line_count: u32,
-    token_id: u32,
+    byte_offset:              u32,
+    byte_length:              u32,
+    token_line_offset:        u32,
+    token_line_count:         u32,
+    token_id:                 u32,
     /// The state that emitted this token.
-    emitting_state: ParserState,
+    emitting_state:           ParserState,
     /// The instruction that follows this
     next_instruction_address: usize,
   },

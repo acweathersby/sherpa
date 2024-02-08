@@ -733,7 +733,7 @@ fn convert_sym_refs_to_token_sym_refs(rules: &mut [Rule], s_store: &IStringStore
           debug_assert_ne!(string, "");
 
           let last = string.chars().count() - 1;
-          
+
           string
             .chars()
             .enumerate()

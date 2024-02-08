@@ -147,15 +147,15 @@ pub struct TokenNonTermRef(u32);
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct SymbolRef {
   /// The type of this symbol.
-  pub id: SymbolId,
+  pub id:                SymbolId,
   /// The original location of this symbol within the grammar source
-  pub loc: Token,
+  pub loc:               Token,
   /// The reference name of this symbol
-  pub annotation: IString,
+  pub annotation:        IString,
   /// The original positional index of the symbol within the original base rule.
-  pub original_index: u32,
+  pub original_index:    u32,
   /// The precedence of this symbol when present in a scanner state
-  pub token_precedence: u16,
+  pub token_precedence:  u16,
   /// Precedence of this symbol when present in a parser state
   pub symbol_precedence: u16,
 }
@@ -208,14 +208,14 @@ pub enum ASTToken {
 /// A custom parse state defined within a grammar e.g `state_name => ...`
 #[cfg_attr(debug_assertions, derive(Debug))]
 pub struct CustomState {
-  pub id: NonTermId,
-  pub g_id: GrammarId,
-  pub guid_name: IString,
+  pub id:            NonTermId,
+  pub g_id:          GrammarId,
+  pub guid_name:     IString,
   pub friendly_name: IString,
-  pub symbols: OrderedSet<SymbolId>,
-  pub nterm_refs: OrderedSet<(Token, IString, NonTermId)>,
-  pub state: Box<parser::State>,
-  pub tok: Token,
+  pub symbols:       OrderedSet<SymbolId>,
+  pub nterm_refs:    OrderedSet<(Token, IString, NonTermId)>,
+  pub state:         Box<parser::State>,
+  pub tok:           Token,
 }
 
 #[derive(Clone)]

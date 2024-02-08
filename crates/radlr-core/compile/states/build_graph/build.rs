@@ -52,12 +52,10 @@ pub(crate) fn handle_kernel_items(
     panic!("Undeterministic PARSE");
     let root_data = pred.root_data.db_key;
 
-    Err(RadlrError::StateConstructionError(
-      crate::compile::states::build_states::StateConstructionError::NonDeterministicPeek(
-        pred.get_root_shared(),
-        Box::new("Testing Messagine. Peek has no successors!".into()),
-      ),
-    ))
+    Err(RadlrError::StateConstructionError(crate::compile::states::build_states::StateConstructionError::NonDeterministicPeek(
+      pred.get_root_shared(),
+      Box::new("Testing Messagine. Peek has no successors!".into()),
+    )))
   } else {
     Ok(())
   }
@@ -106,7 +104,7 @@ fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode) -> RadlrResult<
 /// that have occluding symbols symbols
 fn handle_scanner_items(
   max_completed_precedence: u16,
-  gb: &ConcurrentGraphBuilder,
+  _gb: &ConcurrentGraphBuilder,
   node: &SharedGraphNode,
   mut groups: GroupedFirsts,
 ) -> RadlrResult<GroupedFirsts> {

@@ -2,8 +2,8 @@ use super::super::*;
 use std::io::Write;
 
 pub struct Printer<'node, 'db> {
-  node: &'node CSTNode,
-  db: &'db dyn RuntimeDatabase,
+  node:          &'node CSTNode,
+  db:            &'db dyn RuntimeDatabase,
   write_missing: bool,
 }
 

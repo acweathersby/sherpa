@@ -27,6 +27,5 @@ pub mod fuzz;
 pub mod kernel;
 pub mod llvm_parser;
 pub mod parsers;
-pub mod profiler;
 pub mod types;
 pub mod utf8;

@@ -307,30 +307,6 @@ impl StateType {
       _ => 0,
     }
   }
-
-  fn debug_string(&self, db: &ParserDatabase) -> String {
-    match self {
-      Self::KernelCall(nterm) => {
-        format!("KernelCall({})", db.nonterm_friendly_name_string(*nterm))
-      }
-      Self::InternalCall(nterm) => {
-        format!("InternalCall({})", db.nonterm_friendly_name_string(*nterm))
-      }
-      Self::AssignAndFollow(sym_id) => {
-        format!("AssignAndFollow({}:{})", sym_id.to_val(), db.token(*sym_id).name.to_str(db.string_store()).as_str())
-      }
-      Self::AssignToken(sym_id) => {
-        format!("AssignToken({}:{})", sym_id.to_val(), db.token(*sym_id).name.to_str(db.string_store()).as_str())
-      }
-      Self::Reduce(nterm, _) => {
-        format!("Reduce({nterm:?})",)
-      }
-      Self::ShiftFrom(state_id) => {
-        format!("ShiftOver({state_id:?})",)
-      }
-      _ => format!("{:?}", self),
-    }
-  }
 }
 
 mod node;
@@ -414,12 +390,10 @@ fn create_lookahead_hash<'a, H: std::hash::Hasher>(builder: &mut ConcurrentGraph
           let (follow, _) = get_follow_internal(builder, node, item.to_complete(), FollowType::AllItems);
           for item in follow {
             if let Some(term) = item.term_index_at_sym(mode, builder.db()) {
-              let db = builder.db();
               symbols.insert(term);
             } else if item.is_nonterm(mode, builder.db()) {
               for item in builder.db().get_closure(&item) {
                 if let Some(term) = item.term_index_at_sym(node.graph_type, builder.db()) {
-                  let db = builder.db();
                   symbols.insert(term);
                 }
               }
@@ -557,10 +531,6 @@ impl StagedNode {
     self
   }
 
-  pub fn set_kernel_items_mut(&mut self, items: impl Iterator<Item = Item>) {
-    self.node.kernel = OrderedSet::from_iter(items);
-  }
-
   pub fn build_state(mut self, build_state: GraphBuildState) -> Self {
     self.node.build_state = build_state;
     self
@@ -612,12 +582,6 @@ impl StagedNode {
     debug_assert!(self.pnc_constructor.is_none(), "Expected finalizer to be None: This should only be set once");
     self.pnc_constructor = Some(pnc);
     self.pnc_data = pnc_data;
-    self
-  }
-
-  pub fn finalizer(mut self, finalizer: Finalizer) -> Self {
-    debug_assert!(self.pnc_constructor.is_none(), "Expected finalizer to be None: This should only be set once");
-    self.finalizer = Some(finalizer);
     self
   }
 
@@ -682,7 +646,7 @@ impl Clone for ConcurrentGraphBuilder {
 }
 
 impl ConcurrentGraphBuilder {
-  pub fn new(db: SharedParserDatabase, config: ParserConfig) -> Self {
+  pub fn new(db: SharedParserDatabase) -> Self {
     ConcurrentGraphBuilder {
       db,
       poisoned: Default::default(),
@@ -717,18 +681,11 @@ impl ConcurrentGraphBuilder {
     Origin::Peek(index)
   }
 
-  pub fn get_peek_resolve_state<T: Iterator<Item = Item>>(&self, id: u32) -> Option<PeekGroup> {
-    match self.peek_resolves.read() {
-      Ok(peek_resolve_states) => peek_resolve_states.get(&(id as u64)).cloned(),
-      Err(err) => panic!("{err}"),
-    }
-  }
-
   pub fn invalidate_nonterms(&mut self, invalidate_nonterms: &[DBNonTermKey], graph_version: i16) -> RadlrResult<()> {
     let set = invalidate_nonterms.iter().cloned().collect::<OrderedSet<_>>();
     match self.root_states.write() {
-      Ok(mut nt) => {
-        for (nt, (_, node, _)) in nt.iter() {
+      Ok(nt) => {
+        for (_, (_, node, _)) in nt.iter() {
           if set.contains(&node.root_data.db_key) && node.root_data.version == graph_version {
             node.invalid.store(true, std::sync::atomic::Ordering::Release);
           }
@@ -784,10 +741,6 @@ impl ConcurrentGraphBuilder {
     }
   }
 
-  pub fn pre_stage_state(&mut self, state: SharedGraphNode, parser_config: ParserConfig) {
-    self.enqueue_state_for_processing_kernel(state, parser_config, true);
-  }
-
   fn enqueue_state_for_processing_kernel(&mut self, state: SharedGraphNode, parser_config: ParserConfig, allow_local: bool) {
     if self.local_next.is_none() && allow_local {
       {
@@ -823,15 +776,6 @@ impl ConcurrentGraphBuilder {
     match self.queue.write() {
       Ok(mut queue) => {
         return queue.pop_front();
-        /* while let Some(work) = queue.pop_front() {
-          if work.0.get_root().invalid.load(std::sync::atomic::Ordering::Acquire) {
-            println!("Terminating tree A");
-          } else {
-            return Some(work);
-          }
-        } */
-
-        return None;
       }
       Err(_) => panic!("queue has been poisoned"),
     }

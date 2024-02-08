@@ -2,14 +2,10 @@ use std::{
   fs::OpenOptions,
   io::Write,
   path::{Path, PathBuf},
-  sync::Arc,
 };
 
 use crate::{
-  compile::{
-    ir::{build_ir_from_graph, sweep},
-    states::build_graph::graph::Graphs,
-  },
+  compile::{ir::sweep, states::build_graph::graph::Graphs},
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut, utils::resolve_grammar_path},
   o_to_r,
   proxy::{Array, DeduplicateIterator, Queue, Set},

@@ -1,6 +1,5 @@
 use super::*;
-use crate::utf8::{get_token_class_from_codepoint, get_utf8_byte_length_from_code_point};
-use std::{ops::Range, rc::Rc, sync::Arc};
+use std::{ops::Range, rc::Rc};
 
 struct EditorInsertInput {
   insert:        StringInput,

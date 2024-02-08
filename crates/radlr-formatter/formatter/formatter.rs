@@ -4,7 +4,7 @@ use crate::{
 };
 use radlr_core::{CachedString, ErrorClass, IString, IStringStore, RadlrError, RadlrResult};
 use radlr_rust_runtime::types::Token;
-use std::{collections::HashMap, fmt::format, io::Write, vec};
+use std::{collections::HashMap, io::Write, vec};
 
 pub const fn formatter_error_class() -> ErrorClass {
   ErrorClass::Extended(2)
@@ -575,7 +575,7 @@ impl Formatter {
           let mut obj_map = Some(obj_map);
           let mut obj_val = Value::None;
 
-          for (index, path) in obj.path.iter().enumerate() {
+          for (_, path) in obj.path.iter().enumerate() {
             if let Some(obj_map_unwrapped) = &obj_map {
               match match path {
                 TypeCall(tc) => {

@@ -16,7 +16,7 @@ impl ScannerData {
 
   #[cfg(debug_assertions)]
   pub fn debug_print(&self, db: &ParserDatabase) {
-    let Self { hash, symbols, skipped, follow } = self;
+    let Self { symbols, skipped, follow, .. } = self;
 
     println!(
       "ScannerData\nSymbols:{}\nFollow:{}\nSkipped:{}",

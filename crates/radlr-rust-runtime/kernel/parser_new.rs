@@ -742,9 +742,9 @@ fn token_scan<'a, 'debug>(
 }
 
 pub struct ByteCodeParserNew {
-  bc: Rc<dyn AsRef<[u8]>>,
+  bc:                  Rc<dyn AsRef<[u8]>>,
   non_terminal_lookup: HashMap<u32, u32>,
-  debugger: Option<Box<DebugFnNew>>,
+  debugger:            Option<Box<DebugFnNew>>,
 }
 
 impl ByteCodeParserNew {

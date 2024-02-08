@@ -2,12 +2,9 @@
 
 use super::super::graph::*;
 use crate::{
-  compile::states::{
-    build_graph::{
-      graph::{GraphBuildState, Origin, StateType},
-      items::get_follow,
-    },
-    build_graph::items::{get_follow_internal, get_goal_items_from_completed, FollowType},
+  compile::states::build_graph::{
+    graph::{GraphBuildState, Origin, StateType},
+    items::{get_follow, get_follow_internal, get_goal_items_from_completed, FollowType},
   },
   types::*,
 };
@@ -82,7 +79,7 @@ fn complete_scan(
   let follow = follow.into_iter().flatten().collect::<Items>();
   let completed_items = completed_items.into_iter().flatten().collect::<Items>();
 
-  let goals = get_goal_items_from_completed(&completed_items, gb, &pred);
+  let goals = get_goal_items_from_completed(&completed_items, &pred);
   let is_continue = !follow.is_empty();
   let completes_goal = !goals.is_empty();
 
