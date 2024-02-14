@@ -38,7 +38,7 @@ impl Worker {
 }
 
 // A basic, multi-threaded worker pool.
-pub(crate) struct StandardPool {
+pub struct StandardPool {
   size:     usize,
   workers:  Vec<Worker>,
   c_signal: Receiver<Result<(), RadlrError>>,
@@ -84,7 +84,7 @@ impl Drop for StandardPool {
 }
 
 // A worker pool that runs Jobs on the main thread.
-pub(crate) struct SingleThreadPool {}
+pub struct SingleThreadPool {}
 
 pub trait WorkerPool {
   /// Runs a closure as a job creator for the number of available workers. For

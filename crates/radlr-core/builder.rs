@@ -9,7 +9,7 @@ use crate::{
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut, utils::resolve_grammar_path},
   o_to_r,
   proxy::{Array, DeduplicateIterator, Queue, Set},
-  types::*,
+  types::{worker_pool::WorkerPool, *},
   GrammarIdentities,
   GrammarSoup,
   IString,
@@ -259,10 +259,10 @@ impl RadlrDatabase {
   }
 
   /// Constructs parser and scanner graphs for this variant of the grammar.
-  pub fn build_states(&self, config: ParserConfig) -> RadlrResult<RadlrParseGraph> {
+  pub fn build_states<Pool: WorkerPool>(&self, config: ParserConfig, pool: &Pool) -> RadlrResult<RadlrParseGraph> {
     let RadlrDatabase { j, db } = self;
 
-    match crate::compile::states::build_states::compile_parser_states(db.clone(), config) {
+    match crate::compile::states::build_states::compile_parser_states(db.clone(), config, pool) {
       Ok(graph) => {
         j.transfer().flush_reports();
 
@@ -307,8 +307,13 @@ impl JournalReporter for RadlrParseGraph {
 }
 
 impl RadlrParseGraph {
-  pub fn build_ir_parser(&self, optimize: bool, optimize_for_debugging: bool) -> RadlrResult<RadlrIRParser> {
-    match crate::compile::ir::build_ir_from_graph(self.config, &self.db, &self.graph) {
+  pub fn build_ir_parser<Pool: WorkerPool>(
+    &self,
+    optimize: bool,
+    optimize_for_debugging: bool,
+    pool: &Pool,
+  ) -> RadlrResult<RadlrIRParser> {
+    match crate::compile::ir::build_ir_concurrent(pool, self.graph.clone(), self.config, &self.db) {
       Ok((classification, ir_states)) => {
         let Self { config, db, .. } = self;
         let mut j = self.j.transfer();
@@ -511,25 +516,27 @@ pub fn build_db() -> RadlrResult<()> {
 
 #[test]
 pub fn build_states() -> RadlrResult<()> {
+  let pool = crate::types::worker_pool::SingleThreadPool {};
   let grammar_source_path =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   assert!(RadlrGrammar::new()
     .add_source(&grammar_source_path)?
     .build_db(grammar_source_path, Default::default())?
-    .build_states(Default::default())
+    .build_states(Default::default(), &pool)
     .is_ok());
   Ok(())
 }
 
 #[test]
 pub fn build_with_optimized_states() -> RadlrResult<()> {
+  let pool = crate::types::worker_pool::SingleThreadPool {};
   let grammar_source_path =
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammar/json/json.sg").canonicalize().unwrap();
   RadlrGrammar::new()
     .add_source(&grammar_source_path)?
     .build_db(grammar_source_path, Default::default())?
-    .build_states(Default::default())?
-    .build_ir_parser(true, false)?;
+    .build_states(Default::default(), &pool)?
+    .build_ir_parser(true, false, &pool)?;
   Ok(())
 }
 

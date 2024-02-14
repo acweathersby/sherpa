@@ -23,13 +23,19 @@ pub fn build_parse_states_from_source_str<'a, T>(
   optimize: bool,
   test_fn: &dyn Fn(TestPackage) -> RadlrResult<T>,
 ) -> RadlrResult<T> {
+  #[cfg(not(feature = "wasm-target"))]
+  let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
+
+  #[cfg(feature = "wasm-target")]
+  let pool = crate::types::worker_pool::SingleThreadPool {};
+
   if optimize {
     test_fn(
       RadlrGrammar::new()
         .add_source_from_string(source, &source_path, false)?
         .build_db(source_path, Default::default())?
-        .build_states(Default::default())?
-        .build_ir_parser(true, false)?
+        .build_states(Default::default(), &pool)?
+        .build_ir_parser(true, false, &pool)?
         .into(),
     )
   } else {
@@ -37,8 +43,8 @@ pub fn build_parse_states_from_source_str<'a, T>(
       RadlrGrammar::new()
         .add_source_from_string(source, &source_path, false)?
         .build_db(source_path, Default::default())?
-        .build_states(Default::default())?
-        .build_ir_parser(false, false)?
+        .build_states(Default::default(), &pool)?
+        .build_ir_parser(false, false, &pool)?
         .into(),
     )
   }
@@ -53,6 +59,12 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
 ) -> RadlrResult<T> {
   let mut grammar = RadlrGrammar::new();
 
+  #[cfg(not(feature = "wasm-target"))]
+  let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
+
+  #[cfg(feature = "wasm-target")]
+  let pool = crate::types::worker_pool::SingleThreadPool {};
+
   for (index, source) in sources.iter().enumerate() {
     let source_path = source_path.join("ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().nth(index).unwrap().to_string());
     grammar.add_source_from_string(source, source_path, false)?;
@@ -61,9 +73,9 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   let root_path = source_path.join("A");
 
   if optimize {
-    test_fn(grammar.build_db(root_path, config)?.build_states(config)?.build_ir_parser(true, false)?.into())
+    test_fn(grammar.build_db(root_path, config)?.build_states(config, &pool)?.build_ir_parser(true, false, &pool)?.into())
   } else {
-    test_fn(grammar.build_db(root_path, config)?.build_states(config)?.build_ir_parser(false, false)?.into())
+    test_fn(grammar.build_db(root_path, config)?.build_states(config, &pool)?.build_ir_parser(false, false, &pool)?.into())
   }
 }
 

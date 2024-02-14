@@ -809,7 +809,8 @@ impl ConcurrentGraphBuilder {
     self.state_lookups.get(&state).cloned()
   }
 
-  pub fn abandon_uncommited(&mut self) {
+  /// Drops all nodes that have yet to be committed to the graph.
+  pub fn drop_uncommitted(&mut self) {
     self.pre_stage.clear()
   }
 
@@ -893,7 +894,6 @@ impl ConcurrentGraphBuilder {
     pred: Option<&SharedGraphNode>,
     parser_config: &ParserConfig,
     allow_local_queueing: bool,
-    force: bool,
   ) -> RadlrResult<u32> {
     let mut nodes = self.pre_stage.drain(..).collect::<VecDeque<_>>();
     let mut queued = 0;

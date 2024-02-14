@@ -31,11 +31,15 @@ pub fn add_root(
     .make_root(name, db_nt_key, NORMAL_GRAPH)
     .commit(builder);
 
-  builder.commit(false, None, &config, false, false)?;
+  builder.commit(false, None, &config, false)?;
   Ok(())
 }
 
-pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfig) -> RadlrResult<Arc<Graphs>> {
+pub(crate) fn compile_parser_states<Pool: WorkerPool>(
+  db: Arc<ParserDatabase>,
+  config: ParserConfig,
+  pool: &Pool,
+) -> RadlrResult<Arc<Graphs>> {
   // Create entry nodes.
 
   let mut gb = ConcurrentGraphBuilder::new(db.clone());
@@ -61,36 +65,15 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
     result?;
   }
 
-  #[cfg(not(feature = "wasm-target"))]
-  let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
-
-  #[cfg(feature = "wasm-target")]
-  let pool = crate::types::worker_pool::SingleThreadPool {};
-
   let sync_tracker = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
-  build_states(&pool, &gb, sync_tracker)?;
+  build_states(pool, &gb, sync_tracker)?;
 
-  let graphs: Arc<Graphs> = Arc::new(gb.into());
-
-  //let (states) = build_ir_concurrent(&pool, graphs.clone(), config, &db)?;
-
-  // let (states, report) = optimize::<ParseStatesVec>(&db, &config, states,
-  // false)?;
-
-  //let r = states.iter().map(|s| s.1.print(&db,
-  // false).unwrap()).collect::<Vec<_>>().join("\n"); println!("DONE: {} \n ",
-  // report.to_string());
-
-  for state in graphs.create_ir_precursors().iter() {
-    //println!("{:?}", state.node);
-  }
-
-  Ok(graphs)
+  Ok(Arc::new(gb.into()))
 }
 
-fn build_states<T: WorkerPool>(
-  pool: &T,
+fn build_states<Pool: WorkerPool>(
+  pool: &Pool,
   gb: &ConcurrentGraphBuilder,
   sync_tracker: Arc<std::sync::atomic::AtomicUsize>,
 ) -> Result<(), RadlrError> {
@@ -101,7 +84,7 @@ fn build_states<T: WorkerPool>(
     let have_errors = std::sync::atomic::AtomicBool::new(false);
     let error_count = _num_of_threads_ + 1;
 
-    move |thread_id: usize| {
+    move |_| {
       let mut retries = 0;
       loop {
         let have_errors = &have_errors;
@@ -157,7 +140,8 @@ fn build_states<T: WorkerPool>(
 
                 node.get_root().invalid.store(true, std::sync::atomic::Ordering::Relaxed);
 
-                gb.abandon_uncommited();
+                gb.drop_uncommitted();
+
                 let mut poisoned = vec![root.root_data.db_key];
 
                 if db.entry_nterm_map().contains_key(&nonterm_key) {
@@ -165,7 +149,7 @@ fn build_states<T: WorkerPool>(
                   have_errors.store(true, std::sync::atomic::Ordering::Release);
                   sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Release);
                   return Err(
-                    format!("Entry parser {} is non-deterministic", db.nonterm_friendly_name_string(nonterm_key),).into(),
+                    format!("Entry parser {} {_err} is non-deterministic", db.nonterm_friendly_name_string(nonterm_key),).into(),
                   );
                 } else {
                   if let Some(nonterms) = db.get_nonterminal_predecessors(nonterm_key) {
@@ -193,7 +177,7 @@ fn build_states<T: WorkerPool>(
                         .make_root(db.nonterm_guid_name(*new_nt_key), *new_nt_key, LR_ONLY_GRAPH)
                         .commit(&mut gb);
 
-                      gb.commit(false, None, &new_config, true, false)?;
+                      gb.commit(false, None, &new_config, true)?;
                     }
                   } else {
                     sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Relaxed);
@@ -240,123 +224,4 @@ fn build_states<T: WorkerPool>(
   })?;
 
   Ok(())
-}
-
-#[cfg(test)]
-mod test {
-  #![allow(unused)]
-  use radlr_rust_runtime::types::StringInput;
-  use std::path::PathBuf;
-
-  use super::compile_parser_states;
-  use crate::{
-    compile::ir::{build_ir_from_graph, optimize},
-    ParserConfig,
-    RadlrGrammar,
-    RadlrResult,
-    TestPackage,
-  };
-
-  #[test]
-  fn build_json_graph() -> RadlrResult<()> {
-    let mut config = ParserConfig::default();
-    config.ALLOW_BYTE_SEQUENCES = true;
-    let db = RadlrGrammar::new()
-      .add_source_from_string(include_str!("../../../../grammars/json/json.sg"), "", false)
-      .unwrap()
-      .build_db("", config)
-      .unwrap()
-      .into_internal();
-
-    let graph = compile_parser_states(db.clone(), config)?;
-
-    let mut ir = build_ir_from_graph(config, &db, &graph)?;
-
-    for (_, ir) in &mut ir.1 {
-      ir.build_ast(&db)?;
-      // println!("{}", ir.print(&db, true)?);
-    }
-
-    let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
-
-    println!("{}", ir.1.to_string());
-
-    for (_, ir) in &ir.0 {
-      println!("{} {}", ir.get_canonical_hash(&db, false)?, ir.print(&db, true)?);
-    }
-
-    Ok(())
-  }
-
-  #[test]
-  pub fn peek_hybrid_graph() -> RadlrResult<()> {
-    let mut config = ParserConfig::default().enable_fork(true);
-    config.ALLOW_BYTE_SEQUENCES = false;
-    config.ALLOW_SCANNER_INLINING = false;
-    let db = RadlrGrammar::new()
-      .add_source_from_string(
-        r#"
-        IGNORE { c:sp c:nl }
-
-        <> element_block > '<' component_identifier
-            ( element_attribute(+) )?
-            ( element_attributes | general_data | element_block | general_binding )(*)
-            ">"
-        
-        <> component_identifier >
-            identifier ( ':' identifier )?
-        
-        <> element_attributes >c:nl element_attribute(+)
-        
-        <> element_attribute > '-' identifier attribute_chars c:sp
-        
-        
-            | '-' identifier ':' identifier
-        
-            | '-' "store" '{' local_values? '}'
-            | '-' "local" '{' local_values? '}'
-            | '-' "param" '{' local_values? '}'
-            | '-' "model" '{' local_values? '}'
-        
-        <> general_binding > ':' identifier
-        
-        <> local_values > local_value(+)
-        
-        <> local_value > identifier ( '`' identifier )? ( '='  c:num )? ( ',' )(*)
-        
-        
-        <> attribute_chars > ( c:id | c:num | c:sym  )(+)
-        <> general_data > ( c:id | c:num  | c:nl  )(+)
-        
-        <> identifier > tk:tok_identifier
-        
-        <> tok_identifier > ( c:id | c:num )(+)"#,
-        "",
-        false,
-      )
-      .unwrap()
-      .build_db("", config)
-      .unwrap()
-      .into_internal();
-
-    let graph = compile_parser_states(db.clone(), config)?;
-
-    let mut ir = build_ir_from_graph(config, &db, &graph)?;
-
-    //return Ok(());
-
-    for (_, ir) in &ir.1 {
-      println!("{}", ir.print(&db, true)?);
-    }
-
-    let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
-
-    println!("{}", ir.1.to_string());
-
-    for (_, ir) in &ir.0 {
-      println!("{}", ir.print(&db, true)?);
-    }
-
-    Ok(())
-  }
 }

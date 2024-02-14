@@ -28,8 +28,9 @@ pub fn build_ast_source(
 }
 
 pub fn build_parser_states(db: &RadlrDatabase, parser_config: ParserConfig) -> Result<RadlrIRParser, RadlrError> {
-  let states = db.build_states(parser_config)?;
-  let parser = states.build_ir_parser(true, false)?;
+  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+  let states = db.build_states(parser_config, &pool)?;
+  let parser = states.build_ir_parser(true, false, &pool)?;
   Ok(parser)
 }
 

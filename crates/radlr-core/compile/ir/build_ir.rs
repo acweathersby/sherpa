@@ -19,7 +19,7 @@ pub(crate) fn build_ir_concurrent<T: WorkerPool>(
   graphs: Arc<Graphs>,
   config: ParserConfig,
   db: &Arc<ParserDatabase>,
-) -> RadlrResult<ParseStatesMap> {
+) -> RadlrResult<(ParserClassification, ParseStatesMap)> {
   let states = Arc::new(RwLock::new(OrderedMap::new()));
   let classification = Arc::new(RwLock::new(config.to_classification()));
 
@@ -102,58 +102,7 @@ pub(crate) fn build_ir_concurrent<T: WorkerPool>(
     }
   }
 
-  Ok(states)
-}
-
-pub fn build_ir_from_graph(
-  config: ParserConfig,
-  db: &SharedParserDatabase,
-  graph: &Graphs,
-) -> RadlrResult<(ParserClassification, ParseStatesMap)> {
-  let ir_precursors = graph.create_ir_precursors();
-
-  let mut classification = ParserClassification::default();
-
-  let mut states = BTreeMap::default();
-
-  // Build entry states -------------------------------------------------------
-  for entry in db.entry_points().iter().filter(|i| config.EXPORT_ALL_NONTERMS || i.is_export) {
-    let ir = build_entry_ir(entry, db)?;
-    for state in ir {
-      states.insert(state.guid_name, state);
-    }
-  }
-
-  for node_state in ir_precursors.iter() {
-    classification |= node_state.node.get_classification();
-    process_precursor(node_state, &mut states)?;
-  }
-
-  // Build custom states ------------------------------------------------------
-  for i in 0..db.nonterms_len() {
-    let nonterm_key = DBNonTermKey::from(i);
-    if let Some(custom_state) = db.custom_state(nonterm_key) {
-      let name = db.nonterm_guid_name(nonterm_key);
-
-      let state = ParseState {
-        guid_name:     name,
-        comment:       "Custom State".into(),
-        code:          custom_state.tok.to_string(),
-        ast:           Some(Box::new(custom_state.clone())),
-        compile_error: None,
-        scanner:       None,
-        root:          true,
-        precedence:    0,
-      };
-      states.insert(name, Box::new(state));
-    }
-  }
-
-  for (_, state) in &mut states {
-    state.build_ast(db)?;
-  }
-
-  RadlrResult::Ok((classification, states))
+  Ok((classification, states))
 }
 
 pub(crate) fn process_precursor(

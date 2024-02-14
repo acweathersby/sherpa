@@ -18,11 +18,13 @@ fn test_full_grammar() -> RadlrResult<()> {
 
   // Build our parser;
 
+  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+
   let radlr_grammar = grammar_folder.join("grammar.sg");
   let mut grammar = RadlrGrammar::new();
   let config = ParserConfig::new().hybrid().enable_fork(false);
   let database = grammar.add_source(&radlr_grammar)?.build_db(&radlr_grammar, config)?;
-  let parser_builder = database.build_states(config)?.build_ir_parser(true, false)?;
+  let parser_builder = database.build_states(config, &pool)?.build_ir_parser(true, false, &pool)?;
   let pkg = compile_bytecode(&parser_builder, true)?;
 
   // Gather list of files to validate. This includes the latest radlr grammar

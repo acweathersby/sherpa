@@ -25,6 +25,7 @@ pub use journal::{Journal, Report, ReportType};
 pub use types::{
   o_to_r,
   proxy,
+  worker_pool,
   ASTToken,
   CachedString,
   DBEntryPoint,

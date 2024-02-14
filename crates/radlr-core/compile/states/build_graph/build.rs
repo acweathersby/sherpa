@@ -31,7 +31,7 @@ pub(crate) fn handle_kernel_items(
   let have_lookahead = pred.kernel_items().len() > 1;
 
   if handle_fork(gb, pred) {
-    gb.commit(false, Some(pred), config, true, false)?;
+    gb.commit(false, Some(pred), config, true)?;
     return Ok(());
   }
 
@@ -45,7 +45,7 @@ pub(crate) fn handle_kernel_items(
 
   let update_gotos = handle_nonterminal_shift(gb, pred, &config)?;
 
-  let states_queued = gb.commit(update_gotos, Some(pred), config, true, false)?;
+  let states_queued = gb.commit(update_gotos, Some(pred), config, true)?;
 
   if pred.state_type().is_peek() && pred.state_type().peek_level() > 0 && states_queued == 0 {
     // Todo(anthony) : if peeking, determine if the peek has terminated in a
