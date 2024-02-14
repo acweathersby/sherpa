@@ -35,48 +35,83 @@ pub fn add_root(
   Ok(())
 }
 
-pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfig) -> RadlrResult<Graphs> {
+pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfig) -> RadlrResult<Arc<Graphs>> {
   // Create entry nodes.
 
   let mut gb = ConcurrentGraphBuilder::new(db.clone());
 
-  for result in db.nonterms().iter().enumerate().map(|(index, sym)| {
+  for result in db.nonterms().iter().enumerate().filter_map(|(index, sym)| {
     let nt_id: DBNonTermKey = (index as u32).into();
+
     let kernel_items = ItemSet::start_items(nt_id, &db).to_origin(Origin::NonTermGoal(nt_id));
-    add_root(
-      nt_id,
-      db.nonterm_guid_name(nt_id),
-      sym.is_term().then_some(GraphType::Scanner).unwrap_or(GraphType::Parser),
-      kernel_items,
-      &mut gb,
-      &config,
-    )
+
+    if db.custom_state(nt_id).is_none() {
+      Some(add_root(
+        nt_id,
+        db.nonterm_guid_name(nt_id),
+        sym.is_term().then_some(GraphType::Scanner).unwrap_or(GraphType::Parser),
+        kernel_items,
+        &mut gb,
+        &config,
+      ))
+    } else {
+      None
+    }
   }) {
     result?;
   }
 
   #[cfg(not(feature = "wasm-target"))]
-  let pool: worker_pool::StandardPool = crate::types::worker_pool::StandardPool::new(20).unwrap();
+  let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
 
   #[cfg(feature = "wasm-target")]
   let pool = crate::types::worker_pool::SingleThreadPool {};
 
-  let sync_tracker = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(1));
+  let sync_tracker = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
+  build_states(&pool, &gb, sync_tracker)?;
+
+  let graphs: Arc<Graphs> = Arc::new(gb.into());
+
+  //let (states) = build_ir_concurrent(&pool, graphs.clone(), config, &db)?;
+
+  // let (states, report) = optimize::<ParseStatesVec>(&db, &config, states,
+  // false)?;
+
+  //let r = states.iter().map(|s| s.1.print(&db,
+  // false).unwrap()).collect::<Vec<_>>().join("\n"); println!("DONE: {} \n ",
+  // report.to_string());
+
+  for state in graphs.create_ir_precursors().iter() {
+    //println!("{:?}", state.node);
+  }
+
+  Ok(graphs)
+}
+
+fn build_states<T: WorkerPool>(
+  pool: &T,
+  gb: &ConcurrentGraphBuilder,
+  sync_tracker: Arc<std::sync::atomic::AtomicUsize>,
+) -> Result<(), RadlrError> {
   pool.run(|_num_of_threads_| {
     let mut gb = gb.clone();
 
     let sync_tracker = sync_tracker.clone();
+    let have_errors = std::sync::atomic::AtomicBool::new(false);
+    let error_count = _num_of_threads_ + 1;
 
-    move |_| {
+    move |thread_id: usize| {
       let mut retries = 0;
       loop {
+        let have_errors = &have_errors;
+
         if let Some(((node, config), _is_local_work)) =
           gb.get_local_work().map(|w| (w, true)).or_else(|| gb.get_global_work().map(|w| (w, false)))
         {
           if retries > 0 {
             retries = 0;
-            sync_tracker.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            sync_tracker.fetch_sub(1, std::sync::atomic::Ordering::Release);
           }
 
           match handle_kernel_items(&mut gb, &node, &config) {
@@ -120,12 +155,15 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
               if config.ALLOW_LR {
                 let db = gb.db_rc().clone();
 
+                node.get_root().invalid.store(true, std::sync::atomic::Ordering::Relaxed);
+
                 gb.abandon_uncommited();
                 let mut poisoned = vec![root.root_data.db_key];
 
                 if db.entry_nterm_map().contains_key(&nonterm_key) {
                   // Ensures all other threads are halted when the active queue is exhausted.
-                  sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+                  have_errors.store(true, std::sync::atomic::Ordering::Release);
+                  sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Release);
                   return Err(
                     format!("Entry parser {} is non-deterministic", db.nonterm_friendly_name_string(nonterm_key),).into(),
                   );
@@ -135,7 +173,7 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
 
                     match gb.invalidate_nonterms(&poisoned, NORMAL_GRAPH) {
                       Err(err) => {
-                        sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+                        sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Relaxed);
                         return Err(err);
                       }
                       _ => {}
@@ -158,29 +196,33 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
                       gb.commit(false, None, &new_config, true, false)?;
                     }
                   } else {
-                    sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+                    sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Relaxed);
                     panic!("Somehow encountered an orphaned non-terminal");
                   }
                 }
               }
             }
             Err(_) => {
-              // Ensures all other threads are halted when the active queue is exhausted.
-              sync_tracker.fetch_add(_num_of_threads_ + 1, std::sync::atomic::Ordering::Relaxed);
+              have_errors.store(true, std::sync::atomic::Ordering::Release);
+
+              // Ensures other threads are halted when the active queue is exhausted.
+              sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Relaxed);
               return Err("Todo: Report critical failure during compilation: {err}".into());
             }
             _ => {}
           }
         } else {
           let num_of_waiting_threads = if retries == 0 {
-            let val = sync_tracker.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let val = sync_tracker.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
             val + 1
           } else {
-            sync_tracker.load(std::sync::atomic::Ordering::Relaxed)
+            sync_tracker.load(std::sync::atomic::Ordering::Acquire)
           };
 
-          if num_of_waiting_threads >= _num_of_threads_ {
+          if num_of_waiting_threads == _num_of_threads_ {
             break;
+          } else if num_of_waiting_threads > _num_of_threads_ {
+            return Err("Error detected in another thread".into());
           }
 
           retries += 1;
@@ -197,7 +239,7 @@ pub(crate) fn compile_parser_states(db: Arc<ParserDatabase>, config: ParserConfi
     }
   })?;
 
-  Ok(gb.into())
+  Ok(())
 }
 
 #[cfg(test)]
@@ -240,7 +282,7 @@ mod test {
     println!("{}", ir.1.to_string());
 
     for (_, ir) in &ir.0 {
-      println!("{}", ir.print(&db, true)?);
+      println!("{} {}", ir.get_canonical_hash(&db, false)?, ir.print(&db, true)?);
     }
 
     Ok(())
@@ -248,27 +290,47 @@ mod test {
 
   #[test]
   pub fn peek_hybrid_graph() -> RadlrResult<()> {
-    let mut config = ParserConfig::default();
+    let mut config = ParserConfig::default().enable_fork(true);
     config.ALLOW_BYTE_SEQUENCES = false;
     config.ALLOW_SCANNER_INLINING = false;
     let db = RadlrGrammar::new()
       .add_source_from_string(
         r#"
-      IGNORE { c:sp  } 
-      
-      <> A > ( B | ":" C )(+)
-      
-      <> B > id "=>" c:id
-      
-      <> C > a_id(+)
-      
-      <> a_id > id "!"? 
-      
-      <> id > tk:id_tok
-      
-      <> id_tok > c:id
-      
-      "#,
+        IGNORE { c:sp c:nl }
+
+        <> element_block > '<' component_identifier
+            ( element_attribute(+) )?
+            ( element_attributes | general_data | element_block | general_binding )(*)
+            ">"
+        
+        <> component_identifier >
+            identifier ( ':' identifier )?
+        
+        <> element_attributes >c:nl element_attribute(+)
+        
+        <> element_attribute > '-' identifier attribute_chars c:sp
+        
+        
+            | '-' identifier ':' identifier
+        
+            | '-' "store" '{' local_values? '}'
+            | '-' "local" '{' local_values? '}'
+            | '-' "param" '{' local_values? '}'
+            | '-' "model" '{' local_values? '}'
+        
+        <> general_binding > ':' identifier
+        
+        <> local_values > local_value(+)
+        
+        <> local_value > identifier ( '`' identifier )? ( '='  c:num )? ( ',' )(*)
+        
+        
+        <> attribute_chars > ( c:id | c:num | c:sym  )(+)
+        <> general_data > ( c:id | c:num  | c:nl  )(+)
+        
+        <> identifier > tk:tok_identifier
+        
+        <> tok_identifier > ( c:id | c:num )(+)"#,
         "",
         false,
       )
@@ -282,6 +344,10 @@ mod test {
     let mut ir = build_ir_from_graph(config, &db, &graph)?;
 
     //return Ok(());
+
+    for (_, ir) in &ir.1 {
+      println!("{}", ir.print(&db, true)?);
+    }
 
     let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
 

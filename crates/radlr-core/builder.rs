@@ -297,7 +297,7 @@ pub struct RadlrParseGraph {
   pub(crate) j:      Journal,
   pub(crate) db:     SharedParserDatabase,
   pub(crate) config: ParserConfig,
-  pub(crate) graph:  Graphs,
+  pub(crate) graph:  std::sync::Arc<Graphs>,
 }
 
 impl JournalReporter for RadlrParseGraph {

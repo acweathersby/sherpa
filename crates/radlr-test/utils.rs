@@ -76,7 +76,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
   build_parse_states_from_multi_sources(
     source,
     "".into(),
-    false,
+    true,
     &|tp| {
       #[cfg(all(debug_assertions, not(feature = "wasm-target")))]
       _write_states_to_temp_file_(&tp)?;

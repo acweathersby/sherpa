@@ -32,6 +32,7 @@ pub(crate) struct GraphNode {
   pub sym:         PrecedentSymbol,
   pub hash_id:     u64,
   pub kernel:      OrderedSet<Item>,
+  pub follow_hash: Option<u64>,
   pub graph_type:  GraphType,
   pub reduce_item: Option<ItemIndex>,
   pub predecessor: Option<SharedGraphNode>,
@@ -44,8 +45,18 @@ pub(crate) struct GraphNode {
 }
 
 impl Hash for GraphNode {
-  fn hash<H: std::hash::Hasher>(&self, _: &mut H) {}
+  fn hash<H: std::hash::Hasher>(&self, hash: &mut H) {
+    hash.write_u64(self.hash_id)
+  }
 }
+
+impl PartialEq for GraphNode {
+  fn eq(&self, other: &Self) -> bool {
+    self.hash_id == other.hash_id
+  }
+}
+
+impl Eq for GraphNode {}
 
 impl Debug for GraphNode {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -159,6 +170,7 @@ impl GraphNode {
       sym:         self.sym,
       symbol_set:  self.symbol_set.clone(),
       ty:          self.ty,
+      follow_hash: Default::default(),
     })
   }
 

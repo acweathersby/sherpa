@@ -31,6 +31,7 @@ pub(crate) fn handle_kernel_items(
   let have_lookahead = pred.kernel_items().len() > 1;
 
   if handle_fork(gb, pred) {
+    gb.commit(false, Some(pred), config, true, false)?;
     return Ok(());
   }
 

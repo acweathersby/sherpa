@@ -14,6 +14,7 @@ pub type ParseStatesMap = OrderedMap<IString, Box<ParseState>>;
 #[cfg(debug_assertions)]
 use std::fmt::Debug;
 use std::{
+  collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet},
   hash::{Hash, Hasher},
   io::Write,
 };
@@ -402,24 +403,40 @@ fn canonical_hash<T: Hasher>(state_name: &str, hasher: &mut T, node: &ASTNode) -
       mode.hash(hasher);
       scanner.hash(hasher);
 
-      let mut matches = matches.iter().collect::<Vec<_>>();
+      let matches = matches
+        .iter()
+        .map(|m: &ASTNode| {
+          let mut sort_hasher = DefaultHasher::new();
+          let mut branch_hasher = DefaultHasher::new();
 
-      matches.sort_by(|a, b| (a.to_string().cmp(&b.to_string())));
+          match m {
+            ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
+              u64::MAX.hash(&mut sort_hasher);
+              u64::MAX.hash(&mut branch_hasher);
+              canonical_hash(state_name, &mut branch_hasher, &ASTNode::Statement(statement.clone())).unwrap();
+            }
 
-      for m in matches {
-        canonical_hash(state_name, hasher, m)?;
+            ASTNode::IntMatch(box parser::IntMatch { vals, statement, .. }) => {
+              vals.hash(&mut branch_hasher);
+
+              let mut v = vals.clone();
+              v.sort();
+              v.hash(&mut sort_hasher);
+
+              canonical_hash(state_name, &mut branch_hasher, &ASTNode::Statement(statement.clone())).unwrap();
+            }
+            _ => unreachable!(),
+          }
+
+          (sort_hasher.finish(), branch_hasher.finish())
+        })
+        .collect::<BTreeMap<_, _>>();
+
+      for (_, hash) in matches {
+        hash.hash(hasher)
       }
     }
 
-    ASTNode::DefaultMatch(box parser::DefaultMatch { statement, .. }) => {
-      "default".hash(hasher);
-      canonical_hash(state_name, hasher, &ASTNode::Statement(statement.clone()))?;
-    }
-
-    ASTNode::IntMatch(box parser::IntMatch { vals, statement, .. }) => {
-      vals.hash(hasher);
-      canonical_hash(state_name, hasher, &ASTNode::Statement(statement.clone()))?;
-    }
     ASTNode::Gotos(box parser::Gotos { goto, pushes, fork }) => {
       if let Some(goto) = goto {
         if goto.name != state_name {

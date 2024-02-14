@@ -2,14 +2,108 @@
 
 use crate::{
   compile::states::build_graph::graph::{GraphNode, Graphs, IRPrecursorGroup, ScannerData, SharedGraphNode, StateId, StateType},
-  types::*,
+  types::{worker_pool::WorkerPool, *},
   utils::{hash_group_btree_iter, hash_group_btreemap},
   writer::code_writer::CodeWriter,
 };
 use radlr_rust_runtime::{types::bytecode::MatchInputType, utf8::lookup_table::CodePointClass};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+  collections::BTreeMap,
+  sync::{Arc, RwLock},
+};
 
 use super::super::states::build_graph::flow::resolve_token_assign_id;
+
+pub(crate) fn build_ir_concurrent<T: WorkerPool>(
+  pool: &T,
+  graphs: Arc<Graphs>,
+  config: ParserConfig,
+  db: &Arc<ParserDatabase>,
+) -> RadlrResult<ParseStatesMap> {
+  let states = Arc::new(RwLock::new(OrderedMap::new()));
+  let classification = Arc::new(RwLock::new(config.to_classification()));
+
+  pool.run(|num_of_threads| {
+    let graphs = graphs.clone();
+    let db = db.clone();
+    let final_states = states.clone();
+    let classification = classification.clone();
+
+    move |thread_id| {
+      let chunk_size = graphs.successors.len().div_ceil(num_of_threads);
+      let chunk_start = chunk_size * thread_id;
+      let chunk_end = chunk_start + chunk_size;
+      let mut inner_classification = classification.read().unwrap().clone();
+
+      let mut states = Default::default();
+
+      for (index, (par, children)) in graphs.successors.iter().enumerate() {
+        if index >= chunk_end {
+          break;
+        }
+
+        if index >= chunk_start {
+          if !(par.get_root().invalid.load(std::sync::atomic::Ordering::Acquire)) {
+            let precursor = IRPrecursorGroup {
+              node:          par.clone(),
+              successors:    children.iter().map(|n| (n.hash_id, n.clone())).collect(),
+              non_terminals: graphs.state_nonterms.get(&par.hash_id).cloned(),
+              root_name:     par.is_root().then(|| par.root_data.root_name),
+            };
+
+            inner_classification |= precursor.node.get_classification();
+
+            process_precursor(&precursor, &mut states)?;
+          }
+        }
+      }
+
+      for (_, state) in &mut states {
+        state.build_ast(&db)?;
+      }
+
+      // Perform base level optimizations. Can we do this concurrently?
+
+      final_states.write()?.extend(states);
+      *classification.write()? |= inner_classification;
+      Ok(())
+    }
+  })?;
+
+  let mut states = RwLock::into_inner(Arc::into_inner(states).expect("Should have no other owners"))?;
+  let classification = RwLock::into_inner(Arc::into_inner(classification).expect("Should have no other owners"))?;
+
+  // Build entry states -------------------------------------------------------
+  for entry in db.entry_points().iter().filter(|i| config.EXPORT_ALL_NONTERMS || i.is_export) {
+    let ir = build_entry_ir(entry, db)?;
+    for mut state in ir {
+      state.build_ast(db)?;
+      states.insert(state.guid_name, state);
+    }
+  }
+
+  // Build custom states ------------------------------------------------------
+  for i in 0..db.nonterms_len() {
+    let nonterm_key = DBNonTermKey::from(i);
+    if let Some(custom_state) = db.custom_state(nonterm_key) {
+      let name = db.nonterm_guid_name(nonterm_key);
+
+      let state = ParseState {
+        guid_name:     name,
+        comment:       "Custom State".into(),
+        code:          custom_state.tok.to_string(),
+        ast:           Some(Box::new(custom_state.clone())),
+        compile_error: None,
+        scanner:       None,
+        root:          true,
+        precedence:    0,
+      };
+      states.insert(name, Box::new(state));
+    }
+  }
+
+  Ok(states)
+}
 
 pub fn build_ir_from_graph(
   config: ParserConfig,
@@ -32,27 +126,7 @@ pub fn build_ir_from_graph(
 
   for node_state in ir_precursors.iter() {
     classification |= node_state.node.get_classification();
-
-    let entry_name = node_state.root_name.unwrap_or_default();
-
-    let state = &node_state.node;
-
-    let goto_name = if let Some(_) = node_state.non_terminals.as_ref() {
-      let mut precursor = IRPrecursorGroup { ..node_state.clone() };
-
-      precursor.node = precursor.node.to_goto();
-
-      let goto_pair = convert_nonterm_shift_state_to_ir(&precursor)?;
-      let out = Some(goto_pair.1.guid_name.clone());
-      states.insert(goto_pair.1.guid_name, goto_pair.1);
-      out
-    } else {
-      None
-    };
-
-    for (_, ir_state) in convert_state_to_ir(state.symbol_set.as_ref(), node_state, entry_name, goto_name)? {
-      states.entry(ir_state.guid_name).or_insert(ir_state);
-    }
+    process_precursor(node_state, &mut states)?;
   }
 
   // Build custom states ------------------------------------------------------
@@ -80,6 +154,33 @@ pub fn build_ir_from_graph(
   }
 
   RadlrResult::Ok((classification, states))
+}
+
+pub(crate) fn process_precursor(
+  node_state: &IRPrecursorGroup,
+  states: &mut BTreeMap<IString, Box<ParseState>>,
+) -> Result<(), RadlrError> {
+  let entry_name = node_state.root_name.unwrap_or_default();
+  let state = &node_state.node;
+
+  let goto_name = if let Some(_) = node_state.non_terminals.as_ref() {
+    let mut precursor = IRPrecursorGroup { ..node_state.clone() };
+
+    precursor.node = precursor.node.to_goto();
+
+    let goto_pair = convert_nonterm_shift_state_to_ir(&precursor)?;
+    let out = Some(goto_pair.1.guid_name.clone());
+    states.insert(goto_pair.1.guid_name, goto_pair.1);
+    out
+  } else {
+    None
+  };
+
+  for (_, ir_state) in convert_state_to_ir(state.symbol_set.as_ref(), node_state, entry_name, goto_name)? {
+    states.entry(ir_state.guid_name).or_insert(ir_state);
+  }
+
+  Ok(())
 }
 
 pub(crate) fn build_entry_ir(
@@ -548,7 +649,6 @@ pub(super) fn create_ir_state(
 ) -> RadlrResult<ParseState> {
   let scanner = scanner.map(|s| crate::compile::states::build_graph::graph::ScannerData {
     hash:    s.hash,
-    follow:  s.follow.clone(),
     skipped: s.skipped.clone(),
     symbols: s.symbols.clone(),
   });

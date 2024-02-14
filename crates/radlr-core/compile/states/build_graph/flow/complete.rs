@@ -8,6 +8,10 @@ use crate::{
   },
   types::*,
 };
+use std::{
+  collections::hash_map::DefaultHasher,
+  hash::{self, Hash, Hasher},
+};
 
 pub(crate) fn handle_completed_item<'follow>(
   gb: &mut ConcurrentGraphBuilder,
@@ -77,11 +81,14 @@ fn complete_scan(
     completed.iter().into_iter().map(|i| get_follow_internal(gb, pred, i.kernel, FollowType::ScannerCompleted)).unzip();
 
   let follow = follow.into_iter().flatten().collect::<Items>();
-  let completed_items = completed_items.into_iter().flatten().collect::<Items>();
+  let mut completed_items = completed_items.into_iter().flatten().collect::<Items>();
+
+  completed_items.sort();
+  let follow_hash = create_follow_hash(&completed_items);
 
   let goals = get_goal_items_from_completed(&completed_items, &pred);
-  let is_continue = !follow.is_empty();
   let completes_goal = !goals.is_empty();
+  let is_continue = !follow.is_empty();
 
   let state = StagedNode::new(gb)
     .parent(pred.clone())
@@ -94,9 +101,10 @@ fn complete_scan(
       (false, _) => StateType::CompleteToken,
     })
     .set_reduce_item(first.kernel)
+    .set_follow_hash(follow_hash)
     .kernel_items(follow.iter().cloned());
 
-  let _ = if is_continue {
+  if is_continue {
     if completes_goal {
       state.make_enqueued_leaf()
     } else {
@@ -107,4 +115,17 @@ fn complete_scan(
     state.make_leaf()
   }
   .commit(gb);
+}
+
+fn create_follow_hash(completed_items: &Vec<Item>) -> u64 {
+
+  let mut hasher = DefaultHasher::new();
+  
+  for item in completed_items {
+    item.index().hash(&mut hasher);
+    item.from.hash(&mut hasher);
+    item.origin.hash(&mut hasher);
+  }
+
+  hasher.finish()
 }
