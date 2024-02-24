@@ -17,6 +17,7 @@ use crate::{
     TerminalMatches,
   },
   types::*,
+  worker_pool::WorkerPool,
 };
 use radlr_rust_runtime::types::bytecode::MatchInputType;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -39,11 +40,12 @@ pub(crate) fn sweep<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 /// Performance various transformation on the parse state graph
 /// to reduce the number of steps between transient actions, and to
 /// reduce the number of parse states overall.
-pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
+pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>, Pool: WorkerPool>(
   db: &'db ParserDatabase,
   config: &ParserConfig,
   parse_states: ParseStatesMap,
   optimize_for_debugging: bool,
+  pool_: &Pool,
 ) -> RadlrResult<(R, OptimizationReport)> {
   let mut report = OptimizationReport {
     start: ComplexityMarker::from_map_iter(db, parse_states.iter()),
@@ -78,26 +80,34 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   // as possible.
   let parse_states = {
     report.canonical_rounds += 3;
+    let mut reset = false;
     let mut states = parse_states;
-
-    let mut remove_self_recursive = false;
     loop {
-      match canonicalize_states(db, config, states, remove_self_recursive)? {
-        (s, true) => {
-          report.canonical_rounds += 1;
-          states = s;
-        }
-        (s, false) => {
-          if !remove_self_recursive {
-            // Perform a rounds of canonicalization that merge states that are
-            // identical but are also self-recursive
-            remove_self_recursive = true;
-
+      let mut remove_self_recursive = false;
+      states = loop {
+        match canonicalize_states(db, config, states, remove_self_recursive)? {
+          (s, true) => {
+            report.canonical_rounds += 1;
             states = s;
-          } else {
-            break s;
+          }
+          (s, false) => {
+            if !remove_self_recursive {
+              // Perform a rounds of canonicalization that merge states that are
+              // identical but are also self-recursive
+              remove_self_recursive = true;
+
+              states = s;
+            } else {
+              break s;
+            }
           }
         }
+      };
+
+      if !reset {
+        reset = true;
+      } else {
+        break states;
       }
     }
   };

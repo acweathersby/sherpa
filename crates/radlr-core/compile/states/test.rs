@@ -39,7 +39,7 @@ fn build_json_graph() -> RadlrResult<()> {
     // println!("{}", ir.print(&db, true)?);
   }
 
-  let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
+  let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false, &pool)?;
 
   println!("{}", ir.1.to_string());
 
@@ -101,10 +101,10 @@ pub fn peek_hybrid_graph() -> RadlrResult<()> {
     .unwrap()
     .into_internal();
 
-  // #[cfg(not(feature = "wasm-target"))]
-  // let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
-  //
-  // #[cfg(feature = "wasm-target")]
+  #[cfg(not(feature = "wasm-target"))]
+  let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
+
+  #[cfg(feature = "wasm-target")]
   let pool = crate::types::worker_pool::SingleThreadPool {};
 
   let graph = compile_parser_states(db.clone(), config, &pool)?;
@@ -117,7 +117,7 @@ pub fn peek_hybrid_graph() -> RadlrResult<()> {
     println!("{}", ir.print(&db, true)?);
   }
 
-  let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false)?;
+  let ir: (Vec<_>, _) = optimize(&db, &config, ir.1, false, &pool)?;
 
   println!("{}", ir.1.to_string());
 

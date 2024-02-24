@@ -1,5 +1,5 @@
 use super::utils::build_parse_states_from_multi_sources;
-use crate::{compile::ir::optimize, DBNonTermKey, ParseStatesVec, RadlrResult as R, TestPackage};
+use crate::{compile::ir::optimize, worker_pool::SingleThreadPool, DBNonTermKey, ParseStatesVec, RadlrResult as R, TestPackage};
 
 #[test]
 fn basic_optimize_unknown() -> R<()> {
@@ -24,7 +24,9 @@ fn basic_optimize_unknown() -> R<()> {
       //  println!("A: store{:#}\n", state.1.source_string(db.string_store()))
       // }
 
-      let states = optimize::<ParseStatesVec>(&db, &Default::default(), states.into_iter().collect(), false)?;
+      let pool = SingleThreadPool {};
+
+      let states = optimize::<ParseStatesVec, _>(&db, &Default::default(), states.into_iter().collect(), false, &pool)?;
 
       println!("AFTER -------------------");
 

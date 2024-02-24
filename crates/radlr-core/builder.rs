@@ -27,8 +27,7 @@ use crate::{
 // ----------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------
 
-/** Builds and maintains a grammar compilation context */
-
+/// Pre-compiled Grammar compilation context
 pub struct RadlrGrammar {
   j:    Journal,
   soup: std::sync::Arc<GrammarSoup>,
@@ -320,7 +319,7 @@ impl RadlrParseGraph {
         j.flush_reports();
 
         let (states, report): (Vec<_>, _) = if optimize {
-          crate::compile::ir::optimize(db, config, ir_states, optimize_for_debugging)?
+          crate::compile::ir::optimize(db, config, ir_states, optimize_for_debugging, pool)?
         } else {
           sweep(db, config, ir_states, optimize_for_debugging)?
         };
