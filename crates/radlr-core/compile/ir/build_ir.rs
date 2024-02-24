@@ -21,7 +21,7 @@ pub(crate) fn build_ir_concurrent<T: WorkerPool>(
   db: &Arc<ParserDatabase>,
 ) -> RadlrResult<(ParserClassification, ParseStatesMap)> {
   let states = Arc::new(RwLock::new(OrderedMap::new()));
-  let classification = Arc::new(RwLock::new(config.to_classification()));
+  let classification = Arc::new(RwLock::new(ParserClassification::default()));
 
   pool.run(|num_of_threads| {
     let graphs = graphs.clone();
