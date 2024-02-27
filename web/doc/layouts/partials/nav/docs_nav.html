@@ -1,4 +1,0 @@
-<sidebar class="docs-nav">
-    {{ $doc :=  ( .Site.GetPage "section" "docs" ) }}
-    {{ partial "nav/docs_nav_list.html" (dict "host" . "page" $doc ) }}
-</sidebar>
