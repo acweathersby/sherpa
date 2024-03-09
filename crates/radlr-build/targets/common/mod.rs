@@ -81,8 +81,11 @@ pub fn build_parser_source(
   let bin_path = path_relative_from_abs(&binary_out_path, &parser_out_path).unwrap();
   let bin_path = bin_path.intern(s_store);
 
+  let binary = bytecode.bytecode.as_slice();
+
   ctx.set_val("ir_token_lookup", Value::Obj(&states_lu));
   ctx.set_val("binary_path", Value::Str(bin_path));
+  ctx.set_val("binary", Value::Obj(&binary));
   ctx.set_val("nonterm_name_to_id", Value::Obj(&nonterm_name_to_id));
   ctx.set_val("token_id_to_str", Value::Obj(&token_id_to_str));
   ctx.set_val("nonterm_id_to_address", Value::Obj(&nonterm_id_to_address));

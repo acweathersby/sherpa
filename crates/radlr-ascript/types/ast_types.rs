@@ -300,7 +300,7 @@ impl ValueObj for AscriptScalarType {
 }
 
 impl AscriptScalarType {
-  pub fn precedence(&self) -> usize {
+  pub fn precedence(&self) -> u64 {
     use AscriptScalarType::*;
     match self {
       U8(..) => 0,
@@ -324,7 +324,7 @@ impl AscriptScalarType {
     }
   }
 
-  pub fn byte_size(&self) -> usize {
+  pub fn byte_size(&self) -> u64 {
     use AscriptScalarType::*;
     match self {
       Bool(..) | I8(..) | U8(..) => 1,
@@ -515,7 +515,7 @@ impl AscriptAggregateType {
     }
   }
 
-  pub fn scalar_precedence(&self) -> usize {
+  pub fn scalar_precedence(&self) -> u64 {
     match self {
       AscriptAggregateType::Map { key_type, val_type } => key_type.precedence() << 32 | val_type.precedence(),
       AscriptAggregateType::Vec { val_type } => val_type.precedence(),

@@ -1,0 +1,83 @@
+@name={ "ParserDB" }
+@{#![allow(unused)]
+
+/// ### `radlr` Rust Parser
+///
+/// - **GENERATOR**: radlr 1.0.1-beta2
+/// - **SOURCE**: UNDEFINED
+///
+/// #### WARNING WARNING WARNING WARNING
+/// #### WARNING WARNING WARNING WARNING
+/// #### WARNING WARNING WARNING WARNING
+///
+/// This is a generated file. Any changes to this file may be **overwritten
+/// without notice**.
+///
+/// #### GNINRAW GNINRAW GNINRAW GNINRAW
+/// #### GNINRAW GNINRAW GNINRAW GNINRAW
+/// #### GNINRAW GNINRAW GNINRAW GNINRAW
+///
+/// #### License:
+
+/// Copyright (c) 2020-2024 Anthony Weathersby
+///
+/// Permission is hereby granted, free of charge, to any person obtaining a copy
+/// of this software and associated documentation files (the 'Software'), to
+/// deal in the Software without restriction, including without limitation the
+/// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+/// sell copies of the Software, and to permit persons to whom the Software is
+/// furnished to do so, subject to the following conditions:
+///
+/// The above copyright notice and this permission notice shall be included in
+/// all copies or substantial portions of the Software.
+///
+/// THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+/// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+/// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+/// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+/// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+/// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+/// IN THE SOFTWARE
+
+export const BINARY = new Uint8Array([@binary.iter#bytes_here()]);
+
+export const NONTERM_NAME_TO_ID = [@nonterm_name_to_id.iter#nonterm_name_to_id()];
+
+export const TOKEN_ID_TO_STRING = [@token_id_to_str.iter#token_id_to_str()];
+
+export const NONTERM_ID_TO_ADDRESS = [@nonterm_id_to_address.iter#nonterm_id_to_address()];
+
+export const STATE_TO_TOKEN_IDS = [@state_to_token_ids_map.iter#state_to_token_ids_map()];
+
+@token_maps.iter#token_ids()
+
+}
+
+
+#nonterm_name_to_id {
+  ["@_key_", @self],@;
+}
+
+#token_id_to_str {
+  [@_key_,\ `@self` ],@;
+}
+
+#nonterm_id_to_address {
+  [@_key_,\ @self ],@;
+}
+
+#state_to_token_ids_map {
+  [@_key_,\ TOKENS_@self ],@;
+}
+
+#token_ids {
+  #vals {
+    @self,  @;
+  }
+
+  const\ TOKENS_@_key_ = [ @self.iter#vals() ];\n\n
+}
+
+#bytes_here {
+  @self,@;
+}

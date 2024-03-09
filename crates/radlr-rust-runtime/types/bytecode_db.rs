@@ -20,6 +20,7 @@ pub struct BytecodeParserDB {
 }
 
 impl BytecodeParserDB {
+  /// Write the entire bytecode binary as disassembly to the writer.
   pub fn write_binary<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
     w.write_all(&self.bytecode)
   }
@@ -62,6 +63,14 @@ impl RuntimeDatabase for BytecodeParserDB {
 
   fn default_entrypoint(&self) -> EntryPoint {
     self.default_entry
+  }
+
+  fn entrypoints(&self) -> Vec<(String, u32)> {
+    self
+      .nonterm_name_to_id
+      .iter()
+      .map(|(name, id)| (name.to_owned(), self.nonterm_id_to_address.get(id).map(|address| *address).unwrap_or(0)))
+      .collect()
   }
 }
 

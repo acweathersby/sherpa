@@ -117,7 +117,7 @@ pub fn fs_build<'b>(
       targets::typescript::build(&db, local_build_config, parser_config)?;
     }
     TargetLanguage::JavaScript => {
-      todo!("Build Javascript: Not yet supported")
+      targets::javascript::build(&db, local_build_config, parser_config)?;
     }
     TargetLanguage::Cpp => {
       todo!("Build Cpp: Not yet supported")
@@ -144,6 +144,40 @@ fn builds_basic_grammar() -> RadlrResult<()> {
   build_config.lib_out = &output;
 
   fs_build(build_config, Default::default(), TargetLanguage::Rust)?;
+
+  Ok(())
+}
+
+#[test]
+fn builds_basic_grammar_javascript() -> RadlrResult<()> {
+  let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).canonicalize()?;
+
+  let path = root.join("test_grammar.radlr");
+  let output = root.join("build");
+
+  let mut build_config = BuildConfig::new(&path);
+  build_config.source_out = &output;
+  build_config.lib_out = &output;
+
+  fs_build(build_config, Default::default(), TargetLanguage::JavaScript)?;
+
+  Ok(())
+}
+
+#[test]
+fn builds_basic_grammar_javascript_a() -> RadlrResult<()> {
+  let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).canonicalize()?;
+
+  println!("{:?}", root.join("../../grammars/syntax_highlight/syntax_highlight.radlr").canonicalize()?);
+
+  let path = root.join("../../grammars/syntax_highlight/syntax_highlight.radlr").canonicalize()?;
+  let output = root.join("build");
+
+  let mut build_config = BuildConfig::new(&path);
+  build_config.source_out = &output;
+  build_config.lib_out = &output;
+
+  fs_build(build_config, Default::default(), TargetLanguage::JavaScript)?;
 
   Ok(())
 }

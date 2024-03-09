@@ -490,12 +490,12 @@ fn insert_tok_debug(pkg: &mut BytecodeParserDB, tok: Token, add_debug_symbols: b
 const fn bytecode_header() -> [u8; 8] {
   [
     0,
-    ('S' as u8) | 0x80,
-    ('H' as u8) | 0x80,
-    ('E' as u8) | 0x80,
     ('R' as u8) | 0x80,
-    ('P' as u8) | 0x80,
     ('A' as u8) | 0x80,
+    ('D' as u8) | 0x80,
+    (' ' as u8) | 0x80,
+    ('L' as u8) | 0x80,
+    ('R' as u8) | 0x80,
     Op::Fail as u8,
   ]
 }

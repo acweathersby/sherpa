@@ -181,7 +181,8 @@ fn build_states<Pool: WorkerPool>(
                     }
                   } else {
                     sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Relaxed);
-                    panic!("Somehow encountered an orphaned non-terminal");
+                    //panic!("Somehow encountered an orphaned non-terminal");
+                    return Err("Todo: Report critical failure during compilation: {err}".into());
                   }
                 }
               }

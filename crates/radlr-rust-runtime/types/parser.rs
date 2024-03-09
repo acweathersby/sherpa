@@ -53,6 +53,9 @@ pub trait RuntimeDatabase {
   /// Nonterminal declared in the first `EXPORT` statement of the root
   /// grammar, or the first Nonterminal declared in the root grammar.
   fn default_entrypoint(&self) -> EntryPoint;
+
+  /// Returns a list of enterable nonterminals and their respective entry point.
+  fn entrypoints(&self) -> Vec<(String, u32)>;
 }
 
 /// An object capable of instantiating a parser
