@@ -764,10 +764,11 @@ mod test {
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TransitionPair {
-  pub kernel: Item,
-  pub next:   Item,
-  pub sym:    SymbolId,
-  pub prec:   u16,
+  pub kernel:       Item,
+  pub next:         Item,
+  pub sym:          SymbolId,
+  pub allow_assign: bool,
+  pub prec:         u16,
 }
 
 pub type Lookahead = TransitionPair;
@@ -807,6 +808,7 @@ impl From<(Item, Item, GraphType, &ParserDatabase)> for TransitionPair {
     Self {
       kernel: root,
       next,
+      allow_assign: true,
       sym: if next.is_complete() { SymbolId::Default } else { next.sym_id(db) },
       prec: next.precedence(mode, db),
     }

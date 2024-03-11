@@ -52,6 +52,9 @@ pub struct ParserConfig {
   /// Enables using wide data types ( u16 | u32 | u64 | u128 ) to recognize a
   /// sequence of characters.
   pub ALLOW_BYTE_SEQUENCES: bool,
+  /// Enables context sensitive scanners, which will track lookahead symbols in
+  /// their call site. May increase the number scanner states significantly.
+  pub ALLOW_LOOKAHEAD_SCANNERS: bool,
   /// The maximum number of lookead symbols allowed before parser construction
   /// is aborted or a different disambiguating strategy is employed.
   pub max_k: usize,
@@ -89,6 +92,7 @@ impl Default for ParserConfig {
       ALLOW_SCANNER_INLINING: true,
       ALLOW_ANONYMOUS_NONTERM_INLINING: true,
       ALLOW_BYTE_SEQUENCES: false,
+      ALLOW_LOOKAHEAD_SCANNERS: true,
       max_k: usize::MAX,
     }
   }

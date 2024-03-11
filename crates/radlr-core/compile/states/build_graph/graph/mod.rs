@@ -163,9 +163,7 @@ pub enum Origin {
   Goto(StateId),
   __OOS_CLOSURE__,
   __OOS_ROOT__,
-  // Out of scope item that was generated from the
-  // completion of a token non-terminal.
-  ScanCompleteOOS,
+  __OOS_SCANNER_ROOT__(PrecedentDBTerm),
   /// Generated when the a goal non-terminal is completed.
   /// Goal non-terminals are determined by the
   /// root state (`StateId(0)`) kernel items
@@ -215,7 +213,11 @@ impl Origin {
   }
 
   pub fn is_out_of_scope(&self) -> bool {
-    matches!(self, Origin::GoalCompleteOOS | Origin::ScanCompleteOOS | Origin::__OOS_CLOSURE__ | Origin::__OOS_ROOT__)
+    matches!(self, Origin::GoalCompleteOOS | Origin::__OOS_CLOSURE__ | Origin::__OOS_ROOT__ | Origin::__OOS_SCANNER_ROOT__(..))
+  }
+
+  pub fn is_scanner_oos(&self) -> bool {
+    matches!(self, Origin::__OOS_SCANNER_ROOT__(..))
   }
 
   pub fn get_symbol(&self, db: &ParserDatabase) -> SymbolId {
@@ -314,8 +316,51 @@ impl StateType {
 mod node;
 mod scanner;
 
+fn get_follow_symbol_data<'a>(
+  builder: &mut ConcurrentGraphBuilder,
+  node: &'a GraphNode,
+  item: Item,
+  db: &'a ParserDatabase,
+) -> impl Iterator<Item = (Item, PrecedentDBTerm)> + 'a {
+  let mode = GraphType::Parser;
+  match item.get_type(db) {
+    ItemType::Completed(_) => get_follow_internal(builder, node, item, FollowType::AllItems)
+      .0
+      .into_iter()
+      .flat_map(move |i| {
+        if let Some(sym) = i.precedent_db_key_at_sym(mode, db) {
+          vec![(i.to_origin(item.origin), sym)]
+        } else if i.is_nonterm(mode, db) {
+          db.get_closure(&i)
+            .filter_map(|i| {
+              if let Some(sym) = i.precedent_db_key_at_sym(mode, db) {
+                Some((i.to_origin(item.origin), sym))
+              } else {
+                None
+              }
+            })
+            .collect::<Vec<_>>()
+        } else {
+          vec![]
+        }
+      })
+      .collect::<Vec<_>>()
+      .into_iter(),
+    ItemType::NonTerminal(_) => db
+      .get_closure(&item)
+      .filter_map(|item| if let Some(sym) = item.precedent_db_key_at_sym(mode, db) { Some((item, sym)) } else { None })
+      .collect::<Vec<_>>()
+      .into_iter(),
+    ItemType::TokenNonTerminal(..) | ItemType::Terminal(..) => {
+      vec![(item, item.precedent_db_key_at_sym(mode, db).unwrap())].into_iter()
+    }
+  }
+}
+
 fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode) -> Option<ScannerData> {
   let mode = node.graph_type();
+
+  debug_assert_eq!(mode, GraphType::Parser);
 
   let db = builder.db_rc();
   let db = &db;
@@ -328,34 +373,39 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
     skipped.extend(item.get_skipped(db));
 
     if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
-      scanner_data.symbols.insert(sym);
-    } else if item.is_nonterm(mode, db) {
-      for item in db.get_closure(&item) {
-        skipped.extend(item.get_skipped(db));
+      let follow_syms = get_follow_symbol_data(builder, node, item.increment().unwrap(), db)
+        .into_iter()
+        .map(|(_, sym)| sym)
+        .collect::<OrderedSet<_>>();
 
-        if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
-          scanner_data.symbols.insert(sym);
+      scanner_data.symbols.entry(sym).or_default().extend(follow_syms);
+    } else if item.is_nonterm(mode, db) {
+      for i in db.get_closure(&item) {
+        let i = i.to_origin(item.origin).to_origin_state(item.origin_state);
+        if let Some(sym) = i.precedent_db_key_at_sym(mode, db) {
+          skipped.extend(i.get_skipped(db));
+          let follow_syms = get_follow_symbol_data(builder, node, i.increment().unwrap(), db)
+            .into_iter()
+            .map(|(_, sym)| sym)
+            .collect::<OrderedSet<_>>();
+
+          scanner_data.symbols.entry(sym).or_default().extend(follow_syms);
         }
       }
     } else {
-      let (follow, _) = get_follow_internal(builder, node, item.to_complete(), FollowType::AllItems);
-      for item in follow {
-        if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
-          skipped.extend(item.get_skipped(db));
-          scanner_data.symbols.insert(sym);
-        } else if item.is_nonterm(mode, db) {
-          for item in db.get_closure(&item) {
-            skipped.extend(item.get_skipped(db));
-            if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
-              scanner_data.symbols.insert(sym);
-            }
-          }
-        }
+      for (i, sym) in get_follow_symbol_data(builder, node, item.to_complete(), db) {
+        let i = i.to_origin(item.origin).to_origin_state(item.origin_state);
+        let follow_syms = get_follow_symbol_data(builder, node, i.increment().unwrap(), db)
+          .into_iter()
+          .map(|(_, sym)| sym)
+          .collect::<OrderedSet<_>>();
+        skipped.extend(i.get_skipped(db));
+        scanner_data.symbols.entry(sym).or_default().extend(follow_syms);
       }
     }
   }
 
-  let syms = scanner_data.symbols.iter().map(|s| s.tok()).collect::<OrderedSet<_>>();
+  let syms = scanner_data.symbols.iter().map(|s| s.0.tok()).collect::<OrderedSet<_>>();
 
   let is_uncontested_reduce_state = node.kernel.len() == 1 && node.kernel.first().unwrap().is_complete();
 
@@ -377,6 +427,7 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
     //hash_symbols.extend(scanner_data.follow.iter());
     let hash = hash_id_value_u64((&scanner_data.skipped, hash_symbols));
     scanner_data.hash = hash;
+
     Some(scanner_data)
   }
 }
@@ -487,24 +538,25 @@ impl StagedNode {
   pub fn new(gb: &ConcurrentGraphBuilder) -> Self {
     Self {
       node:                    GraphNode {
-        build_state: GraphBuildState::Normal,
-        graph_type:  GraphType::Parser,
-        hash_id:     0,
-        id:          StateId::default(),
-        is_leaf:     false,
-        kernel:      Default::default(),
+        build_state:  GraphBuildState::Normal,
+        graph_type:   GraphType::Parser,
+        hash_id:      0,
+        id:           StateId::default(),
+        is_leaf:      false,
+        kernel:       Default::default(),
+        scanner_root: Default::default(),
         // lookahead_id: 0,
-        predecessor: None,
-        reduce_item: None,
-        follow_hash: Default::default(),
-        sym:         PrecedentSymbol::default(),
-        ty:          StateType::Undefined,
-        symbol_set:  None,
-        db:          gb.db_rc().clone(),
-        is_goto:     false,
-        invalid:     Default::default(),
-        class:       Default::default(),
-        root_data:   RootData {
+        predecessor:  None,
+        reduce_item:  None,
+        follow_hash:  Default::default(),
+        sym:          PrecedentSymbol::default(),
+        ty:           StateType::Undefined,
+        symbol_set:   None,
+        db:           gb.db_rc().clone(),
+        is_goto:      false,
+        invalid:      Default::default(),
+        class:        Default::default(),
+        root_data:    RootData {
           db_key:    DBNonTermKey::default(),
           is_root:   false,
           root_name: Default::default(),
@@ -531,6 +583,11 @@ impl StagedNode {
 
   pub fn to_classification(mut self, class: ParserClassification) -> Self {
     self.node.class |= class;
+    self
+  }
+
+  pub fn add_scanner_root(mut self, scanner: Arc<ScannerData>) -> Self {
+    self.node.scanner_root = Some(scanner);
     self
   }
 
@@ -814,6 +871,31 @@ impl ConcurrentGraphBuilder {
     self.pre_stage.clear()
   }
 
+  pub fn get_oos_scanner_follow(&self, node: &GraphNode, terms: &OrderedSet<PrecedentDBTerm>) -> ItemSet {
+    if let Some(scanner) = node.scanner_root.as_ref() {
+      let mut items = ItemSet::new();
+      let db = self.db();
+      for precendent_term in terms {
+        if let Some(follow_syms) = scanner.symbols.get(&precendent_term) {
+          items.extend(
+            follow_syms
+              .iter()
+              .map(|s| {
+                ItemSet::start_items(db.token(s.tok()).nonterm_id, db)
+                  .to_origin_state(StateId::default())
+                  .to_origin(Origin::__OOS_SCANNER_ROOT__(*precendent_term))
+              })
+              .flatten()
+              .collect::<Items>(),
+          );
+        }
+      }
+      items
+    } else {
+      Default::default()
+    }
+  }
+
   /// Creates or returns a state whose kernel items is the FOLLOW closure of the
   /// givin non-terminal, that is all items that are `_  = b A • b` for some
   /// non-terminal `A`
@@ -900,7 +982,6 @@ impl ConcurrentGraphBuilder {
     let pred_id = pred.map(|d| d.id).unwrap_or_default().0;
 
     // Ensure we are still working on a valid graph.
-
     if let Some(pred) = pred {
       if pred.get_root().invalid.load(std::sync::atomic::Ordering::Acquire) {
         return Ok(u32::MAX);
@@ -932,6 +1013,26 @@ impl ConcurrentGraphBuilder {
         node
       };
 
+      // Insert scanner lookahead items if allowed by config.
+      if state.is_scanner() && parser_config.ALLOW_LOOKAHEAD_SCANNERS {
+        if let Some(pred) = pred {
+          let kernel_items = &mut state.kernel;
+          let mut completed_symbols = OrderedSet::new();
+          for item in kernel_items.iter() {
+            if item.is_complete() {
+              if let Origin::TerminalGoal(t, p) = item.origin {
+                let term: PrecedentDBTerm = (t, p, false).into();
+                completed_symbols.insert(term);
+              }
+            }
+          }
+
+          if !completed_symbols.is_empty() {
+            kernel_items.extend(self.get_oos_scanner_follow(pred, &completed_symbols));
+          }
+        }
+      }
+
       if let Some(finalizer) = finalizer {
         finalizer(&mut state, self, increment_goto);
       }
@@ -942,6 +1043,7 @@ impl ConcurrentGraphBuilder {
 
       if !state.is_scanner() {
         if let Some(scanner_data) = get_state_symbols(self, &state) {
+          let scanner_data = Arc::new(scanner_data);
           let sym_set_id = scanner_data.hash;
 
           if !self.symbol_sets.contains_key(&sym_set_id) {
@@ -952,9 +1054,9 @@ impl ConcurrentGraphBuilder {
               .symbols
               .iter()
               .map(|s| {
-                ItemSet::start_items(db.token(s.tok()).nonterm_id, db)
+                ItemSet::start_items(db.token(s.0.tok()).nonterm_id, db)
                   .to_origin_state(StateId::default())
-                  .to_origin(Origin::TerminalGoal(s.tok(), s.precedence()))
+                  .to_origin(Origin::TerminalGoal(s.0.tok(), s.0.precedence()))
               })
               .chain(scanner_data.skipped.iter().map(|s| {
                 ItemSet::start_items(db.token(*s).nonterm_id, db)
@@ -967,12 +1069,13 @@ impl ConcurrentGraphBuilder {
               .kernel_items(start_items)
               .ty(StateType::Start)
               .graph_ty(GraphType::Scanner)
+              .add_scanner_root(scanner_data.clone())
               .make_root(scanner_data.create_scanner_name(db), DBNonTermKey::default(), 0)
               .id(StateId(sym_set_id as usize, GraphIdSubType::Root));
 
             nodes.push_back(scanner_root);
 
-            self.symbol_sets.insert(sym_set_id, Arc::new(scanner_data));
+            self.symbol_sets.insert(sym_set_id, scanner_data);
           }
 
           state.symbol_set = self.symbol_sets.get(&sym_set_id).cloned();
@@ -1068,6 +1171,7 @@ fn update_root_info(state: &mut GraphNode, pred: Option<&Arc<GraphNode>>) -> boo
       Some(pred) => {
         state.root_data = pred.root_data;
         state.root_data.is_root = false;
+        state.scanner_root = pred.scanner_root.clone();
         false
       }
       None => {

@@ -458,7 +458,7 @@ fn inline_scanners<'db>(
 
   for (_, state) in &mut parse_states {
     if let Some(scanner) = state.get_scanner() {
-      if !scanner.symbols.iter().map(|s| s.tok()).chain(scanner.skipped.iter().cloned()).all(|s| match db.token(s).sym_id {
+      if !scanner.symbols.iter().map(|s| s.0.tok()).chain(scanner.skipped.iter().cloned()).all(|s| match db.token(s).sym_id {
         SymbolId::Token { val, .. } => val.to_str(db.string_store()).as_str().len() == 1,
         sym if sym.is_class() => true,
         SymbolId::Default => true,

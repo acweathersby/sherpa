@@ -86,7 +86,7 @@ fn complete_scan(
   completed_items.sort();
   let follow_hash = create_follow_hash(&completed_items);
 
-  let goals = get_goal_items_from_completed(&completed_items, &pred);
+  let goals = if first.allow_assign { get_goal_items_from_completed(&completed_items, &pred) } else { Default::default() };
   let completes_goal = !goals.is_empty();
   let is_continue = !follow.is_empty();
 
@@ -111,16 +111,19 @@ fn complete_scan(
       state
     }
   } else {
-    debug_assert!(completes_goal);
+    debug_assert!(
+      !first.allow_assign || completes_goal,
+      "Should complete a token goal {}",
+      first.kernel._debug_string_w_db_(gb.db())
+    );
     state.make_leaf()
   }
   .commit(gb);
 }
 
 fn create_follow_hash(completed_items: &Vec<Item>) -> u64 {
-
   let mut hasher = DefaultHasher::new();
-  
+
   for item in completed_items {
     item.index().hash(&mut hasher);
     item.from.hash(&mut hasher);

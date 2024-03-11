@@ -25,23 +25,25 @@ pub(crate) struct RootData {
 }
 
 pub(crate) struct GraphNode {
-  pub id:          StateId,
-  pub class:       ParserClassification,
-  pub build_state: GraphBuildState,
-  pub ty:          StateType,
-  pub sym:         PrecedentSymbol,
-  pub hash_id:     u64,
-  pub kernel:      OrderedSet<Item>,
-  pub follow_hash: Option<u64>,
-  pub graph_type:  GraphType,
-  pub reduce_item: Option<ItemIndex>,
-  pub predecessor: Option<SharedGraphNode>,
-  pub symbol_set:  Option<Arc<ScannerData>>,
-  pub db:          SharedParserDatabase,
-  pub is_leaf:     bool,
-  pub is_goto:     bool,
-  pub root_data:   RootData,
-  pub invalid:     std::sync::atomic::AtomicBool,
+  pub id:           StateId,
+  pub class:        ParserClassification,
+  pub build_state:  GraphBuildState,
+  pub ty:           StateType,
+  pub sym:          PrecedentSymbol,
+  pub hash_id:      u64,
+  pub kernel:       OrderedSet<Item>,
+  pub follow_hash:  Option<u64>,
+  pub graph_type:   GraphType,
+  pub reduce_item:  Option<ItemIndex>,
+  pub predecessor:  Option<SharedGraphNode>,
+  pub symbol_set:   Option<Arc<ScannerData>>,
+  /// Only present on scanner states.
+  pub scanner_root: Option<Arc<ScannerData>>,
+  pub db:           SharedParserDatabase,
+  pub is_leaf:      bool,
+  pub is_goto:      bool,
+  pub root_data:    RootData,
+  pub invalid:      std::sync::atomic::AtomicBool,
 }
 
 impl Hash for GraphNode {
@@ -67,7 +69,7 @@ impl Debug for GraphNode {
     let scanner = self
       .symbol_set
       .as_ref()
-      .map(|s| s.symbols.iter().map(|s| db.sym(s.tok()).debug_string(db)).collect::<Vec<_>>().join(" | "))
+      .map(|s| s.symbols.iter().map(|s| db.sym(s.0.tok()).debug_string(db)).collect::<Vec<_>>().join(" | "))
       .unwrap_or_default();
 
     if self.is_leaf() {
@@ -154,23 +156,24 @@ impl GraphNode {
 
   pub fn to_goto(&self) -> SharedGraphNode {
     Arc::new(Self {
-      is_goto:     true,
-      class:       self.class,
-      build_state: self.build_state,
-      db:          self.db.clone(),
-      graph_type:  self.graph_type,
-      hash_id:     self.hash_id,
-      id:          self.id,
-      invalid:     AtomicBool::new(false),
-      is_leaf:     self.is_leaf,
-      kernel:      self.kernel.clone(),
-      predecessor: None,
-      reduce_item: self.reduce_item.clone(),
-      root_data:   self.root_data,
-      sym:         self.sym,
-      symbol_set:  self.symbol_set.clone(),
-      ty:          self.ty,
-      follow_hash: Default::default(),
+      is_goto:      true,
+      class:        self.class,
+      build_state:  self.build_state,
+      db:           self.db.clone(),
+      graph_type:   self.graph_type,
+      hash_id:      self.hash_id,
+      id:           self.id,
+      invalid:      AtomicBool::new(false),
+      is_leaf:      self.is_leaf,
+      kernel:       self.kernel.clone(),
+      predecessor:  None,
+      reduce_item:  self.reduce_item.clone(),
+      root_data:    self.root_data,
+      sym:          self.sym,
+      symbol_set:   self.symbol_set.clone(),
+      ty:           self.ty,
+      scanner_root: Default::default(),
+      follow_hash:  Default::default(),
     })
   }
 

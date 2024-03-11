@@ -8,13 +8,9 @@ use super::{
     handle_regular_incomplete_items,
   },
   graph::*,
-  items::{get_completed_item_artifacts, merge_occluding_token_items},
+  items::{get_completed_item_artifacts, get_follow, merge_occluding_token_items},
 };
-use crate::{
-  compile::states::build_graph::graph::{GraphBuildState, StateType},
-  types::*,
-  utils::hash_group_btree_iter,
-};
+use crate::{compile::states::build_graph::graph::StateType, types::*, utils::hash_group_btree_iter};
 
 use ParserClassification as PC;
 
@@ -26,7 +22,18 @@ pub(crate) fn handle_kernel_items(
   pred: &SharedGraphNode,
   config: &ParserConfig,
 ) -> RadlrResult<()> {
-  let mut groups = get_firsts(gb, pred)?;
+  let (mut groups) = get_firsts(gb, pred, config)?;
+
+  if pred.is_scanner() && groups.len() == 0 {
+    StagedNode::new(gb)
+      .sym((SymbolId::Default, 0).into())
+      .parent(pred.clone())
+      .ty(StateType::ScannerCompleteOOS)
+      .include_with_goto_state()
+      .commit(gb);
+
+    gb.commit(false, Some(pred), config, true)?;
+  }
 
   let have_lookahead = pred.kernel_items().len() > 1;
 
@@ -64,13 +71,12 @@ pub(crate) fn handle_kernel_items(
 
 /// Insert non-terminal shift actions
 fn handle_cst_actions(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode, config: &ParserConfig) -> RadlrResult<()> {
-  if config.ALLOW_CST_NONTERM_SHIFT && pred.build_state() == GraphBuildState::Normal {
+  if config.ALLOW_CST_NONTERM_SHIFT {
     let d = &gb.db_rc();
     let mode = pred.graph_type();
     for nonterm in pred.kernel_items().iter().filter(|i| i.is_nonterm(mode, d)) {
       StagedNode::new(gb)
         .parent(pred.clone())
-        .build_state(GraphBuildState::Normal)
         .add_kernel_items([nonterm.try_increment()].into_iter())
         .ty(StateType::CSTNodeAccept(nonterm.nonterm_index_at_sym(mode, d).unwrap()))
         .commit(gb);
@@ -82,20 +88,74 @@ fn handle_cst_actions(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode, c
 /// Iterate over each item's closure and collect the terminal transition symbols
 /// of each item. The item's are then catagorized by these nonterminal symbols.
 /// Completed items are catagorized by the default symbol.
-fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode) -> RadlrResult<GroupedFirsts> {
-  let db = gb.db();
-  let iter = pred.kernel_items().iter().flat_map(|k_i| {
-    let basis = k_i.to_origin_state(pred.id());
-    k_i
-      .closure_iter_align_with_lane_split(basis, db)
-      .term_items_iter(pred.is_scanner(), db)
-      .map(|t_item| -> TransitionPair { (*k_i, t_item, pred.graph_type(), db).into() })
-  });
+fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode, config: &ParserConfig) -> RadlrResult<GroupedFirsts> {
+  let mut oos_scan_completed_tokens = OrderedSet::<PrecedentDBTerm>::new();
+  let mut oos_scan_incompletes = OrderedSet::<PrecedentDBTerm>::new();
 
-  let groups = hash_group_btree_iter::<Vec<_>, _, _, _, _>(iter, |_, first| first.sym);
+  let mut too_process_items = Vec::new();
 
-  let groups: OrderedMap<SymbolId, (u16, Vec<TransitionPair>)> =
-    groups.into_iter().map(|(s, g)| (s, (g.iter().map(|f| f.prec).max().unwrap_or_default(), g))).collect();
+  for item in pred.kernel_items() {
+    match item.origin {
+      Origin::__OOS_SCANNER_ROOT__(token) if config.ALLOW_LOOKAHEAD_SCANNERS => {
+        if item.is_complete() {
+          let (follow, _) = get_follow(gb, pred, *item);
+
+          if follow.is_empty() {
+            // No follow items indicates a completed OOS token.
+            oos_scan_completed_tokens.insert(token);
+            too_process_items.push(*item);
+          } else {
+            // Continue parsing with the OOS items scanned
+            oos_scan_incompletes.insert(token);
+            too_process_items.extend(follow);
+          }
+        } else {
+          if !item.is_initial() {
+            oos_scan_incompletes.insert(token);
+          }
+
+          too_process_items.push(*item);
+        }
+      }
+      _ => too_process_items.push(*item),
+    }
+  }
+
+  let iter = too_process_items
+    .iter()
+    .filter(|i| match i.origin {
+      Origin::TerminalGoal(key, prec) => !oos_scan_completed_tokens.contains(&(key, prec, false).into()),
+      _ => true,
+    })
+    .flat_map(|k_i| {
+      let basis = k_i.to_origin_state(pred.id());
+      k_i
+        .closure_iter_align_with_lane_split(basis, gb.db())
+        .term_items_iter(pred.is_scanner(), gb.db())
+        .map(|t_item| -> TransitionPair { (*k_i, t_item, pred.graph_type(), gb.db()).into() })
+    });
+
+  let mut groups: OrderedMap<SymbolId, (u16, Vec<TransitionPair>)> =
+    hash_group_btree_iter::<Vec<_>, _, _, _, _>(iter, |_, first| first.sym)
+      .into_iter()
+      .map(|(s, g)| {
+        (s, (g.iter().map(|f| f.kernel.origin.is_scanner_oos().then_some(0).unwrap_or(f.prec)).max().unwrap_or_default(), g))
+      })
+      .collect();
+
+  if pred.is_scanner() && config.ALLOW_LOOKAHEAD_SCANNERS {
+    if let Some(group) = groups.get_mut(&SymbolId::Default) {
+      for pair in group.1.iter_mut() {
+        let origin = pair.kernel.origin;
+        if let Origin::TerminalGoal(tok, prec) = origin {
+          let prec: PrecedentDBTerm = (tok, prec, false).into();
+          if oos_scan_incompletes.contains(&prec) {
+            pair.allow_assign = false;
+          }
+        }
+      }
+    }
+  }
 
   RadlrResult::Ok(groups)
 }
@@ -110,6 +170,14 @@ fn handle_scanner_items(
   mut groups: GroupedFirsts,
 ) -> RadlrResult<GroupedFirsts> {
   if node.is_scanner() {
+    for (_, (_, pair)) in &mut groups {
+      if pair.iter().any(|p| !p.kernel.is_oos()) {
+        // Remove all oos items from group
+        let filtered_items = pair.iter().filter_map(|i| (!i.kernel.is_oos()).then_some(*i)).collect::<Vec<_>>();
+        *pair = filtered_items;
+      }
+    }
+
     groups = groups
       .into_iter()
       .filter_map(|(s, (p, g))| {
@@ -132,7 +200,7 @@ fn handle_scanner_items(
         }
       })
       .collect();
-    merge_occluding_token_items(groups.clone(), &mut groups);
+    merge_occluding_token_items(groups.clone(), &mut groups, _gb.db());
   }
 
   Ok(groups)

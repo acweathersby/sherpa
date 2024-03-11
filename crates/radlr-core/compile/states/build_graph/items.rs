@@ -102,15 +102,16 @@ pub(crate) fn get_follow_internal(
       } else {
         let closure_state_id = c_item.origin_state;
         let origin = c_item.origin;
+        let is_scanner_oos = origin.is_scanner_oos();
 
         let state = node
           .get_predecessor(c_item.origin_state)
-          .expect(&format!("Node should have a predecessors unless it is a root node {node:?}"));
+          .expect(&format!("Node should have predecessors unless it is a root node {node:?} {}", c_item._debug_string_w_db_(db)));
 
         let closure = state
           .kernel_items()
           .iter()
-          .filter(|k_i| c_item.is_successor_of(k_i))
+          .filter(|k_i| c_item.is_successor_of(k_i) && (!is_scanner_oos || c_item.origin.is_scanner_oos()))
           .flat_map(|k_i| k_i.closure_iter_align(k_i.to_origin(origin).to_origin_state(closure_state_id), db))
           .filter(|i| i.nonterm_index_at_sym(mode, db) == Some(nterm))
           .filter_map(|i| i.increment());
@@ -175,14 +176,20 @@ pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<
 
   fn create_pair(k_i: Item, i: Item, db: &ParserDatabase) -> TransitionPair {
     TransitionPair {
-      kernel: k_i,
-      next:   i,
-      prec:   i.token_precedence(db),
-      sym:    i.sym_id(db),
+      kernel:       k_i,
+      next:         i,
+      allow_assign: true,
+      prec:         i.token_precedence(db),
+      sym:          i.sym_id(db),
     }
   }
 
   for k_i in completed {
+    if k_i.origin.is_scanner_oos() {
+      // Do not create any states for OOS scanner items
+      continue;
+    }
+
     let (f, d) = get_follow_internal(gb, pred, *k_i, FollowType::AllItems);
 
     if f.is_empty() {
@@ -208,9 +215,9 @@ pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items, node: &
   items.iter().filter(|i| node.item_is_goal(**i)).cloned().collect()
 }
 
-pub(super) fn merge_occluding_token_items(from_groups: GroupedFirsts, into_groups: &mut GroupedFirsts) {
+pub(super) fn merge_occluding_token_items(from_groups: GroupedFirsts, into_groups: &mut GroupedFirsts, db: &ParserDatabase) {
   for (sym, group) in into_groups.iter_mut() {
-    let occluding_items = get_set_of_occluding_token_items(sym, group, &from_groups);
+    let occluding_items = get_set_of_occluding_token_items(sym, group, &from_groups, db);
     group.1.extend(occluding_items);
   }
 }
@@ -219,6 +226,7 @@ pub(super) fn get_set_of_occluding_token_items(
   into_sym: &SymbolId,
   into_group: &TransitionGroup,
   groups: &GroupedFirsts,
+  db: &ParserDatabase,
 ) -> Lookaheads {
   let mut occluding = Lookaheads::new();
   let into_prec = into_group.0;

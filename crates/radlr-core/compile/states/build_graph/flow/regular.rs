@@ -75,7 +75,8 @@ pub(crate) fn handle_regular_incomplete_items(
       create_out_of_scope_complete_state(gb, pred, out_of_scope, prec_sym);
     }
     (_, 1..) if ____is_scan____ => {
-      create_out_of_scope_complete_state(gb, pred, out_of_scope, prec_sym);
+      //Don't create any states
+      //create_out_of_scope_complete_state(gb, pred, out_of_scope, prec_sym);
     }
     (1.., 1..) => {
       if !____allow_peek____ {
@@ -85,6 +86,10 @@ pub(crate) fn handle_regular_incomplete_items(
       }
     }
     (len, _) => {
+      if ____is_scan____ && in_scope.clone().all(|i| i.kernel.origin.is_out_of_scope()) {
+        return Ok(());
+      }
+
       if let Some(CreateCallResult { is_kernel, node, _transition_items }) =
         ____allow_rd____.then(|| create_call(gb, pred, config, in_scope.clone(), prec_sym)).flatten()
       {

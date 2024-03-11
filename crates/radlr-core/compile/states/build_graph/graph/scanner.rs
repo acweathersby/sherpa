@@ -1,10 +1,17 @@
-use crate::{proxy::OrderedSet, types::PrecedentDBTerm, CachedString, DBTermKey, IString, ParserDatabase};
+use crate::{
+  proxy::{OrderedMap, OrderedSet},
+  types::PrecedentDBTerm,
+  CachedString,
+  DBTermKey,
+  IString,
+  ParserDatabase,
+};
 
 #[cfg_attr(debug_assertions, derive(Debug))]
 #[derive(Clone, Default, Hash, PartialEq, Eq)]
 pub struct ScannerData {
   pub hash:    u64,
-  pub symbols: OrderedSet<PrecedentDBTerm>,
+  pub symbols: OrderedMap<PrecedentDBTerm, OrderedSet<PrecedentDBTerm>>,
   pub skipped: OrderedSet<DBTermKey>,
 }
 
@@ -19,7 +26,7 @@ impl ScannerData {
 
     println!(
       "ScannerData\nSymbols:{}\nSkipped:{}",
-      symbols.iter().map(|s| db.sym(s.tok()).debug_string(db)).collect::<Vec<_>>().join("\n"),
+      symbols.iter().map(|s| db.sym(s.0.tok()).debug_string(db)).collect::<Vec<_>>().join("\n"),
       skipped.iter().map(|s| db.sym(*s).debug_string(db)).collect::<Vec<_>>().join("\n")
     );
   }

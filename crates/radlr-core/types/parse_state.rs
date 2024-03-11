@@ -463,3 +463,62 @@ fn canonical_hash<T: Hasher>(state_name: &str, hasher: &mut T, node: &ASTNode) -
 
   RadlrResult::Ok(())
 }
+
+#[cfg(test)]
+mod test {
+  use crate::{types::SharedParserDatabase, CachedString, ParserDatabase, RadlrResult};
+
+  use super::ParseState;
+  #[test]
+  fn test() -> RadlrResult<()> {
+    let db = ParserDatabase::default();
+
+    let mut state_1 = ParseState {
+      guid_name: "p_7025763753808982402".intern(db.string_store()),
+      code: "
+match: _TOKEN_ :scan3427693613344594044 {
+  ( 31 /*(*/ ) { shift tok then push g_9969020078665532269 then goto p_11284104927337060128 }
+  ( 41 /*<id_tok>*/ ) { shift tok then reduce 1 symbols to 37 with rule 101 then goto g_9969020078665532269 }
+  ( 76 /*tk:(*/ ) { shift tok then push g_9969020078665532269 then goto p_17844955314339189243 }
+  ( 82 /*[*/ ) { shift tok then push g_9969020078665532269 then goto p_2534118489890514082 }
+  ( 110 /*tk:*/ ) { shift tok then push g_9969020078665532269 then goto p_14435184104245132970 }
+  ( 112 /*c:*/ ) { shift tok then push g_9969020078665532269 then goto p_3047433483962550135 }
+  ( 127 /*$*/ ) { shift tok then reduce 1 symbols to 115 with rule 352 then goto g_9969020078665532269 }
+  ( 129 /*<string_tok>*/ ) { shift tok then reduce 1 symbols to 121 with rule 360 then goto g_9969020078665532269 }
+  ( 135 /*<quote_tok>*/ ) { shift tok then reduce 1 symbols to 130 with rule 371 then goto g_9969020078665532269 }
+  ( 1 /*c:sp*/ | 2 /*c:nl*/ | 6 /*<line>*/ | 7 /*<block>*/ ) { shift-skip tok }
+}
+"
+      .to_string(),
+
+      ..Default::default()
+    };
+
+    let mut state_2 = ParseState {
+      guid_name: "p_17844955314339189243".intern(db.string_store()),
+      code: "
+      match: _TOKEN_ :scan3427693613344594044 {
+        ( 31 /*(*/ ) { shift tok then push g_9969020078665532269 then goto p_11284104927337060128 }
+        ( 41 /*<id_tok>*/ ) { shift tok then reduce 1 symbols to 37 with rule 101 then goto g_9969020078665532269 }
+        ( 76 /*tk:(*/ ) { shift tok then push g_9969020078665532269 then goto p_17844955314339189243 }
+        ( 82 /*[*/ ) { shift tok then push g_9969020078665532269 then goto p_2534118489890514082 }
+        ( 110 /*tk:*/ ) { shift tok then push g_9969020078665532269 then goto p_14435184104245132970 }
+        ( 112 /*c:*/ ) { shift tok then push g_9969020078665532269 then goto p_3047433483962550135 }
+        ( 127 /*$*/ ) { shift tok then reduce 1 symbols to 115 with rule 352 then goto g_9969020078665532269 }
+        ( 129 /*<string_tok>*/ ) { shift tok then reduce 1 symbols to 121 with rule 360 then goto g_9969020078665532269 }
+        ( 135 /*<quote_tok>*/ ) { shift tok then reduce 1 symbols to 130 with rule 371 then goto g_9969020078665532269 }
+        ( 1 /*c:sp*/ | 2 /*c:nl*/ | 6 /*<line>*/ | 7 /*<block>*/ ) { shift-skip tok }
+      }
+"
+      .to_string(),
+      ..Default::default()
+    };
+
+    state_1.build_ast(&db)?;
+    state_2.build_ast(&db)?;
+
+    assert_eq!(state_1.get_canonical_hash(&db, true)?, state_2.get_canonical_hash(&db, true)?);
+
+    Ok(())
+  }
+}

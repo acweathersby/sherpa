@@ -31,6 +31,51 @@ pub fn group_inline() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn lookahead_scanners() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    <> E > tk:(c:sym+) tk:("@@"(+) "%")
+
+  "#],
+    &[("default", "@#$%^@@@@$@@%", true)],
+    ParserConfig::default().use_lookahead_scanners(true),
+  )
+}
+#[test]
+pub fn temp__AAA() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    IGNORE { c:sp }
+
+    <> rules > rule(+)
+    
+    <> rule > nonterm_name^name rule_id? symbol_set(+)^sym
+    
+      :ast { t_Rule, name:str($name), rule_id:$2, sym: $sym }
+    
+    <> nonterm_name > tk:( ( c:num | "-" | "_" | c:id )+ ) 
+    
+      :ast str($1)
+    
+    <> rule_id > "["{:9999} tk:(c:num+) "]" 
+    
+      :ast { t_RuleId, index: u32($2) }
+    
+    <> symbol_set > "{"{:9999} ( tk:num :ast i32($1) )(+",") tk:color_data? "}" :ast { t_SymSet, syms: $2, col:str($3) }
+    
+    <> color_data > ( c:num | "-" | "_" | c:id ) ( c:num | "-" | "_" | c:id | c:sp | c:sym )+
+    
+      :ast str($1)
+    
+    <> num > "-"? c:num+
+
+  "#],
+    &[("default", "A {1 red} ", true)],
+    ParserConfig::default().use_lookahead_scanners(true),
+  )
+}
+
+#[test]
 pub fn grammar_ascript_naked_refs() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r#"
@@ -347,7 +392,7 @@ pub fn construct_recursive_ascent() -> RadlrResult<()> {
     <> Y > 'x' Y?
 "#],
     &[("default", "xd", true), ("default", "xxxxc", true), ("default", "xxxxf", false)],
-    ParserConfig::default().lalr(),
+    ParserConfig::default(),
   )
 }
 
@@ -772,7 +817,7 @@ IGNORE { c:sp c:nl }
 <> tok_identifier > ( c:id | c:num )(+)
 "##],
     &[("default", "<i -t: a>", true), ("default", "<i -test : soLongMySwanSong - store { test } <i> <i>>", true)],
-    ParserConfig::default().enable_fork(true),
+    ParserConfig::default().use_fork_states(true),
   )
 }
 

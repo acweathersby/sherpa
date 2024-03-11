@@ -56,7 +56,7 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> R
     if let Some(scanner) = state.get_scanner() {
       pkg
         .state_to_token_ids_map
-        .insert(state_address, scanner.symbols.iter().filter(|s| !s.is_skipped()).map(|s| s.tok().to_val()).collect());
+        .insert(state_address, scanner.symbols.iter().filter(|s| !s.0.is_skipped()).map(|s| s.0.tok().to_val()).collect());
     }
 
     pkg.state_name_to_address.insert(name.to_string(db.string_store()), state_address);
