@@ -15,13 +15,11 @@
 mod builder;
 mod compile;
 mod grammar;
-mod journal;
 pub mod parser;
 mod types;
 mod utils;
 mod writer;
 
-pub use journal::{Journal, Report, ReportType};
 pub use types::{
   o_to_r,
   proxy,

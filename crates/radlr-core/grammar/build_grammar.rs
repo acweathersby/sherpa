@@ -7,9 +7,8 @@ use super::{
 };
 use crate::{
   grammar::utils::resolve_grammar_path,
-  journal::Journal,
   parser::{ast::escaped_from, NonTerminal_Symbol},
-  types::error_types::{add_invalid_import_source_error, empty_rule_error},
+  types::error_types::{create_empty_rule_error, create_invalid_import_source_error},
   utils::create_u64_hash,
 };
 #[cfg(debug_assertions)]
@@ -78,7 +77,6 @@ pub fn parse_grammar(string_data: &str) -> RadlrResult<Box<Grammar>> {
 
 /// Do an initial preparation of the grammar data.
 pub fn create_grammar_data(
-  j: &mut Journal,
   grammar: Box<Grammar>,
   grammar_path: &PathBuf,
   string_store: &IStringStore,
@@ -103,7 +101,7 @@ pub fn create_grammar_data(
             imports.insert(reference.intern(string_store), GrammarIdentities::from_path(&path, string_store));
           }
           _ => {
-            add_invalid_import_source_error(j, import, &path, &source_dir);
+            create_invalid_import_source_error(import, &path, &source_dir);
             imports.insert(reference.intern(string_store), GrammarIdentities::from_path(&path, string_store));
           }
         }
@@ -170,7 +168,6 @@ pub fn create_grammar_data(
 }
 
 pub fn extract_nonterminals<'a>(
-  _j: &mut Journal,
   g_data: &'a GrammarData,
   s_store: &IStringStore,
 ) -> RadlrResult<(Array<(Box<NonTerminal>, &'a ASTNode)>, Map<IString, Box<NonTerminalTemplate>>, Array<Box<CustomState>>)> {
@@ -410,7 +407,7 @@ pub fn process_nonterminals<'a>(
 
   for rule in &nterm.rules {
     if rule.symbols.is_empty() {
-      return Err(empty_rule_error(rule, s_store));
+      return Err(create_empty_rule_error(rule, s_store));
     }
   }
 
@@ -1095,26 +1092,18 @@ pub fn remove_grammar_mut(id: GrammarId, soup: &mut GrammarSoup) -> RadlrResult<
 mod test {
   use std::path::PathBuf;
 
-  use crate::{
-    journal::{Journal, ReportType},
-    parser::Grammar,
-    types::*,
-  };
+  use crate::{parser::Grammar, types::*};
 
-  fn create_test_data(input: &str) -> RadlrResult<(Journal, Box<Grammar>, PathBuf, IStringStore)> {
-    let mut j = Journal::new();
-    j.set_active_report("test", ReportType::GrammarCompile(Default::default()));
-
-    RadlrResult::Ok((j, super::parse_grammar(input)?, PathBuf::from("/test.sg"), IStringStore::default()))
+  fn create_test_data(input: &str) -> RadlrResult<(Box<Grammar>, PathBuf, IStringStore)> {
+    RadlrResult::Ok((super::parse_grammar(input)?, PathBuf::from("/test.sg"), IStringStore::default()))
   }
   #[test]
   fn extract_nonterminals() -> RadlrResult<()> {
-    let (mut j, g, path, s_store) =
-      create_test_data(r##"  <> test-sweet-home-alabama > c:id{3} | ("test"{2} "2" :ast $1 ) :ast $1 "##)?;
+    let (g, path, s_store) = create_test_data(r##"  <> test-sweet-home-alabama > c:id{3} | ("test"{2} "2" :ast $1 ) :ast $1 "##)?;
 
-    let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
+    let g_data = super::create_grammar_data(g, &path, &s_store)?;
 
-    let (mut nterms, templates, ..) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
+    let (mut nterms, templates, ..) = super::extract_nonterminals(&g_data, &s_store)?;
 
     assert_eq!(nterms.len(), 1);
 
@@ -1128,7 +1117,7 @@ mod test {
 
   #[test]
   fn process_custom_parse_state() -> RadlrResult<()> {
-    let (mut j, g, path, s_store) = create_test_data(
+    let (g, path, s_store) = create_test_data(
       r##" 
       
       test-sweet-home-alabama =!> match: TERMINAL {
@@ -1140,9 +1129,9 @@ mod test {
        "##,
     )?;
 
-    let g_data = super::create_grammar_data(&mut j, g, &path, &s_store)?;
+    let g_data = super::create_grammar_data(g, &path, &s_store)?;
 
-    let (nonterminals, _, mut parse_states) = super::extract_nonterminals(&mut j, &g_data, &s_store)?;
+    let (nonterminals, _, mut parse_states) = super::extract_nonterminals(&g_data, &s_store)?;
 
     assert_eq!(nonterminals.len(), 0);
     assert_eq!(parse_states.len(), 1);

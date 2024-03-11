@@ -20,7 +20,6 @@ use crate::{
     },
     build_states::StateConstructionError,
   },
-  journal::config,
   parser::Shift,
   types::*,
   utils::{create_u64_hash, hash_group_btree_iter, hash_group_btreemap},

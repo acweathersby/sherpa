@@ -13,7 +13,6 @@ use crate::{
   GrammarIdentities,
   GrammarSoup,
   IString,
-  Journal,
   ParseState,
   ParseStatesVec,
   ParserClassification,
@@ -29,14 +28,7 @@ use crate::{
 
 /// Pre-compiled Grammar compilation context
 pub struct RadlrGrammar {
-  j:    Journal,
   soup: std::sync::Arc<GrammarSoup>,
-}
-
-impl JournalReporter for RadlrGrammar {
-  fn get_journal(&self) -> &Journal {
-    &self.j
-  }
 }
 
 fn blend_soups(soup: std::sync::Arc<GrammarSoup>, other: GrammarSoup) -> RadlrResult<()> {
@@ -68,7 +60,7 @@ fn blend_soups(soup: std::sync::Arc<GrammarSoup>, other: GrammarSoup) -> RadlrRe
 
 impl RadlrGrammar {
   pub fn new() -> Self {
-    Self { j: Journal::new(), soup: GrammarSoup::new() }
+    Self { soup: GrammarSoup::new() }
   }
 
   pub fn path_to_id<T: Into<PathBuf>>(&self, path: T) -> GrammarIdentities {
@@ -87,15 +79,10 @@ impl RadlrGrammar {
 
   /// Adds a grammar source to the soup
   pub fn add_source<T: Into<PathBuf>>(&mut self, path: T) -> RadlrResult<&mut Self> {
+    let mut errors = Vec::new();
     let id = self.path_to_id(path);
 
-    let RadlrGrammar { soup, j } = self;
-
-    j.flush_reports();
-
-    let mut j = j.transfer();
-
-    j.set_active_report("add_source", crate::ReportType::Any);
+    let RadlrGrammar { soup } = self;
 
     let mut queue = Queue::from_iter([id]);
 
@@ -103,7 +90,7 @@ impl RadlrGrammar {
 
     while let Some(id) = queue.pop_front() {
       if known_imports.insert(id.guid) {
-        match load_grammar(&mut j.transfer(), id, soup.string_store.clone()) {
+        match load_grammar(id, soup.string_store.clone()) {
           Ok((new_soup, new_imports)) => {
             blend_soups(
               soup.clone(),
@@ -111,31 +98,32 @@ impl RadlrGrammar {
             )?;
             queue.append(&mut new_imports.into_iter().collect());
           }
-          Err(err) => j.report_mut().add_error(err),
+          Err(err) => errors.extend(err.flatten()),
         }
       }
     }
 
-    j.report_mut().wrap_ok_or_return_errors(self)
+    if errors.len() > 1 {
+      Err(RadlrError::Multi(errors))
+    } else {
+      Ok(self)
+    }
   }
 
   /// Adds a grammar to the soup from a source string
   pub fn add_source_from_string_with_imports<T: Into<PathBuf>>(&mut self, source: &str, grammar_path: T) -> RadlrResult<()> {
+    let mut errors = Vec::new();
+
     let path: PathBuf = grammar_path.into();
+
     let id = self.path_to_id(&path);
 
-    let RadlrGrammar { soup, j } = self;
-
-    j.flush_reports();
-
-    let mut j = j.transfer();
-
-    j.set_active_report("add_source", crate::ReportType::Any);
+    let RadlrGrammar { soup } = self;
 
     let mut known_imports = Set::from_iter(soup.grammar_headers.read().map_err(|e| RadlrError::from(e))?.iter().map(|i| *i.0));
 
     if !known_imports.contains(&id.guid) {
-      match compile_grammar_from_str(&mut j.transfer(), source, path.to_owned(), soup.string_store.clone()) {
+      match compile_grammar_from_str(source, path.to_owned(), soup.string_store.clone()) {
         Ok((soup, ids)) => {
           known_imports.insert(id.guid);
 
@@ -143,7 +131,7 @@ impl RadlrGrammar {
 
           while let Some(id) = queue.pop_front() {
             if known_imports.insert(id.guid) {
-              match load_grammar(&mut j.transfer(), id, soup.string_store.clone()) {
+              match load_grammar(id, soup.string_store.clone()) {
                 Ok((new_soup, new_imports)) => {
                   blend_soups(
                     soup.clone(),
@@ -151,16 +139,20 @@ impl RadlrGrammar {
                   )?;
                   queue.append(&mut new_imports.into_iter().collect());
                 }
-                Err(err) => j.report_mut().add_error(err),
+                Err(err) => errors.extend(err.flatten()),
               }
             }
           }
         }
-        Err(err) => j.report_mut().add_error(err),
+        Err(err) => errors.extend(err.flatten()),
       }
     }
 
-    j.report_mut().wrap_ok_or_return_errors(())
+    if errors.len() > 1 {
+      Err(RadlrError::Multi(errors))
+    } else {
+      Ok(())
+    }
   }
 
   pub fn add_source_from_string<T: Into<PathBuf>>(
@@ -169,62 +161,53 @@ impl RadlrGrammar {
     grammar_path: T,
     replace: bool,
   ) -> RadlrResult<&mut Self> {
+    let mut errors = Vec::new();
     let path: PathBuf = grammar_path.into();
     let id = self.path_to_id(&path);
 
-    let RadlrGrammar { soup, j } = self;
-
-    j.flush_reports();
-
-    let mut j = j.transfer();
-
-    j.set_active_report("add_source", crate::ReportType::Any);
+    let RadlrGrammar { soup } = self;
 
     let known_imports = Set::from_iter(soup.grammar_headers.read().map_err(|e| RadlrError::from(e))?.iter().map(|i| *i.0));
 
     if replace || !known_imports.contains(&id.guid) {
-      match compile_grammar_from_str(&mut j.transfer(), source, path.to_owned(), soup.string_store.clone()) {
+      match compile_grammar_from_str(source, path.to_owned(), soup.string_store.clone()) {
         Ok((new_soup, _)) => {
           blend_soups(soup.clone(), std::sync::Arc::into_inner(new_soup).expect("There should be only one reference for this"))?;
         }
-        Err(err) => j.report_mut().add_error(err),
+        Err(err) => errors.extend(err.flatten()),
       };
     }
 
-    j.report_mut().wrap_ok_or_return_errors(self)
+    if errors.len() > 1 {
+      Err(RadlrError::Multi(errors))
+    } else {
+      Ok(self)
+    }
   }
 
   pub fn remove_grammar<T: Into<PathBuf>>(self, root_grammar: T) -> RadlrResult<RadlrGrammar> {
     let path: PathBuf = root_grammar.into();
     let id = self.path_to_id(&path);
 
-    let RadlrGrammar { soup, j } = self;
+    let RadlrGrammar { soup } = self;
 
     let mut soup = o_to_r(std::sync::Arc::into_inner(soup), "could not get exclusive access to soup")?;
 
     remove_grammar_mut(id.guid, &mut soup)?;
 
-    Ok(Self { j, soup: std::sync::Arc::new(soup) })
+    Ok(Self { soup: std::sync::Arc::new(soup) })
   }
 
   pub fn build_db<T: Into<PathBuf>>(&self, root_grammar: T, config: ParserConfig) -> RadlrResult<RadlrDatabase> {
-    let RadlrGrammar { soup, j } = self;
+    let RadlrGrammar { soup } = self;
     let path: PathBuf = root_grammar.into();
 
     let id = GrammarIdentities::from_path(&path, &soup.string_store);
 
-    let db = build_compile_db(j.transfer(), id, soup, &config)?;
-
-    if !db.is_valid() {
-      let mut j = j.transfer();
-      j.flush_reports();
-      let errors = j.extract_errors();
-      if errors.len() > 0 {
-        return RadlrResult::Err(RadlrError::Multi(errors));
-      }
+    match build_compile_db(id, soup, &config) {
+      Err(errors) => Err(errors),
+      Ok(db) => Ok(RadlrDatabase { db: std::sync::Arc::new(db) }),
     }
-
-    Ok(RadlrDatabase { j: j.transfer(), db: std::sync::Arc::new(db) })
   }
 }
 
@@ -236,14 +219,7 @@ impl RadlrGrammar {
 /// into parsers
 #[derive(Clone)]
 pub struct RadlrDatabase {
-  j:  Journal,
   db: SharedParserDatabase,
-}
-
-impl JournalReporter for RadlrDatabase {
-  fn get_journal(&self) -> &Journal {
-    &self.j
-  }
 }
 
 impl RadlrDatabase {
@@ -259,14 +235,10 @@ impl RadlrDatabase {
 
   /// Constructs parser and scanner graphs for this variant of the grammar.
   pub fn build_states<Pool: WorkerPool>(&self, config: ParserConfig, pool: &Pool) -> RadlrResult<RadlrParseGraph> {
-    let RadlrDatabase { j, db } = self;
+    let RadlrDatabase { db } = self;
 
     match crate::compile::states::build_states::compile_parser_states(db.clone(), config, pool) {
-      Ok(graph) => {
-        j.transfer().flush_reports();
-
-        Ok(RadlrParseGraph { graph, j: j.transfer(), db: db.clone(), config })
-      }
+      Ok(graph) => Ok(RadlrParseGraph { graph, db: db.clone(), config }),
       Err(err) => {
         let mut errors = err.flatten();
         if errors.len() > 1 {
@@ -293,16 +265,9 @@ impl RadlrDatabase {
 
 /// Comprised of the parser and scanner graphs for the given grammar
 pub struct RadlrParseGraph {
-  pub(crate) j:      Journal,
   pub(crate) db:     SharedParserDatabase,
   pub(crate) config: ParserConfig,
   pub(crate) graph:  std::sync::Arc<Graphs>,
-}
-
-impl JournalReporter for RadlrParseGraph {
-  fn get_journal(&self) -> &Journal {
-    &self.j
-  }
 }
 
 impl RadlrParseGraph {
@@ -315,8 +280,6 @@ impl RadlrParseGraph {
     match crate::compile::ir::build_ir_concurrent(pool, self.graph.clone(), self.config, &self.db) {
       Ok((classification, ir_states)) => {
         let Self { config, db, .. } = self;
-        let mut j = self.j.transfer();
-        j.flush_reports();
 
         let (states, report): (Vec<_>, _) = if optimize {
           crate::compile::ir::optimize(db, config, ir_states, optimize_for_debugging, pool)?
@@ -331,7 +294,6 @@ impl RadlrParseGraph {
           states,
           is_optimized: optimize,
           report,
-          j,
         })
       }
       Err(err) => {
@@ -365,19 +327,12 @@ impl RadlrParseGraph {
 // ----------------------------------------------------------------------------------------
 
 pub struct RadlrIRParser {
-  j:              Journal,
   db:             SharedParserDatabase,
   config:         ParserConfig,
   states:         ParseStatesVec,
   classification: ParserClassification,
   is_optimized:   bool,
   pub report:     OptimizationReport,
-}
-
-impl JournalReporter for RadlrIRParser {
-  fn get_journal(&self) -> &Journal {
-    &self.j
-  }
 }
 
 impl ParserStore for RadlrIRParser {
@@ -429,18 +384,11 @@ pub fn empty_source_path() -> RadlrResult<()> {
 }
 
 pub struct TestPackage {
-  pub journal:        Journal,
   pub states:         ParseStatesVec,
   pub db:             SharedParserDatabase,
   pub config:         ParserConfig,
   pub report:         OptimizationReport,
   pub classification: ParserClassification,
-}
-
-impl JournalReporter for TestPackage {
-  fn get_journal(&self) -> &Journal {
-    &self.journal
-  }
 }
 
 impl ParserStore for TestPackage {
@@ -473,7 +421,6 @@ impl From<RadlrIRParser> for TestPackage {
   fn from(value: RadlrIRParser) -> Self {
     TestPackage {
       config:         value.config,
-      journal:        value.j.transfer(),
       states:         value.states.into_iter().collect(),
       db:             value.db,
       report:         value.report,
@@ -487,13 +434,12 @@ impl From<RadlrIRParser> for TestPackage {
 // ----------------------------------------------------------------------------------------
 
 pub struct DBPackage {
-  pub journal: Journal,
-  pub db:      SharedParserDatabase,
+  pub db: SharedParserDatabase,
 }
 
 impl From<RadlrDatabase> for DBPackage {
   fn from(value: RadlrDatabase) -> Self {
-    DBPackage { journal: value.j.transfer(), db: value.db.clone() }
+    DBPackage { db: value.db.clone() }
   }
 }
 
@@ -543,19 +489,7 @@ pub fn build_with_optimized_states() -> RadlrResult<()> {
 // ----------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------
 
-pub trait JournalReporter {
-  fn get_journal(&self) -> &Journal;
-
-  fn dump_errors(&self) -> bool {
-    let mut j = self.get_journal().transfer();
-
-    j.flush_reports();
-
-    j.debug_error_report()
-  }
-}
-
-pub trait ParserStore: JournalReporter {
+pub trait ParserStore {
   fn get_states(&self) -> impl Iterator<Item = (IString, &ParseState)>;
   fn get_db(&self) -> &ParserDatabase;
   fn get_classification(&self) -> ParserClassification;

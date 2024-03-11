@@ -1,19 +1,18 @@
 use super::{super::*, GrammarIdentities};
-use crate::{journal::Journal, types::*};
+use crate::types::*;
 use radlr_rust_runtime::types::Token;
 use std::path::PathBuf;
 
 use ErrorClass::*;
 
 /// This error occurs when source of an imported grammar cannot be found.
-pub(crate) fn add_invalid_import_source_error(
-  j: &mut Journal,
+pub(crate) fn create_invalid_import_source_error(
   import: &parser::Import,
   import_path: &PathBuf,
   base_path: &PathBuf,
-) {
+) -> RadlrError {
   let parser::Import { tok, .. } = import;
-  j.report_mut().add_error(RadlrError::SourceError {
+  RadlrError::SourceError {
     loc:        tok.clone(),
     path:       import_path.to_str().unwrap().to_string(),
     id:         (Imports, 0, "invalid-import-source").into(),
@@ -21,16 +20,15 @@ pub(crate) fn add_invalid_import_source_error(
     inline_msg: "source not found".to_string(),
     severity:   RadlrErrorSeverity::Critical,
     ps_msg:     Default::default(),
-  });
+  }
 }
 
 pub fn _create_missing_import_name_error(
-  j: &mut Journal,
   g: &GrammarIdentities,
   s_store: &IStringStore,
   nterm_import_sym: &parser::NonTerminal_Import_Symbol,
-) {
-  j.report_mut().add_error(RadlrError::SourceError {
+) -> RadlrError {
+  RadlrError::SourceError {
     loc:        nterm_import_sym.tok.clone(),
     path:       g.path.to_string(s_store).into(),
     id:         (Imports, 1, "nonexistent-import-non-terminal").into(),
@@ -41,11 +39,11 @@ pub fn _create_missing_import_name_error(
     inline_msg: "Could not locate this non-terminal".to_string(),
     ps_msg:     Default::default(),
     severity:   RadlrErrorSeverity::Critical,
-  });
+  }
 }
 
-pub fn _add_missing_append_host_error(j: &mut Journal, name: String, rules: &[Rule]) {
-  j.report_mut().add_error(RadlrError::SourceError {
+pub fn _create_missing_append_host_error(name: String, rules: &[Rule]) -> RadlrError {
+  RadlrError::SourceError {
     id:         (Imports, 2, "missing-append-host").into(),
     msg:        format!(
       "
@@ -62,17 +60,16 @@ expression, e.g: `<> {0} > symA ... symN`
     path:       Default::default(),
     severity:   RadlrErrorSeverity::Critical,
     ps_msg:     Default::default(),
-  })
+  }
 }
 
-pub fn _add_non_existent_import_nonterminal_error(
-  j: &mut Journal,
+pub fn _create_non_existent_import_nonterminal_error(
   import_id: &GrammarIdentities,
   host_id: &GrammarIdentities,
   tok: Token,
   s_store: &IStringStore,
-) {
-  j.report_mut().add_error(RadlrError::SourceError {
+) -> RadlrError {
+  RadlrError::SourceError {
     id:         (Imports, 3, "nonexistent-import-non-terminal").into(),
     msg:        format!("Could not locate non-terminal in imported grammar {}", import_id.path.to_string(s_store)),
     inline_msg: "could not find".to_string(),
@@ -80,19 +77,18 @@ pub fn _add_non_existent_import_nonterminal_error(
     path:       host_id.path.to_string(s_store).into(),
     severity:   RadlrErrorSeverity::Critical,
     ps_msg:     Default::default(),
-  })
+  }
 }
 // #############################################################################
 // #################### Grammar Errors
 
-pub fn _add_nonterminal_redefinition_error(
-  j: &mut Journal,
+pub fn _create_nonterminal_redefinition_error(
   grammar_path: &PathBuf,
   old_loc: Token,
   new_loc: Token,
   plain_name: &str,
-) {
-  j.report_mut().add_error(RadlrError::SourcesError {
+) -> RadlrError {
+  RadlrError::SourcesError {
     id:       (Grammar, 0, "non-terminal-redefinition").into(),
     sources:  vec![
       (old_loc, grammar_path.clone(), format!("First definition of {} occurs here.", plain_name)),
@@ -101,11 +97,11 @@ pub fn _add_nonterminal_redefinition_error(
     msg:      format!("Redefinition of {} is not allowed", plain_name),
     ps_msg:   Default::default(),
     severity: RadlrErrorSeverity::Critical,
-  });
+  }
 }
 
-pub fn _add_missing_nonterminal_definition_error(j: &mut Journal, tok: Token, g_id: &GrammarIdentities, s_store: &IStringStore) {
-  j.report_mut().add_error(RadlrError::SourceError {
+pub fn _create_missing_nonterminal_definition_error(tok: Token, g_id: &GrammarIdentities, s_store: &IStringStore) -> RadlrError {
+  RadlrError::SourceError {
     id:         (Grammar, 1, "missing-non-terminal-definition").into(),
     msg:        format!("Could not find a definition for this non-terminal."),
     inline_msg: "could not find".to_string(),
@@ -113,10 +109,10 @@ pub fn _add_missing_nonterminal_definition_error(j: &mut Journal, tok: Token, g_
     path:       g_id.path.to_string(s_store).into(),
     severity:   RadlrErrorSeverity::Critical,
     ps_msg:     "[B]".to_string(),
-  });
+  }
 }
 
-pub fn empty_rule_error(rule: &Rule, s_store: &IStringStore) -> RadlrError {
+pub fn create_empty_rule_error(rule: &Rule, s_store: &IStringStore) -> RadlrError {
   RadlrError::SourceError {
     loc:        rule.tok.clone(),
     path:       rule.g_id.path.to_string(s_store),
@@ -128,7 +124,7 @@ pub fn empty_rule_error(rule: &Rule, s_store: &IStringStore) -> RadlrError {
   }
 }
 
-pub fn invalid_nonterminal_alias(loc: Token, path: IString, s_store: &IStringStore) -> RadlrError {
+pub fn create_invalid_nonterminal_alias(loc: Token, path: IString, s_store: &IStringStore) -> RadlrError {
   RadlrError::SourceError {
     loc,
     path: path.to_string(s_store),
@@ -142,7 +138,7 @@ pub fn invalid_nonterminal_alias(loc: Token, path: IString, s_store: &IStringSto
 
 /// Emitted if the definition of a non-terminal (its production rules) could not
 /// be found.
-pub fn missing_nonterminal_rules(loc: Token, path: IString, s_store: &IStringStore) -> RadlrError {
+pub fn create_missing_nonterminal_rules(loc: Token, path: IString, s_store: &IStringStore) -> RadlrError {
   RadlrError::SourceError {
     loc,
     path: path.to_string(s_store),

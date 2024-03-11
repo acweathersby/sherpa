@@ -1,10 +1,9 @@
 use radlr_rust_runtime::types::{Token, TokenRange};
 
 use crate::{
-  journal::Journal,
   parser,
   types::{
-    error_types::{invalid_nonterminal_alias, missing_nonterminal_rules},
+    error_types::{create_invalid_nonterminal_alias, create_missing_nonterminal_rules},
     *,
   },
   utils::{create_u64_hash, hash_group_btreemap},
@@ -14,7 +13,6 @@ use std::collections::{btree_map, VecDeque};
 type TrackedNonterm = (Token, IString, NonTermId);
 
 pub(crate) fn build_compile_db<'a>(
-  mut j: Journal,
   g: GrammarIdentities,
   gs: &'a GrammarSoup,
   config: &ParserConfig,
@@ -22,9 +20,7 @@ pub(crate) fn build_compile_db<'a>(
   // Gain read access to all parts of the GrammarCloud.
   // We don't want anything changing during these next steps.
 
-  j.set_active_report("Database Compile", crate::ReportType::GrammarCompile(g.guid));
-
-  let mut is_valid = true;
+  let mut errors = Vec::new();
 
   let GrammarSoup {
     grammar_headers, nonterminals, string_store: s_store, custom_states, ..
@@ -191,19 +187,17 @@ pub(crate) fn build_compile_db<'a>(
           add_custom_state(state.state.clone(), c_states);
         }
         (Some(_), Some(_)) => {
-          j.report_mut().add_error(invalid_nonterminal_alias(loc, path, s_store));
-          is_valid = false;
+          errors.push(create_invalid_nonterminal_alias(loc, path, s_store));
         }
         _ => {
-          j.report_mut().add_error(missing_nonterminal_rules(loc, path, s_store));
-          is_valid = false;
+          errors.push(create_missing_nonterminal_rules(loc, path, s_store));
         }
       };
     }
   }
 
-  if !is_valid {
-    return Ok(ParserDatabase::default());
+  if !errors.is_empty() {
+    return Err(RadlrError::Multi(errors));
   }
 
   // Generate token nonterminals -----------------------------------------------
@@ -217,8 +211,7 @@ pub(crate) fn build_compile_db<'a>(
               Some((internal_id, inline_rules(&nterm.rules, &get_inline_candidates(nterm), config, true), nterm.guid_name))
             }
             None => {
-              j.report_mut().add_error(missing_nonterminal_rules(loc, path, s_store));
-              is_valid = false;
+              errors.push(create_missing_nonterminal_rules(loc, path, s_store));
               None
             }
           }
@@ -234,8 +227,7 @@ pub(crate) fn build_compile_db<'a>(
               ))
             }
             None => {
-              j.report_mut().add_error(missing_nonterminal_rules(loc, path, s_store));
-              is_valid = false;
+              errors.push(create_missing_nonterminal_rules(loc, path, s_store));
               None
             }
           }
@@ -310,8 +302,8 @@ pub(crate) fn build_compile_db<'a>(
     }
   }
 
-  if !is_valid {
-    return Ok(ParserDatabase::default());
+  if !errors.is_empty() {
+    return Err(RadlrError::Multi(errors));
   }
 
   // Generate scanner nonterminals and symbol indices --------------------------
@@ -494,7 +486,7 @@ pub(crate) fn build_compile_db<'a>(
     entry_points,
     s_store.clone(),
     c_states_owned,
-    is_valid,
+    errors.is_empty(),
   );
 
   RadlrResult::Ok(db)

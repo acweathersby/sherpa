@@ -1,16 +1,13 @@
 use crate::{
-  journal::config::DebugConfig,
   types::ParserConfig,
   DBPackage,
   GrammarSoup,
-  Journal,
   ParseStatesMap,
   ParserDatabase,
   RadlrDatabase,
   RadlrGrammar,
   RadlrIRParser,
   RadlrResult,
-  ReportType,
   TestPackage,
 };
 use std::{path::PathBuf, str::FromStr};
@@ -63,6 +60,7 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
 
   #[cfg(feature = "wasm-target")]
+  let pool = crate::types::worker_pool::SingleThreadPool {};
   let pool = crate::types::worker_pool::SingleThreadPool {};
 
   for (index, source) in sources.iter().enumerate() {
