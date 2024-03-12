@@ -52,7 +52,7 @@ fn build_json_graph() -> RadlrResult<()> {
 
 #[test]
 pub fn peek_hybrid_graph() -> RadlrResult<()> {
-  let mut config = ParserConfig::default().enable_fork(false);
+  let mut config = ParserConfig::default().use_fork_states(false);
   config.ALLOW_BYTE_SEQUENCES = true;
   config.ALLOW_SCANNER_INLINING = false;
   let db = RadlrGrammar::new()

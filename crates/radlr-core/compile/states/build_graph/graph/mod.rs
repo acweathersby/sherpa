@@ -126,15 +126,6 @@ impl StateId {
   }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
-pub enum GraphBuildState {
-  #[default]
-  Normal,
-  NormalGoto,
-  Leaf,
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Hash, Default)]
 pub enum GraphType {
   /// Classic Recursive Descent Ascent with unlimited lookahead.
@@ -538,7 +529,6 @@ impl StagedNode {
   pub fn new(gb: &ConcurrentGraphBuilder) -> Self {
     Self {
       node:                    GraphNode {
-        build_state:  GraphBuildState::Normal,
         graph_type:   GraphType::Parser,
         hash_id:      0,
         id:           StateId::default(),
@@ -603,11 +593,6 @@ impl StagedNode {
 
   pub fn set_follow_hash(mut self, hash: u64) -> Self {
     self.node.follow_hash = Some(hash);
-    self
-  }
-
-  pub fn build_state(mut self, build_state: GraphBuildState) -> Self {
-    self.node.build_state = build_state;
     self
   }
 
@@ -913,12 +898,7 @@ impl ConcurrentGraphBuilder {
         .map(|i| i.to_origin(Origin::__OOS_CLOSURE__).to_origin_state(item_id))
         .filter_map(|i| i.increment());
 
-      let pending = StagedNode::new(&self)
-        .id(id)
-        .ty(StateType::_OosClosure_)
-        .build_state(GraphBuildState::Normal)
-        .kernel_items(closure)
-        .sym(Default::default());
+      let pending = StagedNode::new(&self).id(id).ty(StateType::_OosClosure_).kernel_items(closure).sym(Default::default());
 
       let mut state = pending.node;
 
@@ -953,7 +933,6 @@ impl ConcurrentGraphBuilder {
       let pending = StagedNode::new(&self)
         .id(id)
         .ty(StateType::_OosClosure_)
-        .build_state(GraphBuildState::Normal)
         .kernel_items(closure)
         .parent(self.get_state(origin).unwrap())
         .sym(Default::default());
@@ -1013,7 +992,7 @@ impl ConcurrentGraphBuilder {
         node
       };
 
-      // Insert scanner lookahead items if allowed by config.
+      // Insert scanner lookahead items if allowed by config
       if state.is_scanner() && parser_config.ALLOW_LOOKAHEAD_SCANNERS {
         if let Some(pred) = pred {
           let kernel_items = &mut state.kernel;

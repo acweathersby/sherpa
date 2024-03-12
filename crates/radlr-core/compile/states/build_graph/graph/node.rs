@@ -1,5 +1,5 @@
 use crate::{
-  compile::states::build_graph::graph::{GraphBuildState, GraphType, StateId, StateType},
+  compile::states::build_graph::graph::{GraphType, StateId, StateType},
   proxy::OrderedSet,
   types::{ItemIndex, ItemSet, PrecedentSymbol, SharedParserDatabase},
   DBNonTermKey,
@@ -27,7 +27,6 @@ pub(crate) struct RootData {
 pub(crate) struct GraphNode {
   pub id:           StateId,
   pub class:        ParserClassification,
-  pub build_state:  GraphBuildState,
   pub ty:           StateType,
   pub sym:          PrecedentSymbol,
   pub hash_id:      u64,
@@ -158,7 +157,6 @@ impl GraphNode {
     Arc::new(Self {
       is_goto:      true,
       class:        self.class,
-      build_state:  self.build_state,
       db:           self.db.clone(),
       graph_type:   self.graph_type,
       hash_id:      self.hash_id,
@@ -204,10 +202,6 @@ impl GraphNode {
 
   pub fn is_leaf(&self) -> bool {
     self.is_leaf
-  }
-
-  pub fn build_state(&self) -> GraphBuildState {
-    self.build_state
   }
 
   pub fn graph_type(&self) -> GraphType {

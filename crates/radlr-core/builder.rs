@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-  compile::{ir::sweep, states::build_graph::graph::Graphs},
+  compile::states::build_graph::graph::Graphs,
   grammar::{build_compile_db, compile_grammar_from_str, load_grammar, remove_grammar_mut, utils::resolve_grammar_path},
   o_to_r,
   proxy::{Array, DeduplicateIterator, Queue, Set},
@@ -284,7 +284,7 @@ impl RadlrParseGraph {
         let (states, report): (Vec<_>, _) = if optimize {
           crate::compile::ir::optimize(db, config, ir_states, optimize_for_debugging, pool)?
         } else {
-          sweep(db, config, ir_states, optimize_for_debugging)?
+          crate::compile::ir::sweep(db, config, ir_states, optimize_for_debugging)?
         };
 
         Ok(RadlrIRParser {
@@ -296,6 +296,7 @@ impl RadlrParseGraph {
           report,
         })
       }
+
       Err(err) => {
         let mut errors = err.flatten();
         if errors.len() > 1 {

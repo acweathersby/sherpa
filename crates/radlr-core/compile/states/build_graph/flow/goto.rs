@@ -1,6 +1,6 @@
 use super::super::graph::*;
 use crate::{
-  compile::states::build_graph::graph::{GraphBuildState, Origin, StateType},
+  compile::states::build_graph::graph::{Origin, StateType},
   types::*,
   utils::hash_group_btreemap,
 };
@@ -117,7 +117,6 @@ pub(crate) fn handle_nonterminal_shift(
     // a completion of the gotos kernel items.
 
     StagedNode::new(gb)
-      .build_state(GraphBuildState::NormalGoto)
       .parent(pred.clone())
       .sym((target_nonterm.to_sym(), 0).into())
       .ty(nterm_shift_type)
@@ -129,7 +128,6 @@ pub(crate) fn handle_nonterminal_shift(
             // Add a default action that pops the current goto off the
             // state stack.
             vec![StagedNode::new(b)
-              .build_state(GraphBuildState::Leaf)
               .parent(s.clone())
               .sym((SymbolId::Default, 0).into())
               .ty(StateType::NonTermCompleteOOS)
@@ -147,7 +145,6 @@ pub(crate) fn handle_nonterminal_shift(
   // The remaining non-terminals are comprised of accept items for this state.
   for nonterm_id in kernel_nterm_ids {
     StagedNode::new(gb)
-      .build_state(GraphBuildState::Leaf)
       .parent(pred.clone())
       .sym((nonterm_id.to_sym(), 0).into())
       .ty(StateType::NonTerminalComplete)

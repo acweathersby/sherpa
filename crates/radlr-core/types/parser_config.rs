@@ -5,23 +5,19 @@
 #[derive(Debug)]
 pub struct ParserConfig {
   /// When enable, recursive descent style `Call` states will be generated
-  pub ALLOW_CALLS:   bool,
+  pub ALLOW_CALLS: bool,
   /// When enable, LR style states may be produced. In general, this
   /// allows more advanced grammar constructs to be parsed, such
   /// as left recursive rules.
   ///
   /// When disabled, grammars with rules that require LR style parse states
   /// will be rejected, and relevant errors will be reported.
-  pub ALLOW_LR:      bool,
+  pub ALLOW_LR: bool,
   /// When enabled, unrestricted lookahead states states will be generated
   ///
   /// When disabled, grammars with rules that require a lookahead that is
   ///  `k>1` will be rejected, and relevant errors will be reported.
   pub ALLOW_PEEKING: bool,
-
-  /// Allow merging of states that only differ in their look ahead sets. This
-  /// will lead to a decrease in accuracy of error messages.
-  pub ALLOW_LOOKAHEAD_MERGE: bool,
   /// Allow the parser to split its context to handle ambiguity. This
   /// may lead to a CSF (Concrete Syntax Forest) or a CSDAG (Concrete Syntax
   /// DAG) being returned by the parser instead of a CST
@@ -82,7 +78,6 @@ impl Default for ParserConfig {
     Self {
       ALLOW_CALLS: true,
       ALLOW_LR: true,
-      ALLOW_LOOKAHEAD_MERGE: true,
       ALLOW_PEEKING: true,
       ALLOW_CONTEXT_SPLITTING: false,
       AllOW_CST_MERGING: false,
@@ -92,7 +87,7 @@ impl Default for ParserConfig {
       ALLOW_SCANNER_INLINING: true,
       ALLOW_ANONYMOUS_NONTERM_INLINING: true,
       ALLOW_BYTE_SEQUENCES: false,
-      ALLOW_LOOKAHEAD_SCANNERS: true,
+      ALLOW_LOOKAHEAD_SCANNERS: false,
       max_k: usize::MAX,
     }
   }
@@ -100,7 +95,7 @@ impl Default for ParserConfig {
 
 impl ParserConfig {
   pub fn new() -> Self {
-    Self::default().set_k(8).enable_fork(false)
+    Self::default().set_k(8).use_fork_states(false)
   }
 
   pub fn to_classification(&self) -> ParserClassification {
@@ -119,7 +114,7 @@ impl ParserConfig {
   }
 
   pub fn g_hybrid(self) -> Self {
-    self.hybrid().set_k(8).enable_fork(true)
+    self.hybrid().set_k(8).use_fork_states(true)
   }
 
   pub fn cst_editor(mut self) -> Self {
@@ -132,13 +127,12 @@ impl ParserConfig {
   }
 
   pub fn g_recursive_descent_k(self) -> Self {
-    self.recursive_descent_k(8).enable_fork(true)
+    self.recursive_descent_k(8).use_fork_states(true)
   }
 
   pub fn recursive_descent_k(mut self, k: usize) -> Self {
     self.ALLOW_CALLS = true;
     self.ALLOW_LR = false;
-    self.ALLOW_LOOKAHEAD_MERGE = false;
     self.set_k(k)
   }
 
@@ -156,7 +150,6 @@ impl ParserConfig {
 
   pub fn lrk(mut self, k: usize) -> Self {
     self.ALLOW_CALLS = false;
-    self.ALLOW_LOOKAHEAD_MERGE = false;
     self.ALLOW_CONTEXT_SPLITTING = false;
     self.ALLOW_LR = true;
     self.set_k(k)
@@ -176,33 +169,29 @@ impl ParserConfig {
     self
   }
 
-  pub fn lalr(self) -> Self {
-    self.lrk(1).enable_lookahead_merge(true)
-  }
-
   pub fn set_k(mut self, k: usize) -> Self {
     self.ALLOW_PEEKING = k > 1;
     self.max_k = k;
     self
   }
 
-  pub fn enable_lookahead_merge(mut self, enable: bool) -> Self {
-    self.ALLOW_LOOKAHEAD_MERGE = enable;
-    self
-  }
-
-  pub fn enable_calls(mut self, enable: bool) -> Self {
+  pub fn use_call_states(mut self, enable: bool) -> Self {
     self.ALLOW_CALLS = enable;
     self
   }
 
-  pub fn enable_fork(mut self, enable: bool) -> Self {
+  pub fn use_fork_states(mut self, enable: bool) -> Self {
     self.ALLOW_CONTEXT_SPLITTING = enable;
     self
   }
 
-  pub fn enable_context_free(mut self, enable: bool) -> Self {
+  pub fn force_context_free(mut self, enable: bool) -> Self {
     self.CONTEXT_FREE = enable;
+    self
+  }
+
+  pub fn use_lookahead_scanners(mut self, enable: bool) -> Self {
+    self.ALLOW_LOOKAHEAD_SCANNERS = enable;
     self
   }
 }

@@ -8,7 +8,6 @@ use super::{
 use crate::{
   compile::states::build_graph::graph::{
     ConcurrentGraphBuilder,
-    GraphBuildState,
     GraphNode,
     Origin,
     PeekGroup,
@@ -43,7 +42,7 @@ pub(crate) fn create_peek<'a, 'follow, Pairs: Iterator<Item = &'a TransitionPair
     "Peek states should not be in the resolution"
   );
 
-  let mut state = StagedNode::new(gb).build_state(GraphBuildState::Normal).sym(sym).ty(StateType::Peek(INITIAL_PEEK_K));
+  let mut state = StagedNode::new(gb).sym(sym).ty(StateType::Peek(INITIAL_PEEK_K));
 
   state = state.parent(pred.clone());
 
@@ -112,7 +111,6 @@ fn resolve_peek<'a, 'db: 'a, T: Iterator<Item = &'a TransitionPair>>(
   StagedNode::new(gb)
     .sym(sym)
     .parent(pred.clone())
-    .build_state(GraphBuildState::NormalGoto)
     .ty(StateType::PeekEndComplete(index))
     .kernel_items(staged.into_iter())
     .to_classification(ParserClassification { max_k: pred.ty.peek_level() as u16, ..Default::default() })
@@ -208,7 +206,6 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           StagedNode::new(gb)
             .sym(prec_sym)
             .parent(pred.clone())
-            .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
             .kernel_items(staged.into_iter())
             .commit(gb);
@@ -220,7 +217,6 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           StagedNode::new(gb)
             .sym(prec_sym)
             .parent(pred.clone())
-            .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
             .kernel_items(staged.into_iter())
             .commit(gb);
@@ -231,7 +227,6 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           StagedNode::new(gb)
             .sym(prec_sym)
             .parent(pred.clone())
-            .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
             .kernel_items(staged.into_iter())
             .commit(gb);
@@ -242,7 +237,6 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
           StagedNode::new(gb)
             .sym(prec_sym)
             .parent(pred.clone())
-            .build_state(GraphBuildState::NormalGoto)
             .ty(StateType::PeekEndComplete(origin_index))
             .kernel_items(staged.into_iter())
             .commit(gb);
@@ -254,7 +248,6 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
             StagedNode::new(gb)
               .sym(prec_sym)
               .parent(pred.clone())
-              .build_state(GraphBuildState::Normal)
               .ty(StateType::Peek(level + 1))
               .kernel_items(follows.iter().map(|f| f.next.to_origin(f.kernel.origin)).try_increment().iter().cloned())
               .commit(gb);
@@ -273,7 +266,6 @@ pub(crate) fn handle_peek_complete_groups<'graph, 'db: 'graph>(
         StagedNode::new(gb)
           .sym(prec_sym)
           .parent(pred.clone())
-          .build_state(GraphBuildState::Normal)
           .ty(StateType::Peek(level + 1))
           .kernel_items(
             group
@@ -307,7 +299,6 @@ pub(crate) fn handle_peek_incomplete_items<'nt_set, 'db: 'nt_set>(
     StagedNode::new(gb)
       .sym(prec_sym)
       .parent(pred.clone())
-      .build_state(GraphBuildState::Normal)
       .ty(StateType::Peek(level + 1))
       .kernel_items(group.iter().to_next().try_increment().iter().cloned())
       .commit(gb);

@@ -33,7 +33,7 @@ pub fn construct_forking_parser_glr() -> RadlrResult<()> {
 
   grammar.add_source_from_string(source, &root_path, false)?;
 
-  let config = ParserConfig::default().cst_editor().enable_fork(true);
+  let config = ParserConfig::default().cst_editor().use_fork_states(true);
 
   let parser_data = grammar.build_db(&root_path, config)?.build_states(config, &pool)?.build_ir_parser(false, false, &pool)?;
 

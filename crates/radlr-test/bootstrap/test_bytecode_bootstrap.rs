@@ -22,7 +22,7 @@ fn test_full_grammar() -> RadlrResult<()> {
 
   let radlr_grammar = grammar_folder.join("grammar.sg");
   let mut grammar = RadlrGrammar::new();
-  let config = ParserConfig::new().hybrid().enable_fork(false);
+  let config = ParserConfig::new().hybrid().use_fork_states(false);
   let database = grammar.add_source(&radlr_grammar)?.build_db(&radlr_grammar, config)?;
   let parser_builder = database.build_states(config, &pool)?.build_ir_parser(true, false, &pool)?;
   let pkg = compile_bytecode(&parser_builder, true)?;

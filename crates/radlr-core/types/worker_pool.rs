@@ -45,6 +45,10 @@ pub struct StandardPool {
 }
 
 impl StandardPool {
+  pub fn new_with_max_workers() -> Result<Self, RadlrError> {
+    Self::new(std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN).get() - 1)
+  }
+
   pub fn new(size: usize) -> Result<Self, RadlrError> {
     let size = size.max(1).min(std::thread::available_parallelism()?.get());
     let (c_sender, receiver) = std::sync::mpsc::channel();

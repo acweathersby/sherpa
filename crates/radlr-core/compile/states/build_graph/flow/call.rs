@@ -1,8 +1,5 @@
 use super::super::graph::*;
-use crate::{
-  compile::states::build_graph::graph::{GraphBuildState, StateType},
-  types::*,
-};
+use crate::{compile::states::build_graph::graph::StateType, types::*};
 
 pub struct CreateCallResult {
   /// `true` if the state is a KernelCall
@@ -54,7 +51,6 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
           return Some(CreateCallResult {
             is_kernel:         true,
             node:              StagedNode::new(gb)
-              .build_state(GraphBuildState::Normal)
               .parent(node.clone())
               .sym(sym)
               .ty(StateType::KernelCall(*nonterm))
@@ -76,7 +72,6 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
     return Some(CreateCallResult {
       is_kernel:         false,
       node:              StagedNode::new(gb)
-        .build_state(GraphBuildState::Normal)
         .parent(node.clone())
         .sym(sym)
         .ty(StateType::InternalCall(nonterm))

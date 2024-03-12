@@ -57,10 +57,9 @@ pub fn build_parse_states_from_multi_sources<'a, T>(
   let mut grammar = RadlrGrammar::new();
 
   #[cfg(not(feature = "wasm-target"))]
-  let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
+  let pool = crate::types::worker_pool::StandardPool::new_with_max_workers()?;
 
   #[cfg(feature = "wasm-target")]
-  let pool = crate::types::worker_pool::SingleThreadPool {};
   let pool = crate::types::worker_pool::SingleThreadPool {};
 
   for (index, source) in sources.iter().enumerate() {

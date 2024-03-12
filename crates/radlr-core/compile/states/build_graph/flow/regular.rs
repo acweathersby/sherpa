@@ -20,7 +20,7 @@ use crate::{
   compile::states::build_graph::{
     build::handle_completed_groups,
     errors::{lr_disabled_error, peek_not_allowed_error},
-    graph::{GraphBuildState, StateType},
+    graph::StateType,
     items::{get_follow, get_follow_symbols},
   },
   parser::Shift,
@@ -105,7 +105,6 @@ pub(crate) fn handle_regular_incomplete_items(
         StagedNode::new(gb)
           .parent(pred.clone())
           .sym(prec_sym)
-          .build_state(GraphBuildState::Normal)
           .ty(StateType::KernelShift)
           .to_classification(classification)
           .kernel_items(group.iter().to_kernel().try_increment().into_iter())
@@ -125,7 +124,6 @@ pub(crate) fn handle_regular_incomplete_items(
               StagedNode::new(gb)
                 .parent(pred.clone())
                 .sym(prec_sym)
-                .build_state(GraphBuildState::Normal)
                 .ty(StateType::Shift)
                 .to_classification(classification)
                 .pnc(
@@ -133,7 +131,6 @@ pub(crate) fn handle_regular_incomplete_items(
                     vec![StagedNode::new(builder)
                       .parent(p)
                       .sym((kernel_item.sym_id(builder.db()), 0).into())
-                      .build_state(GraphBuildState::Normal)
                       .ty(StateType::ShiftFrom(s.id()))
                       .kernel_items([kernel_item.try_increment()].into_iter())]
                   }),
@@ -146,7 +143,6 @@ pub(crate) fn handle_regular_incomplete_items(
             StagedNode::new(gb)
               .parent(pred.clone())
               .sym(prec_sym)
-              .build_state(GraphBuildState::Normal)
               .ty(StateType::Shift)
               .to_classification(classification)
               .kernel_items(items.into_iter())
@@ -156,7 +152,6 @@ pub(crate) fn handle_regular_incomplete_items(
         } else {
           StagedNode::new(gb)
             .sym(prec_sym)
-            .build_state(GraphBuildState::Normal)
             .parent(pred.clone())
             .ty(StateType::Shift)
             .to_classification(classification)
@@ -170,7 +165,6 @@ pub(crate) fn handle_regular_incomplete_items(
         StagedNode::new(gb)
           .parent(pred.clone())
           .sym(prec_sym)
-          .build_state(GraphBuildState::Normal)
           .ty(StateType::Shift)
           .kernel_items(items.into_iter())
           .include_with_goto_state()
@@ -282,8 +276,7 @@ pub(crate) fn handle_regular_complete_groups(
     (_len, _collide) => {
       #[cfg(debug_assertions)]
       unimplemented!(
-        "\nNot Implemented: {:?} len:{_len} collide:{_collide:?} sym:{} \n[ {} ]\n\n{}",
-        pred.build_state(),
+        "\nNot Implemented: len:{_len} collide:{_collide:?} sym:{} \n[ {} ]\n\n{}",
         sym.debug_string(gb.db()),
         cmpl.to_debug_string(gb.db(), "\n"),
         ""

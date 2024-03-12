@@ -5,7 +5,7 @@ use super::super::{
   graph::*,
 };
 use crate::{
-  compile::states::build_graph::graph::{GraphBuildState, StateType},
+  compile::states::build_graph::graph::StateType,
   types::*,
   utils::{hash_group_btree_iter, hash_group_btreemap},
 };
@@ -21,21 +21,13 @@ pub(crate) fn create_fork<'graph_iter, 'follow, I: Iterator<Item = Item>>(
   debug_assert!(config.ALLOW_PEEKING && config.max_k > 1, "Peek states should not be created when peeking is not allowed or k=1");
   debug_assert!(!pred.is_scanner(), "Peeking in scanners is unnecessary and not allowed");
 
-  Ok(
-    StagedNode::new(gb)
-      .build_state(GraphBuildState::Normal)
-      .parent(pred.clone())
-      .sym(sym)
-      .ty(StateType::ForkInitiator)
-      .kernel_items(items),
-  )
+  Ok(StagedNode::new(gb).parent(pred.clone()).sym(sym).ty(StateType::ForkInitiator).kernel_items(items))
 }
 
 pub(crate) fn handle_fork<'a, 'db: 'a>(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode) -> bool {
   if matches!(pred.state_type(), StateType::ForkInitiator) {
     for kernel_item in pred.kernel_items() {
       StagedNode::new(gb)
-        .build_state(GraphBuildState::Normal)
         .parent(pred.clone())
         .sym(Default::default())
         .ty(StateType::ForkedState)

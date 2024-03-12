@@ -3,7 +3,7 @@
 use super::super::graph::*;
 use crate::{
   compile::states::build_graph::{
-    graph::{GraphBuildState, Origin, StateType},
+    graph::{Origin, StateType},
     items::{get_follow, get_follow_internal, get_goal_items_from_completed, FollowType},
   },
   types::*,
@@ -25,13 +25,7 @@ pub(crate) fn handle_completed_item<'follow>(
   let first = completed[0];
 
   if first.kernel.origin == Origin::GoalCompleteOOS {
-    StagedNode::new(gb)
-      .parent(node.clone())
-      .ty(StateType::NonTermCompleteOOS)
-      .build_state(GraphBuildState::Normal)
-      .sym(sym)
-      .make_leaf()
-      .commit(gb);
+    StagedNode::new(gb).parent(node.clone()).ty(StateType::NonTermCompleteOOS).sym(sym).make_leaf().commit(gb);
   } else if ____is_scan____ {
     complete_scan(completed, gb, node, sym, first)
   } else {
@@ -61,7 +55,6 @@ fn complete_regular(
   StagedNode::new(gb)
     .parent(node.clone())
     .ty(StateType::Reduce(root_item.rule_id(), root_item.goto_distance as usize - (root_item.from_goto_origin as usize)))
-    .build_state(GraphBuildState::Normal)
     .sym(sym)
     .make_leaf()
     .set_reduce_item(root_item)
@@ -77,48 +70,51 @@ fn complete_scan(
   sym: PrecedentSymbol,
   first: TransitionPair,
 ) {
-  let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-    completed.iter().into_iter().map(|i| get_follow_internal(gb, pred, i.kernel, FollowType::ScannerCompleted)).unzip();
-
-  let follow = follow.into_iter().flatten().collect::<Items>();
-  let mut completed_items = completed_items.into_iter().flatten().collect::<Items>();
-
-  completed_items.sort();
-  let follow_hash = create_follow_hash(&completed_items);
-
-  let goals = if first.allow_assign { get_goal_items_from_completed(&completed_items, &pred) } else { Default::default() };
-  let completes_goal = !goals.is_empty();
-  let is_continue = !follow.is_empty();
-
-  let state = StagedNode::new(gb)
-    .parent(pred.clone())
-    .build_state(GraphBuildState::Normal)
-    .sym(sym)
-    .ty(match (is_continue, goals.first().map(|d| d.origin)) {
-      (true, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignAndFollow(tok_id),
-      (false, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignToken(tok_id),
-      (true, _) => StateType::Follow,
-      (false, _) => StateType::CompleteToken,
-    })
-    .set_reduce_item(first.kernel)
-    .set_follow_hash(follow_hash)
-    .kernel_items(follow.iter().cloned());
-
-  if is_continue {
-    if completes_goal {
-      state.make_enqueued_leaf()
-    } else {
-      state
-    }
+  if first.kernel.origin.is_scanner_oos() {
+    let state = StagedNode::new(gb).parent(pred.clone()).make_leaf().sym(sym).ty(StateType::ScannerCompleteOOS).commit(gb);
   } else {
-    debug_assert!(
-      !first.allow_assign || completes_goal,
-      "Should complete a token goal {}",
-      first.kernel._debug_string_w_db_(gb.db())
-    );
-    state.make_leaf()
+    let (follow, completed_items): (Vec<Items>, Vec<Items>) =
+      completed.iter().into_iter().map(|i| get_follow_internal(gb, pred, i.kernel, FollowType::ScannerCompleted)).unzip();
+
+    let follow = follow.into_iter().flatten().collect::<Items>();
+    let mut completed_items = completed_items.into_iter().flatten().collect::<Items>();
+
+    completed_items.sort();
+    let follow_hash = create_follow_hash(&completed_items);
+
+    let goals = if first.allow_assign { get_goal_items_from_completed(&completed_items, &pred) } else { Default::default() };
+    let completes_goal = !goals.is_empty();
+    let is_continue = !follow.is_empty();
+
+    let state = StagedNode::new(gb)
+      .parent(pred.clone())
+      .sym(sym)
+      .ty(match (is_continue, goals.first().map(|d| d.origin)) {
+        (true, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignAndFollow(tok_id),
+        (false, Some(Origin::TerminalGoal(tok_id, ..))) => StateType::AssignToken(tok_id),
+        (true, _) => StateType::Follow,
+        (false, _) => StateType::CompleteToken,
+      })
+      .set_reduce_item(first.kernel)
+      .set_follow_hash(follow_hash)
+      .kernel_items(follow.iter().cloned());
+
+    if is_continue {
+      if completes_goal {
+        state.make_enqueued_leaf()
+      } else {
+        state
+      }
+    } else {
+      debug_assert!(
+        !first.allow_assign || completes_goal,
+        "Should complete a token goal {}",
+        first.kernel._debug_string_w_db_(gb.db())
+      );
+      state.make_leaf()
+    }
+    .commit(gb);
   }
-  .commit(gb);
 }
 
 fn create_follow_hash(completed_items: &Vec<Item>) -> u64 {
