@@ -8,11 +8,11 @@ IGNORE {c:sp c:nl}
   
 <> obj 
   
-  > "{" key_val(+",") "}" :ast { t_Object, values: $2, tok }
+  > "{" key_val(*",") "}" :ast { t_Object, values: $2, tok }
 
 <> array
   
-  > "[" val(+",") "]"     :ast { t_Array, values: $2, tok }
+  > "[" val(*",") "]"     :ast { t_Array, values: $2, tok }
 
 
 <> key_val 
@@ -27,7 +27,7 @@ IGNORE {c:sp c:nl}
 
 <> val 
   > tk:string :ast str(tok<1,1>)
-  | c:num     :ast f64($1)
+  | tk:( c:num(+) )     :ast f64($1)
   | obj
   | array
   | "true"    :ast bool($1)
@@ -35,6 +35,8 @@ IGNORE {c:sp c:nl}
   | "null"    :ast {t_Null}
 
 
-<> string 
-  > "\""  ( c:id | c:sp |  c:num | c:sym )(*)  "\""
+<> string > "\"" ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) "\""
+
+<> escaped > "\\"{:9999} ( c:id | c:sym | c:num | c:sp | c:nl )
+
  
