@@ -25,7 +25,7 @@ impl ValueObj for AscriptPropType {
   }
 }
 
-#[derive(Debug, Clone, Copy, Default, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Default, Eq, Hash)]
 pub enum AscriptType {
   #[default]
   Undefined,
@@ -51,6 +51,41 @@ impl AscriptType {
       AscriptType::Scalar(scalar) => AscriptType::Scalar(scalar.to_cardinal()),
       ty @ _ => ty.clone(),
     }
+  }
+}
+
+impl PartialOrd for AscriptType {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for AscriptType {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    use std::cmp::Ordering::*;
+    use AscriptType::*;
+    let result = match (self, other) {
+      (Undefined, Undefined) => Equal,
+
+      (Undefined, _) => Less,
+
+      (_, Undefined) => Greater,
+
+      (Scalar(c), Scalar(d)) => c.cmp(d),
+      (Aggregate(c), Aggregate(d)) => c.cmp(d),
+      (NonTerminalVal(c), NonTerminalVal(d)) => c.cmp(d),
+
+      (NonTerminalVal(_), Scalar(_)) => Less,
+      (Scalar(_), NonTerminalVal(_)) => Greater,
+
+      (Scalar(_), Aggregate(_)) => Less,
+      (Aggregate(_), Scalar(_)) => Greater,
+
+      (NonTerminalVal(_), Aggregate(_)) => Less,
+      (Aggregate(_), NonTerminalVal(_)) => Greater,
+    };
+
+    result
   }
 }
 
@@ -497,13 +532,22 @@ pub enum AscriptAggregateType {
 
 impl PartialOrd for AscriptAggregateType {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    self.scalar_precedence().partial_cmp(&other.scalar_precedence())
+    Some(self.cmp(other))
   }
 }
 
 impl Ord for AscriptAggregateType {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    self.scalar_precedence().cmp(&other.scalar_precedence())
+    use AscriptAggregateType::*;
+    match (self, other) {
+      (Vec { val_type: a }, Vec { val_type: b }) => a.cmp(b),
+      (Map { val_type: a, key_type: b }, Map { val_type: c, key_type: d }) => match a.cmp(c) {
+        std::cmp::Ordering::Equal => b.cmp(d),
+        cmp => cmp,
+      },
+      (Vec { .. }, Map { .. }) => std::cmp::Ordering::Less,
+      (Map { .. }, Vec { .. }) => std::cmp::Ordering::Greater,
+    }
   }
 }
 

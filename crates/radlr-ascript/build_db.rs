@@ -142,7 +142,9 @@ fn collect_types(adb: &mut AscriptDatabase) {
         Some(node) => {
           extract_type_data(node.get_type().to_cardinal(), types);
         }
-        None => {}
+        None => {
+          panic!("GraphNode should be resolved");
+        }
       },
 
       _ => {}
@@ -257,8 +259,9 @@ pub fn process_struct_node(
   strct: &AST_Struct,
   g_id: GrammarIdentities,
 ) -> RadlrResult<StructInitializer> {
+  let s_store = adb.db.string_store();
   let name = &strct.ty[2..];
-  let struct_id = StringId::from(name);
+  let struct_id = StringId(name.intern(s_store));
 
   let mut initializer = StructInitializer {
     name:      struct_id,
@@ -272,6 +275,7 @@ pub fn process_struct_node(
 
   let ast_struct = adb.structs.entry(struct_id).or_insert_with(|| {
     existing_struct = false;
+
     AscriptStruct {
       id:         struct_id,
       name:       name.to_string(),
@@ -304,7 +308,7 @@ pub fn process_struct_node(
           }
         }
 
-        initializer.props.insert(StringId::from(prop.id.to_string()), Initializer {
+        initializer.props.insert(StringId(prop.id.to_string().intern(s_store)), Initializer {
           ty: AscriptType::Undefined,
           name: prop_name,
           output_graph: None,
@@ -313,7 +317,7 @@ pub fn process_struct_node(
         });
       }
       ast @ ASTNode::AST_Token(..) => {
-        let tok_id = StringId::from("tok");
+        let tok_id = StringId("tok".intern(s_store));
         initializer.props.insert(tok_id, Initializer {
           ty: AscriptType::Undefined,
           name: tok_id,
