@@ -414,9 +414,8 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
   if scanner_data.symbols.is_empty() {
     None
   } else {
-    let hash_symbols = scanner_data.symbols.clone();
-    //hash_symbols.extend(scanner_data.follow.iter());
-    let hash = hash_id_value_u64((&scanner_data.skipped, hash_symbols));
+    let hash = hash_id_value_u64((&scanner_data.skipped, &scanner_data.symbols));
+
     scanner_data.hash = hash;
 
     Some(scanner_data)
@@ -996,18 +995,20 @@ impl ConcurrentGraphBuilder {
       if state.is_scanner() && parser_config.ALLOW_LOOKAHEAD_SCANNERS {
         if let Some(pred) = pred {
           let kernel_items = &mut state.kernel;
-          let mut completed_symbols = OrderedSet::new();
-          for item in kernel_items.iter() {
-            if item.is_complete() {
-              if let Origin::TerminalGoal(t, p) = item.origin {
-                let term: PrecedentDBTerm = (t, p, false).into();
-                completed_symbols.insert(term);
+          if kernel_items.iter().any(|i| i.is_incomplete()) {
+            let mut completed_symbols = OrderedSet::new();
+            for item in kernel_items.iter() {
+              if item.is_complete() {
+                if let Origin::TerminalGoal(t, p) = item.origin {
+                  let term: PrecedentDBTerm = (t, p, false).into();
+                  completed_symbols.insert(term);
+                }
               }
             }
-          }
 
-          if !completed_symbols.is_empty() {
-            kernel_items.extend(self.get_oos_scanner_follow(pred, &completed_symbols));
+            if !completed_symbols.is_empty() {
+              kernel_items.extend(self.get_oos_scanner_follow(pred, &completed_symbols));
+            }
           }
         }
       }
@@ -1018,7 +1019,7 @@ impl ConcurrentGraphBuilder {
 
       let is_root = update_root_info(&mut state, pred);
 
-      state = self.append_state_hashes(is_root, state);
+      state = self.commit_state(is_root, state);
 
       if !state.is_scanner() {
         if let Some(scanner_data) = get_state_symbols(self, &state) {
@@ -1119,14 +1120,14 @@ impl ConcurrentGraphBuilder {
   /// Create hash id's for the given state.
   ///
   /// WARNING: Ensure the state's root_data is set before calling this method.
-  fn append_state_hashes(&mut self, is_root: bool, mut state: GraphNode) -> GraphNode {
+  fn commit_state(&mut self, is_root: bool, mut state: GraphNode) -> GraphNode {
     let lookahead =
       if is_root { 0 } else { create_lookahead_hash(self, &state, std::collections::hash_map::DefaultHasher::new()) };
 
-    let state_hash = create_state_hash(&state, lookahead, std::collections::hash_map::DefaultHasher::new());
+    state.hash_id = create_state_hash(&state, lookahead, std::collections::hash_map::DefaultHasher::new());
 
-    state.hash_id = state_hash;
     state.id = StateId::new(state.hash_id as usize, is_root.then_some(GraphIdSubType::Root).unwrap_or(GraphIdSubType::Regular));
+
     state.kernel = state
       .kernel
       .into_iter()

@@ -142,9 +142,7 @@ fn collect_types(adb: &mut AscriptDatabase) {
         Some(node) => {
           extract_type_data(node.get_type().to_cardinal(), types);
         }
-        None => {
-          unreachable!()
-        }
+        None => {}
       },
 
       _ => {}
@@ -174,7 +172,7 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
     let rule = &db_rule.rule;
     let g_id = db_rule.rule.g_id;
 
-    let rule = match &rule.ast {
+    let ast_rule = match &rule.ast {
       None => AscriptRule::LastSymbol(id, Initializer {
         ty: AscriptType::Undefined,
         name: Default::default(),
@@ -230,7 +228,7 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
       }
     }
 
-    adb.rules.push(rule);
+    adb.rules.push(ast_rule);
   }
 
   #[allow(irrefutable_let_patterns)]
@@ -391,7 +389,9 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
             let set = rule_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
             set.insert(nonterm_key);
           }
-          None => {}
+          None => {
+            rule_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
+          }
         }
       }
       Some(_) => {
@@ -405,7 +405,19 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
   // Start with rules that do not rely on non-term-values;
   let mut queue = VecDeque::from_iter(rule_nonterms.iter().filter_map(|(r, s)| s.is_empty().then_some(*r)));
 
+  let max_iterations = db.rules().len().pow(2);
+  let mut total_iterations = 0;
+
   while let Some(rule_id) = queue.pop_front() {
+    total_iterations += 1;
+
+    if total_iterations > max_iterations {
+      panic!(
+        "Could not resolve rule {}",
+        db.db_rule(rule_id).rule.tok.blame(1, 1, "could not resolve the AST of this rule", None)
+      )
+    }
+
     let index: usize = rule_id.into();
     let item = Item::from((rule_id, db));
 
@@ -457,8 +469,8 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
     let nonterm_id = db.db_rule(rule_id).nonterm;
 
     if ty.is_unknown() {
-      queue.push_back(rule_id);
       queue.extend(rule_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
+      queue.push_back(rule_id);
       continue;
     }
 

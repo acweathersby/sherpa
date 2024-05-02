@@ -101,6 +101,10 @@ impl RuntimeDatabase for @name {
   fn token_id_to_str(&self, tok_id: u32) -> Option<&str> {
     self.token_id_to_str.get(&tok_id).map(|s| *s)
   }
+
+  fn entrypoints(&self) -> Vec<(std::string::String,\ u32)> {
+    vec![]
+  }
 }
 
 impl<T: ParserInput> ParserProducer<T> for @name {

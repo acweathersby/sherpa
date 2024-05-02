@@ -59,7 +59,7 @@ pub fn temp__AAA() -> RadlrResult<()> {
     
     <> rule_id > "["{:9999} tk:(c:num+) "]" 
     
-      :ast { t_RuleId, index: u32($2) }
+      :ast { t_RuleId, index: u32($2) } 
     
     <> symbol_set > "{"{:9999} ( tk:num :ast i32($1) )(+",") tk:color_data? "}" :ast { t_SymSet, syms: $2, col:str($3) }
     
@@ -70,7 +70,7 @@ pub fn temp__AAA() -> RadlrResult<()> {
     <> num > "-"? c:num+
 
   "#],
-    &[("default", "A {1 red} ", true)],
+    &[("default", "A[0]{1 red} A[2]{1 green}", true)],
     ParserConfig::default().use_lookahead_scanners(true),
   )
 }
@@ -177,6 +177,27 @@ pub fn temp() -> RadlrResult<()> {
 }
 
 #[test]
+pub fn temp2() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r##"
+
+    IGNORE { c:sp c:nl }
+  
+    <> call > fn_name params
+
+    <> params > id ( ":" id )?
+
+    <> fn_name > tk:( "#" id )
+
+    <> id > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )
+    
+    "##],
+    &[("default", "  #test test", true)],
+    ParserConfig::default().use_lookahead_scanners(true),
+  )
+}
+
+#[test]
 pub fn form() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r###"
@@ -236,7 +257,7 @@ IGNORE { c:sp c:nl }
   "#,
       true,
     )],
-    ParserConfig::default(),
+    ParserConfig::default().use_lookahead_scanners(false),
   )
 }
 
@@ -290,7 +311,7 @@ pub fn templates() -> RadlrResult<()> {
       ("A", "()", true),
       ("A", "[]", true),
     ],
-    ParserConfig::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -319,7 +340,7 @@ pub fn identifier() -> RadlrResult<()> {
 
   "#],
     &[("default", "a_b", true)],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -339,7 +360,7 @@ pub fn basic_scanner() -> RadlrResult<()> {
 
   "#],
     &[("default", "sym?^name", true)],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -448,7 +469,7 @@ pub fn precedence_temp() -> RadlrResult<()> {
 
 "#],
     &[("default", "11 + 2 * 2 + 2 * 2 + 1 + 1", true)],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -469,7 +490,7 @@ pub fn precedence() -> RadlrResult<()> {
 
 "#],
     &[("default", "11 + 2 * 2 ^ 2 + 2 * 2 + 1 + 1", true)],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -752,10 +773,11 @@ fn parsing_using_trivial_custom_state() -> RadlrResult<()> {
 
 #[test]
 fn json_parser() -> RadlrResult<()> {
-  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammars/json/json.sg").canonicalize().unwrap();
+  let grammar_source_path =
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../grammars/json/json.radlr").canonicalize().unwrap();
   compile_and_run_grammars(
     &[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()],
-    &[("entry", r##"[]"##, true), ("entry", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true)],
+    &[("default", r##"[]"##, true), ("default", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true)],
     Default::default(),
   )
 }
@@ -860,7 +882,7 @@ IGNORE { c:sp c:nl }
       "##,
       true,
     )],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -896,28 +918,28 @@ pub fn c_style_comment_blocks() -> RadlrResult<()> {
       ("default", r##"/* triangle */"##, true),
       ("default", r##"walker"##, true),
     ],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
 #[test]
-pub fn recursive_skipped_comments() -> RadlrResult<()> {
+pub fn recursive_comments() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[r##"
     IGNORE { tk:comment c:sp }
 
-    <> A > "hello" "world"
+    <> A > "h" "w"
 
     <> comment > '/' "*"{:9999} comment_body '*'{:9999} "/"{:9999}
 
-    <> comment_body >  ( c:nl | c:sym | c:num | c:sp | c:id | comment )(+)
+    <> comment_body >  ( c:sym | c:sp | comment )(+)
     "##],
     &[
-      ("default", r##"hello /* */ world"##, true),
-      ("default", r##"hello /* This is the only way to go /* to */ the moon */ world"##, true),
-      ("default", r##"hello /* This is the only way to go /* to */ the moon / world"##, false),
+      ("default", r##"h /* -- /* -- */ -- */ w"##, true),
+      ("default", r##"h /* */ w"##, true),
+      ("default", r##"h /* This is the only way to go /* to */ the moon / w"##, false),
     ],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -943,7 +965,7 @@ fn json_object_with_specialized_key() -> RadlrResult<()> {
       ("default", r##"{ "tester" : 2  }"##, false),
       ("default", r##"{ "test" : "mango"  }"##, false),
     ],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -971,7 +993,7 @@ fn escaped_values() -> RadlrResult<()> {
 <> escaped > "\\" ( c:num | c:id | c:sym | c:nl | c:sp )
         "##],
     &[("default", r##"\\"##, true)],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 
@@ -1008,7 +1030,7 @@ fn simple_newline_tracking_sanity() -> RadlrResult<()> {
     <> B > 'mango'
         "##],
     &[("default", "hello\nworld\n\ngoodby\nmango", true)],
-    Default::default(),
+    ParserConfig::default().use_lookahead_scanners(true),
   )
 }
 

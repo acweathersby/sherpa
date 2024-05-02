@@ -71,7 +71,7 @@ fn complete_scan(
   first: TransitionPair,
 ) {
   if first.kernel.origin.is_scanner_oos() {
-    let state = StagedNode::new(gb).parent(pred.clone()).make_leaf().sym(sym).ty(StateType::ScannerCompleteOOS).commit(gb);
+    StagedNode::new(gb).parent(pred.clone()).make_leaf().sym(sym).ty(StateType::ScannerCompleteOOS).commit(gb);
   } else {
     let (follow, completed_items): (Vec<Items>, Vec<Items>) =
       completed.iter().into_iter().map(|i| get_follow_internal(gb, pred, i.kernel, FollowType::ScannerCompleted)).unzip();

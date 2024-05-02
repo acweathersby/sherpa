@@ -57,8 +57,8 @@ pub(crate) fn handle_kernel_items(
   if pred.state_type().is_peek() && pred.state_type().peek_level() > 0 && states_queued == 0 {
     // Todo(anthony) : if peeking, determine if the peek has terminated in a
     // non-deterministic way. If so, produce a NonDeterministicPeek error.
-    panic!("Undeterministic PARSE");
-    let root_data = pred.root_data.db_key;
+    //panic!("Undeterministic PARSE");
+    //let root_data = pred.root_data.db_key;
 
     Err(RadlrError::StateConstructionError(crate::compile::states::build_states::StateConstructionError::NonDeterministicPeek(
       pred.get_root_shared(),
@@ -92,6 +92,8 @@ fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode, config: &Parser
   let mut oos_scan_completed_tokens = OrderedSet::<PrecedentDBTerm>::new();
   let mut oos_scan_incompletes = OrderedSet::<PrecedentDBTerm>::new();
 
+  let mut ooos = false;
+
   let mut too_process_items = Vec::new();
 
   for item in pred.kernel_items() {
@@ -110,6 +112,7 @@ fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode, config: &Parser
             too_process_items.extend(follow);
           }
         } else {
+          ooos = true;
           if !item.is_initial() {
             oos_scan_incompletes.insert(token);
           }
@@ -171,9 +174,9 @@ fn handle_scanner_items(
 ) -> RadlrResult<GroupedFirsts> {
   if node.is_scanner() {
     for (_, (_, pair)) in &mut groups {
-      if pair.iter().any(|p| !p.kernel.is_oos()) {
+      if pair.iter().any(|p| !p.kernel.origin.is_scanner_oos()) {
         // Remove all oos items from group
-        let filtered_items = pair.iter().filter_map(|i| (!i.kernel.is_oos()).then_some(*i)).collect::<Vec<_>>();
+        let filtered_items = pair.iter().filter_map(|i| (!i.kernel.origin.is_scanner_oos()).then_some(*i)).collect::<Vec<_>>();
         *pair = filtered_items;
       }
     }
@@ -266,8 +269,10 @@ fn handle_completed_items(
 
     // TODO(anthony) - create the correct filter to identify the number of rules
     // that are being reduced (compare item indices.)
-    let default: Lookaheads = if completed.1.iter().to_kernel().items_are_the_same_rule() {
-      completed.1
+    let default: Lookaheads = if completed.1.iter().to_kernel().items_are_the_same_rule()
+      || completed.1.iter().all(|i| i.kernel.origin.is_scanner_oos())
+    {
+      completed.1.clone()
     } else {
       lookahead_pairs.iter().filter(|i| i.is_eoi_complete()).cloned().collect()
     };
@@ -275,7 +280,12 @@ fn handle_completed_items(
     if default.len() > 0 {
       handle_completed_groups(gb, pred, config, groups, SymbolId::Default, default)?;
     } else {
-      debug_assert!(!lookahead_pairs.is_empty())
+      #[cfg(debug_assertions)]
+      debug_assert!(
+        !lookahead_pairs.is_empty(),
+        "No default reduce! {pred:?} {}",
+        completed.1.iter().map(|c| c._debug_string_(gb.db())).collect::<Vec<_>>().join("\n")
+      )
     }
   }
 

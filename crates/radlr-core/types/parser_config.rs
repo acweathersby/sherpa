@@ -48,8 +48,11 @@ pub struct ParserConfig {
   /// Enables using wide data types ( u16 | u32 | u64 | u128 ) to recognize a
   /// sequence of characters.
   pub ALLOW_BYTE_SEQUENCES: bool,
-  /// Enables context sensitive scanners, which will track lookahead symbols in
-  /// their call site. May increase the number scanner states significantly.
+  /// Enables FOLLOW context sensitive scanners, which will consider the tokens
+  /// that _follow_ the states which the scanner is constructing tokens
+  /// for.
+  ///
+  /// May significantly increase the number scanner states.
   pub ALLOW_LOOKAHEAD_SCANNERS: bool,
   /// The maximum number of lookead symbols allowed before parser construction
   /// is aborted or a different disambiguating strategy is employed.
@@ -190,6 +193,8 @@ impl ParserConfig {
     self
   }
 
+  /// Adds FOLLOW aware scanning behavior. May significantly increase the
+  /// number of scanner states in more complex grammars.
   pub fn use_lookahead_scanners(mut self, enable: bool) -> Self {
     self.ALLOW_LOOKAHEAD_SCANNERS = enable;
     self

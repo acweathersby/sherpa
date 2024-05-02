@@ -76,6 +76,7 @@ pub(super) fn resolve_reduce_reduce_conflict(
         Ok(ReduceReduceConflictResolution::Peek(k as u16, follow_pairs))
       }
       _ => {
+        return Ok(ReduceReduceConflictResolution::Peek(100 as u16, follow_pairs));
         #[cfg(debug_assertions)]
         {
           for (i, follow_pair) in follow_pairs.iter().enumerate() {
@@ -86,16 +87,18 @@ pub(super) fn resolve_reduce_reduce_conflict(
               println!("{}", item._debug_string_w_db_(&gb.db()));
               let origin_state_id = item.origin_state;
 
-              let origin_state = gb.get_state(origin_state_id.0 as u64).unwrap();
+              if let Some(origin_state) = gb.get_state(origin_state_id.0 as u64) {
+                let kernel_items = origin_state.kernel_items();
 
-              let kernel_items = origin_state.kernel_items();
+                if item.is_initial() && origin_state_id.is_root() {
+                  break;
+                }
 
-              if item.is_initial() && origin_state_id.is_root() {
-                break;
-              }
-
-              if let Some(i) = kernel_items.iter().find(|i| item.is_successor_of(i)) {
-                item = *i;
+                if let Some(i) = kernel_items.iter().find(|i| item.is_successor_of(i)) {
+                  item = *i;
+                } else {
+                  break;
+                }
               } else {
                 break;
               }
