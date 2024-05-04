@@ -1285,6 +1285,7 @@ fn get_resolved_type(
           _ => {
             let types = BTreeSet::from_iter([*a_scalar, *b_scalar]);
             let index = any_i.len();
+
             any_i.push(any_m.len());
 
             if ref_name.len() > 1 {

@@ -498,7 +498,7 @@ impl PartialEq for AscriptScalarType {
   }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BaseType {
   Bool,
   Uint,

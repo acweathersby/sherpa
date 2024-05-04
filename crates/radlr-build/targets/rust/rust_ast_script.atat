@@ -67,7 +67,7 @@ use std::{collections::HashMap, marker::PhantomData};
     "F64"         { f64 }
     "Struct"      { 
       match ty.is_empty {
-        true { }
+        true { @ty.name  }
         { Box<@ty.name<Token>> }
       }
     }
@@ -131,7 +131,7 @@ use std::{collections::HashMap, marker::PhantomData};
   #any_enum_ast_declaration { @self.name(#any_rust_type(self)),\ @; }
   #struct_ast_declaration { 
     match @self.is_empty {
-      true { @self.name, @; }
+      true { @self.name(@self.name),\ @; }
       { @self.name(Box<@self.name<Token>>),\ @;  }
     } 
   }
@@ -158,6 +158,15 @@ use std::{collections::HashMap, marker::PhantomData};
 
   #_{ TYPE DECLARATIONS ------------------------------------------------------------------------ }
 
+  impl<Token:Tk>\ @AST_NAME<Token> { 
+    pub\ fn\ to_token(self)\ ->\ Option<Token>\ { @;
+      mat ch\ self\ {
+        @AST_NAME::Token(val)\ =>\ Some(val),@;
+        _\ =>\ None,@;
+      }
+    }
+  } \n\n
+
   #type_types {
 
     #impls {
@@ -172,7 +181,6 @@ use std::{collections::HashMap, marker::PhantomData};
               }
             }
           } \n\n
-
         }
         {
           impl<Token:Tk>\ @AST_NAME<Token> { 
@@ -209,7 +217,7 @@ use std::{collections::HashMap, marker::PhantomData};
     #iter_types { 
       match (self.agg_type, self.val.#type , self.val.is_empty) {
          (None, "Struct", true) { 
-           #ty_to_ast_name(self),\ @;
+           #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @;
           }
         { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @; }
       }
@@ -232,14 +240,7 @@ use std::{collections::HashMap, marker::PhantomData};
       @enum_type={ #any_rust_type(self) }
 
       #any_type_to_any ANY_NAME:str {
-        match (self.agg_type, self.val.#type , self.val.is_empty) {
-          (None, "Struct", true) { 
-            @AST_NAME::#ty_to_ast_name(self)\ =>\ Some(@ANY_NAME::#ty_to_ast_name(self)),@;
-          }
-          {
-            @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(@ANY_NAME::#ty_to_ast_name(self)(val)),@;
-          }
-        }
+        @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(@ANY_NAME::#ty_to_ast_name(self)(val)),@;
       }
 
       impl<Token:Tk>\ @AST_NAME<Token> { 
@@ -306,13 +307,38 @@ use std::{collections::HashMap, marker::PhantomData};
       #prop_define {
         pub\ #esc_(@self.name):\ #ast_node_rust_type(self.type), @;
       }
-      @rust_struct_type={ "Box<" + self.name + "<Token>>" }
 
       match self.props.#len {
-        0 { }
+        0 { 
+          @rust_struct_type={ self.name }
+          \n\n
+          #[derive(\ Clone,\ Copy,\ Debug,\ Default\ )] 
+
+          \n
+          pub\ struct\ @self.name();
+
+          \n\n
+          impl<Token:Tk>\ @AST_NAME<Token> { 
+            pub\ fn\ into_@self.name (self)\ ->\ Option<@rust_struct_type>\ { @;
+              mat ch\ self\ {
+                @AST_NAME::@self.name(val)\ =>\ Some(val),@;
+                _\ =>\ None,@;
+              }
+            }
+          } \n\n
+
+          impl<Token:Tk>\ From<@rust_struct_type>\ for\ @AST_NAME<Token> { 
+            fn\ from(value:\ @rust_struct_type )\ ->\ Self\ {
+              Self::@self.name(value) @;
+            }@;
+          }
+        }
         { 
+
+          @rust_struct_type={ "Box<" + self.name + "<Token>>" }
           \n\n
           #[derive(\ Clone,\ Debug,\ Default\ )]
+
           \n
           pub\ struct\ @self.name<Token:Tk>{ 
             @self.props.iter#prop_define()
@@ -370,11 +396,11 @@ use std::{collections::HashMap, marker::PhantomData};
       & { 
         @self.init.(ref)
 
-        match (self.init.agg_type, self.init.val.#type, self.init.val.is_empty) {
-          ("Vec", _, _) | ("Map", _, _)  { let\ @ref\ =\ @ref. len()\ as\ #ty_to_rust(@self.val); }
-          (_, "Token", _)  {  let\ @ref:\ #ty_to_rust(@self.val)\ = \ @ref . to_string().parse().unwrap_or_default(); }
-          (_, "String", _)  {  let\ @ref:\ #ty_to_rust(@self.val)\ = \ @ref . parse().unwrap_or_default(); }
-          (_, _, _)  {  let\ @ref\ = @ref\ as\ #ty_to_rust(@self.val); }
+        match (self.init.agg_type, self.init.val.#type) {
+          ("Vec", _) | ("Map", _)  { let\ @ref\ =\ @ref. len()\ as\ #ty_to_rust(@self.val); }
+          (_, "Token")  {  let\ @ref:\ #ty_to_rust(@self.val)\ = \ @ref . to_string().parse().unwrap_or_default(); }
+          (_, "String")  {  let\ @ref:\ #ty_to_rust(@self.val)\ = \ @ref . parse().unwrap_or_default(); }
+          (_, _)  {  let\ @ref\ = @ref\ as\ #ty_to_rust(@self.val); }
           { @{ [TODO: num convert (@self.init.agg_type, @self.init.val) ] }  }
         }
         @;
@@ -398,13 +424,12 @@ use std::{collections::HashMap, marker::PhantomData};
   }
 
   #type_SymNode r:str {
-    match (self.agg_type, self.val.#type, self.val.is_empty) {
-      (None, "Token", _) { 
+    match (self.agg_type, self.val.#type) {
+      (None, "Token") { 
         let\ @r\ =\ nodes[@self.index].clone();@;
         let\ @r\ =\ @r. to_token().unwrap();@; 
       }
-      (None, "Struct", true) { }
-      (_, Some, _) { 
+      (_, Some) { 
         let\ @r\ =\ std::mem::take(&mut\ nodes[@self.index]@;);@;
         let\ @r\ =\ unsafe{\ @r. into_#ty_to_ast_name(self)().unwrap_unchecked()\ };@; 
       }
@@ -554,7 +579,9 @@ use std::{collections::HashMap, marker::PhantomData};
     #print_struct_assign { #esc_(@self.name), @; }
 
     match self.props.#len {
-      0 { @AST_NAME::@self.name @; }
+      0 { 
+        @AST_NAME::@self.name(@self.name())
+      }
       {
         let\ nodes = unsafe { &mut *nodes }; @;@;
         
@@ -582,6 +609,7 @@ use std::{collections::HashMap, marker::PhantomData};
 
     match (@agg_type, @val_type) {
       ("Vec", "Token") { @AST_NAME::Tokens(@out) @; }
+      ( None, "Token") { @AST_NAME::Token(@out) @; }
       { @out . into() @; }
     }
   }
