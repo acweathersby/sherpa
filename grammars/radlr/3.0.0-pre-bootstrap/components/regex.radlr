@@ -1,0 +1,117 @@
+
+<> grammar_regex 
+  
+  > "/" regex "/"{:9999}
+
+    :ast $2
+
+<> regex 
+  
+  > sequence
+
+    :ast $1
+
+<> alternate 
+
+  > sequence(+"|")
+
+<> sequence 
+  
+  > modified_sequence_member(+)
+
+
+<> modified_sequence_member 
+
+  > sequence_member "?"
+
+    :ast { t_RegexOptional, val: $1 }
+
+  | sequence_member "*"
+
+    :ast { t_RegexOptionalRepeat, val: $1 }
+
+  | sequence_member "+" {9:9999}
+
+    :ast { t_RegexRepeat, val: $1 }
+
+  | sequence_member "{" tk:( c:num(+) ) "}"
+
+    :ast { t_RegexRepeatCount, val: $1, min: u32($3) }
+
+  | sequence_member "{" tk:( c:num(+) )(*) "," tk:( c:num(+) )(*) "}"
+
+    :ast { t_RegexRepeatCount, val: $1, min: u32($3), max: u32($5) }
+
+  | sequence_member
+
+
+<> sequence_member
+
+  > characters_symbol
+
+  | "(" alternate ")"{:9999}
+
+    :ast { t_RegexGroup, val: $2 }
+
+  | "^"
+
+    :ast { t_RegexStart }
+
+  | "$"
+
+    :ast { t_RegexEnd }
+
+  | excluding_match
+
+  | match
+  
+
+<> characters_symbol
+
+  > special_char
+
+  | char 
+
+<> special_char 
+
+  > "\\n"      
+    
+    :ast { t_NewLineChar }
+
+  | "\\s"      
+    
+    :ast { t_SpaceChar }
+
+  | "\\w"      
+    
+    :ast { t_WordChar }
+
+  | "\\d"      
+    
+    :ast { t_DigitChar }
+
+  | "."        
+    
+    :ast { t_WildCard }
+
+  | "\\" c:any 
+    
+    :ast { t_EscapedChar, val: $2 }
+
+<> char 
+
+  > c:any{0:0}
+      
+      :ast { t_Char, val: $1 }
+
+<> excluding_match 
+  
+  > "[^"  characters_symbol(+)  "]"{:9999}
+
+    :ast { t_ExcludeMatch, vals: $2 }
+
+<> match 
+  
+  > "["  characters_symbol(+)  "]"{:9999}
+
+    :ast { t_Match, vals: $2 }

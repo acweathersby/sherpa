@@ -1,13 +1,17 @@
 use crate::{AscriptAggregateType, AscriptDatabase, AscriptScalarType, AscriptType, AscriptTypes};
 use radlr_core::CachedString;
 use radlr_formatter::*;
-use std::{collections::BTreeSet, fmt::Debug};
+use std::{
+  collections::{BTreeMap, BTreeSet},
+  fmt::Debug,
+};
 
 #[derive(Debug)]
 pub struct AscriptAny {
   pub(crate) types: AscriptTypes,
   pub(crate) name:  String,
   pub(crate) used:  bool,
+  pub(crate) root:  bool,
 }
 
 impl ValueObj for AscriptAny {
@@ -20,6 +24,8 @@ impl ValueObj for AscriptAny {
       "name" => Value::Str(self.name.intern(s_store)),
       "types" => Value::Obj(&self.types),
       "has_token" => Value::Int(self.types.0.iter().any(contains_token_reference) as isize),
+      "is_used" => Value::Int(self.used as isize),
+      "is_root" => Value::Int(self.root as isize),
       _ => Value::None,
     }
   }
@@ -62,7 +68,7 @@ pub struct AscriptAnys<'db> {
 
 impl<'db> AscriptAnys<'db> {
   pub fn new(db: &'db AscriptDatabase) -> Self {
-    let used_indices = BTreeSet::from_iter(db.any_type_lu.iter().cloned());
+    let mut used_indices = Vec::from_iter(db.any_type_lu.iter().cloned().map(|index| 0));
     Self {
       db,
       len: used_indices.len(),
@@ -70,10 +76,27 @@ impl<'db> AscriptAnys<'db> {
         .any_types
         .iter()
         .enumerate()
-        .map(|(i, any)| AscriptAny {
-          types: AscriptTypes(any.1.iter().map(|t| AscriptType::Scalar(*t)).collect()),
-          name:  format!("{}Any", any.0),
-          used:  used_indices.contains(&i),
+        .map(|(i, _)| {
+          let remapped_index = db.any_type_lu[i];
+          let entry = used_indices.get_mut(remapped_index);
+          let any = &db.any_types[remapped_index];
+
+          let (used, root) = if let Some(entry) = entry {
+            let root = *entry;
+            *entry += 1;
+            (true, root == 0)
+          } else {
+            (false, false)
+          };
+
+          dbg!((used, root));
+
+          AscriptAny {
+            types: AscriptTypes(any.1.iter().map(|t| AscriptType::Scalar(*t)).collect()),
+            name: format!("{}Any", any.0),
+            used,
+            root,
+          }
         })
         .collect(),
     }
@@ -90,11 +113,12 @@ impl<'a> ValueObj for AscriptAnys<'a> {
   }
 
   fn get_index<'scope>(&'scope self, index: usize, _: &radlr_core::IStringStore) -> Value<'scope> {
-    let remapped_index = self.db.any_type_lu[index];
-    Value::Obj(&self.anys[remapped_index])
+    //let remapped_index = self.db.any_type_lu[index];
+    Value::Obj(&self.anys[index])
   }
 
   fn get_iter<'scope>(&'scope self, _: &radlr_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
-    self.anys.iter().filter(|i| i.used).enumerate().map(|(i, any)| (Value::Int(i as isize), Value::Obj(any))).collect()
+    dbg!(self.anys.iter().filter(|i| i.used && i.root).collect::<Vec<_>>());
+    self.anys.iter().filter(|i| i.used && i.root).enumerate().map(|(i, any)| (Value::Int(i as isize), Value::Obj(any))).collect()
   }
 }

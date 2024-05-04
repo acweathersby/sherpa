@@ -106,7 +106,9 @@ use std::{collections::HashMap, marker::PhantomData};
     }
     "Vec" {
       match ty.val.#type {
-        "Any"  { Vec<#any_rust_type(@ANY_ENUMS.[@ty.val.index])> }
+        "Any"  { 
+          Vec<#any_rust_type(@ANY_ENUMS.[@ty.val.index])> 
+        }
         { Vec<#ty_to_rust(ty.val)> }
       }
     }
@@ -139,6 +141,11 @@ use std::{collections::HashMap, marker::PhantomData};
   #type_entry { 
     match (@self.agg_type, @self.val.#type) { 
       (None, "Token") | (None, "Any") { }
+      (_ , "Any") {
+        match @ANY_ENUMS.[self.val.index].is_root {
+          true { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @; }
+        }
+      }
       { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @;}
     }
   }
@@ -172,6 +179,7 @@ use std::{collections::HashMap, marker::PhantomData};
     #impls {
       match (self.agg_type, self.val.#type) {
         (None, "Any") { }
+        
         ("Vec", "Token") { 
           impl<Token:Tk>\ @AST_NAME<Token> { 
             pub\ fn\ into_#ty_to_ast_name(self) (self)\ ->\ Option<#ast_node_rust_type(self)>\ { @;
@@ -181,6 +189,28 @@ use std::{collections::HashMap, marker::PhantomData};
               }
             }
           } \n\n
+        }
+        (_ , "Any") {
+          match @ANY_ENUMS.[self.val.index].is_root {
+            true {
+              impl<Token:Tk>\ @AST_NAME<Token> { 
+                pub\ fn\ into_#ty_to_ast_name(self) (self)\ ->\ Option<#ast_node_rust_type(self)>\ { @;
+                  mat ch\ self\ {
+                    @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(val),@;
+                    _\ =>\ None,@;
+                  }
+                }
+              } \n\n
+
+              impl<Token:Tk>\ From<#ast_node_rust_type(self)>\ for\ @AST_NAME<Token> { 
+                fn\ from(value: #ast_node_rust_type(self))\ ->\ Self\ {
+                  Self::#ty_to_ast_name(self)(value) @;
+                }@;
+              }
+
+              \n\n
+            }
+          }
         }
         {
           impl<Token:Tk>\ @AST_NAME<Token> { 
@@ -215,11 +245,11 @@ use std::{collections::HashMap, marker::PhantomData};
   #any_enum {
     @enum_type={ #any_rust_type(self) }
     #iter_types { 
-      match (self.agg_type, self.val.#type , self.val.is_empty) {
-         (None, "Struct", true) { 
-           #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @;
+      match (self.agg_type, self.val.#type , self.val.is_empty, self.is_root) {
+          (None, "Struct", true, _) { 
+             #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @;
           }
-        { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @; }
+          { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @; }
       }
     }
 

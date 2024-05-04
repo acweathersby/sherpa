@@ -181,3 +181,21 @@ fn builds_basic_grammar_javascript_a() -> RadlrResult<()> {
 
   Ok(())
 }
+
+#[test]
+fn builds_rum_lang() -> RadlrResult<()> {
+  let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).canonicalize()?;
+
+  println!("{:?}", root.join("../../grammars/radlr/3.0.0-pre-bootstrap/radlr.radlr").canonicalize()?);
+
+  let path = root.join("../../grammars/radlr/3.0.0-pre-bootstrap/radlr.radlr").canonicalize()?;
+  let output = root.join("build");
+
+  let mut build_config = BuildConfig::new(&path);
+  build_config.source_out = &output;
+  build_config.lib_out = &output;
+
+  fs_build(build_config, Default::default(), TargetLanguage::Rust)?;
+
+  Ok(())
+}

@@ -1041,6 +1041,11 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
       todo!("Create Mod Graph node")
     }
 
+    ASTNode::AST_BoolLiteral(bool) => {
+      let val = bool.value;
+      Ok(GraphNode::Bool(None, AscriptType::Scalar(AscriptScalarType::Bool(val))))
+    }
+
     ASTNode::AST_Bool(bool) => {
       if let Some(init) = &bool.initializer {
         let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;

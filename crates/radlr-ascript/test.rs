@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{types::AscriptDatabase, AscriptAggregateType, AscriptRule, AscriptType, StringId};
 use radlr_core::{RadlrGrammar, RadlrResult};
 
@@ -127,6 +129,118 @@ fn builds_json() -> RadlrResult<()> {
    "#;
 
   let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
+
+  Ok(())
+}
+
+#[test]
+fn builds_rum_lang() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> RS 
+     
+     > ( table_definition | Block )(+)
+  
+     :ast { t_Rs, val:$1 }
+  
+  <> table_definition 
+     
+     > table_identifier table_row_aliases(*) table_row_types
+
+     :ast { t_Table }
+  
+  <> table_identifier 
+  
+     > "[" id sub_table_id primary_key_table? table_attributes? "]"
+  
+  <> table_attributes 
+  
+     > ":" id(+)
+  
+  <> primary_key_table 
+     
+     > "#" id
+  
+  <> sub_table_id 
+     
+     > "." id
+  
+  <> table_row_aliases 
+     
+     > "[" (id(+))(+"-") "]"
+  
+  <> table_row_types 
+     
+     > "(" (id table_attributes? )(*",") ")"
+  
+  // Statements
+  
+  <> for_in_table_stmt > 
+  
+    "for" id "in" ( id | select_expression ) stmt_block 
+  
+  <> stmt_block > "{" "}"
+  
+  
+  
+  // Expressions
+  
+  <> select_expression > id "{" "}"
+  
+  
+  <> t_expr 
+     > t_expr "|" t_expr 
+  
+  <> row_method > "todo" 
+  
+  <> table_method > "todo" 
+  
+  <> expr > expr "+" expr
+          | expr "-" expr
+          | expr "*" expr
+          | expr "/" expr
+          | expr "^" expr
+          | expr "-" expr
+          | expr "&" expr
+          | expr "|" expr
+          | expr "&&" expr
+          | expr "||" expr
+          | "-" expr
+          | "~" expr
+  
+  
+  <> num > tk:( "-"? c:num(+) ( "." ( c:num(+) )? ( ("e" | "E") c:num(*) )? ) )
+  
+  <> id > tk:(  ( c:id | "_" ) ( c:id | "_" | c:num )(*) | c:num(+) ( c:id ) ( c:id | "_" | c:num )(*)  )
+  
+  
+  <> Block > "{" "}"
+  
+    :ast { t_Block }
+  
+    
+   "##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
+
+  Ok(())
+}
+
+#[test]
+fn builds_radlr_grammar_ast() -> RadlrResult<()> {
+  let resolved_root_path = RadlrGrammar::resolve_to_grammar_file(
+    &PathBuf::from("../../grammars/radlr/3.0.0-pre-bootstrap/radlr.radlr").canonicalize().expect("Grammar not found"),
+  )?;
+  let db = RadlrGrammar::new().add_source(&resolved_root_path)?.build_db(resolved_root_path, Default::default())?;
 
   let adb: AscriptDatabase = db.into();
 

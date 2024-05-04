@@ -1,0 +1,18 @@
+IGNORE { c:sp c:nl }
+
+IMPORT rule as rule
+IMPORT symbol as sym
+
+<> grammar 
+  
+  > non-terminal
+
+<> non-terminal
+  
+  > cf-nonterm-definition
+
+<> cf-nonterm-definition 
+  
+  > "<>" sym::nonterm_symbol^n ">" rule::rules^r
+  
+  :ast { t_NontermDefinition, name:$n, rules: $r, tok }

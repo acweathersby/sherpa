@@ -2,9 +2,8 @@ NAME RADLR_omnibus
 
 IGNORE { c:sp c:nl }
 
-<> RADLR > "hello" "world"
+IMPORT components/grammar as grammar
 
+EXPORT grammar as grammar
 
-
-
-
+<> grammar > grammar::grammar

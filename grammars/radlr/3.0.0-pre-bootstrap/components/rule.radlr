@@ -1,0 +1,12 @@
+IGNORE { c:sp c:nl }
+
+IMPORT symbol as sym
+
+<> rules 
+  
+  > rule(+"|")
+
+<> rule 
+  
+  > sym::annotated_symbol(+)
+
