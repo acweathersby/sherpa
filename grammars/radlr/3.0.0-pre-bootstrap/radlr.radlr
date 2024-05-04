@@ -1,0 +1,10 @@
+NAME RADLR_omnibus
+
+IGNORE { c:sp c:nl }
+
+<> RADLR > "hello" "world"
+
+
+
+
+

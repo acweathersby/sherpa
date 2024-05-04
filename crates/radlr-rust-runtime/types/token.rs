@@ -29,8 +29,8 @@ impl BlameColor {
 /// Combines a range and a reference to binary data.
 #[derive(Clone)]
 pub struct Token {
-  inner: TokenRange,
-  input: Option<Arc<[u8]>>,
+  pub(crate) inner: TokenRange,
+  pub(crate) input: Option<Arc<[u8]>>,
 }
 
 impl Hash for Token {
@@ -299,7 +299,7 @@ impl Token {
   }
 
   #[inline(always)]
-  fn slice(&self, start: i32, end: i32) -> String {
+  pub fn slice(&self, start: i32, end: i32) -> String {
     if let Some(input) = &self.input {
       let (adjusted_start, adjusted_end) = self.get_slice_range(start, end);
 
@@ -523,7 +523,6 @@ impl Default for Token {
 #[cfg(test)]
 mod test {
   use crate::types::{Token, TokenRange};
-  use std::sync::Arc;
 
   #[test]
   pub fn blame_string_places_cursor_in_correct_position() {

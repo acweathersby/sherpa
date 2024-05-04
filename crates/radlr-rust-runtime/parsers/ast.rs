@@ -1,12 +1,12 @@
 //! A parser that produce the tokens, including skipped tokens, of an input.
 
 use crate::types::*;
-use std::fmt::{format, Debug};
+use std::fmt::Debug;
 
 pub trait Tk: Clone + Default + std::hash::Hash {
   fn to_string(&self) -> String;
   fn trim(&self, start: usize, end: usize) -> Self;
-  fn from_range(start: usize, end: usize, id: u32, source: SharedSymbolBuffer) -> Self;
+  fn from_range(start: usize, end: usize, line_number: u32, line_offset: u32, id: u32, source: SharedSymbolBuffer) -> Self;
   fn from_slice(slice: &[Self]) -> Self;
   fn len(&self) -> usize;
 }
@@ -18,7 +18,7 @@ impl<Token: Tk, T: Default> Node<Token> for T {}
 pub type Reducer<Token, N> = fn(*mut [N], &[Token], Token) -> N;
 
 impl Tk for String {
-  fn from_range(start: usize, end: usize, id: u32, source: SharedSymbolBuffer) -> Self {
+  fn from_range(start: usize, end: usize, _line_number: u32, _line_offset: u32, _id: u32, source: SharedSymbolBuffer) -> Self {
     unsafe { Self::from_utf8_unchecked((&source[start..end]).to_vec()) }
   }
 
@@ -34,8 +34,48 @@ impl Tk for String {
     self.clone()
   }
 
+  fn trim(&self, _start: usize, _end: usize) -> Self {
+    todo!("Create String trim function")
+  }
+}
+
+impl Tk for Token {
+  fn from_range(start: usize, end: usize, line_number: u32, line_offset: u32, _id: u32, source: SharedSymbolBuffer) -> Self {
+    Token {
+      inner: TokenRange {
+        len:      (end - start) as u32,
+        off:      start as u32,
+        line_num: line_number,
+        line_off: line_offset,
+      },
+      input: Some(source),
+    }
+  }
+
+  fn from_slice(slice: &[Self]) -> Self {
+    debug_assert!(slice.len() > 0);
+    if slice.len() == 1 {
+      slice[0].clone()
+    } else {
+      let start = &slice[0];
+      let end = &slice[slice.len() - 1];
+      Token {
+        inner: TokenRange { len: end.inner.off - start.inner.off + end.inner.len, ..start.inner },
+        input: start.input.clone(),
+      }
+    }
+  }
+
+  fn len(&self) -> usize {
+    self.inner.len as usize
+  }
+
+  fn to_string(&self) -> String {
+    self.slice(0, self.inner.len as i32)
+  }
+
   fn trim(&self, start: usize, end: usize) -> Self {
-    self.trim(start, end)
+    Token::trim(&self, start as u32, end as u32)
   }
 }
 
@@ -74,8 +114,6 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token> + 
   let mut parser = db.get_parser()?;
 
   let mut ctx = parser.init(entry)?;
-
-  let mut last_offset = 0;
 
   while let Some(action) = parser.next(input, &mut ctx) {
     match action {
@@ -158,12 +196,15 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token> + 
         byte_length: token_byte_length,
         byte_offset: token_byte_offset,
         token_id,
+        token_line_count,
+        token_line_offset,
         ..
       } => {
         let offset_start = token_byte_offset as usize;
         let offset_end = (token_byte_offset + token_byte_length) as usize;
 
-        let token = Token::from_range(offset_start, offset_end, token_id, input.get_owned_ref());
+        let token =
+          Token::from_range(offset_start, offset_end, token_line_count, token_line_offset, token_id, input.get_owned_ref());
 
         tokens.push(token.clone());
         nodes.push(N::default());
