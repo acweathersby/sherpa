@@ -5,7 +5,7 @@ use crate::utf8::{get_token_class_from_codepoint, get_utf8_byte_length_from_code
 /// A multi-reader, multi-writer view of the underlying parser input
 /// data, used to distribute access to the input string over multiple
 /// Tokens and SymbolReaders.
-pub type SharedSymbolBuffer = Arc<Vec<u8>>;
+pub type SharedSymbolBuffer = Arc<[u8]>;
 
 pub trait ParserInput {
   /// The number of bytes available for reading. This is allowed
@@ -63,18 +63,18 @@ pub trait ParserInput {
 
 #[derive(Debug)]
 pub struct StringInput {
-  input: Arc<Vec<u8>>,
+  input: Arc<[u8]>,
 }
 
 impl From<String> for StringInput {
   fn from(value: String) -> Self {
-    Self { input: Arc::new(value.into_bytes()) }
+    Self { input: value.into_bytes().into() }
   }
 }
 
 impl From<&str> for StringInput {
   fn from(value: &str) -> Self {
-    Self { input: Arc::new(value.bytes().collect()) }
+    Self { input: value.as_bytes().into() }
   }
 }
 

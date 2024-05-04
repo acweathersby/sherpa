@@ -93,7 +93,7 @@ impl<'a> ByteReader for UTF8StringReader<'a> {
 
   #[inline(always)]
   fn get_source(&mut self) -> SharedSymbolBuffer {
-    self.source.get_or_insert(SharedSymbolBuffer::new(Vec::from(self.data))).clone()
+    self.source.get_or_insert(self.data.as_bytes().into()).clone()
   }
 
   #[inline(always)]

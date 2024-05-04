@@ -190,7 +190,7 @@ impl TokenRange {
 
   pub fn to_token_with_string(&self, original_string: &str) -> Token {
     let mut tok: Token = (*self).into();
-    tok.set_source(Arc::new(original_string.to_string().as_bytes().to_vec()));
+    tok.set_source(original_string.to_string().as_bytes().into());
     tok
   }
 

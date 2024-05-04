@@ -606,7 +606,14 @@ pub fn get_next_action<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M
   loop {
     if state < 1 {
       //Accept never encountered.
-      break ParseAction::Error { last_nonterminal: ctx.nterm, last_state: Default::default() };
+      break ParseAction::Error {
+        last_nonterminal:  ctx.nterm,
+        last_state:        Default::default(),
+        byte_length:       ctx.tok_len as u32,
+        byte_offset:       ctx.begin_ptr as u32,
+        token_line_count:  0,
+        token_line_offset: 0,
+      };
     } else {
       let mask_gate = NORMAL_STATE_FLAG << (ctx.in_fail_mode() as u32);
       if (state & mask_gate) != 0 {

@@ -580,7 +580,7 @@ pub trait RadlrParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool
         ParseAction::Error { .. } => {
           let last_input = TokenRange::default();
           let mut token: Token = last_input.to_token(self.get_reader_mut());
-          token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
+          token.set_source(self.get_input().to_string().as_bytes().into());
           break Err(RadlrParseError {
             message:          "Could not recognize the following input:".to_string(),
             inline_message:   "".to_string(),
@@ -639,7 +639,7 @@ pub trait RadlrParser<R: ByteReader + MutByteReader, M, const UPWARD_STACK: bool
           }
           let mut token: Token = last_input.to_token(self.get_reader_mut());
 
-          token.set_source(Arc::new(Vec::from(self.get_input().to_string().as_bytes())));
+          token.set_source(self.get_input().to_string().as_bytes().into());
           break ShiftsAndSkipsResult::FailedParse(RadlrParseError {
             message:          "Could not recognize the following input:".to_string(),
             inline_message:   "".to_string(),

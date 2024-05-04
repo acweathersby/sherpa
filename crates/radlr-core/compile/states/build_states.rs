@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Hash)]
 pub(crate) enum StateConstructionError {
   NonDeterministicPeek(SharedGraphNode, Box<RadlrError>),
-  OtherErrors(Vec<RadlrError>),
+  _OtherErrors(Vec<RadlrError>),
 }
 
 const NORMAL_GRAPH: i16 = 0;

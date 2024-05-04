@@ -471,8 +471,8 @@ fn read_codepoint<'a, 'debug>(
     }
   } else {
     if is_nl {
-      ctx.end_line_num += 1;
-      ctx.end_line_off = ctx.input_ptr as u32;
+      ctx.chkp_line_num += 1;
+      ctx.chkp_line_off = ctx.input_ptr as u32;
     }
     OpResult {
       action:    ParseAction::None,
@@ -519,8 +519,8 @@ fn hash_branch<'a, 'debug>(
 
       if value == input_value {
         if is_nl {
-          ctx.end_line_num += 1;
-          ctx.end_line_off = ctx.input_ptr as u32;
+          ctx.chkp_line_num += 1;
+          ctx.chkp_line_off = ctx.input_ptr as u32;
         }
         return OpResult {
           action:    ParseAction::None,
@@ -567,8 +567,8 @@ fn vector_branch<'a, 'debug>(
     let value_index = (input_value as i32 - value_offset as i32) as usize;
     if value_index < table_length as usize {
       if is_nl {
-        ctx.end_line_num += 1;
-        ctx.end_line_off = ctx.input_ptr as u32;
+        ctx.chkp_line_num += 1;
+        ctx.chkp_line_off = ctx.input_ptr as u32;
       }
       let mut iter: ByteCodeIterator = (i.bytecode(), table_start + value_index * 4).into();
       let address_offset = iter.next_u32_le().unwrap();
@@ -814,7 +814,14 @@ impl<T: ParserInput> ParserIterator<T> for ByteCodeParserNew {
       if state.address < 1 {
         //Accept never encountered.
         ctx.is_finished = true;
-        break Some(ParseAction::Error { last_nonterminal: ctx.nonterm, last_state: state });
+        break Some(ParseAction::Error {
+          last_nonterminal:  ctx.nonterm,
+          last_state:        state,
+          byte_offset:       ctx.sym_ptr as u32,
+          byte_length:       ctx.tok_byte_len,
+          token_line_count:  ctx.chkp_line_num,
+          token_line_offset: ctx.chkp_line_off,
+        });
       } else {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
         if state.info.is_state_entry {
@@ -827,8 +834,12 @@ impl<T: ParserInput> ParserIterator<T> for ByteCodeParserNew {
           (ParseAction::FailState, _, fail_address) => {
             ctx.is_finished = true;
             break Some(ParseAction::Error {
-              last_nonterminal: ctx.nonterm,
-              last_state:       ParserState::yield_entry(fail_address),
+              last_nonterminal:  ctx.nonterm,
+              last_state:        ParserState::yield_entry(fail_address),
+              byte_offset:       ctx.sym_ptr as u32,
+              byte_length:       ctx.tok_byte_len,
+              token_line_count:  ctx.chkp_line_num,
+              token_line_offset: ctx.chkp_line_off,
             });
           }
           (action, next_state, ..) => {

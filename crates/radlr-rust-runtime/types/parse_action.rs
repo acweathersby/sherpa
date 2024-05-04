@@ -75,8 +75,12 @@ pub enum ParseAction {
     final_offset:   usize,
   },
   Error {
-    last_state:       ParserState,
-    last_nonterminal: u32,
+    last_state:        ParserState,
+    last_nonterminal:  u32,
+    byte_offset:       u32,
+    byte_length:       u32,
+    token_line_offset: u32,
+    token_line_count:  u32,
   },
   EndOfInput {
     current_cursor_offset: u32,

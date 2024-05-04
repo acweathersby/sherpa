@@ -30,7 +30,7 @@ impl BlameColor {
 #[derive(Clone)]
 pub struct Token {
   inner: TokenRange,
-  input: Option<Arc<Vec<u8>>>,
+  input: Option<Arc<[u8]>>,
 }
 
 impl Hash for Token {
@@ -167,7 +167,7 @@ impl Token {
   /// methods will not work correctly if the Token has not been
   /// attached to its source.
   #[inline(always)]
-  pub fn set_source(&mut self, source: Arc<Vec<u8>>) {
+  pub fn set_source(&mut self, source: Arc<[u8]>) {
     self.input = Some(source);
   }
 
@@ -409,7 +409,7 @@ impl Token {
   ///   is
   /// not defined.
   pub fn blame(&self, max_pre: usize, max_post: usize, inline_comment: &str, colors: Option<BlameColor>) -> String {
-    fn create_line(source: &Arc<Vec<u8>>, prev_line: i64, next_line: i64, line_number: usize) -> String {
+    fn create_line(source: &Arc<[u8]>, prev_line: i64, next_line: i64, line_number: usize) -> String {
       if let Ok(utf_string) = String::from_utf8(Vec::from(&source[(prev_line + 1) as usize..next_line as usize])) {
         format!("{: >4}: {}\n", line_number, utf_string,)
       } else {
@@ -528,7 +528,7 @@ mod test {
   #[test]
   pub fn blame_string_places_cursor_in_correct_position() {
     let tok = Token {
-      input: Some(Arc::new("\n start \n\n test \n final ".to_string().as_bytes().to_vec())),
+      input: Some("\n start \n\n test \n final ".to_string().as_bytes().into()),
       inner: TokenRange { len: 4, off: 11, line_num: 3, line_off: 9 },
     };
 
@@ -549,7 +549,7 @@ mod test {
   #[test]
   pub fn blame_string_places_cursor_in_correct_position2() {
     let tok = Token {
-      input: Some(Arc::new(" start \n\n test \n final ".to_string().as_bytes().to_vec())),
+      input: Some(" start \n\n test \n final ".to_string().as_bytes().into()),
       inner: TokenRange { len: 5, off: 1, line_num: 0, line_off: 0 },
     };
 

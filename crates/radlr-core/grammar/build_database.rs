@@ -82,7 +82,7 @@ pub(crate) fn build_compile_db<'a>(
   let root_grammar = o_to_r(grammar_headers.get(&g.guid), "Could not find grammar")?.as_ref();
 
   // Build non-terminal list.
-  let mut symbols = OrderedMap::from_iter(vec![(SymbolId::Default, 0)]);
+  let mut symbols = OrderedMap::from_iter(vec![(SymbolId::Default, (Token::default(), 0))]);
   let mut nonterminal_queue: VecDeque<TrackedNonterm> =
     Queue::from_iter(root_grammar.pub_nterms.iter().map(|(_, p)| (p.1.clone(), root_grammar.identity.path, p.0)));
 
@@ -164,7 +164,7 @@ pub(crate) fn build_compile_db<'a>(
           }
 
           for sym in nterm.symbols.iter() {
-            insert_symbol(&mut symbols, sym);
+            insert_symbol(&mut symbols, sym, Token::default());
           }
 
           extract_nterm_syms(
@@ -376,7 +376,7 @@ pub(crate) fn build_compile_db<'a>(
     }
   }
 
-  let tokens = convert_index_map_to_vec(symbols.iter().map(|(sym, index)| {
+  let tokens = convert_index_map_to_vec(symbols.iter().map(|(sym, (tok, index))| {
     (
       DBTokenData {
         nonterm_id: if sym.is_default() {
@@ -388,31 +388,38 @@ pub(crate) fn build_compile_db<'a>(
         sym_id:     *sym,
         name:       {
           use SymbolId::*;
-          match sym {
-            Undefined => "Undefine".intern(s_store),
-            Default => "Default".intern(s_store),
-            EndOfFile { .. } => "{EOF}".intern(s_store),
-            ClassSpace { .. } => "c:sp".intern(s_store),
-            ClassHorizontalTab { .. } => "c:tab".intern(s_store),
-            ClassNewLine { .. } => "c:nl".intern(s_store),
-            ClassIdentifier { .. } => "c:id".intern(s_store),
-            ClassNumber { .. } => "c:num".intern(s_store),
-            ClassSymbol { .. } => "c:sym".intern(s_store),
-            Token { val, .. } => val.to_string(&s_store).intern(s_store),
-            NonTerminalState { id } | NonTerminal { id, .. } | NonTerminalToken { id, .. } => {
-              let name = nonterminals.get(&id.as_parse_prod()).unwrap().friendly_name.to_string(s_store);
 
-              ("<".to_string() + &name + ">").intern(s_store)
-            }
-            Codepoint { val } => val.to_string().intern(s_store),
-            Char { char, .. } => {
-              if *char < 128 {
-                ("[".to_string() + &char::from(*char).to_string() + "]").intern(s_store)
-              } else {
-                ("[".to_string() + &char.to_string() + "]").intern(s_store)
+          let token_string = tok.to_string();
+
+          if token_string.is_empty() {
+            match sym {
+              Undefined => "Undefine".intern(s_store),
+              Default => "Default".intern(s_store),
+              EndOfFile { .. } => "{EOF}".intern(s_store),
+              ClassSpace { .. } => "c:sp".intern(s_store),
+              ClassHorizontalTab { .. } => "c:tab".intern(s_store),
+              ClassNewLine { .. } => "c:nl".intern(s_store),
+              ClassIdentifier { .. } => "c:id".intern(s_store),
+              ClassNumber { .. } => "c:num".intern(s_store),
+              ClassSymbol { .. } => "c:sym".intern(s_store),
+              Token { val, .. } => val.to_string(&s_store).intern(s_store),
+              NonTerminalState { id } | NonTerminal { id, .. } | NonTerminalToken { id, .. } => {
+                let name = nonterminals.get(&id.as_parse_prod()).unwrap().friendly_name.to_string(s_store);
+
+                ("<".to_string() + &name + ">").intern(s_store)
               }
+              Codepoint { val } => val.to_string().intern(s_store),
+              Char { char, .. } => {
+                if *char < 128 {
+                  ("[".to_string() + &char::from(*char).to_string() + "]").intern(s_store)
+                } else {
+                  ("[".to_string() + &char.to_string() + "]").intern(s_store)
+                }
+              }
+              _ => "".intern(s_store),
             }
-            _ => "".intern(s_store),
+          } else {
+            token_string.intern(s_store)
           }
         },
         tok_id:     (*index).into(),
@@ -504,7 +511,7 @@ fn add_empty_custom_state(c_states: &mut Vec<Option<Box<parser::State>>>) {
 fn convert_rule_symbol_ids(
   r_table: &mut Vec<DBRule>,
   p_map: &mut OrderedMap<SymbolId, usize>,
-  symbols: OrderedMap<SymbolId, usize>,
+  symbols: OrderedMap<SymbolId, (Token, usize)>,
 ) {
   for DBRule { rule, is_scanner, .. } in r_table {
     for SymbolRef { id: sym, original_index: _index, .. } in &mut rule.symbols {
@@ -523,7 +530,7 @@ fn convert_rule_symbol_ids(
 fn convert_symbol_into_db_symbol(
   sym: &SymbolId,
   p_map: &mut OrderedMap<SymbolId, usize>,
-  symbols: &OrderedMap<SymbolId, usize>,
+  symbols: &OrderedMap<SymbolId, (Token, usize)>,
   is_scanner: bool,
 ) -> SymbolId {
   match *sym {
@@ -535,7 +542,7 @@ fn convert_symbol_into_db_symbol(
         let index = p_map.get(&sym).unwrap();
         SymbolId::DBNonTerminalToken {
           nonterm_key: (*index as u32).into(),
-          sym_key:     symbols.get(sym).map(|i| (*i as u32).into()),
+          sym_key:     symbols.get(sym).map(|(_, i)| (*i as u32).into()),
         }
       }
     }
@@ -544,7 +551,7 @@ fn convert_symbol_into_db_symbol(
       SymbolId::DBNonTerminal { key: (*index as u32).into() }
     }
     sym_id if !is_scanner => {
-      let index = symbols.get(&sym_id).unwrap();
+      let (_, index) = symbols.get(&sym_id).unwrap();
       SymbolId::DBToken { key: (*index as u32).into() }
     }
     _ => *sym,
@@ -556,7 +563,7 @@ fn extract_nterm_syms(
   nonterminal_queue: &mut VecDeque<(Token, IString, NonTermId)>,
   nonterminals: &OrderedMap<NonTermId, Box<NonTerminal>>,
   s_store: &IStringStore,
-  symbols: &mut OrderedMap<SymbolId, usize>,
+  symbols: &mut OrderedMap<SymbolId, (Token, usize)>,
   token_names: &mut OrderedMap<SymbolId, IString>,
   token_nonterminals: &mut VecDeque<TrackedNonterm>,
 ) -> RadlrResult<()> {
@@ -576,7 +583,7 @@ fn extract_nterm_syms(
         SymbolId::NonTerminalToken { id, .. } => {
           let name = o_to_r(nonterminals.get(&id.as_parse_prod()), "Non-terminal not found")?.guid_name;
           let name = ("tk:".to_string() + &name.to_string(s_store)).intern(s_store);
-          insert_symbol(symbols, &sym);
+          insert_symbol(symbols, &sym, tok.clone());
           token_names.insert(id.as_parse_prod().as_tok_sym(), name);
           token_nonterminals.push_back((tok, rule.g_id.path, id.as_parse_prod()));
         }
@@ -702,9 +709,9 @@ fn convert_index_map_to_vec<T, C: IntoIterator<Item = (T, usize)>>(nonterminal_m
   nonterminal_map.into_iter().map(|(k, v)| (v, k)).collect::<OrderedMap<_, _>>().into_values().collect::<Array<_>>()
 }
 
-fn insert_symbol(symbol_map: &mut OrderedMap<SymbolId, usize>, sym: &SymbolId) {
+fn insert_symbol(symbol_map: &mut OrderedMap<SymbolId, (Token, usize)>, sym: &SymbolId, name_tok: Token) {
   if !symbol_map.contains_key(sym) {
-    symbol_map.insert(*sym, symbol_map.len());
+    symbol_map.insert(*sym, (name_tok, symbol_map.len()));
   }
 }
 

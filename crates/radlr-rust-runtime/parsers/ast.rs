@@ -1,7 +1,7 @@
 //! A parser that produce the tokens, including skipped tokens, of an input.
 
 use crate::types::*;
-use std::fmt::Debug;
+use std::fmt::{format, Debug};
 
 pub trait Tk: Clone + Default + std::hash::Hash {
   fn to_string(&self) -> String;
@@ -16,6 +16,28 @@ pub trait Node<Token: Tk>: Default {}
 impl<Token: Tk, T: Default> Node<Token> for T {}
 
 pub type Reducer<Token, N> = fn(*mut [N], &[Token], Token) -> N;
+
+impl Tk for String {
+  fn from_range(start: usize, end: usize, id: u32, source: SharedSymbolBuffer) -> Self {
+    unsafe { Self::from_utf8_unchecked((&source[start..end]).to_vec()) }
+  }
+
+  fn from_slice(slice: &[Self]) -> Self {
+    slice.join("")
+  }
+
+  fn len(&self) -> usize {
+    String::len(&self)
+  }
+
+  fn to_string(&self) -> String {
+    self.clone()
+  }
+
+  fn trim(&self, start: usize, end: usize) -> Self {
+    self.trim(start, end)
+  }
+}
 
 pub trait AstDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// Parse while attempting to recover from any errors encountered in the
@@ -53,6 +75,8 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token> + 
 
   let mut ctx = parser.init(entry)?;
 
+  let mut last_offset = 0;
+
   while let Some(action) = parser.next(input, &mut ctx) {
     match action {
       ParseAction::Accept { nonterminal_id, final_offset } => {
@@ -74,8 +98,57 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token> + 
           return Ok(nodes.pop().unwrap());
         };
       }
-      ParseAction::Error { .. } => {
-        todo!("Create panic error");
+      ParseAction::Error {
+        last_state,
+        last_nonterminal,
+        byte_length,
+        byte_offset,
+        token_line_count,
+        token_line_offset,
+      } => {
+        use super::super::types::Token as TK;
+
+        println!("{byte_length} {byte_offset}");
+        let mut token = TK::from_vals(byte_length, byte_offset, token_line_count, token_line_offset);
+        let input_data = input.get_owned_ref();
+        token.set_source(input_data);
+
+        if let Some(expected_tokens) = db.get_expected_tok_ids_at_state(last_state.address as u32) {
+          let token_strings = expected_tokens
+            .iter()
+            .filter_map(|id| db.token_id_to_str(*id))
+            .to_owned()
+            .map(|d| format!("\"{}\"", d.replace("\"", "\\\"")))
+            .collect::<Vec<_>>()
+            .join(" | ");
+
+          return Err(ParserError::InputError {
+            inline_message:   if expected_tokens.len() > 1 {
+              format!(
+                "Expected one of  [ {token_strings} ] got [ \"{}\" ] instead",
+                char::from_u32(input.codepoint(byte_offset as usize)).unwrap_or_default()
+              )
+            } else {
+              format!(
+                "Expected [ {token_strings} ] got [ \"{}\" ] instead",
+                char::from_u32(input.codepoint(byte_offset as usize)).unwrap_or_default()
+              )
+            },
+            last_nonterminal: last_nonterminal,
+            loc:              token,
+            message:          "Encountered an unexpected character".to_string(),
+          });
+        } else {
+          return Err(ParserError::InputError {
+            inline_message:   format!(
+              "Did not expect to encounter character [ \"{}\" ] at this point",
+              char::from_u32(input.codepoint(byte_offset as usize)).unwrap_or_default()
+            ),
+            last_nonterminal: last_nonterminal,
+            loc:              token,
+            message:          "Encountered an unexpected character".to_string(),
+          });
+        }
       }
       ParseAction::Fork { .. } => {
         panic!("No implementation of fork resolution is available")
