@@ -1,5 +1,6 @@
 use super::{
   flow::{
+    get_kernel_items_from_peek_origin,
     handle_fork,
     handle_nonterminal_shift,
     handle_peek_complete_groups,
@@ -58,11 +59,28 @@ pub(crate) fn handle_kernel_items(
     // Todo(anthony) : if peeking, determine if the peek has terminated in a
     // non-deterministic way. If so, produce a NonDeterministicPeek error.
     //panic!("Undeterministic PARSE");
-    //let root_data = pred.root_data.db_key;
+    let root_data = pred.root_data.db_key;
+
+    let root_node = gb.db().nonterm_sym(root_data);
+
+    let mut peek_items = vec![];
+
+    for peek_item in pred.kernel_items() {
+      let (_, PeekGroup { items, .. }) = get_kernel_items_from_peek_origin(gb, pred, peek_item.origin);
+
+      peek_items.extend(items.into_iter());
+    }
 
     Err(RadlrError::StateConstructionError(crate::compile::states::build_states::StateConstructionError::NonDeterministicPeek(
       pred.get_root_shared(),
-      Box::new("Testing Messagine. Peek has no successors!".into()),
+      Box::new(
+        format!(
+          "Testing Messagine. Peek has no successors! \n Error occurred in nonterminal {} \n Unresolved leaf items: \n {}",
+          root_node.debug_string(gb.db()),
+          peek_items.to_debug_string(gb.db(), "\n")
+        )
+        .into(),
+      ),
     )))
   } else {
     Ok(())

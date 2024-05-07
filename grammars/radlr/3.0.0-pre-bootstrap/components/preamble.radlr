@@ -1,0 +1,33 @@
+<> preamble >
+
+        export_clause 
+
+        | import_clause
+
+        | name_clause
+
+        | ignore_clause
+
+<> export_clause > 
+
+        "EXPORT" sym::non_terminal (( "AS" | "as" ) sym::identifier)?
+
+            :ast { t_Export, c_Preamble, production:$2, reference:$3 } 
+
+<> import_clause > 
+
+        "IMPORT" ( c:id | c:sym | c:num  )(+) c:sp ( "AS" | "as" ) sym::identifier
+
+            :ast { t_Import, c_Preamble, uri: str($2), reference:str($5), tok }
+
+<> ignore_clause >
+
+        "IGNORE" "{"  ( sym::terminal_non_terminal | sym::terminal | sym::class )(+) "}"
+
+            :ast { t_Ignore, c_Preamble, symbols: $3 }
+
+<> name_clause >
+
+        "NAME" sym::identifier
+
+            :ast { t_Name, c_Preamble, name: str($2) }

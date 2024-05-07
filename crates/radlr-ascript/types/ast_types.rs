@@ -119,6 +119,31 @@ pub enum PendingType {
 }
 
 impl AscriptType {
+  pub fn is_any(&self) -> bool {
+    match self {
+      AscriptType::Aggregate(agg_type) => match agg_type {
+        AscriptAggregateType::Map { val_type, .. } => val_type.is_any(),
+        AscriptAggregateType::Vec { val_type } => val_type.is_any(),
+      },
+
+      AscriptType::Scalar(val_type) => val_type.is_any(),
+
+      _ => false,
+    }
+  }
+
+  pub fn get_any_type_index(&self) -> Option<usize> {
+    match self {
+      AscriptType::Aggregate(agg_type) => match agg_type {
+        AscriptAggregateType::Map { val_type, .. } => val_type.get_any_type_index(),
+        AscriptAggregateType::Vec { val_type } => val_type.get_any_type_index(),
+      },
+
+      AscriptType::Scalar(val_type) => val_type.get_any_type_index(),
+      _ => None,
+    }
+  }
+
   pub fn is_numeric(&self) -> bool {
     if let Some(s) = self.as_scalar() {
       s.is_numeric()
@@ -419,6 +444,20 @@ impl AscriptScalarType {
     }
   }
 
+  pub fn is_any(&self) -> bool {
+    match self {
+      AscriptScalarType::Any(_) => true,
+      _ => false,
+    }
+  }
+
+  pub fn get_any_type_index(&self) -> Option<usize> {
+    match self {
+      AscriptScalarType::Any(index) => Some(*index),
+      _ => None,
+    }
+  }
+
   pub fn is_numeric(&self) -> bool {
     use AscriptScalarType::*;
     match self {
@@ -600,6 +639,7 @@ pub enum GraphNode {
   Sym(usize, bool, AscriptType),
   TokSym(usize, bool, AscriptType),
   TokRule(AscriptType),
+  AnyConvert(Rc<GraphNode>, AscriptType),
   Undefined(AscriptType),
 }
 
@@ -623,6 +663,29 @@ impl GraphNode {
       | TokRule(ty)
       | TokSym(.., ty)
       | Tok(.., ty)
+      | AnyConvert(.., ty)
+      | Undefined(ty) => ty,
+    }
+  }
+
+  pub fn get_type_mut(&mut self) -> &mut AscriptType {
+    use GraphNode::*;
+    match self {
+      Add(.., ty)
+      | Sub(.., ty)
+      | Mul(.., ty)
+      | Div(.., ty)
+      | Map(.., ty)
+      | Vec(.., ty)
+      | Trim(.., ty)
+      | Sym(.., ty)
+      | Num(.., ty)
+      | Str(.., ty)
+      | Bool(.., ty)
+      | TokRule(ty)
+      | TokSym(.., ty)
+      | Tok(.., ty)
+      | AnyConvert(.., ty)
       | Undefined(ty) => ty,
     }
   }
@@ -643,6 +706,7 @@ impl ValueObj for GraphNode {
       Str(..) => "StrNode",
       Trim(..) => "TrimNode",
       Bool(..) => "BoolNode",
+      AnyConvert(..) => "AnyConvertNode",
       TokRule(..) => "TokRuleNode",
       TokSym(..) | Tok(..) => "TokNode",
       Undefined(..) => "UndefinedNode",
@@ -683,6 +747,7 @@ impl ValueObj for GraphNode {
       "index" => match self {
         Sym(index, ..) => Value::Int(*index as isize),
         TokSym(index, ..) => Value::Int(*index as isize),
+        AnyConvert(_, index) => Value::Int(index.get_any_type_index().unwrap() as isize),
         _ => Value::None,
       },
       "is_last_ref" => match self {
@@ -691,6 +756,7 @@ impl ValueObj for GraphNode {
         _ => Value::None,
       },
       "init" => match self {
+        AnyConvert(val, ..) => Value::Obj(val.as_ref()),
         Map(_, val, ..) => Value::Obj(val.as_ref()),
         Trim(val, ..) => Value::Obj(val.as_ref()),
         Vec(val, ..) => Value::Obj(val),

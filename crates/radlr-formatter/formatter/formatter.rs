@@ -366,7 +366,7 @@ impl Formatter {
   ) -> RadlrResult<(IString, Vec<Value<'ctx>>)> {
     let mut name = name.to_string();
     let mut vals = vec![];
-    for arg in call_args.iter() {
+    for (index, arg) in call_args.iter().enumerate() {
       match Self::eval_expression(arg, ctx)? {
         num @ Value::Num(_) => {
           name += "_num";
@@ -391,7 +391,7 @@ impl Formatter {
               Value::Obj(obj) => {
                 obj.get_type().to_string()
               }
-              _ => format!("{node:?}").to_string(),
+              _ => format!("{name} arg #{index} {node:?}").to_string(),
             },
             arg.to_token().blame(1, 1, "", Default::default())
           )

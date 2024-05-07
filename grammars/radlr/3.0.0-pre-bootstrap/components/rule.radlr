@@ -1,12 +1,71 @@
 IGNORE { c:sp c:nl }
 
 IMPORT symbol as sym
+IMPORT ast as ast
+
++> sym::nonterm 
+  
+  > "(" rules ")"{1}
+
+    :ast { t_Grouped_Rules, rules:$2,  tok }
+
+
++> sym::terminal 
+
+  > "tk:(" rules ")"{1}
+
+        :ast { t_TokenGroupRules, rules:$2,  tok }
+
 
 <> rules 
   
   > rule(+"|")
 
+
 <> rule 
   
-  > sym::annotated_symbol(+)
+  > ( [ ( sym::annotated_symbol | not_empty )(*)^s end_of_input?^eoi ]  :ast [$s, $eoi] )^s 
+    
+    //ast_definition?^a
+
+    //:ast { t_Rule, symbols:$s, ast:$a, tok }
+
+    :ast { t_Rule, symbols:$s, ast:$a, tok }
+
+
+/* <> ast_definition 
+
+  > ":ast" ast::body^ast
+
+    :ast  { t_Ascript, ast:$ast, tok } */
+
+
+<> not_empty 
+
+  > "[" not_empty_set^s ']' "!"?^o  
+
+      :ast { t_NotEmptySet, unordered: bool($o), symbols:$s, tok }
+  
+  | "[" not_empty_set^s "]!?"^o
+
+      :ast { t_NotEmptySet, unordered: bool($o), allow_empty: bool($o), symbols:$s, tok }
+
+
+<> not_empty_set 
+  
+  > sym::annotated_symbol(+)^s
+
+
+<> ignore_scope 
+
+  > ignore_clause "{" ( cf_rules | peg_rules | append_rules /* | ir::state */ | template_rule )(+) "}"
+
+    :ast { t_Grammar, preamble:$1, rules:$2, tok }
+
+
+<> end_of_input 
+
+  > "$" 
+
+    :ast { t_EOFSymbol, tok }
 

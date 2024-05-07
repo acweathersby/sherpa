@@ -69,7 +69,12 @@ fn dispatch<'a, 'debug>(
       Accept => {
         ctx.is_finished = true;
         OpResult {
-          action:    ParseAction::Accept { nonterminal_id: ctx.nonterm, final_offset: ctx.sym_ptr },
+          action:    ParseAction::Accept {
+            nonterminal_id:    ctx.nonterm,
+            final_offset:      ctx.sym_ptr,
+            token_line_count:  ctx.end_line_num,
+            token_line_offset: ctx.end_line_off,
+          },
           next:      Option::None,
           is_goto:   false,
           can_debug: true,

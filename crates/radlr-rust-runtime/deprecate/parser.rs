@@ -79,7 +79,17 @@ pub fn dispatch<'a, 'debug, R: ByteReader + MutByteReader + UTF8Reader, M>(
       HashBranch => hash_branch(i, ctx, debug),
       Fail => (FailState, Option::None, false, true),
       Pass => (CompleteState, Option::None, false, true),
-      Accept => (ParseAction::Accept { nonterminal_id: ctx.nterm, final_offset: 0 }, Option::None, false, true),
+      Accept => (
+        ParseAction::Accept {
+          nonterminal_id:    ctx.nterm,
+          final_offset:      0,
+          token_line_count:  0,
+          token_line_offset: 0,
+        },
+        Option::None,
+        false,
+        true,
+      ),
       NoOp => (None, i.next(), false, true),
       instr => unreachable!("Unrecognized instruction: {}", instr as u32),
     } {

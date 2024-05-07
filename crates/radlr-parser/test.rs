@@ -21,3 +21,36 @@ fn simple_nonterminal_regex() {
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
   dbg!(result);
 }
+
+#[test]
+fn class_symols() {
+  const INPUT: &'static str = r##"
+
+<> test > \n \s \is \sym \any \tab \vtab \test \wildtest
+  "##;
+  let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+
+  dbg!(result);
+}
+
+#[test]
+fn optional_repeat() {
+  const INPUT: &'static str = r##"
+
+<> test > "test"( 8, 9 "|") "test"(*"|") "test"(*) "test"*
+
+  "##;
+  let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+  dbg!(result);
+}
+
+#[test]
+fn at_least_once_repeat() {
+  const INPUT: &'static str = r##"
+
+<> test > "test"(+",") "test"(+) "test"+
+
+  "##;
+  let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+  dbg!(result);
+}

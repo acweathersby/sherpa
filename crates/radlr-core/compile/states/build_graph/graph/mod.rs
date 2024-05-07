@@ -800,7 +800,7 @@ impl ConcurrentGraphBuilder {
   }
 
   fn enqueue_state_for_processing_kernel(&mut self, state: SharedGraphNode, parser_config: ParserConfig, allow_local: bool) {
-    if self.local_next.is_none() && allow_local {
+    if self.local_next.is_none() && allow_local && (state.graph_type() != GraphType::Scanner || !state.is_root()) {
       {
         self.local_next = Some((state, parser_config));
       }

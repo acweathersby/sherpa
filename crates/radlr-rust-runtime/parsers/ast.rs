@@ -35,7 +35,7 @@ impl Tk for String {
   }
 
   fn trim(&self, _start: usize, _end: usize) -> Self {
-    todo!("Create String trim function")
+    self[_start.min(self.len())..self.len() - _end.min(self.len())].to_string()
   }
 }
 
@@ -90,7 +90,7 @@ pub trait AstDatabase<I: ParserInput>: ParserProducer<I> + Sized {
   /// quality. In this case, the tree containing the least number of error
   /// correction assumptions will be ordered in front of trees that employ more
   /// guesswork to recover parsing.
-  fn build_ast<Token: Tk, N: Node<Token> + Debug, R: AsRef<[Reducer<Token, N>]>>(
+  fn build_ast<Token: Tk + Debug, N: Node<Token> + Debug, R: AsRef<[Reducer<Token, N>]>>(
     &self,
     input: &mut I,
     entry: EntryPoint,
@@ -102,12 +102,14 @@ pub trait AstDatabase<I: ParserInput>: ParserProducer<I> + Sized {
 
 impl<I: ParserInput, T: ParserProducer<I> + Sized> AstDatabase<I> for T {}
 
-fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token> + Debug, R: AsRef<[Reducer<Token, N>]>>(
+fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk + Debug, N: Node<Token> + Debug, R: AsRef<[Reducer<Token, N>]>>(
   input: &mut I,
   entry: EntryPoint,
   db: &DB,
   rules: R,
 ) -> Result<N, ParserError> {
+  use super::super::types::Token as TK;
+
   let mut tokens = vec![];
   let mut nodes = vec![];
 
@@ -117,19 +119,27 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token> + 
 
   while let Some(action) = parser.next(input, &mut ctx) {
     match action {
-      ParseAction::Accept { nonterminal_id, final_offset } => {
+      ParseAction::Accept { nonterminal_id, final_offset, token_line_count, token_line_offset } => {
         return if final_offset != input.len() {
+          let mut token = TK::from_vals(1, final_offset as u32, token_line_count, token_line_offset);
+          let input_data = input.get_owned_ref();
+          token.set_source(input_data);
+
           Err(ParserError::InputError {
             inline_message:   format!("Failed to read entire input {} {}", input.len(), final_offset),
             last_nonterminal: nonterminal_id,
-            loc:              Default::default(),
+            loc:              token,
             message:          "Failed to read entire input".to_string(),
           })
         } else if nonterminal_id != entry.nonterm_id {
+          let mut token = TK::from_vals(1, final_offset as u32, token_line_count, token_line_offset);
+          let input_data = input.get_owned_ref();
+          token.set_source(input_data);
+
           Err(ParserError::InputError {
             inline_message:   "Top symbol did not match the target nonterminal".to_string(),
             last_nonterminal: nonterminal_id,
-            loc:              Default::default(),
+            loc:              token,
             message:          "CST is incorrect".to_string(),
           })
         } else {
@@ -144,8 +154,6 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk, N: Node<Token> + 
         token_line_count,
         token_line_offset,
       } => {
-        use super::super::types::Token as TK;
-
         println!("{byte_length} {byte_offset}");
         let mut token = TK::from_vals(byte_length, byte_offset, token_line_count, token_line_offset);
         let input_data = input.get_owned_ref();

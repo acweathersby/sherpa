@@ -11,10 +11,6 @@ use super::{
 
 const _TOKEN_SYNTHESIS_PENALTY: isize = 1;
 
-struct ErrorRecoveryConfig {
-  synch_limit: usize,
-}
-
 /// Maximum number of subsequent synthetic tokens
 const SYNTH_LIMIT: usize = 10;
 
@@ -93,7 +89,6 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
     {
       // Need to halt forward progression until we have resolved all
       // contexts that have errors.
-      let end = input.len();
 
       let last_state = rec_ctx.last_failed_state;
 

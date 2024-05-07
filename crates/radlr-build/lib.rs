@@ -1,6 +1,6 @@
 use radlr_core::RadlrGrammar;
 pub use radlr_core::RadlrResult;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use targets::rust::RustConfig;
 
 mod targets;
@@ -74,8 +74,8 @@ impl<'a> BuildConfig<'a> {
   pub fn new(root_grammar: &'a Path) -> Self {
     BuildConfig {
       ast_struct_name:       "ASTNode",
-      lib_out:               &root_grammar.parent().unwrap(),
-      source_out:            &root_grammar.parent().unwrap(),
+      lib_out:               &root_grammar.parent().unwrap_or(root_grammar),
+      source_out:            &root_grammar.parent().unwrap_or(root_grammar),
       build_ast:             true,
       include_debug_symbols: false,
       root_grammar_path:     root_grammar,
@@ -84,6 +84,54 @@ impl<'a> BuildConfig<'a> {
       rust:                  Default::default(),
     }
   }
+}
+
+/// Build a Radlr parser from a grammar source string
+pub fn source_string_build<'b>(
+  build_config: BuildConfig<'b>,
+  parser_config: radlr_core::ParserConfig,
+  source: &str,
+  target: TargetLanguage,
+) -> RadlrResult<()> {
+  let mut local_build_config = build_config;
+
+  let BuildConfig { lib_out, source_out, root_grammar_path, .. } = &mut local_build_config;
+
+  std::fs::create_dir_all(*lib_out)?;
+  std::fs::create_dir_all(*source_out)?;
+
+  let canonical_libout = lib_out.canonicalize()?;
+  let canonical_source_out = source_out.canonicalize()?;
+
+  (*lib_out) = &canonical_libout;
+  (*source_out) = &canonical_source_out;
+
+  let db = RadlrGrammar::new()
+    .add_source_from_string(&source, &root_grammar_path, false)?
+    .build_db(&root_grammar_path, parser_config)?;
+
+  match target {
+    TargetLanguage::Rust => {
+      targets::rust::build(&db, local_build_config, parser_config)?;
+    }
+    TargetLanguage::TypeScript => {
+      targets::typescript::build(&db, local_build_config, parser_config)?;
+    }
+    TargetLanguage::JavaScript => {
+      targets::javascript::build(&db, local_build_config, parser_config)?;
+    }
+    TargetLanguage::Cpp => {
+      todo!("Build Cpp: Not yet supported")
+    }
+    TargetLanguage::C => {
+      todo!("Build C: Not yet supported")
+    }
+    TargetLanguage::Llvm => {
+      todo!("Build Llvm: Not yet supported")
+    }
+  }
+
+  Ok(())
 }
 
 /// Build a Radlr parser from a grammar file
@@ -196,6 +244,34 @@ fn builds_rum_lang() -> RadlrResult<()> {
   build_config.lib_out = &output;
 
   fs_build(build_config, Default::default(), TargetLanguage::Rust)?;
+
+  Ok(())
+}
+
+#[test]
+fn build_test() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> A > ( [ ( R | B )(*)^s T?^eoi ]  :ast [$s, $eoi] )^s 
+
+  <> T > "tt" :ast { t_T }
+
+  <> R > "test" :ast { t_R }
+
+  <> B >  "nest" :ast { t_B }
+    
+   "##;
+
+  let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).canonicalize()?;
+  let output = root.join("build");
+  let default_path: PathBuf = "grammar.radlr".into();
+
+  let mut build_config = BuildConfig::new(&default_path);
+  build_config.source_out = &output;
+  build_config.lib_out = &output;
+
+  source_string_build(build_config, Default::default(), source, TargetLanguage::Rust)?;
 
   Ok(())
 }

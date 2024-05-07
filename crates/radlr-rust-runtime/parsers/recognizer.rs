@@ -10,7 +10,7 @@ pub trait Recognizer<T: ParserInput>: ParserIterator<T> + ParserInitializer {
 
     while let Some(action) = self.next(input, &mut ctx) {
       match action {
-        ParseAction::Accept { nonterminal_id, final_offset } => {
+        ParseAction::Accept { nonterminal_id, final_offset, .. } => {
           return if final_offset != input.len() {
             Err(ParserError::InputError {
               inline_message:   format!(

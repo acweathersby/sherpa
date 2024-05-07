@@ -76,27 +76,27 @@
 
   > "\\n"      
     
-    :ast { t_NewLineChar }
+    :ast { t_RegexNewLineChar }
 
   | "\\s"      
     
-    :ast { t_SpaceChar }
+    :ast { t_RegexSpaceChar }
 
   | "\\w"      
     
-    :ast { t_WordChar }
+    :ast { t_RegexWordChar }
 
   | "\\d"      
     
-    :ast { t_DigitChar }
+    :ast { t_RegexDigitChar }
 
   | "."        
     
-    :ast { t_WildCard }
+    :ast { t_RegexWildCard }
 
   | "\\" c:any 
     
-    :ast { t_EscapedChar, val: $2 }
+    :ast { t_RegexEscapedChar, val: $2 }
 
 <> char 
 
@@ -108,10 +108,10 @@
   
   > "[^"  characters_symbol(+)  "]"{:9999}
 
-    :ast { t_ExcludeMatch, vals: $2 }
+    :ast { t_RegexExcludeMatch, vals: $2 }
 
 <> match 
   
   > "["  characters_symbol(+)  "]"{:9999}
 
-    :ast { t_Match, vals: $2 }
+    :ast { t_REgexMatch, vals: $2 }

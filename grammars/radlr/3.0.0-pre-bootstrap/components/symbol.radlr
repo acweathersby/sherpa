@@ -6,26 +6,74 @@ IMPORT regex as re
 
 <> annotated_symbol 
   
-  > symbol^s [tk:reference^r? "?"^o?  precedence?^p ]!?
+  > repetition^s [tk:reference^r? "?"^o?  precedence?^p ]!?
 
     :ast { t_AnnotatedSymbol, precedence:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
 
 
+<> repetition 
+
+    > symbol '+'
+
+            :ast { t_List_Rules, symbol:$1, tok, min: u32(1) }
+
+    | symbol "*"
+
+            :ast { t_List_Rules, symbol:$1, tok }
+
+    | symbol "(+" token? ')'
+
+            :ast { t_List_Rules, terminal_symbol:$3, symbol:$1, tok, min: u32(1) }
+
+    | symbol "(*" token? ')'
+
+            :ast { t_List_Rules, terminal_symbol:$3, symbol:$1, tok }
+
+    | symbol "(" prim::int ("," prim::int)?  token? ")"
+
+            :ast { t_List_Rules, terminal_symbol:$5, symbol:$1, tok, min: u32($3), max: u32($4) }
+
+    | symbol
+
+
 <> symbol
+  
+  > terminal | nonterm
 
-  > tk:( "\"" c:id(+) "\"" ) 
 
-  :ast { t_TokenSymbol, val:$1 }
+<> terminal 
+
+  > token | token_non_terminal | class
+
+
+<> token
+
+  > prim::string
+
+  :ast { t_TerminalToken, val:str(tok<1,1>), tok, is_exclusive:true } 
+
+  | prim::quote
+
+  :ast { t_TokenSymbol, val:str(tok<1,1>), tok }
 
   | re::grammar_regex
 
   :ast { t_RegexSymbol, val:$1 }
 
-<> nonterm_symbol 
-  
-  > prim::id
 
-  :ast { t_NonTermSymbol, val:$1 }
+<> token_non_terminal >
+
+    "tk:" nonterm
+
+        :ast { t_NonTerminal_Terminal_Symbol, nonterm:$2, tok }
+
+
+<> class 
+
+  > ( '\\n' | '\\s' | '\\id' | '\\sym' | '\\any' | '\\tab' | '\\vtab' | tk:( "\\" c:id+) )
+
+        :ast { t_ClassSymbol, val:str($1<1,0>),  tok }
+
 
 <> precedence 
 
@@ -37,6 +85,25 @@ IMPORT regex as re
   
     :ast { t_Precedence, sym_prec: u32($prec), is_keyword: true }
 
+
 <> precedence_num > c:num(+)
 
-<> reference > "^" prim::id
+
+<> reference > "^" prim::id 
+
+
+<> nonterm > nonterm_symbol | import_nonterm_symbol
+
+
+<> import_nonterm_symbol 
+
+    > prim::id '::' prim::id
+
+        :ast { t_NonTermSymbolImportSymbol, module:str($1), name:str($3), tok }
+
+
+<> nonterm_symbol 
+  
+  > prim::id
+
+  :ast { t_NonTermSymbol, val:str($1), tok }

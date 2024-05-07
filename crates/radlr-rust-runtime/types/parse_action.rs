@@ -71,8 +71,10 @@ pub enum ParseAction {
     symbol_count:   u32,
   },
   Accept {
-    nonterminal_id: u32,
-    final_offset:   usize,
+    nonterminal_id:    u32,
+    final_offset:      usize,
+    token_line_offset: u32,
+    token_line_count:  u32,
   },
   Error {
     last_state:        ParserState,

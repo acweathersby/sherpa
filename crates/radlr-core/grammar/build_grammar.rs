@@ -148,7 +148,7 @@ pub fn create_grammar_data(
   // our exports into ProductionIds.
   if exports.is_empty() != true {
     for export in exports {
-      let nterm = get_nonterminal_id_from_ast_node(&g_data, &export.nonterminal)?;
+      let nterm = get_nonterminal_id_from_ast_node(&g_data, &export.nonterminal, string_store)?;
       g_data.exports.push((export.reference.intern(string_store), (nterm, export.nonterminal.to_token())));
     }
   } else {
@@ -157,7 +157,7 @@ pub fn create_grammar_data(
       if nterm.as_TemplateRules().is_some() {
         continue;
       }
-      if let Ok(nterm_id) = get_nonterminal_id_from_ast_node(&g_data, &nterm) {
+      if let Ok(nterm_id) = get_nonterminal_id_from_ast_node(&g_data, &nterm, string_store) {
         g_data.exports.push(("default".intern(string_store), (nterm_id, nterm.to_token())));
         break;
       }
@@ -276,7 +276,7 @@ pub fn process_parse_state<'a>(
         match g.imports.get(&ref_name) {
           Some(id) => (&nterm.tok, id),
           _ => {
-            RadlrResult_Err("Could not retrieve ProductionID from node")?;
+            Err(RadlrError::Text(nterm.tok.blame(1, 1, "Could not resolve nonterm id from node", None)))?;
             unreachable!()
           }
         }
@@ -917,13 +917,13 @@ fn record_symbol(
     },
 
     ASTNode::NonTerminal_Symbol(_) | ASTNode::NonTerminal_Import_Symbol(_) => {
-      let id = get_nonterminal_id_from_ast_node(g_data, sym_node)?.as_sym();
+      let id = get_nonterminal_id_from_ast_node(g_data, sym_node, s_store)?.as_sym();
       // Bypass the registration of this nonterminal as a symbol.
       return RadlrResult::Ok(id);
     }
 
     ASTNode::NonTerminal_Terminal_Symbol(token_prod) => {
-      let id = get_nonterminal_id_from_ast_node(g_data, &token_prod.nonterminal)?.as_tok_sym();
+      let id = get_nonterminal_id_from_ast_node(g_data, &token_prod.nonterminal, s_store)?.as_tok_sym();
       // Bypass the registration of this nonterminal as a symbol.
       return RadlrResult::Ok(id);
     }
@@ -985,7 +985,7 @@ fn get_nonterminal_symbol<'a>(
 /// - [ASTNode::PrattProduction]
 /// - [ASTNode::PegProduction]
 /// - [ASTNode::CFProduction]
-fn get_nonterminal_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> RadlrResult<NonTermId> {
+fn get_nonterminal_id_from_ast_node(g_data: &GrammarData, node: &ASTNode, s_store: &IStringStore) -> RadlrResult<NonTermId> {
   match get_nonterminal_symbol(g_data, node) {
     (Some(nterm), None) => Ok(NonTermId::from((g_data.id.guid, nterm.name.as_str()))),
     (None, Some(nterm)) => {
@@ -993,7 +993,11 @@ fn get_nonterminal_id_from_ast_node(g_data: &GrammarData, node: &ASTNode) -> Rad
 
       match g_data.imports.get(&ref_name) {
         Some(GrammarIdentities { guid, .. }) => Ok(NonTermId::from((*guid, nterm.name.as_str()))),
-        _ => RadlrResult_Err("Could not retrieve ProductionID from node"),
+        _ => Err(RadlrError::Text(format!(
+          "in {} ,\n {}",
+          nterm.tok.path_ref(&g_data.id.path.to_path(s_store)),
+          nterm.tok.blame(1, 1, "Could not resolve nonterm id from symbol", None)
+        )))?,
       }
     }
     _ => {

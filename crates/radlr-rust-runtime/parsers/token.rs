@@ -16,7 +16,7 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
 
     while let Some(action) = self.next(input, &mut ctx) {
       match action {
-        ParseAction::Accept { nonterminal_id, final_offset } => {
+        ParseAction::Accept { nonterminal_id, final_offset, .. } => {
           return if final_offset != input.len() {
             Err(ParserError::InputError {
               inline_message:   format!("Failed to read entire input {} {}", input.len(), final_offset),
@@ -61,17 +61,12 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
         ParseAction::Skip { byte_offset: token_byte_offset, byte_length: token_byte_length, .. } => {
           skips.push(input.string_range(token_byte_offset as usize..(token_byte_offset + token_byte_length) as usize));
         }
-        ParseAction::Shift {
-          byte_length: token_byte_length,
-          byte_offset: token_byte_offset,
-          token_id,
-          ..
-        } => {
+        ParseAction::Shift { byte_length: token_byte_length, byte_offset: token_byte_offset, .. } => {
           let offset_start = token_byte_offset as usize;
           let offset_end = (token_byte_offset + token_byte_length) as usize;
 
           #[cfg(debug_assertions)]
-          if let Some(debug) = self.get_debugger() {
+          if let Some(_) = self.get_debugger() {
             //debug(&DebugEventNew::ActionShift { offset_start, offset_end,
             // token_id }, input);
           }
@@ -79,7 +74,7 @@ pub trait TokenProducer<I: ParserInput>: ParserIterator<I> + ParserInitializer {
         }
         ParseAction::Reduce { rule_id: _rule_id, .. } => {
           #[cfg(debug_assertions)]
-          if let Some(debug) = self.get_debugger() {
+          if let Some(_) = self.get_debugger() {
             // debug(&DebugEventNew::ActionReduce { rule_id: _rule_id }, input);
           }
         }

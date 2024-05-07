@@ -1,0 +1,226 @@
+NAME ascript
+
+IGNORE { c:sp c:nl }
+
+IMPORT primitive as prim
+
+<> body 
+    
+    > struct 
+
+    | flag
+    
+    | expression
+        :ast { t_AST_Statement, expression:$1, tok }
+
+    | "{" expression '}'
+        :ast { t_AST_Statement, expression:$2, tok }
+
+
+<> struct 
+    
+    > "{" type_identifier^t ( "," struct_prop(+",") )? '}'
+        :ast { t_AST_Struct, ty: str($t), props:$3, tok }
+
+<> struct_prop 
+
+    > identifier ":" expr
+        :ast { t_AST_Property, id:str($1), value:$3, tok }
+
+    |  identifier ":" struct
+        :ast { t_AST_Property, id:str($1), value:$3, tok }
+
+    |  identifier
+        :ast { t_AST_Property, id:str($1), named_reference: str($1), tok }
+
+    | token
+
+
+
+<> type_identifier 
+
+    > tk:( 't' "_"{:9999} ) identifier
+
+
+<> flag 
+    
+    > flag_identifier "::" identifier
+        :ast { t_AST_Flag, ty: str($1), val:$3, tok }
+
+
+<> flag_identifier 
+
+    > tk:( 'f' "_"{:9999} ) identifier
+
+
+<> expression  > expr
+
+<> expr 
+    
+    > expr "+"{2} expr{1} :ast { t_AST_Add, left: $1, right: $3, tok }
+    
+    | expr "-"{2} expr{1} :ast { t_AST_Sub, left: $1, right: $3, tok }
+    
+    | expr "/"{4} expr{3} :ast { t_AST_Div, left: $1, right: $3, tok }
+    
+    | expr "*"{4} expr{3} :ast { t_AST_Mul, left: $1, right: $3, tok }
+    
+    | expr "%"{4} expr{3} :ast { t_AST_Mod, left: $1, right: $3, tok }
+
+    | expr "^"{6} expr{5} :ast { t_AST_Pow, left: $1, right: $3, tok }
+    
+    |      "-"{8} expr{7} :ast { t_AST_Neg, expr: $2, tok }
+    
+    | "(" expr^expr ")"        :ast $expr
+    
+    | term{9}
+
+<> term 
+  > member
+  | map
+  | vector
+  | string
+  | bool
+  | number
+  | literal             
+
+
+<> vector 
+
+    > "[" expr(*",") "]"
+        :ast { t_AST_Vector, initializer: $2, tok }
+
+
+<> map > 
+
+    "map" "(" expr^k ',' expr^v ')'
+
+        :ast { t_AST_Map, key: $k, val: $v, tok }
+
+
+<> member > 
+
+    trimmed_reference
+
+    | reference "." identifier
+        :ast { t_AST_Member, reference:$1, property:$3 }
+
+
+<> string 
+
+    > "str" convert_initializer?
+        :ast { t_AST_String, initializer: $2, tok }
+
+
+<> bool 
+
+    > "bool" convert_initializer?
+        :ast { t_AST_Bool,  initializer: $2, tok }
+
+
+<> number 
+
+    > "u8"  convert_initializer?
+        :ast { t_AST_U8,  initializer: $2, tok }
+
+    | "u16" convert_initializer?
+        :ast { t_AST_U16, initializer: $2, tok }
+
+    | "u32" convert_initializer?
+        :ast { t_AST_U32, initializer: $2, tok }
+
+    | "u64" convert_initializer?
+        :ast { t_AST_U64, initializer: $2, tok }
+
+    | "u128" convert_initializer?
+        :ast { t_AST_U128, initializer: $2, tok }
+
+    | "i8"  convert_initializer?
+        :ast { t_AST_I8,  initializer: $2, tok }
+
+    | "i16" convert_initializer?
+        :ast { t_AST_I16, initializer: $2, tok }
+
+    | "i32" convert_initializer?
+        :ast { t_AST_I32, initializer: $2, tok }
+
+    | "i64" convert_initializer?
+        :ast { t_AST_I64, initializer: $2, tok }
+
+    | "i128" convert_initializer?
+        :ast { t_AST_I64, initializer: $2, tok }
+
+    | "f16" convert_initializer?
+        :ast { t_AST_F16, initializer: $2, tok }
+
+    | "f32" convert_initializer?
+        :ast { t_AST_F32, initializer: $2, tok }
+
+    | "f64" convert_initializer?
+        :ast { t_AST_F64, initializer: $2, tok }
+
+    | "f128" convert_initializer?
+        :ast { t_AST_F128, initializer: $2, tok }
+
+
+
+<> convert_initializer 
+    
+    > "(" init_objects ")"       
+        :ast { t_Init, expression: $2 }
+
+
+<> init_objects 
+    
+    > member 
+    
+    | token 
+    
+    | literal
+
+<> literal > 
+
+    "true" 
+        :ast { t_AST_BoolLiteral, value: true }
+
+    | "false"
+        :ast { t_AST_BoolLiteral, value: false }
+
+    | prim::scientific
+        :ast { t_AST_NumberLiteral, value: f64($1) }
+
+    | prim::string
+        :ast { t_AST_StringLiteral, value:str($1<1,1>), tok }
+
+
+
+<> trimmed_reference
+
+    > reference 
+    
+    | reference range
+        :ast { t_AST_TrimmedReference, reference:$1, range:$2, tok }
+
+<> reference > 
+
+    "$" prim::id 
+        :ast { t_AST_NamedReference, value: str($2), tok }
+
+    | "$" prim::int
+        :ast { t_AST_IndexReference, value: i64($2), tok }
+
+
+
+<> identifier 
+    
+    > prim::id
+
+<> token 
+
+    > ( "tk" | "tok" | "token" ) range?
+        :ast { t_AST_Token, range: $2 }
+
+<> range 
+    
+    > "<" prim::int ( ","  prim::int  )? ">"
+        :ast { t_Range, start_trim:i32($2), end_trim:i32($3) }

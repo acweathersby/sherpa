@@ -1,0 +1,193 @@
+NAME ir
+
+IMPORT symbol as sym
+IMPORT primitive as prim
+IMPORT ast as ast
+IMPORT comment as cmt
+
+IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
+
+
+<> state > 
+
+    sym::nonterminal_symbol^id "=>" statement
+
+        :ast { t_State, id, statement, tok }
+
+    | sym::nonterminal_symbol^id "=!>" statement
+
+        :ast { t_State, catches:true, id, statement, tok }
+
+
+<> statement >
+
+    transitive_statement^transitive 
+     ( "then" non_branch_statement(+"then")^non_branch )?
+     ( "then" pop^pop )?
+     ( "then" branch_statement^branch )?
+
+     :ast { t_Statement, transitive, non_branch, pop, branch }
+
+     |
+
+     non_branch_statement(+"then")^non_branch
+     ( "then" pop^pop )?
+     ( "then" branch_statement^branch )?
+
+     :ast { t_Statement, non_branch, branch, pop }
+
+    | ( pop^pop "then" )?
+      branch_statement^branch 
+
+     :ast { t_Statement, branch, pop }
+
+    | pop^pop :ast { t_Statement, pop }
+
+
+<> branch_statement 
+  
+  > match | goto_sequence | terminal_statement
+
+
+<> transitive_statement 
+
+  > "shift" "-skip"? ( "tok" | "char" )    
+      
+    :ast { t_Shift, ptr_type:str($3), skip:bool($2), tok }
+
+  | "peek" "-skip"? ( "tok" | "char" )    
+    
+    :ast { t_Peek,  ptr_type:str($3), skip:bool($2), tok }
+
+  | "reset" ( "tok" | "char" )            
+    
+    :ast { t_Reset, ptr_type:str($2), tok }
+
+
+<> terminal_statement >
+
+  "fail"          
+    
+    :ast { t_Fail, tok }
+
+  | "pass"        
+    
+    :ast { t_Pass, tok }
+
+  | "accept"      
+    
+    :ast { t_Accept, tok }
+
+
+<> non_branch_statement 
+
+  > "reduce" tok::int ( "symbols" "to" )? tok::int ( "with" "rule" )? tok::int^int
+        
+      :ast { t_ReduceRaw, len: u32($2), rule_id: u32($int), nonterminal_id: u32($4), tok }
+
+  | "reduce" tok::int ( "symbols" "to" )? sym::nonterminal^nonterminal ( ":ast" ast::body^ast )?
+        
+    :ast { t_Reduce, len: u32($2), ast,  nonterminal, tok }
+
+  | "set-tok" tok::int
+
+    :ast { t_SetTokenId, id: u32($2), tok }
+
+  | "set-tok-len" tok::int
+
+    :ast { t_SetTokenLen, id: u32($2) }
+
+  | "set-line"        :ast { t_SetLine, tok }
+
+
+<> pop > 
+
+    "pop" tok::int      :ast { t_Pop, count: u32($2), tok }
+    
+
+<> goto_sequence >
+
+        goto_push(+"then") "then" goto
+
+            :ast { t_Gotos, pushes: $1, goto }
+
+    |   goto
+    
+            :ast { t_Gotos, goto }
+
+    |   fork
+
+            :ast { t_Gotos, fork }
+
+
+<> fork 
+  
+  > "fork" "{" ( sym::nonterminal :ast { t_Goto, nonterminal: $1, name:str($1), tok } )(+) "}"                 
+                                            
+    :ast { t_Fork, paths: $3, tok }
+
+
+<> goto_push 
+
+  > "push" sym::nonterminal
+
+    :ast { t_Push, nonterminal: $2, name:str($2), tok }
+
+
+<> goto 
+
+  > "goto" sym::nonterminal
+
+    :ast { t_Goto, nonterminal: $2, name:str($2), tok }
+
+
+<> match 
+
+  > generic_match_block | nonterminal_match_block | terminal_match_block
+
+
+<> generic_match_block >
+
+    "match" ":" prim::id^id ( ":" prim::id :ast str($2) )?^scanner ( int_match :ast [$1] | "{" ( int_match | default_match | hint )(+) "}" :ast $2  )^m
+
+        :ast { t_Matches, mode: str($id), matches:$m, scanner, tok }
+
+
+<> nonterminal_match_block >
+
+    "match" ":" "PRODUCTION" ( nonterminal_match :ast [$1] | "{" ( nonterminal_match | hint | default_match )(+) "}" :ast $2 )^m
+
+        :ast { t_ProductionMatches, matches:$m }
+
+
+<> terminal_match_block >
+
+    "match" ":" "TERMINAL" ( terminal_match :ast [$1] | "{" ( terminal_match | hint | default_match )(+) "}" :ast $2 )^m
+
+        :ast { t_TerminalMatches, matches:$m }
+
+
+<> nonterminal_match > "(" sym::nonterminal^sym ")" "{" statement "}"
+
+    :ast { t_NonTermMatch, sym, statement }
+
+
+<> terminal_match > "(" sym::terminal^sym ")" "{" statement "}"
+
+    :ast { t_TermMatch, sym, statement }
+
+
+<> int_match > "(" ( prim::int :ast u64($1) )(+"|")^vals ")" "{" statement "}"
+
+    :ast { t_IntMatch, vals, statement }
+
+
+<> default_match > "default"? "{" statement "}"
+
+    :ast { t_DefaultMatch, statement }
+
+
+<> hint > "fail-hint" "{" prim::string^message "}"
+
+    :ast { t_FailHint, message: str($message) }
+

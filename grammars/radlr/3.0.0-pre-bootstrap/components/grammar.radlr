@@ -5,14 +5,16 @@ IMPORT symbol as sym
 
 <> grammar 
   
-  > non-terminal
+  > non-terminals
 
-<> non-terminal
+
+<> non-terminals
   
   > cf-nonterm-definition
+
 
 <> cf-nonterm-definition 
   
   > "<>" sym::nonterm_symbol^n ">" rule::rules^r
   
-  :ast { t_NontermDefinition, name:$n, rules: $r, tok }
+  :ast { t_NontermDefinition, name:$n, rules: $r, tok } 

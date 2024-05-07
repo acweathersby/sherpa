@@ -1,4 +1,25 @@
 
 <> id 
 
-  >  tk:( ( "-" | "_" | c:id ) ( c:id | '_' | '-' | c:num )(*) )
+  > tk:( ( "-" | "_" | c:id ) ( c:id | '_' | '-' | c:num )(*) )
+
+<> int 
+
+  > tk:( c:num(+) )
+
+<> scientific
+  
+  > tk:( ( '+' | '-' )? c:num(+) ( '.' c:num(+) )? ( ( 'e' | 'E' ) ( '+' | '-' )? c:num(+) )? )
+
+<> string 
+
+  > tk:( "\"" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\"" )
+
+<> quote 
+  
+  > tk:( "'" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "'" )
+
+<> escaped 
+
+  > "\\"{:9999} ( c:sym | c:num | c:sp | c:id )
+

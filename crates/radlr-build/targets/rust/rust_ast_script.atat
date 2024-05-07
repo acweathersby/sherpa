@@ -71,7 +71,7 @@ use std::{collections::HashMap, marker::PhantomData};
         { Box<@ty.name<Token>> }
       }
     }
-    "Any"         { #any_rust_type(@ANY_ENUMS.[@ty.index]) }
+  "Any"  { #any_rust_type(@ANY_ENUMS.[@ty.index]) }
     { @{ [TODO: ScalarType @type_name ] } }
   }
 }
@@ -94,7 +94,12 @@ use std::{collections::HashMap, marker::PhantomData};
         { #ty_to_cap_name(ty.val)s }
       }  
     }
-    {  #ty_to_cap_name(ty.val) }
+    {  
+      match ty.val.#type {
+        None {  /* wah wah */ }
+        { #ty_to_cap_name(ty.val) }
+      }
+    }
   }
 }
 
@@ -107,13 +112,16 @@ use std::{collections::HashMap, marker::PhantomData};
     "Vec" {
       match ty.val.#type {
         "Any"  { 
-          Vec<#any_rust_type(@ANY_ENUMS.[@ty.val.index])> 
+          /* @ty.val.index */ Vec<#any_rust_type(@ANY_ENUMS.[@ty.val.index])> 
         }
         { Vec<#ty_to_rust(ty.val)> }
       }
     }
-    { 
-      #ty_to_rust(ty.val)
+    {
+      match ty.val.#type {
+        None {  /* wah wah */ }
+        { #ty_to_rust(ty.val) }
+      } 
     }
   }
 }
@@ -142,6 +150,7 @@ use std::{collections::HashMap, marker::PhantomData};
     match (@self.agg_type, @self.val.#type) { 
       (None, "Token") | (None, "Any") { }
       (_ , "Any") {
+        /* @self.val.index */\ @;
         match @ANY_ENUMS.[self.val.index].is_root {
           true { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @; }
         }
@@ -411,6 +420,20 @@ use std::{collections::HashMap, marker::PhantomData};
   #_{ GRAPH NODE RENDERERS --------------------------------------------------------------------- }
 
 
+  #type_AnyConvertNode ref:str {    
+    /*  @self.init.agg_type\ @self.init.val */
+    match @self.init.#type {
+      "SymNode" { 
+        let\ @ref\ =\ nodes[@self.init.index].clone();@;
+        let\ @ref\ =\ unsafe{\ @ref . into_@ANY_ENUMS.[@self.index].name() .unwrap_unchecked()\ }; @;
+      }
+      {
+        @self.init.(ref) 
+        /*\ Don't\ know\ what\ to\ do!\ @self.index */
+      }
+    }
+  }
+
   #type_StrNode ref:str {    
     @self.init.(ref)
 
@@ -553,9 +576,20 @@ use std::{collections::HashMap, marker::PhantomData};
       @ref={ ref + "_" + _index_ }
       @ref match _iter_last_ { & { } { , } }@;
     }
-    @self.init.iter#vec_elements_initializers(ref) 
 
-    let\ @ref\ =\ vec![\ @self.init.iter#vec_elements_names(ref)\ ];@;
+    /* @self.init.#len */
+
+    match self.init.#len {
+      0 {
+        let\ @ref:\ #ast_node_rust_type(@self)\  =\ vec![];@;
+      }
+      {
+        @self.init.iter#vec_elements_initializers(ref) 
+        let\ @ref\ =\ vec![\ @self.init.iter#vec_elements_names(ref)\ ];@;
+      }
+    }
+
+    
   }
 
 
@@ -653,7 +687,7 @@ use std::{collections::HashMap, marker::PhantomData};
   @r={ self }
 
   \n
-  fn\ rule_@_index_<Token:Tk>(
+  fn\ rule_@self.id/*@_index_*/<Token:Tk>(
     \ nodes:\ *mut\ [@AST_NAME<Token>],@;\ tokens: &[Token],@;\ nterm_tok:\ Token 
   )\ ->\ @AST_NAME<Token>\ { 
     @r.init.()
