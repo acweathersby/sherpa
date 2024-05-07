@@ -2,19 +2,23 @@ IGNORE { c:sp c:nl }
 
 IMPORT rule as rule
 IMPORT symbol as sym
+IMPORT non-terminal as nt
+IMPORT preamble as pre
 
-<> grammar 
+<> declaration
   
-  > non-terminals
+  > pre::preamble(*)^pre nonterm_declarations^nt
+
+  :ast { t_GrammarDefinition, preambles: $pre, declarations:$nt }
 
 
-<> non-terminals
+<> nonterm_declarations 
+
+  > ( ignore_scope | nt::nonterm_declaration )+
+
+
+<> ignore_scope 
   
-  > cf-nonterm-definition
+  > pre::ignore_clause^clause "{" nt::standard_nonterm_declarations^defs "}"
 
-
-<> cf-nonterm-definition 
-  
-  > "<>" sym::nonterm_symbol^n ">" rule::rules^r
-  
-  :ast { t_NontermDefinition, name:$n, rules: $r, tok } 
+    :ast { t_IgnoreScope, clause:$clause, definitions: $defs }

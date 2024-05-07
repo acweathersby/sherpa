@@ -145,7 +145,8 @@ pub fn create_missing_nonterminal_rules(loc: Token, path: IString, s_store: &ISt
     id: (Grammar, 4, "missing-nonterminal-rules").into(),
     inline_msg: Default::default(),
     msg: "Cannot find definition for non-terminal".into(),
-    ps_msg: Default::default(),
+    ps_msg: "TODO(anthony): lookup in existing grammars to see if there is an import name that matches the missing non-terminal for hinting"
+      .into(),
     severity: RadlrErrorSeverity::Critical,
   }
 }

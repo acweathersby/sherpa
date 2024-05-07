@@ -231,7 +231,7 @@ fn builds_basic_grammar_javascript_a() -> RadlrResult<()> {
 }
 
 #[test]
-fn builds_rum_lang() -> RadlrResult<()> {
+fn builds_radlr_lang() -> RadlrResult<()> {
   let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).canonicalize()?;
 
   println!("{:?}", root.join("../../grammars/radlr/3.0.0-pre-bootstrap/radlr.radlr").canonicalize()?);

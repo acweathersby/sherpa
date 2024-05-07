@@ -8,7 +8,8 @@ fn simple_nonterminal() {
 
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
-  dbg!(result);
+
+  std::hint::black_box(result);
 }
 
 #[test]
@@ -19,7 +20,7 @@ fn simple_nonterminal_regex() {
 
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
-  dbg!(result);
+  std::hint::black_box(result);
 }
 
 #[test]
@@ -30,7 +31,7 @@ fn class_symols() {
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
 
-  dbg!(result);
+  std::hint::black_box(result);
 }
 
 #[test]
@@ -41,16 +42,49 @@ fn optional_repeat() {
 
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
-  dbg!(result);
+  std::hint::black_box(result);
 }
 
 #[test]
 fn at_least_once_repeat() {
   const INPUT: &'static str = r##"
 
-<> test > "test"(+",") "test"(+) "test"+
+<> test > "test"(1 ",") "test"(+",") "test"(+) "test"+
 
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
-  dbg!(result);
+  std::hint::black_box(result);
+}
+
+#[test]
+fn ignore_scope() {
+  const INPUT: &'static str = r##"
+
+  IGNORE { \s } IGNORE { \s } { <> A > \n |\s }
+
+  "##;
+  let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+  std::hint::black_box(result);
+}
+
+#[test]
+fn ignore_scope_panicked() {
+  const INPUT: &'static str = r##"
+
+  IGNORE { \s } { <> test > "test"(1 ",") "test"(+",") "test"(+) "test"+ }
+
+  "##;
+  let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+  std::hint::black_box(result);
+}
+
+#[test]
+fn equivalent_token_expressions() {
+  const INPUT: &'static str = r##"
+
+  <> A > "\n "  tk:( \n \s )  /\n\s/
+
+  "##;
+  let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+  std::hint::black_box(result);
 }

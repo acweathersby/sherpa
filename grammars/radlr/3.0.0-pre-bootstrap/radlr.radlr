@@ -6,4 +6,4 @@ IMPORT components/grammar as grammar
 
 EXPORT grammar as grammar
 
-<> grammar > grammar::grammar
+<> grammar > grammar::declaration

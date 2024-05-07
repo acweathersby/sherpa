@@ -1,5 +1,8 @@
 @{#![allow(unused)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+
 /// ### `radlr` Rust Parser
 ///
 /// - **GENERATOR**: radlr 1.0.0-beta2
@@ -438,7 +441,7 @@ use std::{collections::HashMap, marker::PhantomData};
     @self.init.(ref)
 
     match (self.init.agg_type, self.init.val.#type) {
-      ("Vec", "Token") {  let\ @ref\ =\ @ref[0]\ .slice(@ref[@ref\ .len() - 1]); }
+      ("Vec", "Token") {  let\ @ref\ =\ Token::from_slice (&@ref) .to_string(); }
       (_, "Token")     {  let\ @ref\ =\ @ref. to_string(); }
       { let\ @ref:String\ =\ String::default();  }
     }@;
@@ -687,7 +690,7 @@ use std::{collections::HashMap, marker::PhantomData};
   @r={ self }
 
   \n
-  fn\ rule_@self.id/*@_index_*/<Token:Tk>(
+  fn\ rule_@self.id /* @r.init.comment */  <Token:Tk>(
     \ nodes:\ *mut\ [@AST_NAME<Token>],@;\ tokens: &[Token],@;\ nterm_tok:\ Token 
   )\ ->\ @AST_NAME<Token>\ { 
     @r.init.()

@@ -69,11 +69,12 @@ fn fill_out_rules(adb: &mut AscriptDatabase) {
             match init.props.0.entry(*prop_name) {
               std::collections::btree_map::Entry::Vacant(init_prop) => {
                 init_prop.insert(Initializer {
-                  ty:           prop.ty,
-                  name:         *prop_name,
-                  output_graph: None,
-                  ast:          None,
-                  g_id:         db.root_grammar_id,
+                  ty:                prop.ty,
+                  name:              *prop_name,
+                  output_graph:      None,
+                  ast:               None,
+                  g_id:              db.root_grammar_id,
+                  rule_local_string: Default::default(),
                 });
               }
               std::collections::btree_map::Entry::Occupied(_) => {}
@@ -110,11 +111,12 @@ fn add_token_nodes(adb: &mut AscriptDatabase) {
       AscriptRule::Struct(_, init) => match init.props.0.entry(prop_name) {
         std::collections::btree_map::Entry::Vacant(prop) => {
           prop.insert(Initializer {
-            ty:           tok_type,
-            name:         prop_name,
-            output_graph: Some(GraphNode::TokRule(AscriptType::Scalar(AscriptScalarType::Token))),
-            ast:          None,
-            g_id:         db.root_grammar_id,
+            ty:                tok_type,
+            name:              prop_name,
+            output_graph:      Some(GraphNode::TokRule(AscriptType::Scalar(AscriptScalarType::Token))),
+            ast:               None,
+            g_id:              db.root_grammar_id,
+            rule_local_string: Default::default(),
           });
         }
         std::collections::btree_map::Entry::Occupied(_) => {}
@@ -189,10 +191,11 @@ fn collect_types(adb: &mut AscriptDatabase) {
         Some(node) => {
           let ty = node.get_type().to_cardinal();
 
-          if ty.is_unknown() {
-            let blame = init.ast.as_ref().map(|a| a.to_token()).unwrap_or_default().blame(1, 1, "Produced Undefined value", None);
-            panic!("AAAA {ty:?} {}", blame);
-          }
+          debug_assert!(
+            !ty.is_unknown(),
+            "This should not be unknown: {}",
+            init.ast.as_ref().map(|a| a.to_token()).unwrap_or_default().blame(1, 1, "Produced Undefined value", None)
+          );
 
           add_to_type_list(ty, types, any_type_lu);
         }
@@ -250,6 +253,7 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
         output_graph: None,
         ast: None,
         g_id,
+        rule_local_string: rule.tok.to_string().intern(db.string_store()),
       }),
       Some(ast) => match ast {
         ASTToken::Defined(ast) => match &ast.ast {
@@ -266,6 +270,7 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
             output_graph: None,
             ast: Some(stmt.expression.clone()),
             g_id,
+            rule_local_string: rule.tok.to_string().intern(db.string_store()),
           }),
           _ => unreachable!(),
         },
@@ -275,6 +280,7 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
           output_graph: None,
           ast: None,
           g_id,
+          rule_local_string: rule.tok.to_string().intern(db.string_store()),
         }),
         ASTToken::ListIterate(_) => AscriptRule::ListContinue(id, Initializer {
           ty: AscriptType::Undefined,
@@ -282,6 +288,7 @@ pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
           output_graph: None,
           ast: None,
           g_id,
+          rule_local_string: rule.tok.to_string().intern(db.string_store()),
         }),
       },
     };
@@ -333,10 +340,11 @@ pub fn process_struct_node(
   let struct_id = StringId(name.intern(s_store));
 
   let mut initializer = StructInitializer {
-    name:      struct_id,
-    props:     Default::default(),
-    complete:  false,
-    has_token: false,
+    name:              struct_id,
+    props:             Default::default(),
+    complete:          false,
+    has_token:         false,
+    rule_local_string: strct.tok.to_string().intern(s_store),
   };
 
   let mut seen: BTreeSet<StringId> = OrderedSet::new();
@@ -383,6 +391,7 @@ pub fn process_struct_node(
           output_graph: None,
           ast: prop.value.clone(),
           g_id,
+          rule_local_string: Default::default(),
         });
       }
       ast @ ASTNode::AST_Token(..) => {
@@ -393,6 +402,7 @@ pub fn process_struct_node(
           output_graph: None,
           ast: Some(ast.clone()),
           g_id,
+          rule_local_string: Default::default(),
         });
 
         let mut ast_prop = AscriptProp {
@@ -433,8 +443,9 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
   let AscriptDatabase { errors, any_type_lu, any_types, .. } = adb;
 
   let mut resolved_nonterms = OrderedMap::new();
-  //let pending_nonterms = OrderedMap::new();
-  let mut rule_nonterms = OrderedMap::new();
+
+  let mut rule_to_nonterms = OrderedMap::new();
+  let nonterms_to_rule = db.get_nonterm_symbol_to_rules();
 
   // Collect all non_term_dependency_of_a_rule
 
@@ -442,7 +453,7 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
     match &adb.rules.get(i) {
       Some(AscriptRule::Expression(_, node)) => {
         let item = Item::from((DBRuleKey::from(i), db));
-        let set = rule_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
+        let set = rule_to_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
         get_nonterm_refs(
           GraphResolveData {
             db,
@@ -459,16 +470,16 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
         let item = item.to_penultimate();
         match item.nonterm_index_at_sym(Default::default(), db) {
           Some(nonterm_key) => {
-            let set = rule_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
+            let set = rule_to_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
             set.insert(nonterm_key);
           }
           None => {
-            rule_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
+            rule_to_nonterms.entry(item.rule_id()).or_insert_with(|| OrderedSet::new());
           }
         }
       }
       Some(_) => {
-        rule_nonterms.entry(DBRuleKey::from(i as u32)).or_insert_with(|| OrderedSet::new());
+        rule_to_nonterms.entry(DBRuleKey::from(i as u32)).or_insert_with(|| OrderedSet::new());
       }
 
       _ => {}
@@ -476,23 +487,23 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
   }
 
   // Start with rules that do not rely on non-term-values;
-  let mut queue = VecDeque::from_iter(rule_nonterms.iter().filter_map(|(r, s)| s.is_empty().then_some(*r)));
+  let mut queue = VecDeque::from_iter(rule_to_nonterms.iter().filter_map(|(r, s)| s.is_empty().then_some(*r)));
 
   let max_iterations = db.rules().len().pow(2);
   let mut total_iterations = 0;
 
-  while let Some(rule_id) = queue.pop_front() {
+  while let Some(rule_in_process) = queue.pop_front() {
     total_iterations += 1;
 
     if total_iterations > max_iterations {
       panic!(
         "Could not resolve rule {}",
-        db.db_rule(rule_id).rule.tok.blame(1, 1, "could not resolve the AST of this rule", None)
+        db.db_rule(rule_in_process).rule.tok.blame(1, 1, "could not resolve the AST of this rule", None)
       )
     }
 
-    let index: usize = rule_id.into();
-    let item = Item::from((rule_id, db));
+    let index: usize = rule_in_process.into();
+    let item = Item::from((rule_in_process, db));
 
     let ty = match &adb.rules.get(index) {
       Some(AscriptRule::Invalid(..)) => AscriptType::Undefined,
@@ -539,35 +550,41 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
       _ => unreachable!(""),
     };
 
-    let nonterm_id = db.db_rule(rule_id).nonterm;
+    let nonterm_id = db.db_rule(rule_in_process).nonterm;
 
     if ty.is_unknown() {
-      queue.extend(rule_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
-      queue.push_back(rule_id);
+      queue.extend(rule_to_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
+      queue.push_back(rule_in_process);
       continue;
     }
 
     let was_empty = resolved_nonterms.get(&nonterm_id).is_none();
     let existing_type = resolved_nonterms.entry(nonterm_id).or_insert(ty.clone());
+    let ref_name = db.nonterm_friendly_name_string(nonterm_id);
 
-    if was_empty || *existing_type != ty {
-      queue.extend(rule_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
+    match get_resolved_type(existing_type, &ty, any_type_lu, any_types, &ref_name) {
+      Ok(resolved_type) => {
+        if was_empty || *existing_type != resolved_type {
+          queue.extend(rule_to_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
 
-      let ref_name = db.nonterm_friendly_name_string(nonterm_id);
-
-      match get_resolved_type(existing_type, &ty, any_type_lu, any_types, &ref_name) {
-        Ok(resolved_type) => {
           *existing_type = resolved_type;
+
+          if let Some(rules_to_update) = nonterms_to_rule.get(&nonterm_id) {
+            for new_rule in rules_to_update {
+              if *new_rule != rule_in_process {
+                queue.push_back(*new_rule)
+              }
+            }
+          }
         }
-        Err(err) => errors.push(err),
       }
+      Err(err) => errors.push(err),
     }
   }
 
   resolved_nonterms
 }
 
-#[track_caller]
 fn resolve_expressions(
   adb: &mut AscriptDatabase,
   nonterm_types: OrderedMap<DBNonTermKey, AscriptType>,
@@ -580,7 +597,10 @@ fn resolve_expressions(
     let item = Item::from((DBRuleKey::from(index), db));
     let mut selected_indices = HashSet::new();
     let selected_indices = &mut selected_indices;
-    let expected_type = nonterm_types.get(&db.rule_nonterm(ast_rule.get_db_key())).unwrap();
+    let rule_key = ast_rule.get_db_key();
+    let nt_key = db.rule_nonterm(rule_key);
+    let expected_type = nonterm_types.get(&nt_key).unwrap();
+    let rule_tok = db.rule(rule_key).tok.blame(1, 1, "", None);
 
     match ast_rule {
       AscriptRule::Expression(_, init) => {

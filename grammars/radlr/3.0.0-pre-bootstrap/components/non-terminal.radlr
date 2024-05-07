@@ -3,25 +3,34 @@ IGNORE { c:sp c:nl }
 IMPORT symbol as sym
 IMPORT rule as rule
 IMPORT primitive as prim
+IMPORT ast as ast
 
 
-<> nonterm_declaration > 
+<> standard_nonterm_declarations 
 
-  "<>" sym::nonterm_symbol^n ">" rule::rules^r
+  > nonterm_declaration(+)
+
+
+<> nonterm_declaration 
+  
+  > "<>" sym::nonterm_symbol^n ">" rule::rules^r
 
     :ast { t_NontermDeclaration, name_sym:$n, rules: $r, tok }
 
-<> nonterm_amendment >
 
-  '+' ">" sym::nonterm^n ">" rule::rules^r
+<> nonterm_amendment 
+
+  > '+' ">" sym::nonterm^n ">" rule::rules^r
 
     :ast { t_NontermAmendment,  name_sym:$n, rules: $r, tok }
 
-<> nonterm_template > 
 
-  "<" template_param(+",")^p ">" sym::nonterm_symbol^n ">" rule::rules^r
+<> nonterm_template 
+
+  > "<" template_param(+",")^p ">" sym::nonterm_symbol^n ">" rule::rules^r
 
     :ast { t_NontermTemplate, name_sym:$n, template_params:$p, rules: $r, tok }
+
 
 <> template_param 
   

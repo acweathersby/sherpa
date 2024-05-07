@@ -1,20 +1,21 @@
 use super::{AscriptType, GraphNode};
 use crate::StringId;
-use radlr_core::{parser::ASTNode, proxy::OrderedMap, GrammarIdentities};
+use radlr_core::{parser::ASTNode, proxy::OrderedMap, GrammarIdentities, IString};
 use radlr_formatter::*;
 use std::fmt::Debug;
 
 /// Intializes a value derived from a rule.
 pub struct Initializer {
   // The type created by this initializer
-  pub(crate) ty:           AscriptType,
+  pub(crate) ty:                AscriptType,
   /// Optional name. Assigned if the initializer is used for a struct property.
   /// This is left as default if this Initializer is used as the node
   /// initialization of a rule.
-  pub(crate) name:         StringId,
-  pub(crate) output_graph: Option<GraphNode>,
-  pub(crate) ast:          Option<ASTNode>,
-  pub(crate) g_id:         GrammarIdentities,
+  pub(crate) name:              StringId,
+  pub(crate) output_graph:      Option<GraphNode>,
+  pub(crate) ast:               Option<ASTNode>,
+  pub(crate) g_id:              GrammarIdentities,
+  pub(crate) rule_local_string: IString,
 }
 
 impl Debug for Initializer {
@@ -38,6 +39,7 @@ impl ValueObj for Initializer {
           Value::None
         }
       }
+      "comment" => Value::Str(self.rule_local_string),
       _ => Value::None,
     }
   }
@@ -49,12 +51,13 @@ impl ValueObj for Initializer {
 
 #[derive(Debug)]
 pub struct StructInitializer {
-  pub(crate) name:      StringId,
-  pub(crate) props:     AscriptStructInitProps,
+  pub(crate) name:              StringId,
+  pub(crate) props:             AscriptStructInitProps,
   /// `true` if the number of `props`  is equal to the number of property
   /// definitions.
-  pub(crate) complete:  bool,
-  pub(crate) has_token: bool,
+  pub(crate) complete:          bool,
+  pub(crate) has_token:         bool,
+  pub(crate) rule_local_string: IString,
 }
 
 formatted_typed_ordered_map!(AscriptStructInitProps, StringId, Initializer, "AscriptStructInitProps");
@@ -66,6 +69,7 @@ impl ValueObj for StructInitializer {
       "name" => Value::Str(self.name.0),
       "complete" => Value::Int(self.complete as isize),
       "has_token" => Value::Int(self.has_token as isize),
+      "comment" => Value::Str(self.rule_local_string),
       _ => Value::None,
     }
   }

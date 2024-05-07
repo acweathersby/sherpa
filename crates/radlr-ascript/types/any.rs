@@ -116,7 +116,6 @@ impl<'a> ValueObj for AscriptAnys<'a> {
   }
 
   fn get_iter<'scope>(&'scope self, _: &radlr_core::IStringStore) -> Vec<(Value<'scope>, Value<'scope>)> {
-    dbg!(&self.anys);
     self.anys.iter().filter(|i| i.used && i.root).enumerate().map(|(i, any)| (Value::Int(i as isize), Value::Obj(any))).collect()
   }
 }

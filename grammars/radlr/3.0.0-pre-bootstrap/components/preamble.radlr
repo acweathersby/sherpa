@@ -1,33 +1,42 @@
-<> preamble >
+IGNORE { c:sp c:nl }
 
-        export_clause 
+IMPORT symbol as sym
+IMPORT primitive as prim
 
-        | import_clause
+<> preamble 
+  
+  > export_clause 
 
-        | name_clause
+  | import_clause
 
-        | ignore_clause
+  | name_clause
 
-<> export_clause > 
+  | ignore_clause
 
-        "EXPORT" sym::non_terminal (( "AS" | "as" ) sym::identifier)?
 
-            :ast { t_Export, c_Preamble, production:$2, reference:$3 } 
+<> export_clause 
+  
+  > "EXPORT" sym::nonterm (( "AS" | "as" ) prim::id)?
+    
+    :ast { t_ExportPreamble, production:$2, reference:$3 } 
 
-<> import_clause > 
 
-        "IMPORT" ( c:id | c:sym | c:num  )(+) c:sp ( "AS" | "as" ) sym::identifier
+<> import_clause 
 
-            :ast { t_Import, c_Preamble, uri: str($2), reference:str($5), tok }
+  > "IMPORT" ( c:id | c:sym | c:num  )(+) c:sp ( "AS" | "as" ) prim::id 
+    
+    :ast { t_ImportPreamble, uri: str($2), reference:str($5), tok }
 
-<> ignore_clause >
 
-        "IGNORE" "{"  ( sym::terminal_non_terminal | sym::terminal | sym::class )(+) "}"
+<> ignore_clause 
 
-            :ast { t_Ignore, c_Preamble, symbols: $3 }
+  > "IGNORE" "{" sym::terminal(+) "}" 
+    
+    :ast { t_IgnorePreamble, symbols: $3 }
 
-<> name_clause >
 
-        "NAME" sym::identifier
-
-            :ast { t_Name, c_Preamble, name: str($2) }
+<> name_clause 
+  
+  > "NAME" prim::id 
+  
+    :ast { t_NamePreamble, name: str($2) }
