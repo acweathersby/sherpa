@@ -4,8 +4,7 @@ use super::{
 };
 
 /// Deconstructed bytecode table information.
-#[derive(Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Debug)]
 pub struct TableHeaderData<'a> {
   pub input_type:             MatchInputType,
   pub table_length:           u32,

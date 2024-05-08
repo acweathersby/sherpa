@@ -1,32 +1,32 @@
-use crate::{build_db, AscriptAnys, AscriptRules, AscriptScalarType, AscriptStructs, AscriptTypes};
+use crate::{build_db, AscriptMultis, AscriptRules, AscriptScalarType, AscriptStructs, AscriptTypes};
 use radlr_core::{proxy::OrderedSet, CachedString, IString, ParserDatabase, RadlrDatabase, RadlrError, RadlrResult};
 use radlr_formatter::*;
 use std::{fmt::Debug, io::Write, sync::Arc};
 
-pub type AnyTypeRef = (String, OrderedSet<AscriptScalarType>);
+pub type MultiTypeRef = (String, OrderedSet<AscriptScalarType>);
 
 /// Stores resolved type and construction information used to create
 /// AST constructors based on `:ast` expressions extracted from a
 /// grammar.
 pub struct AscriptDatabase {
-  pub(crate) structs:     AscriptStructs,
+  pub(crate) structs:       AscriptStructs,
   /// If errors are present then it is likely that the
   /// database is in an incomplete state and SHOULD NOT be
   /// used to construct parser outputs.
-  pub(crate) errors:      Vec<RadlrError>,
+  pub(crate) errors:        Vec<RadlrError>,
   /// Initializing information for converting a rules into AST nodes.
-  pub(crate) rules:       AscriptRules,
+  pub(crate) rules:         AscriptRules,
   /// A set of all non-struct types produced by the the grammar's rules
-  pub(crate) types:       AscriptTypes,
-  /// A set of `ANY` type groups that should be converted into special enum
+  pub(crate) types:         AscriptTypes,
+  /// A set of `multi` type groups that should be converted into special enum
   /// types.
-  pub(crate) any_type_lu: Vec<usize>,
-  /// A set of `ANY` type groups that should be converted into special enum
+  pub(crate) multi_type_lu: Vec<usize>,
+  /// A set of `multi` type groups that should be converted into special enum
   /// types.
-  pub(crate) any_types:   Vec<AnyTypeRef>,
+  pub(crate) multi_types:   Vec<MultiTypeRef>,
   ///  The underlying grammar database from which Ascript types are
   /// derived.
-  pub(crate) db:          Arc<ParserDatabase>,
+  pub(crate) db:            Arc<ParserDatabase>,
 }
 
 impl Debug for AscriptDatabase {
@@ -36,8 +36,8 @@ impl Debug for AscriptDatabase {
     s.field("structs", &self.structs);
     s.field("types", &self.types);
     s.field("erros", &self.errors);
-    s.field("any_type_lu", &self.any_type_lu);
-    s.field("any_types", &self.any_types);
+    s.field("multi_type_lu", &self.multi_type_lu);
+    s.field("multi_types", &self.multi_types);
     s.finish()
   }
 }
@@ -54,11 +54,11 @@ impl AscriptDatabase {
   pub fn format<W: Write>(&self, script: &str, writer: W, max_width: usize, ast_struct_name: &str) -> RadlrResult<W> {
     let mut ctx: FormatterContext = FormatterContext::new("AscriptForm", self.db.string_store().clone());
 
-    let any = AscriptAnys::new(self);
+    let multi = AscriptMultis::new(self);
     ctx.set_val("STRUCTS", Value::Obj(&self.structs));
     ctx.set_val("TYPES", Value::Obj(&self.types));
     ctx.set_val("RULES", Value::Obj(&self.rules));
-    ctx.set_val("ANY_ENUMS", Value::Obj(&any));
+    ctx.set_val("MULTI_ENUMS", Value::Obj(&multi));
     ctx.set_val("AST_NAME", Value::Str(ast_struct_name.intern(self.db.string_store())));
     ctx.max_width = max_width;
 

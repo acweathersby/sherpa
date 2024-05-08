@@ -14,7 +14,7 @@ pub type ParseStatesMap = OrderedMap<IString, Box<ParseState>>;
 #[cfg(debug_assertions)]
 use std::fmt::Debug;
 use std::{
-  collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet},
+  collections::{hash_map::DefaultHasher, BTreeMap},
   hash::{Hash, Hasher},
   io::Write,
 };
@@ -466,7 +466,7 @@ fn canonical_hash<T: Hasher>(state_name: &str, hasher: &mut T, node: &ASTNode) -
 
 #[cfg(test)]
 mod test {
-  use crate::{types::SharedParserDatabase, CachedString, ParserDatabase, RadlrResult};
+  use crate::{CachedString, ParserDatabase, RadlrResult};
 
   use super::ParseState;
   #[test]

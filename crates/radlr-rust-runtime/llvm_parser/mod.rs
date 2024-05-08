@@ -33,7 +33,7 @@ pub extern "C" fn radlr_allocate_stack(byte_size: usize) -> *mut Goto {
 }
 
 #[repr(C)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 pub struct InputInfo(pub *const u8, pub u32, pub bool);
 
 pub trait LLVMByteReader {

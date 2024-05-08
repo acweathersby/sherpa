@@ -22,8 +22,7 @@ use crate::{
 use super::{Array, CachedString, IString, IStringStore, Map, Set, SymbolId};
 
 /// A globally unique identifier for a single non-terminal.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum NonTermId {
   /// Non-terminals directly defined within a grammar.
   Standard(u64, NonTermSubType),
@@ -39,8 +38,7 @@ impl Default for NonTermId {
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum NonTermSubType {
   Parser,
   Scanner,
@@ -102,8 +100,7 @@ impl NonTermId {
 
 /// A globally unique identifier for a single grammar source file. Derived from
 /// the source's absolute resource path.
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct GrammarId(u64);
 
 impl From<&PathBuf> for GrammarId {
@@ -124,27 +121,22 @@ impl From<&String> for GrammarId {
   }
 }
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct RuleId(u64);
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct TokenSymbol {
   pub type_: SymbolType,
   pub val:   IString,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct NontermRef(u32);
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct TokenNonTermRef(u32);
 
-#[derive(Clone, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Default, Debug)]
 pub struct SymbolRef {
   /// The type of this symbol.
   pub id:                SymbolId,
@@ -170,8 +162,7 @@ impl Hash for SymbolRef {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Rule {
   /// A list of [SymbolId]s and their position within the source grammar
   pub symbols: Array<SymbolRef>,
@@ -183,8 +174,7 @@ pub struct Rule {
 
 /// A reference to some Ascript AST data that is either automatically generated
 /// depending on the reference type, or is stored on a NonTerminal node.
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub enum ASTToken {
   /// Represents the ast expression `:ast [ $1 ]`.
   ///
@@ -204,9 +194,8 @@ pub enum ASTToken {
   Defined(Arc<parser::Ascript>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// A custom parse state defined within a grammar e.g `state_name => ...`
-#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct CustomState {
   pub id:            NonTermId,
   pub g_id:          GrammarId,
@@ -218,8 +207,7 @@ pub struct CustomState {
   pub tok:           Token,
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct NonTerminalTemplate {
   /// The globally unique name string of the non-terminal. Similar to a C++
   /// mangled name
@@ -243,8 +231,7 @@ pub struct NonTerminalTemplate {
   pub tok: Token,
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct NonTerminal {
   /// The unique identifier of this non-terminal.
   pub id: NonTermId,
@@ -287,8 +274,7 @@ pub struct NonTerminal {
 /// Non-terminals generated from the expansion of "non-terminal" type
 /// symbols such as groups & lists. These nonterminals are only referenced
 /// by the rules defined by this non-terminal.
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct SubNonTerminal {
   pub id: NonTermId,
 
@@ -307,8 +293,7 @@ pub struct SubNonTerminal {
 }
 
 /// Types of [SubNonTerminal]s that may be derived from rule symbols.
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub enum SubNonTermType {
   /// List sub nonterminals are left recursive nonterminals
   /// that are derived from `list` symbols e.g: `A(+) | A(*) | A(+sym) |
@@ -331,7 +316,7 @@ impl SubNonTermType {
 }
 
 /// Data from a single grammar source file
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 pub struct GrammarHeader {
   pub identity:   GrammarIdentities,
   /// Non-terminals that are accessible as entry points to this
@@ -342,8 +327,7 @@ pub struct GrammarHeader {
   pub imports: Array<GrammarId>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SymbolType {
   /// A single token string
   Token,
@@ -352,8 +336,7 @@ pub enum SymbolType {
   NonTerminal(NontermRef),
 }
 
-#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum NonTermType {
   ContextFree,
   Pratt,
@@ -362,8 +345,7 @@ pub enum NonTermType {
 }
 
 /// Set of identifiers for a single grammar source
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct GrammarIdentities {
   /// A globally unique identifier for this GrammarStore instance. Derived
   /// from the source path. Assumes the source path is an absolute path
@@ -404,8 +386,7 @@ use ::std::sync;
 /// This object is generally only created once and then passed to entry
 /// functions for parser, compilers, and analyzers, with which appropriate
 /// derivatives can be created for the respective task.
-#[derive(Clone, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Default, Debug)]
 pub struct GrammarSoup {
   pub grammar_headers: Arc<sync::RwLock<OrderedMap<GrammarId, Box<GrammarHeader>>>>,
   //pub nonterminals:     Arc<sync::RwLock<Map<Non-terminalId, Box<Non-terminal>>>>,

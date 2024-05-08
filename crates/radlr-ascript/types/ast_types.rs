@@ -1,3 +1,5 @@
+use crate::{AscriptDatabase, MultiTypeRef};
+
 use super::StringId;
 use radlr_core::{proxy::OrderedSet, CachedString, DBNonTermKey, IString};
 use radlr_formatter::*;
@@ -35,6 +37,29 @@ pub enum AscriptType {
 }
 
 impl AscriptType {
+  pub fn requires_template(&self, db: &AscriptDatabase) -> bool {
+    use AscriptType::*;
+    match self {
+      Scalar(scalar) => scalar.requires_template(db),
+      Aggregate(agg) => agg.requires_template(db),
+      _ => false,
+    }
+  }
+
+  pub fn get_structs<'b>(&self, struct_types: &'b mut Vec<StringId>, multi_types: &Vec<MultiTypeRef>) -> &'b mut Vec<StringId> {
+    match self {
+      Self::Scalar(scalar) => {
+        scalar.get_structs(struct_types, multi_types);
+      }
+      Self::Aggregate(agg) => {
+        agg.get_structs(struct_types, multi_types);
+      }
+      _ => {}
+    };
+
+    struct_types
+  }
+
   pub fn friendly_name(&self) -> String {
     use AscriptType::*;
     match self {
@@ -119,27 +144,27 @@ pub enum PendingType {
 }
 
 impl AscriptType {
-  pub fn is_any(&self) -> bool {
+  pub fn is_multi(&self) -> bool {
     match self {
       AscriptType::Aggregate(agg_type) => match agg_type {
-        AscriptAggregateType::Map { val_type, .. } => val_type.is_any(),
-        AscriptAggregateType::Vec { val_type } => val_type.is_any(),
+        AscriptAggregateType::Map { val_type, .. } => val_type.is_multi(),
+        AscriptAggregateType::Vec { val_type } => val_type.is_multi(),
       },
 
-      AscriptType::Scalar(val_type) => val_type.is_any(),
+      AscriptType::Scalar(val_type) => val_type.is_multi(),
 
       _ => false,
     }
   }
 
-  pub fn get_any_type_index(&self) -> Option<usize> {
+  pub fn get_multi_type_index(&self) -> Option<usize> {
     match self {
       AscriptType::Aggregate(agg_type) => match agg_type {
-        AscriptAggregateType::Map { val_type, .. } => val_type.get_any_type_index(),
-        AscriptAggregateType::Vec { val_type } => val_type.get_any_type_index(),
+        AscriptAggregateType::Map { val_type, .. } => val_type.get_multi_type_index(),
+        AscriptAggregateType::Vec { val_type } => val_type.get_multi_type_index(),
       },
 
-      AscriptType::Scalar(val_type) => val_type.get_any_type_index(),
+      AscriptType::Scalar(val_type) => val_type.get_multi_type_index(),
       _ => None,
     }
   }
@@ -228,7 +253,7 @@ impl ValueObj for AscriptType {
         AscriptScalarType::F32(_) => Value::Str("f32".intern(s_store)),
         AscriptScalarType::F64(_) => Value::Str("f64".intern(s_store)),
         AscriptScalarType::Struct(..) => Value::Str("struct".intern(s_store)),
-        AscriptScalarType::Any(_) => Value::Str("any".intern(s_store)),
+        AscriptScalarType::Multi(_) => Value::Str("any".intern(s_store)),
         AscriptScalarType::Token => Value::Str("tok".intern(s_store)),
         AscriptScalarType::TokenRange => Value::Str("tok_range".intern(s_store)),
         AscriptScalarType::String(_) => Value::Str("str".intern(s_store)),
@@ -250,7 +275,7 @@ impl ValueObj for AscriptType {
           _ => Value::None,
         },
         AscriptType::Scalar(scl) => match scl {
-          AscriptScalarType::Any(index) => Value::Int(*index as isize),
+          AscriptScalarType::Multi(index) => Value::Int(*index as isize),
           _ => Value::None,
         },
         _ => Value::None,
@@ -279,9 +304,9 @@ impl ValueObj for AscriptType {
   }
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AscriptAnyType(pub OrderedSet<AscriptScalarType>);
+pub struct AscriptMultiType(pub OrderedSet<AscriptScalarType>);
 
-impl Hash for AscriptAnyType {
+impl Hash for AscriptMultiType {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     for ty in &self.0 {
       ty.hash(state)
@@ -308,7 +333,7 @@ pub enum AscriptScalarType {
   String(Option<IString>),
   Bool(bool),
   Struct(StringId, bool),
-  Any(usize),
+  Multi(usize),
   Token,
   TokenRange,
   #[default]
@@ -336,7 +361,7 @@ impl ValueObj for AscriptScalarType {
         _ => Value::None,
       },
       "index" => match self {
-        Any(index) => Value::Int(*index as isize),
+        Multi(index) => Value::Int(*index as isize),
         _ => Value::Str(self.get_type().intern(s_store)),
       },
       "literal" => match self {
@@ -360,6 +385,30 @@ impl ValueObj for AscriptScalarType {
 }
 
 impl AscriptScalarType {
+  pub fn requires_template(&self, db: &AscriptDatabase) -> bool {
+    use AscriptScalarType::*;
+    match self {
+      Multi(index) => db.multi_types[*index].1.iter().any(|i| i.requires_template(db)),
+      Token | TokenRange => true,
+      Struct(id, _) => db.structs.get(id).is_some_and(|s| s.requires_template),
+      _ => false,
+    }
+  }
+
+  pub fn get_structs<'b>(&self, struct_types: &'b mut Vec<StringId>, multi_types: &Vec<MultiTypeRef>) -> &'b mut Vec<StringId> {
+    match self {
+      Self::Multi(id) => {
+        for ty in multi_types[*id].1.iter() {
+          ty.get_structs(struct_types, multi_types);
+        }
+      }
+      Self::Struct(struct_id, _) => struct_types.push(*struct_id),
+      _ => {}
+    };
+
+    struct_types
+  }
+
   pub fn precedence(&self) -> u64 {
     use AscriptScalarType::*;
     match self {
@@ -376,7 +425,7 @@ impl AscriptScalarType {
       String(..) => 10,
       Bool(..) => 11,
       Struct(..) => 12,
-      Any(..) => 13,
+      Multi(..) => 13,
       Flag(..) => 14,
       Token => 15,
       TokenRange => 16,
@@ -393,7 +442,7 @@ impl AscriptScalarType {
       U64(..) | I64(..) | F64(..) => 8,
       String(..) => 16,
       Struct(..) => 128,
-      Any(..) => 0,
+      Multi(..) => 0,
       Flag(..) => 8,
       Token => 16,
       TokenRange => 8,
@@ -417,7 +466,7 @@ impl AscriptScalarType {
       String(..) => "String",
       Bool(..) => "Bool",
       Struct(..) => "Struct",
-      Any(..) => "Any",
+      Multi(..) => "Multi",
       Flag(..) => "Flag",
       Token => "Token",
       TokenRange => "TokenRange",
@@ -444,16 +493,16 @@ impl AscriptScalarType {
     }
   }
 
-  pub fn is_any(&self) -> bool {
+  pub fn is_multi(&self) -> bool {
     match self {
-      AscriptScalarType::Any(_) => true,
+      AscriptScalarType::Multi(_) => true,
       _ => false,
     }
   }
 
-  pub fn get_any_type_index(&self) -> Option<usize> {
+  pub fn get_multi_type_index(&self) -> Option<usize> {
     match self {
-      AscriptScalarType::Any(index) => Some(*index),
+      AscriptScalarType::Multi(index) => Some(*index),
       _ => None,
     }
   }
@@ -508,7 +557,7 @@ impl Hash for AscriptScalarType {
 impl PartialOrd for AscriptScalarType {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     match (self, other) {
-      (AscriptScalarType::Any(a), AscriptScalarType::Any(b)) => a.partial_cmp(b),
+      (AscriptScalarType::Multi(a), AscriptScalarType::Multi(b)) => a.partial_cmp(b),
       (AscriptScalarType::Struct(a, _), AscriptScalarType::Struct(b, _)) => a.partial_cmp(b),
       _ => self.precedence().partial_cmp(&other.precedence()),
     }
@@ -518,7 +567,7 @@ impl PartialOrd for AscriptScalarType {
 impl Ord for AscriptScalarType {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
     match (self, other) {
-      (AscriptScalarType::Any(a), AscriptScalarType::Any(b)) => a.cmp(b),
+      (AscriptScalarType::Multi(a), AscriptScalarType::Multi(b)) => a.cmp(b),
       (AscriptScalarType::Struct(a, _), AscriptScalarType::Struct(b, _)) => a.cmp(b),
       _ => self.precedence().cmp(&other.precedence()),
     }
@@ -530,7 +579,7 @@ impl Eq for AscriptScalarType {}
 impl PartialEq for AscriptScalarType {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
-      (AscriptScalarType::Any(a), AscriptScalarType::Any(b)) => a.cmp(b).is_eq(),
+      (AscriptScalarType::Multi(a), AscriptScalarType::Multi(b)) => a.cmp(b).is_eq(),
       (AscriptScalarType::Struct(a, _), AscriptScalarType::Struct(b, _)) => a.cmp(b).is_eq(),
       _ => std::mem::discriminant(self) == std::mem::discriminant(other),
     }
@@ -591,6 +640,27 @@ impl Ord for AscriptAggregateType {
 }
 
 impl AscriptAggregateType {
+  pub fn requires_template(&self, db: &AscriptDatabase) -> bool {
+    use AscriptAggregateType::*;
+    match self {
+      Vec { val_type } => val_type.requires_template(db),
+      Map { key_type, val_type } => key_type.requires_template(db) || val_type.requires_template(db),
+    }
+  }
+
+  pub fn get_structs<'b>(&self, struct_types: &'b mut Vec<StringId>, multi_types: &Vec<MultiTypeRef>) -> &'b mut Vec<StringId> {
+    match self {
+      Self::Vec { val_type } => {
+        val_type.get_structs(struct_types, multi_types);
+      }
+      Self::Map { val_type, .. } => {
+        val_type.get_structs(struct_types, multi_types);
+      }
+    };
+
+    struct_types
+  }
+
   pub fn precedence(&self) -> usize {
     match self {
       AscriptAggregateType::Map { .. } => 0,
@@ -639,7 +709,7 @@ pub enum GraphNode {
   Sym(usize, bool, AscriptType),
   TokSym(usize, bool, AscriptType),
   TokRule(AscriptType),
-  AnyConvert(Rc<GraphNode>, AscriptType),
+  MultiConvert(Rc<GraphNode>, AscriptType),
   Undefined(AscriptType),
 }
 
@@ -663,7 +733,7 @@ impl GraphNode {
       | TokRule(ty)
       | TokSym(.., ty)
       | Tok(.., ty)
-      | AnyConvert(.., ty)
+      | MultiConvert(.., ty)
       | Undefined(ty) => ty,
     }
   }
@@ -685,7 +755,7 @@ impl GraphNode {
       | TokRule(ty)
       | TokSym(.., ty)
       | Tok(.., ty)
-      | AnyConvert(.., ty)
+      | MultiConvert(.., ty)
       | Undefined(ty) => ty,
     }
   }
@@ -706,7 +776,7 @@ impl ValueObj for GraphNode {
       Str(..) => "StrNode",
       Trim(..) => "TrimNode",
       Bool(..) => "BoolNode",
-      AnyConvert(..) => "AnyConvertNode",
+      MultiConvert(..) => "MultiConvertNode",
       TokRule(..) => "TokRuleNode",
       TokSym(..) | Tok(..) => "TokNode",
       Undefined(..) => "UndefinedNode",
@@ -747,7 +817,7 @@ impl ValueObj for GraphNode {
       "index" => match self {
         Sym(index, ..) => Value::Int(*index as isize),
         TokSym(index, ..) => Value::Int(*index as isize),
-        AnyConvert(_, index) => Value::Int(index.get_any_type_index().unwrap() as isize),
+        MultiConvert(_, index) => Value::Int(index.get_multi_type_index().unwrap() as isize),
         _ => Value::None,
       },
       "is_last_ref" => match self {
@@ -756,7 +826,7 @@ impl ValueObj for GraphNode {
         _ => Value::None,
       },
       "init" => match self {
-        AnyConvert(val, ..) => Value::Obj(val.as_ref()),
+        MultiConvert(val, ..) => Value::Obj(val.as_ref()),
         Map(_, val, ..) => Value::Obj(val.as_ref()),
         Trim(val, ..) => Value::Obj(val.as_ref()),
         Vec(val, ..) => Value::Obj(val),

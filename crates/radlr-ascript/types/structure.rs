@@ -10,10 +10,13 @@ formatted_typed_ordered_map!(AscriptStructs, StringId, AscriptStruct, "structs")
 #[derive(Debug)]
 pub struct AscriptStruct {
   #[allow(unused)]
-  pub(crate) id:         StringId,
-  pub(crate) name:       String,
-  pub(crate) properties: AscriptStructProps,
-  pub(crate) has_token:  bool,
+  pub(crate) id:                StringId,
+  pub(crate) name:              String,
+  pub(crate) properties:        AscriptStructProps,
+  pub(crate) has_token:         bool,
+  /// The node itself or one of its properties requires a template specifier
+  /// for TK
+  pub(crate) requires_template: bool,
 }
 
 formatted_typed_ordered_map!(AscriptStructProps, StringId, AscriptProp, "AscriptStructProps");
@@ -25,6 +28,7 @@ impl ValueObj for AscriptStruct {
       "name" => Value::Str(self.name.intern(s_store)),
       "props" => Value::Obj(&self.properties),
       "has_token" => Value::Int(self.has_token as isize),
+      "requires_template" => Value::Int(self.requires_template as isize),
       _ => Value::None,
     }
   }
@@ -34,7 +38,6 @@ impl ValueObj for AscriptStruct {
   }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
 pub struct AscriptProp {
   pub(crate) is_optional: bool,
   pub(crate) name:        String,
@@ -43,7 +46,6 @@ pub struct AscriptProp {
   pub(crate) g_id:        GrammarIdentities,
 }
 
-#[cfg(not(debug_assertions))]
 impl Debug for AscriptProp {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str("AscriptProp")

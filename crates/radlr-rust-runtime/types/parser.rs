@@ -67,8 +67,7 @@ pub trait ParserProducer<T: ParserInput>: RuntimeDatabase {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum StateType {
   #[default]
   Normal,
@@ -76,16 +75,14 @@ pub enum StateType {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct UniqueParseState {
   pub state_id: u16,
   pub address:  u16,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct StateInfo {
   pub stack_address:  u16,
   pub state_type:     StateType,
@@ -96,8 +93,7 @@ pub struct StateInfo {
 
 /// An identifier for the first instruction of a particular state.
 #[repr(C)]
-#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ParserState {
   pub address: usize,
   pub info:    StateInfo,

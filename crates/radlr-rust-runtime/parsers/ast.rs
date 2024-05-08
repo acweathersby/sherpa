@@ -117,13 +117,15 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk + Debug, N: Node<T
 
   let mut ctx = parser.init(entry)?;
 
+  let input_data = input.get_owned_ref();
+
   while let Some(action) = parser.next(input, &mut ctx) {
     match action {
       ParseAction::Accept { nonterminal_id, final_offset, token_line_count, token_line_offset } => {
         return if final_offset != input.len() {
           let mut token = TK::from_vals(1, final_offset as u32, token_line_count, token_line_offset);
-          let input_data = input.get_owned_ref();
-          token.set_source(input_data);
+
+          token.set_source(input_data.clone());
 
           Err(ParserError::InputError {
             inline_message:   format!("Failed to read entire input {} {}", input.len(), final_offset),
@@ -133,8 +135,8 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk + Debug, N: Node<T
           })
         } else if nonterminal_id != entry.nonterm_id {
           let mut token = TK::from_vals(1, final_offset as u32, token_line_count, token_line_offset);
-          let input_data = input.get_owned_ref();
-          token.set_source(input_data);
+
+          token.set_source(input_data.clone());
 
           Err(ParserError::InputError {
             inline_message:   "Top symbol did not match the target nonterminal".to_string(),
@@ -156,7 +158,6 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk + Debug, N: Node<T
       } => {
         println!("{byte_length} {byte_offset}");
         let mut token = TK::from_vals(byte_length, byte_offset, token_line_count, token_line_offset);
-        let input_data = input.get_owned_ref();
         token.set_source(input_data);
 
         if let Some(expected_tokens) = db.get_expected_tok_ids_at_state(last_state.address as u32) {
@@ -212,7 +213,7 @@ fn build_ast<I: ParserInput, DB: ParserProducer<I>, Token: Tk + Debug, N: Node<T
         let offset_end = (token_byte_offset + token_byte_length) as usize;
 
         let token =
-          Token::from_range(offset_start, offset_end, token_line_count, token_line_offset, token_id, input.get_owned_ref());
+          Token::from_range(offset_start, offset_end, token_line_count, token_line_offset, token_id, input_data.clone());
 
         tokens.push(token.clone());
         nodes.push(N::default());

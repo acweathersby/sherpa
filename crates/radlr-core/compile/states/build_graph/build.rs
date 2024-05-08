@@ -23,7 +23,7 @@ pub(crate) fn handle_kernel_items(
   pred: &SharedGraphNode,
   config: &ParserConfig,
 ) -> RadlrResult<()> {
-  let (mut groups) = get_firsts(gb, pred, config)?;
+  let mut groups = get_firsts(gb, pred, config)?;
 
   if pred.is_scanner() && groups.len() == 0 {
     StagedNode::new(gb)
@@ -110,8 +110,6 @@ fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode, config: &Parser
   let mut oos_scan_completed_tokens = OrderedSet::<PrecedentDBTerm>::new();
   let mut oos_scan_incompletes = OrderedSet::<PrecedentDBTerm>::new();
 
-  let mut ooos = false;
-
   let mut too_process_items = Vec::new();
 
   for item in pred.kernel_items() {
@@ -130,7 +128,6 @@ fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode, config: &Parser
             too_process_items.extend(follow);
           }
         } else {
-          ooos = true;
           if !item.is_initial() {
             oos_scan_incompletes.insert(token);
           }

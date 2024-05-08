@@ -1,20 +1,18 @@
 use crate::{AscriptAggregateType, AscriptDatabase, AscriptScalarType, AscriptType, AscriptTypes};
 use radlr_core::CachedString;
 use radlr_formatter::*;
-use std::{
-  collections::{BTreeMap, BTreeSet},
-  fmt::Debug,
-};
+use std::fmt::Debug;
 
 #[derive(Debug)]
-pub struct AscriptAny {
-  pub(crate) types: AscriptTypes,
-  pub(crate) name:  String,
-  pub(crate) used:  bool,
-  pub(crate) root:  bool,
+pub struct AscriptMulti {
+  pub(crate) types:             AscriptTypes,
+  pub(crate) requires_template: bool,
+  pub(crate) name:              String,
+  pub(crate) used:              bool,
+  pub(crate) root:              bool,
 }
 
-impl ValueObj for AscriptAny {
+impl ValueObj for AscriptMulti {
   fn get_keys<'scope>(&'scope self) -> &'static [&'static str] {
     &["name", "types"]
   }
@@ -23,7 +21,7 @@ impl ValueObj for AscriptAny {
     match key {
       "name" => Value::Str(self.name.intern(s_store)),
       "types" => Value::Obj(&self.types),
-      "has_token" => Value::Int(self.types.0.iter().any(contains_token_reference) as isize),
+      "requires_template" => Value::Int(self.requires_template as isize),
       "is_used" => Value::Int(self.used as isize),
       "is_root" => Value::Int(self.root as isize),
       _ => Value::None,
@@ -31,55 +29,32 @@ impl ValueObj for AscriptAny {
   }
 
   fn get_type<'scope>(&'scope self) -> &str {
-    "AscriptAnyEnum"
-  }
-}
-
-fn contains_token_reference(t: &AscriptType) -> bool {
-  use AscriptAggregateType::*;
-  use AscriptScalarType::*;
-  use AscriptType::*;
-  match t {
-    Scalar(Token) | Scalar(Struct(_, false)) | Scalar(TokenRange) => true,
-    Aggregate(Vec { val_type }) => match val_type {
-      Token | Struct(_, false) | TokenRange => true,
-      _ => false,
-    },
-    Aggregate(Map { key_type, val_type }) => {
-      (match key_type {
-        Token | Struct(_, false) | TokenRange => true,
-        _ => false,
-      }) || (match val_type {
-        Token | Struct(_, false) | TokenRange => true,
-        _ => false,
-      })
-    }
-    _ => false,
+    "AscriptMultiEnum"
   }
 }
 
 #[derive(Debug)]
 /// Provides services to remap AnyTypes to enums of Any
-pub struct AscriptAnys<'db> {
+pub struct AscriptMultis<'db> {
   db:   &'db AscriptDatabase,
-  anys: Vec<AscriptAny>,
+  anys: Vec<AscriptMulti>,
   len:  usize,
 }
 
-impl<'db> AscriptAnys<'db> {
+impl<'db> AscriptMultis<'db> {
   pub fn new(db: &'db AscriptDatabase) -> Self {
-    let mut used_indices = Vec::from_iter(db.any_type_lu.iter().cloned().map(|index| 0));
+    let mut used_indices = Vec::from_iter(db.multi_type_lu.iter().cloned().map(|index| 0));
     Self {
       db,
       len: used_indices.len(),
       anys: db
-        .any_types
+        .multi_types
         .iter()
         .enumerate()
         .map(|(i, _)| {
-          let remapped_index = db.any_type_lu[i];
+          let remapped_index = db.multi_type_lu[i];
           let entry = used_indices.get_mut(remapped_index);
-          let any = &db.any_types[remapped_index];
+          let any = &db.multi_types[remapped_index];
 
           let (used, root) = if let Some(entry) = entry {
             let root = *entry;
@@ -88,10 +63,11 @@ impl<'db> AscriptAnys<'db> {
           } else {
             (false, false)
           };
-
-          AscriptAny {
-            types: AscriptTypes(any.1.iter().map(|t| AscriptType::Scalar(*t)).collect()),
-            name: format!("{}Any", any.0),
+          let types = AscriptTypes(any.1.iter().map(|t| AscriptType::Scalar(*t)).collect());
+          AscriptMulti {
+            name: format!("{}Values", any.0),
+            requires_template: types.0.iter().any(|t| t.requires_template(db)),
+            types,
             used,
             root,
           }
@@ -101,9 +77,9 @@ impl<'db> AscriptAnys<'db> {
   }
 }
 
-impl<'a> ValueObj for AscriptAnys<'a> {
+impl<'a> ValueObj for AscriptMultis<'a> {
   fn get_type<'scope>(&'scope self) -> &str {
-    "any_enums"
+    "multi_enums"
   }
 
   fn get_len<'scope>(&'scope self) -> usize {
@@ -111,7 +87,7 @@ impl<'a> ValueObj for AscriptAnys<'a> {
   }
 
   fn get_index<'scope>(&'scope self, index: usize, _: &radlr_core::IStringStore) -> Value<'scope> {
-    //let remapped_index = self.db.any_type_lu[index];
+    //let remapped_index = self.db.multi_type_lu[index];
     Value::Obj(&self.anys[index])
   }
 

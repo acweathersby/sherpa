@@ -1,5 +1,4 @@
-#[derive(Clone, Copy, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Default, Debug)]
 
 pub struct EntryPoint {
   /// A pointer to the initial entry function for the given non-terminal.

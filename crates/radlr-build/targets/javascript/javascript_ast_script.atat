@@ -38,7 +38,7 @@ class Token {
 };
 
 
-#ast_nodes(TYPES, STRUCTS, ANY_ENUMS)
+#ast_nodes(TYPES, STRUCTS, MULTI_ENUMS)
   
 @RULES.iter#rule_function()
 }
@@ -69,7 +69,7 @@ class Token {
     "F32"         { number }
     "F64"         { number }
     "Struct"      { @ty.name }
-    "Any"         { (@ANY_ENUMS.[@ty.index].types.iter#any_items_union()) }
+    "Multi"         { (@MULTI_ENUMS.[@ty.index].types.iter#any_items_union()) }
     { @{ [TODO: ScalarType @type_name ] } }
   }
 }
@@ -86,7 +86,7 @@ class Token {
   }
 }
 
-#ast_nodes types:obj structs:obj any_enums:obj {
+#ast_nodes types:obj structs:obj multi_enums:obj {
   
   #_{ AST DECLARATION -------------------------------------------------------------------------- }
   #_{ Not Used }

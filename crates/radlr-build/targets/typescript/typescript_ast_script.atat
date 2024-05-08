@@ -38,14 +38,14 @@ class Token {
 };
 
 
-#ast_nodes(TYPES, STRUCTS, ANY_ENUMS)
+#ast_nodes(TYPES, STRUCTS, MULTI_ENUMS)
   
 @RULES.iter#rule_function()
 }
 
 #_ {@"This is a comment function. Since we never call it, it has the same effect as a comment in other languages."}
 
-#any_items_union {
+#multi_items_union {
   #ast_node_ts_type(self)
   match _iter_last_ {
     true { } { \ |\ }
@@ -69,7 +69,7 @@ class Token {
     "F32"         { number }
     "F64"         { number }
     "Struct"      { @ty.name }
-    "Any"         { (@ANY_ENUMS.[@ty.index].types.iter#any_items_union()) }
+    "Multi"         { (@MULTI_ENUMS.[@ty.index].types.iter#multi_items_union()) }
     { @{ [TODO: ScalarType @type_name ] } }
   }
 }
@@ -86,7 +86,7 @@ class Token {
   }
 }
 
-#ast_nodes types:obj structs:obj any_enums:obj {
+#ast_nodes types:obj structs:obj multi_enums:obj {
   
   #_{ AST DECLARATION -------------------------------------------------------------------------- }
   #_{ Not Used }
@@ -96,7 +96,7 @@ class Token {
   #_{ Not Used }
   #_{ ------------------------------------------------------------------------------------------ }
 
-  #_{ ANY DECLARATIONS ------------------------------------------------------------------------- }
+  #_{ MULTI DECLARATIONS ------------------------------------------------------------------------- }
   #_{ Not Used }
   #_{ ------------------------------------------------------------------------------------------ }
 

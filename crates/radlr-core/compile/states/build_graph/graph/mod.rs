@@ -14,8 +14,7 @@ use std::{
   vec,
 };
 
-#[derive(Hash, Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Hash, Clone, Debug)]
 pub struct PeekGroup {
   pub items:  ItemSet,
   pub is_oos: bool,
@@ -137,8 +136,7 @@ pub enum GraphType {
 
 /// Indicates the State type that generated
 /// the item
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[allow(non_camel_case_types)]
 pub enum Origin {
   None,
@@ -660,7 +658,7 @@ type RootStateData = (GraphType, SharedGraphNode, ParserConfig);
 
 type RootStates = Map<u64, RootStateData>;
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 pub struct ConcurrentGraphBuilder {
   queue: SharedRW<VecDeque<(SharedGraphNode, ParserConfig)>>,
   root_states: SharedRW<RootStates>,
@@ -1217,8 +1215,7 @@ impl Graphs {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct IRPrecursorGroup {
   pub node:          SharedGraphNode,
   pub successors:    BTreeMap<u64, SharedGraphNode>,
@@ -1227,6 +1224,7 @@ pub struct IRPrecursorGroup {
 }
 
 pub struct IrPrecursorData<'a> {
+  #[allow(unused)]
   graph:      &'a Graphs,
   precursors: BTreeMap<u64, IRPrecursorGroup>,
 }

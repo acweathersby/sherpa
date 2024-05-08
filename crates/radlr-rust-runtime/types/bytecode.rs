@@ -5,8 +5,7 @@ use std::fmt::Debug;
 use std::fmt::Display;
 
 /// The current set of instruction opcodes
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(u8)]
 pub enum Opcode {
   /// Default value for unrecognized opcode values.
@@ -316,8 +315,7 @@ impl<'a> From<&(&'a [u8], usize)> for Instruction<'a> {
   }
 }
 
-#[cfg(debug_assertions)]
-impl<'a> Debug for Instruction<'a> {
+impl<'a> std::fmt::Debug for Instruction<'a> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let opcode = self.get_opcode();
     f.write_fmt(format_args!("Instruction({:?})", opcode))
@@ -446,8 +444,7 @@ impl<'a> Instruction<'a> {
   }
 }
 
-#[derive(Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Debug)]
 pub struct ByteCodeIterator<'a> {
   offset: usize,
   bc:     &'a [u8],

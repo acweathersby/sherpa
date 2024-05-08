@@ -35,21 +35,44 @@
 /// IN THE SOFTWARE
 
 use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 
-#ast_nodes(TYPES, STRUCTS, ANY_ENUMS)
+#ast_nodes(TYPES, STRUCTS, MULTI_ENUMS)
   
 @RULES.iter#rule_function()}
 
 #_ {@"This is a comment function. Since we never call it, it has the same effect as a comment in other languages."}
 
-
-#any_rust_type any:obj{ 
-  @any.name match @any.has_token { true { <Token> } }
+#s_temple_arg n:str {
+  @struct={ STRUCTS.[n] }
+  match (@struct.requires_template, @struct.#len) {
+    (false, _) | (_, 0) {}
+    { <Token> }
+  }
 }
 
-#any_rust_type_impl any:obj{ 
-  @any.name match @any.has_token { true { <Token: Tk> } }
+#s_temple_param n:str {
+  @struct={ STRUCTS.[n] }
+  match (@struct.requires_template, @struct.#len) {
+    (false, _) | (_, 0) {}
+    { <Token:Tk> }
+  }
+}
+
+#s_type n:str {
+  @struct={ STRUCTS.[n] }
+    match struct.is_empty {
+    true { @ty.name  }
+    { Box<@ty.name #s_temple_arg(ty.name)> }
+  }
+}
+
+#multi_rust_type multi:obj{ 
+  @multi.name match @multi.requires_template { true { <Token> } }
+}
+
+#multi_rust_type_impl multi:obj{ 
+  @multi.name match @multi.requires_template { true { <Token: Tk> } }
 }
 
 #ty_to_rust ty:obj {
@@ -68,21 +91,17 @@ use std::{collections::HashMap, marker::PhantomData};
     "U64"         { u64 }
     "F32"         { f32 }
     "F64"         { f64 }
-    "Struct"      { 
-      match ty.is_empty {
-        true { @ty.name  }
-        { Box<@ty.name<Token>> }
-      }
-    }
-  "Any"  { #any_rust_type(@ANY_ENUMS.[@ty.index]) }
-    { @{ [TODO: ScalarType @type_name ] } }
-  }
+    "AscriptStruct" | "Struct"      
+                  { #s_type(ty.name) }
+    "Multi"       { #multi_rust_type(@MULTI_ENUMS.[@ty.index]) }
+                    { @{ [TODO: ScalarType @type_name ] } }
+                  }
 }
 
 #ty_to_cap_name ty:obj {
   match ty.#type {
     "Struct"  { @ty.name }
-    "Any"     { @ANY_ENUMS.[@ty.index].name }
+    "Multi"     { @MULTI_ENUMS.[@ty.index].name }
     { @ty.#type }
   }
 }
@@ -93,8 +112,8 @@ use std::{collections::HashMap, marker::PhantomData};
     "Map" {  #ty_to_cap_name(ty.key)#ty_to_cap_name(ty.val) }
     "Vec" { 
       match ty.val.#type {
-        "Any"  { @ANY_ENUMS.[@ty.val.index].name s }
-        { #ty_to_cap_name(ty.val)s }
+        "Multi"  { Vec @MULTI_ENUMS.[@ty.val.index].name }
+        { Vec #ty_to_cap_name(ty.val) }
       }  
     }
     {  
@@ -114,8 +133,8 @@ use std::{collections::HashMap, marker::PhantomData};
     }
     "Vec" {
       match ty.val.#type {
-        "Any"  { 
-          /* @ty.val.index */ Vec<#any_rust_type(@ANY_ENUMS.[@ty.val.index])> 
+        "Multi"  { 
+          /* @ty.val.index */ Vec<#multi_rust_type(@MULTI_ENUMS.[@ty.val.index])> 
         }
         { Vec<#ty_to_rust(ty.val)> }
       }
@@ -137,24 +156,25 @@ use std::{collections::HashMap, marker::PhantomData};
   }
 }
 
-#ast_nodes types:obj structs:obj any_enums:obj {
+#ast_nodes types:obj structs:obj multi_enums:obj {
   
   #_{ AST DECLARATION -------------------------------------------------------------------------- }
 
-  #any_enum_ast_declaration { @self.name(#any_rust_type(self)),\ @; }
+  #multi_enum_ast_declaration { @self.name(#multi_rust_type(self)),\ @; }
+
   #struct_ast_declaration { 
     match @self.is_empty {
       true { @self.name(@self.name),\ @; }
-      { @self.name(Box<@self.name<Token>>),\ @;  }
+      { @self.name(Box<@self.name #s_temple_arg(self.name)>),\ @;  }
     } 
   }
 
   #type_entry { 
     match (@self.agg_type, @self.val.#type) { 
-      (None, "Token") | (None, "Any") { }
-      (_ , "Any") {
+      (None, "Token") | (None, "Multi") { }
+      (_ , "Multi") {
         /* @self.val.index */\ @;
-        match @ANY_ENUMS.[self.val.index].is_root {
+        match @MULTI_ENUMS.[self.val.index].is_root {
           true { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @; }
         }
       }
@@ -169,7 +189,7 @@ use std::{collections::HashMap, marker::PhantomData};
     None,\ @;
     Token(Token),\ @;
     @types.iter#type_entry()
-    @any_enums.iter#any_enum_ast_declaration()
+    @multi_enums.iter#multi_enum_ast_declaration()
     @structs.iter#struct_ast_declaration()
   }\n\n
 
@@ -190,7 +210,7 @@ use std::{collections::HashMap, marker::PhantomData};
 
     #impls {
       match (self.agg_type, self.val.#type) {
-        (None, "Any") { }
+        (None, "Multi") { }
         
         ("Vec", "Token") { 
           impl<Token:Tk>\ @AST_NAME<Token> { 
@@ -202,8 +222,8 @@ use std::{collections::HashMap, marker::PhantomData};
             }
           } \n\n
         }
-        (_ , "Any") {
-          match @ANY_ENUMS.[self.val.index].is_root {
+        (_ , "Multi") {
+          match @MULTI_ENUMS.[self.val.index].is_root {
             true {
               impl<Token:Tk>\ @AST_NAME<Token> { 
                 pub\ fn\ into_#ty_to_ast_name(self) (self)\ ->\ Option<#ast_node_rust_type(self)>\ { @;
@@ -252,10 +272,10 @@ use std::{collections::HashMap, marker::PhantomData};
 
   #_{ ------------------------------------------------------------------------------------------ }
 
-  #_{ ANY DECLARATIONS ------------------------------------------------------------------------- }
+  #_{ MULTI DECLARATIONS ------------------------------------------------------------------------- }
 
-  #any_enum {
-    @enum_type={ #any_rust_type(self) }
+  #multi_enum {
+    @enum_type={ #multi_rust_type(self) }
     #iter_types { 
       match (self.agg_type, self.val.#type , self.val.is_empty, self.is_root) {
           (None, "Struct", true, _) { 
@@ -266,7 +286,7 @@ use std::{collections::HashMap, marker::PhantomData};
     }
 
     #[derive(Clone,\ Debug,\ Default)]\n
-    pub\ enum\ #any_rust_type_impl(self) {
+    pub\ enum\ #multi_rust_type_impl(self) {
       #[default] @;
       None, @;
       @self.types.iter#iter_types()
@@ -274,22 +294,22 @@ use std::{collections::HashMap, marker::PhantomData};
     \n\n
   }
 
-  @any_enums.iter#any_enum()
+  @multi_enums.iter#multi_enum()
 
-  #type_any_enums {
+  #type_multi_enums {
 
     #impls {
-      @enum_type={ #any_rust_type(self) }
+      @enum_type={ #multi_rust_type(self) }
 
-      #any_type_to_any ANY_NAME:str {
-        @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(@ANY_NAME::#ty_to_ast_name(self)(val)),@;
+      #multi_type_to_multi MULTI_NAME:str {
+        @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(@MULTI_NAME::#ty_to_ast_name(self)(val)),@;
       }
 
       impl<Token:Tk>\ @AST_NAME<Token> { 
         pub\ fn\ into_@self.name (self)\ ->\ Option<@enum_type>\ { @;
           mat ch\ self\ {
             @AST_NAME::@self.name (val)\ =>\ Some(val),@;
-            @self.types.iter#any_type_to_any(self.name)
+            @self.types.iter#multi_type_to_multi(self.name)
             _\ =>\ None,@;
           }
         }
@@ -307,7 +327,7 @@ use std::{collections::HashMap, marker::PhantomData};
     @self.iter#impls()
   }
 
-  @any_enums.()
+  @multi_enums.()
 
   #_{ ------------------------------------------------------------------------------------------ }
 
@@ -350,63 +370,28 @@ use std::{collections::HashMap, marker::PhantomData};
         pub\ #esc_(@self.name):\ #ast_node_rust_type(self.type), @;
       }
 
-      match self.props.#len {
-        0 { 
-          @rust_struct_type={ self.name }
-          \n\n
-          #[derive(\ Clone,\ Copy,\ Debug,\ Default\ )] 
+       @rust_struct_type={ #ty_to_rust(self) }
 
-          \n
-          pub\ struct\ @self.name();
+      \n\n
+      #[derive(\ Clone,\ Debug,\ Default\ )] \n
+      pub\ struct\ @self.name#s_temple_param(self.name){ 
+        @self.props.iter#prop_define()
+      }
 
-          \n\n
-          impl<Token:Tk>\ @AST_NAME<Token> { 
-            pub\ fn\ into_@self.name (self)\ ->\ Option<@rust_struct_type>\ { @;
-              mat ch\ self\ {
-                @AST_NAME::@self.name(val)\ =>\ Some(val),@;
-                _\ =>\ None,@;
-              }
-            }
-          } \n\n
-
-          impl<Token:Tk>\ From<@rust_struct_type>\ for\ @AST_NAME<Token> { 
-            fn\ from(value:\ @rust_struct_type )\ ->\ Self\ {
-              Self::@self.name(value) @;
-            }@;
+      \n\n
+      impl<Token:Tk>\ @AST_NAME<Token> { 
+        pub\ fn\ into_@self.name (self)\ ->\ Option<@rust_struct_type>\ { @;
+          mat ch\ self\ {
+            @AST_NAME::@self.name(val)\ =>\ Some(val),@;
+            _\ =>\ None,@;
           }
         }
-        { 
+      } \n\n
 
-          @rust_struct_type={ "Box<" + self.name + "<Token>>" }
-          \n\n
-          #[derive(\ Clone,\ Debug,\ Default\ )]
-
-          \n
-          pub\ struct\ @self.name<Token:Tk>{ 
-            @self.props.iter#prop_define()
-            match self.has_token {
-              false {
-                _tok: PhantomData<Token>
-              }
-            }
-          }
-
-          \n\n
-          impl<Token:Tk>\ @AST_NAME<Token> { 
-            pub\ fn\ into_@self.name (self)\ ->\ Option<@rust_struct_type>\ { @;
-              mat ch\ self\ {
-                @AST_NAME::@self.name(val)\ =>\ Some(val),@;
-                _\ =>\ None,@;
-              }
-            }
-          } \n\n
-
-          impl<Token:Tk>\ From<@rust_struct_type>\ for\ @AST_NAME<Token> { 
-            fn\ from(value:\ @rust_struct_type )\ ->\ Self\ {
-              Self::@self.name(value) @;
-            }@;
-          }
-        }
+      impl<Token:Tk>\ From<@rust_struct_type>\ for\ @AST_NAME<Token> { 
+        fn\ from(value:\ @rust_struct_type )\ ->\ Self\ {
+          Self::@self.name(value) @;
+        }@;
       }
     }
 
@@ -423,16 +408,16 @@ use std::{collections::HashMap, marker::PhantomData};
   #_{ GRAPH NODE RENDERERS --------------------------------------------------------------------- }
 
 
-  #type_AnyConvertNode ref:str {    
+  #type_MultiConvertNode ref:str {    
     /*  @self.init.agg_type\ @self.init.val */
     match @self.init.#type {
       "SymNode" { 
         let\ @ref\ =\ nodes[@self.init.index].clone();@;
-        let\ @ref\ =\ unsafe{\ @ref . into_@ANY_ENUMS.[@self.index].name() .unwrap_unchecked()\ }; @;
+        let\ @ref\ =\ unsafe{\ @ref . into_@MULTI_ENUMS.[@self.index].name() .unwrap_unchecked()\ }; @;
       }
       {
         @self.init.(ref) 
-        /*\ Don't\ know\ what\ to\ do!\ @self.index */
+        /*\ Don't\ know\ what\ to\ do!\ @self.index\ @self.init.#type */
       }
     }
   }
@@ -647,18 +632,15 @@ use std::{collections::HashMap, marker::PhantomData};
 
     match self.props.#len {
       0 { 
-        @AST_NAME::@self.name(@self.name())
+        @AST_NAME::@self.name(@self.name{})
       }
       {
         let\ nodes = unsafe { &mut *nodes }; @;@;
         
         @self.props.iter#print_struct_initializer()
       
-        match self.has_token { false { let\ _tok\ = Default::default(); @;@; } }
-
         @AST_NAME::@self.name(Box::new(@self.name{
           @self.props.iter#print_struct_assign()
-          match self.has_token { false { _tok, @; } }
         }))
       }
     }
@@ -675,7 +657,7 @@ use std::{collections::HashMap, marker::PhantomData};
     @self.node.(@out)
 
     match (@agg_type, @val_type) {
-      ("Vec", "Token") { @AST_NAME::Tokens(@out) @; }
+      ("Vec", "Token") { @AST_NAME::VecToken(@out) @; }
       ( None, "Token") { @AST_NAME::Token(@out) @; }
       { @out . into() @; }
     }

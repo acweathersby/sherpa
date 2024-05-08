@@ -3,7 +3,7 @@ use crate::types::{BlameColor, Token};
 use std::fmt::Debug;
 use std::fmt::Display;
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 pub struct RadlrParseError {
   pub message:          String,
   pub inline_message:   String,

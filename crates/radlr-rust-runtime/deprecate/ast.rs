@@ -15,8 +15,7 @@ pub static DEFAULT_AST_TYPE_NAMES: [&str; 27] = [
   "I32Vec", "I16Vec", "I8Vec", "U64Vec", "U32Vec", "U16Vec", "U8Vec", "TOKEN", "TOKENS", "BOOL", "NONE",
 ];
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub enum HCObj<T: 'static> {
   NONE,
   LAZY(Box<Lazy>),
@@ -249,8 +248,7 @@ impl<T: HCObjTrait> HCObjTrait for HCObj<T> {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 
 pub struct Lazy {
   pub tok:           Token,
@@ -274,8 +272,7 @@ pub trait AstObject: Clone + Default + Sized {}
 #[cfg(debug_assertions)]
 pub trait AstObject: Debug + Clone + Default + Sized {}
 
-#[derive(Clone, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Default, Debug)]
 #[repr(C)]
 pub struct AstSlot<Ast: AstObject>(pub Ast, pub TokenRange, pub TokenRange);
 
@@ -383,23 +380,4 @@ impl<T: AstObject, const STACK_GROWS_UPWARD: bool> Index<usize> for AstStackSlic
 
     unsafe { &*self.get_pointer(index) }
   }
-}
-
-#[test]
-fn test_slots_from_slice() {
-  let mut d = vec![1, 2, 3, 4, 5, 6, 7];
-  let len = d.len();
-  let slots = AstStackSlice::<_, true>::from_slice(&mut d[len - 3..len]);
-
-  assert_eq!(slots.take(0), 5);
-  assert_eq!(slots.take(1), 6);
-  assert_eq!(slots.take(2), 7);
-
-  slots.assign(0, 55);
-
-  drop(slots);
-
-  d.resize(len - 2, Default::default());
-
-  assert_eq!(d.last().cloned(), Some(55));
 }

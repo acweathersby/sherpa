@@ -8,8 +8,7 @@ use std::{
 };
 
 /// Stores color setting code for terminal text coloring of token blame strings.
-#[derive(Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Debug)]
 pub struct BlameColor {
   highlight: &'static str,
   reset:     &'static str,
@@ -418,6 +417,10 @@ impl Token {
     }
 
     if let Some(source) = self.input.clone() {
+      if source.len() == 0 {
+        return format!("[Source Invalid] \n{:^>16} {inline_comment}", "");
+      }
+
       let mut string = String::from("");
       let mut prev_line = Self::find_prev_line(&source, self.inner.off as i64) as i64;
       let mut line_num = (self.inner.line_num + 1) as usize;
@@ -458,7 +461,7 @@ impl Token {
           let highlight_len = ((utf_string.len() as i64)
             - (diff as i64)
             - i64::max(0, next_line as i64 - (self.inner.off + self.inner.len) as i64))
-          .max(0) as usize;
+          .max(1) as usize;
 
           let lines_str = format!("{: >4}", line_num);
           string += &format!(

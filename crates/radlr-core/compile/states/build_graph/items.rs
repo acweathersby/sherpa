@@ -226,7 +226,7 @@ pub(super) fn get_set_of_occluding_token_items(
   into_sym: &SymbolId,
   into_group: &TransitionGroup,
   groups: &GroupedFirsts,
-  db: &ParserDatabase,
+  _db: &ParserDatabase,
 ) -> Lookaheads {
   let mut occluding = Lookaheads::new();
   let into_prec = into_group.0;

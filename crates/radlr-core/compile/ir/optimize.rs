@@ -45,7 +45,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>, Pool: W
   config: &ParserConfig,
   parse_states: ParseStatesMap,
   optimize_for_debugging: bool,
-  pool_: &Pool,
+  _pool_: &Pool,
 ) -> RadlrResult<(R, OptimizationReport)> {
   let mut report = OptimizationReport {
     start: ComplexityMarker::from_map_iter(db, parse_states.iter()),

@@ -136,8 +136,7 @@ macro_rules! to_numeric {
   };
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 #[repr(C, u32)]
 pub enum ASTNode {
   NONE,
@@ -247,8 +246,7 @@ pub enum ASTNode {
   Production_Terminal_Symbol(Box<Production_Terminal_Symbol>),
 }
 
-#[derive(Eq, PartialEq, Clone, Copy, Hash)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub enum ASTNodeType {
   NODES,
   STRING,
@@ -725,8 +723,7 @@ impl Hash for ASTNode {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Reset {
   pub tok: Token,
 }
@@ -770,8 +767,7 @@ impl Hash for Reset {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_NamedReference {
   pub value: String,
   pub tok:   Token,
@@ -817,8 +813,7 @@ impl Hash for AST_NamedReference {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Reduce {
   pub ast:  Option<ASTNode>,
   pub len:  u32,
@@ -868,8 +863,7 @@ impl Hash for Reduce {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct SetTokenLen {
   pub id: u32,
 }
@@ -914,8 +908,7 @@ impl Hash for SetTokenLen {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct PrattProduction {
   pub name_sym: Box<Production_Symbol>,
   pub rules:    Vec<Box<Rule>>,
@@ -966,8 +959,7 @@ impl Hash for PrattProduction {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct EOFSymbol {
   pub tok: Token,
 }
@@ -1011,8 +1003,7 @@ impl Hash for EOFSymbol {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct PegProduction {
   pub name_sym: Box<Production_Symbol>,
   pub rules:    Vec<Box<Rule>>,
@@ -1063,8 +1054,7 @@ impl Hash for PegProduction {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_Add {
   pub left:  ASTNode,
   pub right: ASTNode,
@@ -1112,8 +1102,7 @@ impl Hash for AST_Add {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Precedence {
   pub val: u32,
 }
@@ -1158,8 +1147,7 @@ impl Hash for Precedence {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct NonTermMatch {
   pub statement: Box<Statement>,
   pub sym:       ASTNode,
@@ -1206,8 +1194,7 @@ impl Hash for NonTermMatch {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct GroupProduction {
   pub rules: Vec<Box<Rule>>,
   pub tok:   Token,
@@ -1256,13 +1243,12 @@ impl Hash for GroupProduction {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct List_Production {
-  pub optional: bool,
-  pub symbol: ASTNode,
+  pub optional:        bool,
+  pub symbol:          ASTNode,
   pub terminal_symbol: Option<ASTNode>,
-  pub tok: Token,
+  pub tok:             Token,
 }
 
 impl List_Production {
@@ -1307,8 +1293,7 @@ impl Hash for List_Production {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct SetTokenId {
   pub id:  u32,
   pub tok: Token,
@@ -1354,8 +1339,7 @@ impl Hash for SetTokenId {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct TerminalToken {
   pub is_exclusive: bool,
   pub val:          String,
@@ -1403,8 +1387,7 @@ impl Hash for TerminalToken {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Pop {
   pub tok: Token,
 }
@@ -1448,8 +1431,7 @@ impl Hash for Pop {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_Vector {
   pub initializer: Vec<ASTNode>,
   pub tok:         Token,
@@ -1498,8 +1480,7 @@ impl Hash for AST_Vector {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct FailHint {
   pub message: String,
 }
@@ -1544,8 +1525,7 @@ impl Hash for FailHint {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Production_Symbol {
   pub name: String,
   pub tok:  Token,
@@ -1591,8 +1571,7 @@ impl Hash for Production_Symbol {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Grammar {
   pub preamble:    Vec<ASTNode>,
   pub productions: Vec<ASTNode>,
@@ -1646,8 +1625,7 @@ impl Hash for Grammar {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_U64 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -1693,8 +1671,7 @@ impl Hash for AST_U64 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct DEFINED_TYPE_IDENT {}
 
 impl DEFINED_TYPE_IDENT {
@@ -1736,8 +1713,7 @@ impl Hash for DEFINED_TYPE_IDENT {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Pass {
   pub tok: Token,
 }
@@ -1781,8 +1757,7 @@ impl Hash for Pass {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Import {
   pub reference: String,
   pub uri:       String,
@@ -1830,8 +1805,7 @@ impl Hash for Import {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Init {
   pub expression: ASTNode,
 }
@@ -1876,8 +1850,7 @@ impl Hash for Init {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct CFProduction {
   pub name_sym: Box<Production_Symbol>,
   pub rules:    Vec<Box<Rule>>,
@@ -1928,8 +1901,7 @@ impl Hash for CFProduction {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_IndexReference {
   pub value: i64,
   pub tok:   Token,
@@ -1975,8 +1947,7 @@ impl Hash for AST_IndexReference {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_Member {
   pub property:  Token,
   pub reference: ASTNode,
@@ -2023,8 +1994,7 @@ impl Hash for AST_Member {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Production_Import_Symbol {
   pub module: String,
   pub name:   String,
@@ -2072,8 +2042,7 @@ impl Hash for Production_Import_Symbol {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_I32 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -2119,8 +2088,7 @@ impl Hash for AST_I32 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Goto {
   pub name: String,
   pub prod: ASTNode,
@@ -2168,8 +2136,7 @@ impl Hash for Goto {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_I8 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -2215,8 +2182,7 @@ impl Hash for AST_I8 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_F32 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -2262,8 +2228,7 @@ impl Hash for AST_F32 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Gotos {
   pub goto:   Box<Goto>,
   pub pushes: Vec<Box<Push>>,
@@ -2313,8 +2278,7 @@ impl Hash for Gotos {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct TerminalMatches {
   pub matches: Vec<ASTNode>,
 }
@@ -2362,8 +2326,7 @@ impl Hash for TerminalMatches {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_Token {
   pub range: Option<Box<Range>>,
 }
@@ -2408,8 +2371,7 @@ impl Hash for AST_Token {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Shift {
   pub tok: Token,
 }
@@ -2453,8 +2415,7 @@ impl Hash for Shift {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Export {
   pub production: ASTNode,
   pub reference:  String,
@@ -2501,8 +2462,7 @@ impl Hash for Export {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Name {
   pub name: String,
 }
@@ -2547,8 +2507,7 @@ impl Hash for Name {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_BOOL {
   pub initializer: Option<Box<Init>>,
   pub value:       bool,
@@ -2596,8 +2555,7 @@ impl Hash for AST_BOOL {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Fail {
   pub tok: Token,
 }
@@ -2641,8 +2599,7 @@ impl Hash for Fail {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_Statements {
   pub statements: Vec<ASTNode>,
   pub tok:        Token,
@@ -2691,8 +2648,7 @@ impl Hash for AST_Statements {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_U8 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -2738,8 +2694,7 @@ impl Hash for AST_U8 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Ignore {
   pub symbols: Vec<ASTNode>,
 }
@@ -2787,8 +2742,7 @@ impl Hash for Ignore {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_STRING {
   pub value: Option<Box<Init>>,
   pub tok:   Token,
@@ -2834,8 +2788,7 @@ impl Hash for AST_STRING {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Skip {
   pub tok: Token,
 }
@@ -2879,8 +2832,7 @@ impl Hash for Skip {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_U32 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -2926,8 +2878,7 @@ impl Hash for AST_U32 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct State {
   pub catches:   bool,
   pub id:        Box<Production_Symbol>,
@@ -2977,8 +2928,7 @@ impl Hash for State {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_I64 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -3024,8 +2974,7 @@ impl Hash for AST_I64 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct PeekSkip {
   pub tok: Token,
 }
@@ -3069,8 +3018,7 @@ impl Hash for PeekSkip {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct DefaultMatch {
   pub statement: Box<Statement>,
 }
@@ -3115,8 +3063,7 @@ impl Hash for DefaultMatch {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct SetLine {
   pub tok: Token,
 }
@@ -3160,8 +3107,7 @@ impl Hash for SetLine {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_U16 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -3207,8 +3153,7 @@ impl Hash for AST_U16 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct NotEmptySet {
   pub symbols:   Vec<ASTNode>,
   pub unordered: bool,
@@ -3259,8 +3204,7 @@ impl Hash for NotEmptySet {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Accept {
   pub tok: Token,
 }
@@ -3304,8 +3248,7 @@ impl Hash for Accept {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct ClassSymbol {
   pub val: String,
   pub tok: Token,
@@ -3351,8 +3294,7 @@ impl Hash for ClassSymbol {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct ReduceRaw {
   pub len:     u32,
   pub prod_id: u32,
@@ -3402,8 +3344,7 @@ impl Hash for ReduceRaw {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Statement {
   pub branch:     Option<ASTNode>,
   pub non_branch: Vec<ASTNode>,
@@ -3455,8 +3396,7 @@ impl Hash for Statement {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_F64 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -3502,8 +3442,7 @@ impl Hash for AST_F64 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct TokenGroupProduction {
   pub rules: Vec<Box<Rule>>,
   pub tok:   Token,
@@ -3552,8 +3491,7 @@ impl Hash for TokenGroupProduction {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_Map {
   pub key: ASTNode,
   pub val: ASTNode,
@@ -3601,8 +3539,7 @@ impl Hash for AST_Map {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Range {
   pub end_trim:   i32,
   pub start_trim: i32,
@@ -3649,8 +3586,7 @@ impl Hash for Range {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct IntMatch {
   pub statement: Box<Statement>,
   pub vals:      Vec<u64>,
@@ -3697,8 +3633,7 @@ impl Hash for IntMatch {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_I16 {
   pub initializer: Option<Box<Init>>,
   pub tok:         Token,
@@ -3744,8 +3679,7 @@ impl Hash for AST_I16 {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Scan {
   pub tok: Token,
 }
@@ -3789,8 +3723,7 @@ impl Hash for Scan {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Push {
   pub name: String,
   pub prod: ASTNode,
@@ -3838,8 +3771,7 @@ impl Hash for Push {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_NUMBER {
   pub value: f64,
 }
@@ -3884,8 +3816,7 @@ impl Hash for AST_NUMBER {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_Struct {
   pub props: Vec<ASTNode>,
   pub typ:   Token,
@@ -3936,8 +3867,7 @@ impl Hash for AST_Struct {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Peek {
   pub tok: Token,
 }
@@ -3981,8 +3911,7 @@ impl Hash for Peek {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Matches {
   pub matches: Vec<ASTNode>,
   pub mode:    String,
@@ -4035,8 +3964,7 @@ impl Hash for Matches {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct ProductionMatches {
   pub matches: Vec<ASTNode>,
 }
@@ -4084,8 +4012,7 @@ impl Hash for ProductionMatches {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct TermMatch {
   pub statement: Box<Statement>,
   pub sym:       ASTNode,
@@ -4132,8 +4059,7 @@ impl Hash for TermMatch {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct DEFINED_TYPE_NUM {}
 
 impl DEFINED_TYPE_NUM {
@@ -4175,8 +4101,7 @@ impl Hash for DEFINED_TYPE_NUM {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Rule {
   pub ast:     Option<Box<Ascript>>,
   pub symbols: Vec<ASTNode>,
@@ -4227,8 +4152,7 @@ impl Hash for Rule {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AnnotatedSymbol {
   pub is_optional: bool,
   pub precedence:  Option<Box<Precedence>>,
@@ -4280,13 +4204,12 @@ impl Hash for AnnotatedSymbol {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AST_Property {
-  pub id: String,
+  pub id:              String,
   pub named_reference: String,
-  pub value: Option<ASTNode>,
-  pub tok: Token,
+  pub value:           Option<ASTNode>,
+  pub tok:             Token,
 }
 
 impl AST_Property {
@@ -4331,8 +4254,7 @@ impl Hash for AST_Property {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Ascript {
   pub ast: ASTNode,
   pub tok: Token,
@@ -4378,8 +4300,7 @@ impl Hash for Ascript {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct AppendProduction {
   pub name_sym: ASTNode,
   pub rules:    Vec<Box<Rule>>,
@@ -4430,8 +4351,7 @@ impl Hash for AppendProduction {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Production_Terminal_Symbol {
   pub production: ASTNode,
   pub tok:        Token,
@@ -10300,10 +10220,10 @@ pub mod ast {
       }
 
       ParseResult::Error(err_tok, _) => Err(RadlrParseError {
-        inline_message: "Token not recognized".to_string(),
+        inline_message:  "Token not recognized".to_string(),
         last_production: 0,
-        loc: err_tok.to_token(&mut ctx.1),
-        message: "Failed to parse".to_string(),
+        loc:             err_tok.to_token(&mut ctx.1),
+        message:         "Failed to parse".to_string(),
       }),
       _ => unreachable!(),
     }
@@ -10325,10 +10245,10 @@ pub mod ast {
       }
 
       ParseResult::Error(err_tok, _) => Err(RadlrParseError {
-        inline_message: "Token not recognized".to_string(),
+        inline_message:  "Token not recognized".to_string(),
         last_production: 0,
-        loc: err_tok.to_token(&mut ctx.1),
-        message: "Failed to parse".to_string(),
+        loc:             err_tok.to_token(&mut ctx.1),
+        message:         "Failed to parse".to_string(),
       }),
       _ => unreachable!(),
     }
@@ -10351,10 +10271,10 @@ pub mod ast {
       }
 
       ParseResult::Error(err_tok, _) => Err(RadlrParseError {
-        inline_message: "Token not recognized".to_string(),
+        inline_message:  "Token not recognized".to_string(),
         last_production: 0,
-        loc: err_tok.to_token(&mut ctx.1),
-        message: "Failed to parse".to_string(),
+        loc:             err_tok.to_token(&mut ctx.1),
+        message:         "Failed to parse".to_string(),
       }),
       _ => unreachable!(),
     }
@@ -10376,10 +10296,10 @@ pub mod ast {
       }
 
       ParseResult::Error(err_tok, _) => Err(RadlrParseError {
-        inline_message: "Token not recognized".to_string(),
+        inline_message:  "Token not recognized".to_string(),
         last_production: 0,
-        loc: err_tok.to_token(&mut ctx.1),
-        message: "Failed to parse".to_string(),
+        loc:             err_tok.to_token(&mut ctx.1),
+        message:         "Failed to parse".to_string(),
       }),
       _ => unreachable!(),
     }
@@ -10401,10 +10321,10 @@ pub mod ast {
       }
 
       ParseResult::Error(err_tok, _) => Err(RadlrParseError {
-        inline_message: "Token not recognized".to_string(),
+        inline_message:  "Token not recognized".to_string(),
         last_production: 0,
-        loc: err_tok.to_token(&mut ctx.1),
-        message: "Failed to parse".to_string(),
+        loc:             err_tok.to_token(&mut ctx.1),
+        message:         "Failed to parse".to_string(),
       }),
       _ => unreachable!(),
     }
@@ -10427,10 +10347,10 @@ pub mod ast {
       }
 
       ParseResult::Error(err_tok, _) => Err(RadlrParseError {
-        inline_message: "Token not recognized".to_string(),
+        inline_message:  "Token not recognized".to_string(),
         last_production: 0,
-        loc: err_tok.to_token(&mut ctx.1),
-        message: "Failed to parse".to_string(),
+        loc:             err_tok.to_token(&mut ctx.1),
+        message:         "Failed to parse".to_string(),
       }),
       _ => unreachable!(),
     }

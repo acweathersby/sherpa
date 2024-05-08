@@ -188,8 +188,9 @@ fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: 
 
   ctx.start_line_num = ctx.chkp_line_num;
   ctx.start_line_off = ctx.chkp_line_off;
-  ctx.end_line_num = ctx.start_line_num;
-  ctx.end_line_off = ctx.end_line_off;
+
+  ctx.end_line_num = ctx.chkp_line_num;
+  ctx.end_line_off = ctx.chkp_line_off;
 
   let new_offset = ctx.sym_ptr + ctx.tok_byte_len as usize;
 
@@ -280,11 +281,12 @@ fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserCo
 fn skip_token<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::SkipToken;
   let result = __skip_token_core__(base_instruction, ctx);
+
+  ctx.end_line_num = ctx.chkp_line_num;
+  ctx.end_line_off = ctx.chkp_line_off;
+
   ctx.start_line_num = ctx.chkp_line_num;
   ctx.start_line_off = ctx.chkp_line_off;
-  ctx.end_line_num = ctx.start_line_num;
-  ctx.end_line_off = ctx.end_line_off;
-  //ctx.base_ptr = ctx.head_ptr;
 
   result
 }
@@ -422,8 +424,10 @@ fn assign_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a>
   let mut iter = i.iter();
   ctx.tok_id = iter.next_u32_le().unwrap();
   ctx.tok_byte_len = (ctx.input_ptr - ctx.sym_ptr) as u32;
+
   ctx.chkp_line_num = ctx.end_line_num;
   ctx.chkp_line_off = ctx.end_line_off;
+
   OpResult {
     action:    ParseAction::None,
     next:      i.next(),
@@ -443,10 +447,11 @@ fn peek_reset<'a>(i: Instruction<'a>, ctx: &mut ParserContext) -> OpResult<'a> {
   ctx.tok_byte_len = 0;
   ctx.byte_len = 0;
 
-  ctx.chkp_line_num = ctx.end_line_num;
-  ctx.chkp_line_num = ctx.start_line_off;
   ctx.end_line_off = ctx.start_line_off;
-  ctx.end_line_num = ctx.end_line_num;
+  ctx.end_line_num = ctx.start_line_num;
+
+  ctx.chkp_line_off = ctx.start_line_off;
+  ctx.chkp_line_num = ctx.start_line_num;
 
   OpResult {
     action:    ParseAction::None,
@@ -524,8 +529,8 @@ fn hash_branch<'a, 'debug>(
 
       if value == input_value {
         if is_nl {
-          ctx.chkp_line_num += 1;
-          ctx.chkp_line_off = ctx.input_ptr as u32;
+          ctx.end_line_num += 1;
+          ctx.end_line_off = ctx.input_ptr as u32;
         }
         return OpResult {
           action:    ParseAction::None,
@@ -572,8 +577,8 @@ fn vector_branch<'a, 'debug>(
     let value_index = (input_value as i32 - value_offset as i32) as usize;
     if value_index < table_length as usize {
       if is_nl {
-        ctx.chkp_line_num += 1;
-        ctx.chkp_line_off = ctx.input_ptr as u32;
+        ctx.end_line_num += 1;
+        ctx.end_line_off = ctx.input_ptr as u32;
       }
       let mut iter: ByteCodeIterator = (i.bytecode(), table_start + value_index * 4).into();
       let address_offset = iter.next_u32_le().unwrap();

@@ -24,8 +24,7 @@ pub trait CSTHashes: Hash {
   fn dedup_hash<H: std::hash::Hasher>(&self, state: &mut H);
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub enum CSTErrorNodeType {
   MissingToken(u16),
   ErroneousInput,

@@ -5,8 +5,7 @@ use crate::parsers::{fork::CHAR_USAGE_SCORE, Parser};
 use super::*;
 
 #[repr(C)]
-#[derive(Clone, Copy, Eq, PartialEq, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Eq, PartialEq, Default, Debug)]
 pub struct ParserStackTrackers {
   // Input pointers -----------------------------------------------------------
   /// The head of the input window.
@@ -51,8 +50,7 @@ impl From<&ParserContext> for ParserStackTrackers {
 }
 
 #[repr(C)]
-#[derive(Clone, Eq, PartialEq)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// Stores a stack of active states and lexer/parser symbol pointers.
 pub struct ParserContext {
   // Goto stack data ----------------------------------------------------------
@@ -177,8 +175,7 @@ impl<T: ForkableContext> QueuedContext for T {
   }
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct ForkContext {
   pub(crate) entropy: isize,
   pub(crate) offset:  usize,
@@ -253,8 +250,7 @@ pub fn create_recovery_ctx<I: ParserInput, DB: ParserProducer<I>>(
   }))
 }
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct RecoverableContext {
   pub(crate) offset:     usize,
   pub entropy:           isize,

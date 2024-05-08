@@ -7,8 +7,7 @@ pub type SharedParserDatabase = std::sync::Arc<ParserDatabase>;
 /// The internal data type used for the compilation and analysis of grammars and
 /// parsers. contains additional metadata for compilation of LLVM and Bytecode
 /// parsers.
-#[derive(Clone, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Default, Debug)]
 pub struct ParserDatabase {
   pub root_grammar_id:  GrammarIdentities,
   /// Table of symbols.
@@ -240,7 +239,6 @@ impl ParserDatabase {
   }
 
   /// Prints token ids and their friendly names to the console
-  #[cfg(debug_assertions)]
   pub fn print_tokens(&self) {
     let token_strings =
       self.tokens.iter().enumerate().map(|(idx, t)| format!("{:>0000}: {}", idx, t.name.to_str(&self.string_store).as_str()));
@@ -565,8 +563,7 @@ impl DBTermKey {
   }
 }
 
-#[derive(Default, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Default, Clone, Copy, Debug)]
 pub enum ReductionType {
   /// Any reduction resulting in the execution of a some kind of semantic
   /// action. At this point only `:ast` semantic actions are available.
@@ -583,8 +580,7 @@ pub enum ReductionType {
 }
 
 // The type of recursion that can occur for a given rule.
-#[derive(Default, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Default, Clone, Copy, Debug)]
 pub enum RecursionType {
   #[default]
   None               = 0,
@@ -610,16 +606,14 @@ impl RecursionType {
   }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DBRule {
   pub rule:       Rule,
   pub nonterm:    DBNonTermKey,
   pub is_scanner: bool,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct DBTokenData {
   /// The symbol type and precedence.
   pub sym_id:     SymbolId,
@@ -631,8 +625,7 @@ pub struct DBTokenData {
   pub tok_id:     DBTermKey,
 }
 
-#[derive(Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Debug)]
 pub struct DBEntryPoint {
   pub nonterm_key:        DBNonTermKey,
   /// The GUID name of the non-terminal.

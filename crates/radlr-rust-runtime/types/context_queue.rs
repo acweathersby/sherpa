@@ -6,15 +6,14 @@ pub trait QueuedContext: Sized {
   fn queued_priority(&self) -> usize;
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 pub struct Sled<T: Sized> {
   content:  Option<T>,
   next:     Option<u32>,
   priority: usize,
 }
 
-#[derive(Default, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Default, Clone, Copy, Debug)]
 enum BufferTracker {
   #[default]
   None,

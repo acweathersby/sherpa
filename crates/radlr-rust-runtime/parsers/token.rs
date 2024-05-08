@@ -1,7 +1,7 @@
 //! A parser that produce the tokens, including skipped tokens, of an input.
 use crate::types::*;
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 pub struct Tokens {
   pub shifts: Vec<String>,
   pub skips:  Vec<String>,

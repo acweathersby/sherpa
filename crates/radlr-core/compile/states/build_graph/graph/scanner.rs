@@ -7,8 +7,7 @@ use crate::{
   ParserDatabase,
 };
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Default, Hash, PartialEq, Eq, Debug)]
 pub struct ScannerData {
   pub hash:    u64,
   pub symbols: OrderedMap<PrecedentDBTerm, OrderedSet<PrecedentDBTerm>>,

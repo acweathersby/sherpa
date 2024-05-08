@@ -2,8 +2,7 @@ const JMPTBLE_BYTE_SIZE: usize = 382976;
 
 pub type CharLUType = [u8; JMPTBLE_BYTE_SIZE];
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub enum CodePointClass {
   EndOfInput     = 1,
   Symbol         = 2,

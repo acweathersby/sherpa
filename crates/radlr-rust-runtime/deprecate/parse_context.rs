@@ -19,8 +19,7 @@ use super::{
   UTF8Reader,
 };
 
-#[derive(Clone, Copy)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct Goto {
   pub goto_fn: *const usize,
@@ -382,7 +381,7 @@ impl<T: ByteReader + UTF8Reader, M> ParseContext<T, M> {
   }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 #[repr(C, u64)]
 pub enum ParseResult<Node: AstObject> {
   Complete(AstSlot<Node>),
@@ -390,7 +389,7 @@ pub enum ParseResult<Node: AstObject> {
   NeedMoreInput(Vec<AstSlot<Node>>),
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Debug)]
 pub enum ShiftsAndSkipsResult {
   Accepted { shifts: Vec<String>, skips: Vec<String> },
 

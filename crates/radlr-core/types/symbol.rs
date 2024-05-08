@@ -14,8 +14,7 @@ pub const TERMINAL_TOKEN_PRECEDENCE: u16 = 1;
 pub const CLASS_TOKEN_PRECEDENCE: u16 = 1;
 pub const ANY_TOKEN_PRECEDENCE: u16 = 0;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 #[repr(u8)]
 pub enum SymbolId {
   Undefined,
@@ -249,8 +248,7 @@ impl SymbolId {
   }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash, Debug)]
 pub struct PrecedentSymbol(SymbolId, u16);
 
 impl PrecedentSymbol {
@@ -270,8 +268,7 @@ impl From<(SymbolId, u16)> for PrecedentSymbol {
   }
 }
 
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash, Debug)]
 pub struct PrecedentDBTerm(DBTermKey, u16, bool);
 
 impl PrecedentDBTerm {

@@ -87,8 +87,7 @@ pub trait AstObjectNew: std::fmt::Debug + Clone + Default + Sized {}
 #[cfg(debug_assertions)]
 impl<T: std::fmt::Debug + Clone + Default + Sized> AstObjectNew for T {}
 
-#[derive(Clone, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Default, Debug)]
 #[repr(C)]
 pub struct AstSlotNew<Ast: AstObjectNew>(pub Ast, pub TokenRange, pub TokenRange);
 

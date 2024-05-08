@@ -93,7 +93,6 @@ impl Into<u32> for ItemIndex {
   }
 }
 
-#[cfg(debug_assertions)]
 impl std::fmt::Debug for ItemIndex {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.write_str(&self._debug_string_())
@@ -186,7 +185,7 @@ impl From<(DBRuleKey, &RadlrDatabase)> for Item {
     (index, db.get_internal()).into()
   }
 }
-#[cfg(debug_assertions)]
+
 impl std::fmt::Debug for Item {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let mut s = f.debug_struct("ItemRef");
@@ -761,8 +760,7 @@ mod test {
 
 /// Represents either a FIRST or a FOLLOW depending on whether the root item
 /// is incomplete or not.
-#[cfg_attr(debug_assertions, derive(Debug))]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct TransitionPair {
   pub kernel:       Item,
   pub next:         Item,
@@ -1117,12 +1115,10 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> 
     self.clone().to_vec().into_iter().map(|i| if i.sym_index() > 0 { i.decrement().unwrap() } else { i }).collect()
   }
 
-  #[cfg(debug_assertions)]
   fn _debug_print_(&self, db: &ParserDatabase, _comment: &str) {
     debug_items(_comment, self.clone(), db);
   }
 
-  #[cfg(debug_assertions)]
   fn to_debug_string(&self, db: &ParserDatabase, sep: &str) -> String {
     self.clone().to_vec().iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join(sep)
   }
@@ -1137,7 +1133,6 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> 
 }
 
 #[allow(unused)]
-#[cfg(debug_assertions)]
 fn debug_items<'db, T: IntoIterator<Item = Item>>(comment: &str, items: T, db: &ParserDatabase) {
   eprintln!("\n {} --> ", comment);
 

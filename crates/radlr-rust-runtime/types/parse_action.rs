@@ -3,8 +3,7 @@ use std::rc::Rc;
 use super::*;
 
 #[repr(u32)]
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ParseActionType {
   None,
   Error,
@@ -28,8 +27,7 @@ impl Into<u64> for ParseActionType {
   }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, PartialEq, Eq, Debug)]
 #[repr(C, u32)]
 pub enum ParseAction {
   Undefined,

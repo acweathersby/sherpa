@@ -1,11 +1,10 @@
-use std::{ops::Add, str::FromStr, sync::Arc};
+use std::{ops::Add, str::FromStr};
 
 use crate::deprecate::ByteReader;
 
 use super::{ParserInput, SharedSymbolBuffer, Token};
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct Range {
   /// The line number at which the range starts
   pub start_line:   u32,
@@ -17,8 +16,7 @@ pub struct Range {
   pub end_column:   u32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct TokenRange {
   pub len:      u32,
   pub off:      u32,

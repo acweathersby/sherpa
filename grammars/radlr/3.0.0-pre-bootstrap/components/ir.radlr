@@ -10,11 +10,11 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> state > 
 
-    sym::nonterminal_symbol^id "=>" statement
+    sym::nonterm^id "=>" statement
 
         :ast { t_State, id, statement, tok }
 
-    | sym::nonterminal_symbol^id "=!>" statement
+    | sym::nonterm^id "=!>" statement
 
         :ast { t_State, catches:true, id, statement, tok }
 
@@ -81,19 +81,19 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> non_branch_statement 
 
-  > "reduce" tok::int ( "symbols" "to" )? tok::int ( "with" "rule" )? tok::int^int
+  > "reduce" prim::int ( "symbols" "to" )? prim::int ( "with" "rule" )? prim::int^int
         
       :ast { t_ReduceRaw, len: u32($2), rule_id: u32($int), nonterminal_id: u32($4), tok }
 
-  | "reduce" tok::int ( "symbols" "to" )? sym::nonterminal^nonterminal ( ":ast" ast::body^ast )?
+  | "reduce" prim::int ( "symbols" "to" )? sym::nonterm_symbol^nonterminal ( ":ast" ast::body^ast )?
         
     :ast { t_Reduce, len: u32($2), ast,  nonterminal, tok }
 
-  | "set-tok" tok::int
+  | "set-tok" prim::int
 
     :ast { t_SetTokenId, id: u32($2), tok }
 
-  | "set-tok-len" tok::int
+  | "set-tok-len" prim::int
 
     :ast { t_SetTokenLen, id: u32($2) }
 
@@ -102,7 +102,7 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> pop > 
 
-    "pop" tok::int      :ast { t_Pop, count: u32($2), tok }
+    "pop" prim::int      :ast { t_Pop, count: u32($2), tok }
     
 
 <> goto_sequence >
@@ -122,21 +122,21 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 <> fork 
   
-  > "fork" "{" ( sym::nonterminal :ast { t_Goto, nonterminal: $1, name:str($1), tok } )(+) "}"                 
+  > "fork" "{" ( sym::nonterm_symbol :ast { t_Goto, nonterminal: $1, name:str($1), tok } )(+) "}"                 
                                             
     :ast { t_Fork, paths: $3, tok }
 
 
 <> goto_push 
 
-  > "push" sym::nonterminal
+  > "push" sym::nonterm_symbol
 
     :ast { t_Push, nonterminal: $2, name:str($2), tok }
 
 
 <> goto 
 
-  > "goto" sym::nonterminal
+  > "goto" sym::nonterm_symbol
 
     :ast { t_Goto, nonterminal: $2, name:str($2), tok }
 
@@ -167,7 +167,7 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
         :ast { t_TerminalMatches, matches:$m }
 
 
-<> nonterminal_match > "(" sym::nonterminal^sym ")" "{" statement "}"
+<> nonterminal_match > "(" sym::nonterm_symbol^sym ")" "{" statement "}"
 
     :ast { t_NonTermMatch, sym, statement }
 

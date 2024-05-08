@@ -1,9 +1,15 @@
 NAME RADLR_omnibus
 
-IGNORE { c:sp c:nl }
-
 IMPORT components/grammar as grammar
+IMPORT components/ast as ast
+IMPORT components/ir as ir
 
 EXPORT grammar as grammar
+EXPORT ast as ast
+EXPORT ir as ir
 
 <> grammar > grammar::declaration
+
+<> ast > ast::body
+
+<> ir > ir::state

@@ -2,8 +2,7 @@ use crate::types::SharedSymbolBuffer;
 
 use super::*;
 
-#[derive(Clone)]
-#[cfg_attr(debug_assertions, derive(Debug))]
+#[derive(Clone, Debug)]
 pub struct UTF8StringReader<'a> {
   len:      usize,
   cursor:   usize,
