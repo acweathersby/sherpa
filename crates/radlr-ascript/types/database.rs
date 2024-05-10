@@ -60,6 +60,7 @@ impl AscriptDatabase {
     ctx.set_val("RULES", Value::Obj(&self.rules));
     ctx.set_val("MULTI_ENUMS", Value::Obj(&multi));
     ctx.set_val("AST_NAME", Value::Str(ast_struct_name.intern(self.db.string_store())));
+    ctx.set_val("ALLOW_UPPER_ATTRIBUTES", Value::Int(0));
     ctx.max_width = max_width;
 
     let f: Formatter = FormatterResult::from(script).into_result()?;

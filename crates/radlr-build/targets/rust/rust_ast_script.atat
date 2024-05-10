@@ -1,7 +1,4 @@
-@{#![allow(unused)]
-#![cfg_attr(rustfmt, rustfmt_skip)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
+@{#header()
 
 /// ### `radlr` Rust Parser
 ///
@@ -709,3 +706,15 @@ impl<Token:Tk>\ AsRef<[Reducer<Token,\ @AST_NAME<Token>>]>\ for\ ReduceRules<Tok
 }
 
 #_{ -------------------------------------------------------------------------------------------- }
+
+#header {
+  match ALLOW_UPPER_ATTRIBUTES {
+    true {
+@{#![allow(unused)]
+#![cfg_attr(rustfmt, rustfmt_skip)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+}
+    }
+  }
+}

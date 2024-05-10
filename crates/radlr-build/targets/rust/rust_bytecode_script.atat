@@ -1,6 +1,6 @@
 @name={ "ParserDB" }
-@{#![allow(unused)]
-
+@{
+#header()
 /// ### `radlr` Rust Parser
 ///
 /// - **GENERATOR**: radlr 1.0.1-beta2
@@ -138,4 +138,14 @@ impl<T: ParserInput> ParserProducer<T> for @name {
   }
 
   const\ TOKENS_@_key_:\ [u32; @self.#len] = [ @self.iter#vals() ];\n\n
+}
+
+#header {
+match ALLOW_UPPER_ATTRIBUTES {
+  true {
+    @{
+#![allow(unused)]
+    }
+  }
+}
 }

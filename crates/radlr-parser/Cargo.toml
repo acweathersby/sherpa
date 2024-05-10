@@ -1,0 +1,18 @@
+[package]
+name = "radlr_parser"
+version = "1.0.1-beta1"
+edition = "2021"
+
+# build = "./build.rs"
+
+[lib]
+path = "./lib.rs"
+
+[build-dependencies]
+radlr_build    = { path="../radlr-build" }
+
+[dependencies]
+radlr_rust_runtime    = { path="../radlr-rust-runtime" }
+
+
+

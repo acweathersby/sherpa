@@ -817,6 +817,7 @@ fn process_rule_symbols(
 }
 
 fn replace_template_ast(s: Option<Box<parser::Ascript>>, symbol_lookup: &Map<String, &ASTNode>) -> Option<Box<parser::Ascript>> {
+  let root_name = symbol_lookup.get("t_TypeNamePrefix");
   match &s {
     Some(s) => {
       let mut output = s.clone();
@@ -826,6 +827,9 @@ fn replace_template_ast(s: Option<Box<parser::Ascript>>, symbol_lookup: &Map<Str
             if let ASTNode::AST_STRUCT_TEMPLATE_NAME(d) = new_type {
               s.ty = d.typ.clone();
             }
+          } else if let Some(ASTNode::AST_STRUCT_TEMPLATE_NAME(root_name)) = root_name {
+            let ty = root_name.typ.clone();
+            s.ty = ty + &s.ty[2..];
           }
         }
         _ => {}

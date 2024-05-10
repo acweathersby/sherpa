@@ -48,7 +48,13 @@ pub struct AscriptProp {
 
 impl Debug for AscriptProp {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str("AscriptProp")
+    let mut s = f.debug_struct("AscriptProp");
+
+    s.field("name", &self.name);
+    s.field("ty", &self.ty);
+    s.field("optional", &self.is_optional);
+
+    s.finish()
   }
 }
 

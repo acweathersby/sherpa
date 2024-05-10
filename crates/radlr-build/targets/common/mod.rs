@@ -91,6 +91,7 @@ pub fn build_parser_source(
   ctx.set_val("nonterm_id_to_address", Value::Obj(&nonterm_id_to_address));
   ctx.set_val("state_to_token_ids_map", Value::Obj(&state_to_token_ids_map));
   ctx.set_val("token_maps", Value::Obj(&token_maps));
+  ctx.set_val("ALLOW_UPPER_ATTRIBUTES", Value::Int(0));
   ctx.max_width = 100;
 
   let f: Formatter = FormatterResult::from(parser_script).into_result()?;

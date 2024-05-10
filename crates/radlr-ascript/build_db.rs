@@ -754,7 +754,13 @@ fn resolve_expressions(
 
                 match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| sym_ref.annotation == prop_name.0) {
                   Some(item) => graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
-                  None => AscriptType::Undefined,
+                  None => match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| match sym_ref.id {
+                    radlr_core::SymbolId::DBNonTerminal { key } => db.nonterm_friendly_name(key) == prop_name.0,
+                    _ => false,
+                  }) {
+                    Some(item) => graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
+                    None => AscriptType::Undefined,
+                  },
                 }
               }
               Some(node) => get_graph_type(
@@ -819,7 +825,13 @@ fn resolve_expressions(
 
                 let node = match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| sym_ref.annotation == prop_name.0) {
                   Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, &mut HashSet::new(), None)?,
-                  None => GraphNode::Undefined(AscriptType::Undefined),
+                  None => match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| match sym_ref.id {
+                    radlr_core::SymbolId::DBNonTerminal { key } => db.nonterm_friendly_name(key) == prop_name.0,
+                    _ => false,
+                  }) {
+                    Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, &mut HashSet::new(), None)?,
+                    None => GraphNode::Undefined(AscriptType::Undefined),
+                  },
                 };
 
                 (node, Default::default())

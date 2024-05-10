@@ -181,18 +181,17 @@ fn build_states<Pool: WorkerPool>(
                     }
                   } else {
                     sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Relaxed);
-                    //panic!("Somehow encountered an orphaned non-terminal");
-                    return Err("Todo: Report critical failure during compilation: {err}".into());
+                    return Err(format!("Todo: Report critical failure during compilation (Orphaned non-terminal)").into());
                   }
                 }
               }
             }
-            Err(_) => {
+            Err(err) => {
               have_errors.store(true, std::sync::atomic::Ordering::Release);
 
               // Ensures other threads are halted when the active queue is exhausted.
               sync_tracker.fetch_add(error_count, std::sync::atomic::Ordering::Relaxed);
-              return Err("Todo: Report critical failure during compilation: {err}".into());
+              return Err(format!("Todo: Report critical failure during compilation : {err:?}").into());
             }
             _ => {}
           }

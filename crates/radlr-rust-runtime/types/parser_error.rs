@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Hash)]
 pub enum ParserError {
   InputError { message: String, inline_message: String, loc: Token, last_nonterminal: u32 },
   Unexpected,

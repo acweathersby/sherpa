@@ -7,7 +7,9 @@ const RADLR_GRAMMAR_ROOT: &'static str = "radlr.radlr";
 
 const BUILD_OUTPUT_PATH: &'static str = "./parser/";
 
-fn main() -> RadlrResult<()> {
+fn main() {}
+
+fn _main() -> RadlrResult<()> {
   let RADLR_dir = std::process::Command::new(env!("CARGO"))
     .arg("locate-project")
     .arg("--workspace")
