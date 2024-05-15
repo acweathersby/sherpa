@@ -9,7 +9,8 @@ use super::{
     handle_regular_incomplete_items,
   },
   graph::*,
-  items::{get_completed_item_artifacts, get_follow, merge_occluding_token_items},
+  items::{get_completed_item_artifacts, get_follow, get_follow_internal, merge_occluding_token_items, FollowType},
+  stack_vec::StackVec,
 };
 use crate::{compile::states::build_graph::graph::StateType, types::*, utils::hash_group_btree_iter};
 
@@ -116,7 +117,10 @@ fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode, config: &Parser
     match item.origin {
       Origin::__OOS_SCANNER_ROOT__(token) if config.ALLOW_LOOKAHEAD_SCANNERS => {
         if item.is_complete() {
-          let (follow, _) = get_follow(gb, pred, *item);
+          let mut follow = StackVec::<512, _>::new();
+          let mut _default: StackVec<512, Item> = StackVec::<512, _>::new();
+
+          get_follow_internal(gb, pred, *item, FollowType::AllItems, &mut follow, &mut _default);
 
           if follow.is_empty() {
             // No follow items indicates a completed OOS token.
@@ -125,7 +129,7 @@ fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode, config: &Parser
           } else {
             // Continue parsing with the OOS items scanned
             oos_scan_incompletes.insert(token);
-            too_process_items.extend(follow);
+            too_process_items.extend(follow.iter().cloned());
           }
         } else {
           if !item.is_initial() {

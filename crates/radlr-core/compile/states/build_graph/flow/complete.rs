@@ -5,6 +5,7 @@ use crate::{
   compile::states::build_graph::{
     graph::{Origin, StateType},
     items::{get_follow, get_follow_internal, get_goal_items_from_completed, FollowType},
+    stack_vec::StackVec,
   },
   types::*,
 };
@@ -73,16 +74,19 @@ fn complete_scan(
   if first.kernel.origin.is_scanner_oos() {
     StagedNode::new(gb).parent(pred.clone()).make_leaf().sym(sym).ty(StateType::ScannerCompleteOOS).commit(gb);
   } else {
-    let (follow, completed_items): (Vec<Items>, Vec<Items>) =
-      completed.iter().into_iter().map(|i| get_follow_internal(gb, pred, i.kernel, FollowType::ScannerCompleted)).unzip();
+    let mut follow = StackVec::<512, _>::new();
+    let mut completed_items = StackVec::<512, _>::new();
 
-    let follow = follow.into_iter().flatten().collect::<Items>();
-    let mut completed_items = completed_items.into_iter().flatten().collect::<Items>();
+    for pair in completed {
+      get_follow_internal(gb, pred, pair.kernel, FollowType::ScannerCompleted, &mut follow, &mut completed_items);
+    }
 
     completed_items.sort();
-    let follow_hash = create_follow_hash(&completed_items);
 
-    let goals = if first.allow_assign { get_goal_items_from_completed(&completed_items, &pred) } else { Default::default() };
+    let follow_hash = create_follow_hash(completed_items.as_slice());
+
+    let goals =
+      if first.allow_assign { get_goal_items_from_completed(completed_items.as_slice(), &pred) } else { Default::default() };
     let completes_goal = !goals.is_empty();
     let is_continue = !follow.is_empty();
 
@@ -117,7 +121,7 @@ fn complete_scan(
   }
 }
 
-fn create_follow_hash(completed_items: &Vec<Item>) -> u64 {
+fn create_follow_hash(completed_items: &[Item]) -> u64 {
   let mut hasher = DefaultHasher::new();
 
   for item in completed_items {

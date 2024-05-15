@@ -1,6 +1,7 @@
 use super::{
   flow::get_kernel_items_from_peek_item,
   items::{get_follow_internal, FollowType},
+  stack_vec::StackVec,
 };
 use crate::{hash_id_value_u64, proxy::OrderedSet, types::*, Item};
 use core::panic;
@@ -315,7 +316,11 @@ fn get_follow_symbol_data<'a>(
   let mut out = Vec::with_capacity(512);
   match item.get_type(db) {
     ItemType::Completed(_) => {
-      let follow = get_follow_internal(builder, node, item, FollowType::AllItems).0;
+      let mut follow = StackVec::<512, _>::new();
+      let mut completed_items = StackVec::<512, _>::new();
+
+      get_follow_internal(builder, node, item, FollowType::AllItems, &mut follow, &mut completed_items);
+
       let mut i = 0;
       let len = follow.len();
       while i < len {
@@ -420,8 +425,12 @@ fn create_lookahead_hash<'a, H: std::hash::Hasher>(builder: &mut ConcurrentGraph
       let mut symbols = OrderedSet::new();
       for item in node.kernel_items() {
         {
-          let (follow, _) = get_follow_internal(builder, node, item.to_complete(), FollowType::AllItems);
-          for item in follow {
+          let mut follow = StackVec::<512, _>::new();
+          let mut completed_items = StackVec::<512, _>::new();
+
+          get_follow_internal(builder, node, item.to_complete(), FollowType::AllItems, &mut follow, &mut completed_items);
+
+          for item in follow.iter() {
             if let Some(term) = item.term_index_at_sym(mode, builder.db()) {
               symbols.insert(term);
             } else if item.is_nonterm(mode, builder.db()) {

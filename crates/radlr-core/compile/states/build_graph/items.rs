@@ -1,6 +1,7 @@
 use super::{
   build::{GroupedFirsts, TransitionGroup},
   graph::*,
+  stack_vec::StackVec,
 };
 use crate::{
   compile::states::build_graph::graph::{GraphType, Origin, StateId},
@@ -9,12 +10,12 @@ use crate::{
 use radlr_rust_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
 use std::collections::VecDeque;
 
-/// Returns a tuple comprised of a vector of all items that follow the given
-/// item, provided the given item is in a complete state, and a list of a all
-/// items that are completed from directly or indirectly transitioning on the
-/// nonterminal of the given item.
 pub(crate) fn get_follow(gb: &mut ConcurrentGraphBuilder, node: &GraphNode, item: Item) -> (Items, Items) {
-  get_follow_internal(gb, node, item, FollowType::AllItems)
+  let mut a = StackVec::<512, _>::new();
+  let mut b = StackVec::<512, _>::new();
+  get_follow_internal(gb, node, item, FollowType::AllItems, &mut a, &mut b);
+
+  (a.to_vec(), b.to_vec())
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -24,45 +25,34 @@ pub enum FollowType {
   ScannerCompleted,
 }
 
-pub fn insert_unique<T: Eq>(vec: &mut Vec<T>, item: T) -> bool {
-  let len = vec.len();
-  let mut i = 0;
-  while i < len {
-    if vec[i] == item {
-      return false;
-    }
-    i += 1;
-  }
-  vec.push(item);
-  true
-}
-
 /// Returns a tuple comprised of a vector of all items that follow the given
 /// item, provided the given item is in a complete state, and a list of a all
 /// items that are completed from directly or indirectly transitioning on the
 /// nonterminal of the given item.
-pub(crate) fn get_follow_internal(
+#[inline]
+pub(crate) fn get_follow_internal<const STACK_BUFFER_SIZE_FOLLOW: usize, const STACK_BUFFER_SIZE_COMPLETE: usize>(
   gb: &mut ConcurrentGraphBuilder,
   node: &GraphNode,
   item: Item,
   caller_type: FollowType,
-) -> (Items, Items) {
+  follow: &mut StackVec<STACK_BUFFER_SIZE_FOLLOW, Item>,
+  complete: &mut StackVec<STACK_BUFFER_SIZE_COMPLETE, Item>,
+) {
   if !item.is_complete() {
-    return (vec![item], vec![]);
+    follow.push(item);
+    follow.sort();
+    return;
   }
 
   let ____is_scan____ = node.graph_type() == GraphType::Scanner;
-  let mut completed = Vec::with_capacity(512);
-  let mut follow = Vec::with_capacity(512);
-  let mut oos_follow = Vec::with_capacity(512);
   let mut queue = VecDeque::from_iter(vec![item]);
   let mode = node.graph_type();
   let db = &gb.db_rc();
   let root_nterm = item.nonterm_index(db);
-  let mut seen_nonterminal_extents = Vec::with_capacity(512);
+  let mut seen_nonterminal_extents = StackVec::<64, _>::new();
 
   while let Some(c_item) = queue.pop_front() {
-    if insert_unique(&mut completed, c_item) {
+    if complete.push_unique(c_item) {
       let nterm: DBNonTermKey = c_item.nonterm_index(db);
 
       if caller_type == FollowType::FirstReduction && nterm != root_nterm {
@@ -72,10 +62,10 @@ pub(crate) fn get_follow_internal(
       let result = if c_item.origin_state.is_oos() {
         if c_item.origin_state.is_oos_entry() {
           // Create or retrieve a new OOS state for this set of items.
-          if insert_unique(&mut seen_nonterminal_extents, nterm) {
+          if seen_nonterminal_extents.push_unique(nterm) {
             let closure_state = gb.get_oos_root_state(nterm);
             let closure = closure_state.kernel_items().iter().cloned();
-            process_closure(db, closure, &mut queue, &mut follow)
+            process_closure(db, closure, &mut queue, follow)
           } else {
             None
           }
@@ -94,7 +84,7 @@ pub(crate) fn get_follow_internal(
             queue.push_back(c_item.to_origin_state(StateId::extended_entry_base()));
             None
           } else {
-            process_closure(db, closure, &mut queue, &mut follow)
+            process_closure(db, closure, &mut queue, follow)
           }
         }
       } else {
@@ -112,13 +102,13 @@ pub(crate) fn get_follow_internal(
           .filter(|i| i.nonterm_index_at_sym(mode, db) == Some(nterm))
           .filter_map(|i| i.increment());
 
-        process_closure(db, closure, &mut queue, &mut follow)
+        process_closure(db, closure, &mut queue, follow)
       };
 
       if let Some(oos_queue) = result {
         for next_item in oos_queue {
           gb.get_oos_closure_state(next_item);
-          oos_follow.push(next_item);
+          follow.push_unique(next_item);
         }
       } else {
         if !c_item.origin_state.is_root() && !c_item.origin_state.is_oos() {
@@ -131,19 +121,16 @@ pub(crate) fn get_follow_internal(
       }
     }
   }
-  let mut items = follow.into_iter().chain(oos_follow.into_iter()).collect::<Vec<_>>();
 
-  items.sort();
-  completed.sort();
-
-  (items, completed)
+  follow.sort();
+  complete.sort();
 }
 
-fn process_closure(
+fn process_closure<const STACK_BUFFER_SIZE: usize>(
   db: &ParserDatabase,
   closure: impl Iterator<Item = Item>,
   queue: &mut VecDeque<Item>,
-  follow: &mut Vec<Item>,
+  follow: &mut StackVec<STACK_BUFFER_SIZE, Item>,
 ) -> Option<VecDeque<Item>> {
   let mut oos_queue = VecDeque::new();
   let mut closure_yielded_items = false;
@@ -156,7 +143,7 @@ fn process_closure(
         if item.is_oos() {
           oos_queue.push_front(item);
         } else {
-          insert_unique(follow, item);
+          follow.push_unique(item);
         };
       }
     }
@@ -165,6 +152,7 @@ fn process_closure(
   closure_yielded_items.then_some(oos_queue)
 }
 
+#[inline]
 pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<'a>>(
   gb: &mut ConcurrentGraphBuilder,
   pred: &GraphNode,
@@ -190,16 +178,19 @@ pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<
       continue;
     }
 
-    let (f, d) = get_follow_internal(gb, pred, *k_i, FollowType::AllItems);
+    let mut f = StackVec::<512, _>::new();
+    let mut d = StackVec::<512, _>::new();
+
+    get_follow_internal(gb, pred, *k_i, FollowType::AllItems, &mut f, &mut d);
 
     if f.is_empty() {
       debug_assert!(!d.is_empty());
       default_only_items.insert(*k_i);
       follow_pairs.extend([create_pair(*k_i, *k_i, db)]);
     } else {
-      for k_follow in f {
+      for k_follow in f.iter() {
         if let Origin::__OOS_CLOSURE__ = k_follow.origin {
-          let state = gb.get_oos_closure_state(k_follow);
+          let state = gb.get_oos_closure_state(*k_follow);
           follow_pairs.extend(state.kernel_items().iter().filter(|i| !i.is_complete()).map(|i| create_pair(*k_i, *i, db)));
         } else {
           follow_pairs.extend(k_follow.closure_iter_align(k_follow.to_origin(k_i.origin), db).map(|i| create_pair(*k_i, i, db)))
@@ -211,7 +202,7 @@ pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<
   RadlrResult::Ok(CompletedItemArtifacts { lookahead_pairs: follow_pairs, default_only: default_only_items })
 }
 
-pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &Items, node: &GraphNode) -> ItemSet {
+pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &[Item], node: &GraphNode) -> ItemSet {
   items.iter().filter(|i| node.item_is_goal(**i)).cloned().collect()
 }
 

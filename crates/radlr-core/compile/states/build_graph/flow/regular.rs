@@ -21,7 +21,6 @@ use crate::{
     build::handle_completed_groups,
     errors::{lr_disabled_error, peek_not_allowed_error},
     graph::StateType,
-    items::get_follow,
   },
   parser::Shift,
   types::*,

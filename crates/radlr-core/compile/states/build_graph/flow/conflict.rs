@@ -16,7 +16,8 @@ use crate::{
     build_graph::{
       build::handle_completed_groups,
       errors::{conflicting_symbols_error, peek_not_allowed_error},
-      items::get_follow,
+      items::{get_follow, get_follow_internal, FollowType},
+      stack_vec::StackVec,
     },
     build_states::StateConstructionError,
   },
@@ -264,18 +265,23 @@ fn get_conflict_follow_artifacts(
   let mut syms = OrderedSet::default();
   let mut item_filter = Set::new();
   for item in i_reduce {
-    let (follow, default) = get_follow(gb, &node, *item);
+    let mut follow = StackVec::<512, _>::new();
+    let mut _default: StackVec<512, Item> = StackVec::<512, _>::new();
 
-    let items = follow.iter().flat_map(|i| i.closure_iter_align(*i, gb.db()));
-    for item in items {
-      if item_filter.insert(item.index) || !item.is_oos() {
-        if let Some(sym) = item.term_index_at_sym(node.graph_type(), gb.db()) {
-          out.insert(item);
-          syms.insert(sym);
+    get_follow_internal(gb, node, *item, FollowType::AllItems, &mut follow, &mut _default);
+
+    for item in follow.as_slice() {
+      for item in item.closure_iter_align(*item, gb.db()) {
+        if item_filter.insert(item.index) || !item.is_oos() {
+          if let Some(sym) = item.term_index_at_sym(node.graph_type(), gb.db()) {
+            out.insert(item);
+            syms.insert(sym);
+          }
         }
       }
     }
   }
+
   (out, syms)
 }
 
