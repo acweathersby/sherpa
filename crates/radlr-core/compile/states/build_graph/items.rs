@@ -24,6 +24,19 @@ pub enum FollowType {
   ScannerCompleted,
 }
 
+pub fn insert_unique<T: Eq>(vec: &mut Vec<T>, item: T) -> bool {
+  let len = vec.len();
+  let mut i = 0;
+  while i < len {
+    if vec[i] == item {
+      return false;
+    }
+    i += 1;
+  }
+  vec.push(item);
+  true
+}
+
 /// Returns a tuple comprised of a vector of all items that follow the given
 /// item, provided the given item is in a complete state, and a list of a all
 /// items that are completed from directly or indirectly transitioning on the
@@ -39,17 +52,17 @@ pub(crate) fn get_follow_internal(
   }
 
   let ____is_scan____ = node.graph_type() == GraphType::Scanner;
-  let mut completed = OrderedSet::new();
-  let mut follow = OrderedSet::new();
-  let mut oos_follow = OrderedSet::new();
+  let mut completed = Vec::with_capacity(512);
+  let mut follow = Vec::with_capacity(512);
+  let mut oos_follow = Vec::with_capacity(512);
   let mut queue = VecDeque::from_iter(vec![item]);
   let mode = node.graph_type();
   let db = &gb.db_rc();
   let root_nterm = item.nonterm_index(db);
-  let mut seen_nonterminal_extents = OrderedSet::new();
+  let mut seen_nonterminal_extents = Vec::with_capacity(512);
 
   while let Some(c_item) = queue.pop_front() {
-    if completed.insert(c_item) {
+    if insert_unique(&mut completed, c_item) {
       let nterm: DBNonTermKey = c_item.nonterm_index(db);
 
       if caller_type == FollowType::FirstReduction && nterm != root_nterm {
@@ -59,7 +72,7 @@ pub(crate) fn get_follow_internal(
       let result = if c_item.origin_state.is_oos() {
         if c_item.origin_state.is_oos_entry() {
           // Create or retrieve a new OOS state for this set of items.
-          if seen_nonterminal_extents.insert(nterm) {
+          if insert_unique(&mut seen_nonterminal_extents, nterm) {
             let closure_state = gb.get_oos_root_state(nterm);
             let closure = closure_state.kernel_items().iter().cloned();
             process_closure(db, closure, &mut queue, &mut follow)
@@ -89,9 +102,7 @@ pub(crate) fn get_follow_internal(
         let origin = c_item.origin;
         let is_scanner_oos = origin.is_scanner_oos();
 
-        let state = node
-          .get_predecessor(c_item.origin_state)
-          .expect(&format!("Node should have predecessors unless it is a root node {node:?} {}", c_item._debug_string_w_db_(db)));
+        let state = unsafe { node.get_predecessor(c_item.origin_state).unwrap_unchecked() };
 
         let closure = state
           .kernel_items()
@@ -107,7 +118,7 @@ pub(crate) fn get_follow_internal(
       if let Some(oos_queue) = result {
         for next_item in oos_queue {
           gb.get_oos_closure_state(next_item);
-          oos_follow.insert(next_item);
+          oos_follow.push(next_item);
         }
       } else {
         if !c_item.origin_state.is_root() && !c_item.origin_state.is_oos() {
@@ -120,15 +131,19 @@ pub(crate) fn get_follow_internal(
       }
     }
   }
+  let mut items = follow.into_iter().chain(oos_follow.into_iter()).collect::<Vec<_>>();
 
-  (follow.into_iter().chain(oos_follow.into_iter()).collect(), completed.to_vec())
+  items.sort();
+  completed.sort();
+
+  (items, completed)
 }
 
 fn process_closure(
   db: &ParserDatabase,
   closure: impl Iterator<Item = Item>,
   queue: &mut VecDeque<Item>,
-  follow: &mut OrderedSet<Item>,
+  follow: &mut Vec<Item>,
 ) -> Option<VecDeque<Item>> {
   let mut oos_queue = VecDeque::new();
   let mut closure_yielded_items = false;
@@ -141,7 +156,7 @@ fn process_closure(
         if item.is_oos() {
           oos_queue.push_front(item);
         } else {
-          follow.insert(item);
+          insert_unique(follow, item);
         };
       }
     }

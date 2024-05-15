@@ -310,40 +310,41 @@ fn get_follow_symbol_data<'a>(
   node: &'a GraphNode,
   item: Item,
   db: &'a ParserDatabase,
-) -> impl Iterator<Item = (Item, PrecedentDBTerm)> + 'a {
+) -> Vec<(Item, PrecedentDBTerm)> {
   let mode = GraphType::Parser;
+  let mut out = Vec::with_capacity(512);
   match item.get_type(db) {
-    ItemType::Completed(_) => get_follow_internal(builder, node, item, FollowType::AllItems)
-      .0
-      .into_iter()
-      .flat_map(move |i| {
-        if let Some(sym) = i.precedent_db_key_at_sym(mode, db) {
-          vec![(i.to_origin(item.origin), sym)]
-        } else if i.is_nonterm(mode, db) {
-          db.get_closure(&i)
-            .filter_map(|i| {
-              if let Some(sym) = i.precedent_db_key_at_sym(mode, db) {
-                Some((i.to_origin(item.origin), sym))
-              } else {
-                None
-              }
-            })
-            .collect::<Vec<_>>()
-        } else {
-          vec![]
+    ItemType::Completed(_) => {
+      let follow = get_follow_internal(builder, node, item, FollowType::AllItems).0;
+      let mut i = 0;
+      let len = follow.len();
+      while i < len {
+        let f_item = follow[i];
+
+        if let Some(sym) = f_item.precedent_db_key_at_sym(mode, db) {
+          out.push((f_item.to_origin(item.origin), sym));
+        } else if f_item.is_nonterm(mode, db) {
+          out.extend(db.get_closure(&f_item).filter_map(|i| {
+            if let Some(sym) = i.precedent_db_key_at_sym(mode, db) {
+              Some((i.to_origin(f_item.origin), sym))
+            } else {
+              None
+            }
+          }));
         }
-      })
-      .collect::<Vec<_>>()
-      .into_iter(),
-    ItemType::NonTerminal(_) => db
-      .get_closure(&item)
-      .filter_map(|item| if let Some(sym) = item.precedent_db_key_at_sym(mode, db) { Some((item, sym)) } else { None })
-      .collect::<Vec<_>>()
-      .into_iter(),
-    ItemType::TokenNonTerminal(..) | ItemType::Terminal(..) => {
-      vec![(item, item.precedent_db_key_at_sym(mode, db).unwrap())].into_iter()
+        i += 1;
+      }
     }
-  }
+    ItemType::NonTerminal(_) => out.extend(db.get_closure(&item).filter_map(|item| {
+      if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
+        Some((item, sym))
+      } else {
+        None
+      }
+    })),
+    ItemType::TokenNonTerminal(..) | ItemType::Terminal(..) => out.push((item, item.precedent_db_key_at_sym(mode, db).unwrap())),
+  };
+  out
 }
 
 fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode) -> Option<ScannerData> {
@@ -362,33 +363,24 @@ fn get_state_symbols<'a>(builder: &mut ConcurrentGraphBuilder, node: &GraphNode)
     skipped.extend(item.get_skipped(db));
 
     if let Some(sym) = item.precedent_db_key_at_sym(mode, db) {
-      let follow_syms = get_follow_symbol_data(builder, node, item.increment().unwrap(), db)
-        .into_iter()
-        .map(|(_, sym)| sym)
-        .collect::<OrderedSet<_>>();
-
+      let follow_syms = get_follow_symbol_data(builder, node, item.increment().unwrap(), db).into_iter().map(|(_, sym)| sym);
       scanner_data.symbols.entry(sym).or_default().extend(follow_syms);
     } else if item.is_nonterm(mode, db) {
       for i in db.get_closure(&item) {
         let i = i.to_origin(item.origin).to_origin_state(item.origin_state);
         if let Some(sym) = i.precedent_db_key_at_sym(mode, db) {
           skipped.extend(i.get_skipped(db));
-          let follow_syms = get_follow_symbol_data(builder, node, i.increment().unwrap(), db)
-            .into_iter()
-            .map(|(_, sym)| sym)
-            .collect::<OrderedSet<_>>();
 
+          let follow_syms = get_follow_symbol_data(builder, node, i.increment().unwrap(), db).into_iter().map(|(_, sym)| sym);
           scanner_data.symbols.entry(sym).or_default().extend(follow_syms);
         }
       }
     } else {
       for (i, sym) in get_follow_symbol_data(builder, node, item.to_complete(), db) {
         let i = i.to_origin(item.origin).to_origin_state(item.origin_state);
-        let follow_syms = get_follow_symbol_data(builder, node, i.increment().unwrap(), db)
-          .into_iter()
-          .map(|(_, sym)| sym)
-          .collect::<OrderedSet<_>>();
         skipped.extend(i.get_skipped(db));
+
+        let follow_syms = get_follow_symbol_data(builder, node, i.increment().unwrap(), db).into_iter().map(|(_, sym)| sym);
         scanner_data.symbols.entry(sym).or_default().extend(follow_syms);
       }
     }
