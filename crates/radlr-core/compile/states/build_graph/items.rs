@@ -9,21 +9,6 @@ use crate::{
 use radlr_rust_runtime::utf8::{get_token_class_from_codepoint, lookup_table::CodePointClass};
 use std::collections::VecDeque;
 
-/// Returns all terminals that follow the item. This is equivalent to extracting
-/// the terminals from the closure of the item, including completed items, in
-/// which the closure of all non-terminal items that transition on the item is
-/// taken after performing the non-term shift
-pub(crate) fn get_follow_symbols<'a, 'db: 'a>(
-  gb: &'a mut ConcurrentGraphBuilder,
-  node: &'a GraphNode,
-  item: Item,
-) -> impl Iterator<Item = DBTermKey> + 'a {
-  get_follow_internal(gb, node, item, FollowType::AllItems)
-    .0
-    .into_iter()
-    .flat_map(|i| i.closure_iter(gb.db()).filter_map(|i| i.term_index_at_sym(node.graph_type(), gb.db())))
-}
-
 /// Returns a tuple comprised of a vector of all items that follow the given
 /// item, provided the given item is in a complete state, and a list of a all
 /// items that are completed from directly or indirectly transitioning on the
