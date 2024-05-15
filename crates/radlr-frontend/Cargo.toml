@@ -1,5 +1,5 @@
 [package]
-name = "radlr_parser"
+name = "radlr_compiler_fe"
 version = "1.0.1-beta1"
 edition = "2021"
 

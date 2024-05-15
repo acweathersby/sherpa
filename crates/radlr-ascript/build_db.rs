@@ -19,7 +19,7 @@ use radlr_core::{
   SymbolRef,
 };
 
-use crate::{errors::add_prop_redefinition_error, types::*};
+use crate::types::*;
 
 pub fn build_database(db: RadlrDatabase) -> AscriptDatabase {
   let mut adb = AscriptDatabase {
@@ -40,8 +40,10 @@ pub fn build_database(db: RadlrDatabase) -> AscriptDatabase {
   let nonterm_types = resolve_nonterm_types(db, &mut adb);
 
   if adb.errors.is_empty() {
-    match resolve_expressions(&mut adb, nonterm_types) {
+    match resolve_nonterm_values(&mut adb, nonterm_types) {
       Ok(()) => {
+        resolve_multi_types(&mut adb);
+
         fill_out_rules(&mut adb);
 
         resolve_struct_definitions(&mut adb);
@@ -56,6 +58,49 @@ pub fn build_database(db: RadlrDatabase) -> AscriptDatabase {
   }
 
   adb
+}
+
+fn resolve_multi_types(adb: &mut AscriptDatabase) {
+  // Flatten multi types
+  for i in 0..adb.multi_types.len() {
+    let mut accessed_types = adb.multi_types.iter().map(|_| false).collect::<Vec<_>>();
+    let mut outgoing_set = BTreeSet::new();
+    let mut queue = VecDeque::from_iter(adb.multi_types[i].1.iter().cloned());
+
+    while let Some(ty) = queue.pop_front() {
+      if let AscriptScalarType::Multi(index) = ty {
+        if !accessed_types[index] {
+          accessed_types[index] = true;
+          queue.extend(adb.multi_types[index].1.iter().cloned())
+        }
+      } else {
+        outgoing_set.insert(ty);
+      }
+    }
+
+    adb.multi_types[i].1 = outgoing_set;
+    adb.multi_types[i].2 =
+      accessed_types.iter().enumerate().filter_map(|(index, used)| (index != i && *used).then_some(index)).collect();
+  }
+
+  for i in 0..adb.multi_type_lu.len() {
+    for j in 0..adb.multi_type_lu.len() {
+      if j == i {
+        continue;
+      };
+
+      let target = &adb.multi_types[i];
+      let other = &adb.multi_types[j];
+
+      if other.0 < target.0 && other.1 == target.1 {
+        adb.multi_type_lu[i] = j;
+        let converts = adb.multi_types[i].2.clone();
+        adb.multi_types[j].2.extend(converts);
+        adb.multi_types[j].2.remove(&i);
+        adb.multi_types[j].2.remove(&j);
+      }
+    }
+  }
 }
 
 fn fill_out_rules(adb: &mut AscriptDatabase) {
@@ -524,6 +569,8 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
   while let Some(rule_in_process) = queue.pop_front() {
     total_iterations += 1;
 
+    let nonterm_id = db.db_rule(rule_in_process).nonterm;
+
     if total_iterations > max_iterations {
       panic!(
         "Could not resolve rule {}",
@@ -556,6 +603,7 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
           multi_indices:    multi_type_lu,
           multi_maps:       multi_types,
         },
+        nonterm_id,
       ) {
         Ok(ty) => ty,
         Err(err) => {
@@ -579,8 +627,6 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
       _ => unreachable!(""),
     };
 
-    let nonterm_id = db.db_rule(rule_in_process).nonterm;
-
     if ty.is_unknown() {
       queue.extend(rule_to_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
       queue.push_back(rule_in_process);
@@ -589,9 +635,8 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
 
     let was_empty = resolved_nonterms.get(&nonterm_id).is_none();
     let existing_type = resolved_nonterms.entry(nonterm_id).or_insert(ty.clone());
-    let ref_name = db.nonterm_friendly_name_string(nonterm_id);
 
-    match get_resolved_type(existing_type, &ty, multi_type_lu, multi_types, &ref_name) {
+    match get_resolved_type(existing_type, &ty, multi_type_lu, multi_types, nonterm_id) {
       Ok(resolved_type) => {
         if was_empty || *existing_type != resolved_type {
           queue.extend(rule_to_nonterms.iter().filter_map(|(r, s)| s.contains(&nonterm_id).then_some(*r)));
@@ -614,7 +659,7 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
   resolved_nonterms
 }
 
-fn resolve_expressions(
+fn resolve_nonterm_values(
   adb: &mut AscriptDatabase,
   nonterm_types: OrderedMap<DBNonTermKey, AscriptType>,
 ) -> Result<(), DBNonTermKey> {
@@ -622,14 +667,14 @@ fn resolve_expressions(
   let db = adb.db.clone();
   let db = db.as_ref();
 
-  let mut struct_rules = OrderedMap::<StringId, OrderedSet<usize>>::new();
+  let mut struct_rules = OrderedMap::<StringId, OrderedSet<(usize, DBNonTermKey)>>::new();
 
   for (index, ast_rule) in rules.iter_mut().enumerate() {
     let item = Item::from((DBRuleKey::from(index), db));
     let mut selected_indices = HashSet::new();
     let selected_indices = &mut selected_indices;
     let rule_key = ast_rule.get_db_key();
-    let nt_key = db.rule_nonterm(rule_key);
+    let nt_key: DBNonTermKey = db.rule_nonterm(rule_key);
     let expected_type = nonterm_types.get(&nt_key).unwrap();
 
     match ast_rule {
@@ -647,6 +692,7 @@ fn resolve_expressions(
             multi_indices:    multi_type_lu,
             multi_maps:       multi_types,
           },
+          nt_key,
         )?;
         init.ty = node.get_type().clone();
         init.output_graph = Some(node);
@@ -732,14 +778,14 @@ fn resolve_expressions(
       }
       AscriptRule::Struct(_, rule_struct) => {
         let struct_name: StringId = rule_struct.name;
-        struct_rules.entry(struct_name).or_default().insert(index);
+        struct_rules.entry(struct_name).or_default().insert((index, nt_key));
       }
       _r => todo!("handle rule {{_r:?}}"),
     }
   }
 
   for (_, struct_rules) in struct_rules {
-    for index in struct_rules.iter().map(|i| *i) {
+    for (index, db_nt_key) in struct_rules.iter().map(|i| *i) {
       let item = Item::from((DBRuleKey::from(index), db));
       let ast_rule = &mut rules[index];
 
@@ -747,42 +793,61 @@ fn resolve_expressions(
         AscriptRule::Struct(_, rule_struct) => {
           let struct_name: StringId = rule_struct.name;
           for (prop_name, init) in rule_struct.props.iter_mut().rev() {
-            let ty = match &init.ast {
+            let (ty, nt_key) = match &init.ast {
               None => {
                 // the property is a named value, so we may be able to resolve this
                 // with a symbol refernce name lookup.
 
                 match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| sym_ref.annotation == prop_name.0) {
-                  Some(item) => graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
+                  Some(item) => (
+                    graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
+                    item.nonterm_index_at_sym_parser(db).unwrap_or_default(),
+                  ),
                   None => match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| match sym_ref.id {
                     radlr_core::SymbolId::DBNonTerminal { key } => db.nonterm_friendly_name(key) == prop_name.0,
                     _ => false,
                   }) {
-                    Some(item) => graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
-                    None => AscriptType::Undefined,
+                    Some(item) => {
+                      println!("--------------------1");
+                      (
+                        graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
+                        item.nonterm_index_at_sym_parser(db).unwrap_or_default(),
+                      )
+                    }
+                    None => {
+                      println!("--------------------");
+                      (AscriptType::Undefined, db_nt_key)
+                    }
                   },
                 }
               }
-              Some(node) => get_graph_type(
-                GraphResolveData {
-                  db,
-                  item,
-                  node,
-                  nonterm_types: &nonterm_types,
-                  default_nonterm_type: None,
-                },
-                &mut GraphMutData {
-                  selected_indices: &mut HashSet::new(),
-                  multi_indices:    multi_type_lu,
-                  multi_maps:       multi_types,
-                },
-              )
-              .expect("Could not resolve prop type"),
+              Some(node) => {
+                println!("--------------------3, {init:?}");
+                (
+                  get_graph_type(
+                    GraphResolveData {
+                      db,
+                      item,
+                      node,
+                      nonterm_types: &nonterm_types,
+                      default_nonterm_type: None,
+                    },
+                    &mut GraphMutData {
+                      selected_indices: &mut HashSet::new(),
+                      multi_indices:    multi_type_lu,
+                      multi_maps:       multi_types,
+                    },
+                    Default::default(),
+                  )
+                  .expect("Could not resolve prop type"),
+                  db_nt_key,
+                )
+              }
             };
 
             if let Some(archetype_struct) = structs.get_mut(&struct_name) {
               if let Some(archetype_prop) = archetype_struct.properties.get_mut(prop_name) {
-                archetype_prop.ty = get_resolved_type(&archetype_prop.ty, &ty, multi_type_lu, multi_types, "Struct")
+                archetype_prop.ty = get_resolved_type(&archetype_prop.ty, &ty, multi_type_lu, multi_types, nt_key)
                   .expect("Could not resolve prop type");
               }
             }
@@ -792,7 +857,7 @@ fn resolve_expressions(
       }
     }
 
-    for index in struct_rules.iter().map(|i| *i) {
+    for (index, _) in struct_rules.iter().map(|i| *i) {
       let item = Item::from((DBRuleKey::from(index), db));
 
       let ast_rule = &mut rules[index];
@@ -816,6 +881,7 @@ fn resolve_expressions(
                     multi_indices:    multi_type_lu,
                     multi_maps:       multi_types,
                   },
+                  Default::default(),
                 )?,
                 node.to_token(),
               ),
@@ -965,7 +1031,6 @@ impl<'a> GraphResolveData<'a> {
   }
 }
 
-/// Returns the type of the root node in ascript node graph;
 fn get_nonterm_refs<'a>(args: GraphResolveData<'a>, nonterms: &mut OrderedSet<DBNonTermKey>) {
   match args.node {
     ASTNode::AST_NamedReference(rf) => {
@@ -1030,8 +1095,11 @@ fn get_nonterm_refs<'a>(args: GraphResolveData<'a>, nonterms: &mut OrderedSet<DB
   };
 }
 
-/// Returns the type of the root node in ascript node graph;
-fn get_graph_type<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -> RadlrResult<AscriptType> {
+fn get_graph_type<'a>(
+  args: GraphResolveData<'a>,
+  mut_args: &mut GraphMutData,
+  nonterm: DBNonTermKey,
+) -> RadlrResult<AscriptType> {
   let ty = match args.node {
     ASTNode::AST_NamedReference(rf) => {
       match get_item_at_sym_ref(args.item, args.db, |_, sym| sym.annotation == rf.value.to_token()) {
@@ -1050,8 +1118,8 @@ fn get_graph_type<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -
       let mut ty = AscriptType::Undefined;
 
       for node in vec.initializer.iter() {
-        let node = get_graph_type(args.to_node(node), mut_args)?;
-        ty = get_resolved_type(&node, &ty, mut_args.multi_indices, mut_args.multi_maps, "__TEMP___").unwrap();
+        let node = get_graph_type(args.to_node(node), mut_args, nonterm)?;
+        ty = get_resolved_type(&node, &ty, mut_args.multi_indices, mut_args.multi_maps, nonterm).unwrap();
       }
 
       let ty = if let Some(ty_) = ty.as_aggregate() {
@@ -1071,8 +1139,8 @@ fn get_graph_type<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -
     }
 
     ASTNode::AST_Map(map) => {
-      let key = get_graph_type(args.to_node(&map.key), mut_args)?;
-      let val = get_graph_type(args.to_node(&map.val), mut_args)?;
+      let key = get_graph_type(args.to_node(&map.key), mut_args, nonterm)?;
+      let val = get_graph_type(args.to_node(&map.val), mut_args, nonterm)?;
 
       if key.is_unknown() || val.is_unknown() {
         AscriptType::Undefined
@@ -1087,8 +1155,8 @@ fn get_graph_type<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -
     }
 
     ASTNode::AST_Add(add) => {
-      let l_ty = get_graph_type(args.to_node(&add.left), mut_args)?;
-      let r_ty = get_graph_type(args.to_node(&add.right), mut_args)?;
+      let l_ty = get_graph_type(args.to_node(&add.left), mut_args, nonterm)?;
+      let r_ty = get_graph_type(args.to_node(&add.right), mut_args, nonterm)?;
 
       if l_ty.is_unknown() || r_ty.is_unknown() {
         AscriptType::Undefined
@@ -1108,12 +1176,12 @@ fn get_graph_type<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -
       } else if l_ty.is_string() || r_ty.is_string() {
         AscriptType::Scalar(AscriptScalarType::String(None))
       } else {
-        get_resolved_type(&l_ty, &r_ty, mut_args.multi_indices, mut_args.multi_maps, "__TEMP___").unwrap()
+        get_resolved_type(&l_ty, &r_ty, mut_args.multi_indices, mut_args.multi_maps, nonterm).unwrap()
       }
     }
     ASTNode::AST_Mul(mul) => {
-      let l_ty = get_graph_type(args.to_node(&mul.left), mut_args)?;
-      let r_ty = get_graph_type(args.to_node(&mul.right), mut_args)?;
+      let l_ty = get_graph_type(args.to_node(&mul.left), mut_args, nonterm)?;
+      let r_ty = get_graph_type(args.to_node(&mul.right), mut_args, nonterm)?;
 
       if l_ty.is_unknown() || r_ty.is_unknown() {
         AscriptType::Undefined
@@ -1152,15 +1220,19 @@ fn get_graph_type<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -
 /// Any type incompatibilities will have been reported before we
 /// start building graph nodes. We should be able to assign nodes with having to
 /// verify whether there are type conflicts.
-fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData) -> Result<GraphNode, DBNonTermKey> {
+fn create_graph_node<'a>(
+  args: GraphResolveData<'a>,
+  mut_args: &mut GraphMutData,
+  nonterm: DBNonTermKey,
+) -> Result<GraphNode, DBNonTermKey> {
   match args.node {
     ASTNode::AST_Vector(vec) => {
       let mut ty = AscriptType::Undefined;
       let mut initializers = vec![];
 
       for node in vec.initializer.iter() {
-        let node = create_graph_node(args.to_node(node), mut_args)?;
-        ty = get_resolved_type(node.get_type(), &ty, mut_args.multi_indices, mut_args.multi_maps, "__TEMP___").unwrap();
+        let node = create_graph_node(args.to_node(node), mut_args, nonterm)?;
+        ty = get_resolved_type(node.get_type(), &ty, mut_args.multi_indices, mut_args.multi_maps, nonterm).unwrap();
 
         if !node.get_type().is_unknown() {
           initializers.push(node);
@@ -1222,9 +1294,9 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
     }
 
     ASTNode::AST_Map(map) => {
-      let key = create_graph_node(args.to_node(&map.key), mut_args)?;
+      let key = create_graph_node(args.to_node(&map.key), mut_args, nonterm)?;
 
-      let val = create_graph_node(args.to_node(&map.val), mut_args)?;
+      let val = create_graph_node(args.to_node(&map.val), mut_args, nonterm)?;
 
       let ascript_type = AscriptType::Aggregate(AscriptAggregateType::Map {
         key_type: key.get_type().as_scalar().unwrap(),
@@ -1269,7 +1341,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_String(str) => {
       if let Some(init) = &str.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Str(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::String(None))))
       } else {
         Ok(GraphNode::Str(None, AscriptType::Scalar(AscriptScalarType::String(None))))
@@ -1277,33 +1349,33 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
     }
 
     ASTNode::AST_Add(add) => {
-      let l = create_graph_node(args.to_node(&add.left), mut_args)?;
-      let r = create_graph_node(args.to_node(&add.right), mut_args)?;
-      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.multi_indices, mut_args.multi_maps, "TEST").unwrap();
+      let l = create_graph_node(args.to_node(&add.left), mut_args, nonterm)?;
+      let r = create_graph_node(args.to_node(&add.right), mut_args, nonterm)?;
+      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.multi_indices, mut_args.multi_maps, nonterm).unwrap();
 
       Ok(GraphNode::Add(Rc::new(l), Rc::new(r), ty))
     }
 
     ASTNode::AST_Sub(sub) => {
-      let l = create_graph_node(args.to_node(&sub.left), mut_args)?;
-      let r = create_graph_node(args.to_node(&sub.right), mut_args)?;
-      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.multi_indices, mut_args.multi_maps, "TEST").unwrap();
+      let l = create_graph_node(args.to_node(&sub.left), mut_args, nonterm)?;
+      let r = create_graph_node(args.to_node(&sub.right), mut_args, nonterm)?;
+      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.multi_indices, mut_args.multi_maps, nonterm).unwrap();
       let (l, r) = convert_binary_op_types(l, ty, r);
       Ok(GraphNode::Sub(Rc::new(l), Rc::new(r), ty))
     }
 
     ASTNode::AST_Mul(mul) => {
-      let l = create_graph_node(args.to_node(&mul.left), mut_args)?;
-      let r = create_graph_node(args.to_node(&mul.right), mut_args)?;
-      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.multi_indices, mut_args.multi_maps, "TEST").unwrap();
+      let l = create_graph_node(args.to_node(&mul.left), mut_args, nonterm)?;
+      let r = create_graph_node(args.to_node(&mul.right), mut_args, nonterm)?;
+      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.multi_indices, mut_args.multi_maps, nonterm).unwrap();
       let (l, r) = convert_binary_op_types(l, ty, r);
       Ok(GraphNode::Mul(Rc::new(l), Rc::new(r), ty))
     }
 
     ASTNode::AST_Div(div) => {
-      let l = create_graph_node(args.to_node(&div.left), mut_args)?;
-      let r = create_graph_node(args.to_node(&div.right), mut_args)?;
-      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.multi_indices, mut_args.multi_maps, "TEST").unwrap();
+      let l = create_graph_node(args.to_node(&div.left), mut_args, nonterm)?;
+      let r = create_graph_node(args.to_node(&div.right), mut_args, nonterm)?;
+      let ty = get_resolved_type(l.get_type(), r.get_type(), mut_args.multi_indices, mut_args.multi_maps, nonterm).unwrap();
       let (l, r) = convert_binary_op_types(l, ty, r);
       Ok(GraphNode::Div(Rc::new(l), Rc::new(r), ty))
     }
@@ -1323,7 +1395,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_Bool(bool) => {
       if let Some(init) = &bool.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Bool(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::Bool(false))))
       } else {
         Ok(GraphNode::Bool(None, AscriptType::Scalar(AscriptScalarType::Bool(false))))
@@ -1333,7 +1405,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_U8(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U8(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U8(None))))
@@ -1342,7 +1414,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_U16(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U16(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U16(None))))
@@ -1351,7 +1423,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_U32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U32(None))))
@@ -1360,7 +1432,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_U64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::U64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::U64(None))))
@@ -1369,7 +1441,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_I8(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I8(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I8(None))))
@@ -1378,7 +1450,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_I16(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I16(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I16(None))))
@@ -1387,7 +1459,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_I32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I32(None))))
@@ -1396,7 +1468,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_I64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::I64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::I64(None))))
@@ -1405,7 +1477,7 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_F32(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::F32(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::F32(None))))
@@ -1414,14 +1486,14 @@ fn create_graph_node<'a>(args: GraphResolveData<'a>, mut_args: &mut GraphMutData
 
     ASTNode::AST_F64(val) => {
       if let Some(init) = &val.initializer {
-        let gn = create_graph_node(args.to_node(&init.expression), mut_args)?;
+        let gn = create_graph_node(args.to_node(&init.expression), mut_args, nonterm)?;
         Ok(GraphNode::Num(Some(Rc::new(gn)), AscriptType::Scalar(AscriptScalarType::F64(None))))
       } else {
         Ok(GraphNode::Num(None, AscriptType::Scalar(AscriptScalarType::F64(None))))
       }
     }
     ASTNode::AST_TrimmedReference(val) => {
-      let gn = create_graph_node(args.to_node(&val.reference), mut_args)?;
+      let gn = create_graph_node(args.to_node(&val.reference), mut_args, nonterm)?;
 
       Ok(GraphNode::Trim(
         Rc::new(gn),
@@ -1454,7 +1526,7 @@ fn get_resolved_type(
   b: &AscriptType,
   multi_i: &mut Vec<usize>,
   multi_m: &mut Vec<MultiTypeRef>,
-  ref_name: &str,
+  target_nonterm: DBNonTermKey,
 ) -> RadlrResult<AscriptType> {
   use AscriptAggregateType::*;
   use AscriptType::*;
@@ -1464,16 +1536,16 @@ fn get_resolved_type(
       Aggregate(a_agg) => match b_agg {
         Map { key_type: b_key_type, val_type: b_val_type } => match a_agg {
           Map { key_type: a_key_type, val_type: a_val_type } => {
-            let key_type = get_resolved_type(&Scalar(*a_key_type), &Scalar(*b_key_type), multi_i, multi_m, ref_name)?
+            let key_type = get_resolved_type(&Scalar(*a_key_type), &Scalar(*b_key_type), multi_i, multi_m, target_nonterm)?
               .as_scalar()
               .unwrap_or_default();
-            let val_type = get_resolved_type(&Scalar(*a_val_type), &Scalar(*b_val_type), multi_i, multi_m, ref_name)?
+            let val_type = get_resolved_type(&Scalar(*a_val_type), &Scalar(*b_val_type), multi_i, multi_m, target_nonterm)?
               .as_scalar()
               .unwrap_or_default();
             Ok(Aggregate(Map { key_type, val_type }))
           }
           Vec { val_type: a_base_type } => {
-            let base_type = get_resolved_type(&Scalar(*a_base_type), &Scalar(*b_val_type), multi_i, multi_m, ref_name)?
+            let base_type = get_resolved_type(&Scalar(*a_base_type), &Scalar(*b_val_type), multi_i, multi_m, target_nonterm)?
               .as_scalar()
               .unwrap_or_default();
             Ok(Aggregate(Vec { val_type: base_type }))
@@ -1481,13 +1553,13 @@ fn get_resolved_type(
         },
         Vec { val_type: b_base_type } => match a_agg {
           Map { val_type: a_val_type, .. } => {
-            let base_type = get_resolved_type(&Scalar(*b_base_type), &Scalar(*a_val_type), multi_i, multi_m, ref_name)?
+            let base_type = get_resolved_type(&Scalar(*b_base_type), &Scalar(*a_val_type), multi_i, multi_m, target_nonterm)?
               .as_scalar()
               .unwrap_or_default();
             Ok(Aggregate(Vec { val_type: base_type }))
           }
           Vec { val_type: a_base_type } => {
-            let base_type = get_resolved_type(&Scalar(*b_base_type), &Scalar(*a_base_type), multi_i, multi_m, ref_name)?
+            let base_type = get_resolved_type(&Scalar(*b_base_type), &Scalar(*a_base_type), multi_i, multi_m, target_nonterm)?
               .as_scalar()
               .unwrap_or_default();
             Ok(Aggregate(Vec { val_type: base_type }))
@@ -1496,7 +1568,7 @@ fn get_resolved_type(
       },
       Scalar(_) => match b_agg {
         Vec { val_type: base_type } => Ok(Aggregate(Vec {
-          val_type: get_resolved_type(a, &Scalar(*base_type), multi_i, multi_m, ref_name)?.as_scalar().unwrap_or_default(),
+          val_type: get_resolved_type(a, &Scalar(*base_type), multi_i, multi_m, target_nonterm)?.as_scalar().unwrap_or_default(),
         })),
         Map { .. } => todo!("Issue invalid joining of scalar and map"),
       },
@@ -1506,6 +1578,7 @@ fn get_resolved_type(
     },
     Scalar(b_scalar) => match a {
       Undefined => Ok(*b),
+
       Scalar(a_scalar) => {
         use BaseType::*;
 
@@ -1527,28 +1600,41 @@ fn get_resolved_type(
             let b_index = multi_i[*multi_b];
 
             if a_index != b_index {
-              let used_index = a_index.min(b_index);
+              let nt_a = multi_m[a_index].0;
+              let nt_b = multi_m[b_index].0;
 
-              multi_i[*multi_a] = used_index;
-              multi_i[*multi_b] = used_index;
+              if nt_a == target_nonterm || nt_b == target_nonterm {
+                //panic!("AA, {a_index} {b_index} {nt_A:?} {nt_B:?} {target_nonterm:?}");
 
-              let mut set = OrderedSet::new();
+                let (used_index, other) = if nt_a == target_nonterm { (a_index, b_index) } else { (b_index, a_index) };
 
-              set.extend(&multi_m[a_index].1);
-              set.extend(&multi_m[b_index].1);
+                let other_index = AscriptScalarType::Multi(other);
 
-              multi_m[used_index].1 = set;
+                multi_m[used_index].1.insert(other_index);
+
+                return Ok(AscriptType::Scalar(AscriptScalarType::Multi(used_index)));
+              } else {
+                create_multi(
+                  [AscriptScalarType::Multi(a_index), AscriptScalarType::Multi(b_index)].into_iter(),
+                  multi_i,
+                  multi_m,
+                  target_nonterm,
+                )
+              }
+            } else {
+              Ok(*a)
             }
-
-            Ok(*a)
           }
           ((_, _, AscriptType::Scalar(AscriptScalarType::Multi(multi))), (_, _, AscriptType::Scalar(scalar)))
           | ((_, _, AscriptType::Scalar(scalar)), (_, _, AscriptType::Scalar(AscriptScalarType::Multi(multi)))) => {
             let a_index = multi_i[*multi];
 
-            multi_m[a_index].1.insert(*scalar);
-
-            Ok(AscriptType::Scalar(AscriptScalarType::Multi(*multi)))
+            if multi_m[a_index].0 == target_nonterm {
+              multi_m[a_index].1.insert(*scalar);
+              Ok(AscriptType::Scalar(AscriptScalarType::Multi(*multi)))
+            } else {
+              create_multi([*scalar, AscriptScalarType::Multi(*multi)].into_iter(), multi_i, multi_m, target_nonterm)
+            }
           }
 
           ((_, _, a), (_, _, b)) if a == b => Ok(*a),
@@ -1572,21 +1658,7 @@ fn get_resolved_type(
             1..=4 => Ok(Scalar(AscriptScalarType::F32(None))),
             _ => Ok(Scalar(AscriptScalarType::F64(None))),
           },
-          _ => {
-            let types = BTreeSet::from_iter([*a_scalar, *b_scalar]);
-            let index = multi_i.len();
-
-            multi_i.push(multi_m.len());
-
-            if ref_name.len() > 1 {
-              multi_m
-                .push((format!("{}{}", ref_name.chars().next().unwrap_or_default().to_ascii_uppercase(), &ref_name[1..]), types));
-            } else {
-              multi_m.push((format!("{}", ref_name.chars().next().unwrap_or_default()), types));
-            }
-
-            return Ok(AscriptType::Scalar(AscriptScalarType::Multi(index)));
-          }
+          _ => create_multi([*a_scalar, *b_scalar].iter().cloned(), multi_i, multi_m, target_nonterm),
         }
       }
       Aggregate(a_gg) => match b_scalar {
@@ -1596,5 +1668,27 @@ fn get_resolved_type(
       _ => todo!("Resolve types scaler:{a:?} ty:{b:?}"),
     },
     _ => todo!("Resolve types ty:{a:?} ty:{b:?}"),
+  }
+}
+
+fn create_multi<T: Iterator<Item = AscriptScalarType>>(
+  scalars: T,
+  multi_i: &mut Vec<usize>,
+  multi_m: &mut Vec<MultiTypeRef>,
+  ref_name: DBNonTermKey,
+) -> Result<AscriptType, RadlrError> {
+  if let Some((index, multi_m)) = multi_m.iter_mut().enumerate().find(|(_, i)| i.0 == ref_name) {
+    multi_m.1.extend(scalars);
+    return Ok(AscriptType::Scalar(AscriptScalarType::Multi(index)));
+  } else {
+    assert!(ref_name != DBNonTermKey::default());
+    let types = BTreeSet::from_iter(scalars);
+
+    let index = multi_i.len();
+
+    multi_i.push(multi_m.len());
+    multi_m.push((ref_name, types, Default::default()));
+
+    return Ok(AscriptType::Scalar(AscriptScalarType::Multi(index)));
   }
 }

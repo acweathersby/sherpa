@@ -220,7 +220,7 @@ use std::collections::HashMap;
           } \n\n
         }
         (_ , "Multi") {
-          match @MULTI_ENUMS.[self.val.index].is_root {
+          match @MULTI_ENUMS.[self.val.index].is_root {           
             true {
               impl<Token:Tk>\ @AST_NAME<Token> { 
                 pub\ fn\ into_#ty_to_ast_name(self) (self)\ ->\ Option<#ast_node_rust_type(self)>\ { @;
@@ -294,7 +294,6 @@ use std::collections::HashMap;
   @multi_enums.iter#multi_enum()
 
   #type_multi_enums {
-
     #impls {
       @enum_type={ #multi_rust_type(self) }
 
@@ -302,11 +301,46 @@ use std::collections::HashMap;
         @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(@MULTI_NAME::#ty_to_ast_name(self)(val)),@;
       }
 
+      #handle_convert_from_ast_node TO_NAME: str {
+        @from={ @MULTI_ENUMS.[self.val] }
+        @AST_NAME::@from.name(val)\ =>\ Some(val.into()),@;
+      }
+
+      #multi_convert_from FROM_NAME:str TO_NAME:str {
+        @FROM_NAME::#ty_to_ast_name(self)(val)\ =>\ @TO_NAME::#ty_to_ast_name(self)(val),@;
+      }
+
+      #handle_convert_from to:obj {
+        @from       ={ @MULTI_ENUMS.[self.val] }
+        @from_type  ={ #multi_rust_type(from)  }
+        @to_type    ={ #multi_rust_type(to)    }
+        @to_name    ={ @to.name }
+        @from_name  ={ @from.name }
+
+        impl 
+        
+        match (@from.requires_template, @to.requires_template) {
+          (true, _) | (_, true)  { <Token:Tk> }
+        } 
+        
+        \ From<@from_type>\ for\ @to_type\ { 
+          fn\ from\ (val: @from_type)\ ->\ @to_type\ { @;
+            mat ch\ val\ {
+              @from.types.iter#multi_convert_from(@from_name, @to_name)
+              _\ =>\ @to_name::None,@;
+            }
+          }
+        } \n\n
+      }
+
+      @self.converts_from.iter#handle_convert_from(self)
+
       impl<Token:Tk>\ @AST_NAME<Token> { 
         pub\ fn\ into_@self.name (self)\ ->\ Option<@enum_type>\ { @;
           mat ch\ self\ {
             @AST_NAME::@self.name (val)\ =>\ Some(val),@;
             @self.types.iter#multi_type_to_multi(self.name)
+            @self.converts_from.iter#handle_convert_from_ast_node(self.name)
             _\ =>\ None,@;
           }
         }

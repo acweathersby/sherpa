@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use crate::{types::AscriptDatabase, AscriptAggregateType, AscriptRule, AscriptType, StringId};
-use radlr_core::{RadlrGrammar, RadlrResult};
+use crate::{types::AscriptDatabase, AscriptAggregateType, AscriptMultis, AscriptRule, AscriptScalarType, AscriptType, StringId};
+use radlr_core::{CachedString, RadlrGrammar, RadlrResult};
 
 #[test]
 fn parse_errors_when_struct_prop_type_is_redefined() -> RadlrResult<()> {
@@ -138,6 +138,137 @@ fn builds_json() -> RadlrResult<()> {
 }
 
 #[test]
+fn builds_rum_lang_2() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> A > ( [ ( R | B )(*)^s T?^eoi ]  :ast [$s, $eoi] )^s 
+
+  <> T > "tt" :ast { t_T }
+
+  <> R > "test" :ast { t_R }
+
+  <> B >  "nest" :ast { t_B }
+   "##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
+
+  Ok(())
+}
+
+#[test]
+fn builds_rum_langd() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> A > B Ca? :ast { t_A, B, Ca }
+
+  <> B > "test"
+
+  <> Ca > "test" :ast f32($1)
+
+   "##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
+
+  Ok(())
+}
+
+#[test]
+fn builds_template() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> B > A::<t_Test>^A  :ast { t_R, A }
+  
+  <t_TypeNamePrefix:ast> A > "Cat" :ast { t_A, B, Ca }
+
+   "##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(adb);
+
+  Ok(())
+}
+
+#[test]
+fn builds_values() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> A > B | D
+
+  <> B > X :ast { t_B, X }
+
+  <> D > Y :ast { t_D, X }
+
+
+  <> X > "A" :ast { t_X } 
+       | "B" :ast { t_Y } 
+
+  
+  <> Y > "C" :ast { t_X } 
+       | "D" :ast { t_Y } 
+  
+
+   "##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(&adb);
+
+  for i in 0..adb.multi_types.len() {
+    for j in 0..adb.multi_types.len() {
+      if j == i {
+        continue;
+      }
+
+      assert_ne!(adb.multi_type_lu[i], adb.multi_type_lu[j]);
+    }
+  }
+
+  Ok(())
+}
+
+#[test]
+fn builds_values_2() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> A > C | B 
+
+  <> C > B | "R" :ast  { t_R }
+
+  <> B > "X" :ast {t_X} | "Y" :ast {t_Y} | "Z" :ast {t_Z} | W
+
+  <> W > "W" :ast { t_W }
+  
+
+   "##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+  dbg!(&adb.multi_types);
+
+  Ok(())
+}
+
+#[test]
 fn builds_rum_lang() -> RadlrResult<()> {
   let source = r##"
   IGNORE { c:sp c:nl }
@@ -238,13 +369,51 @@ fn builds_rum_lang() -> RadlrResult<()> {
 #[test]
 fn builds_radlr_grammar_ast() -> RadlrResult<()> {
   let resolved_root_path = RadlrGrammar::resolve_to_grammar_file(
-    &PathBuf::from("../../grammars/radlr/3.0.0-pre-bootstrap/radlr.radlr").canonicalize().expect("Grammar not found"),
+    &PathBuf::from("/home/work/projects/lib_radlr/grammars/radlr/3.0.0-pre-bootstrap/radlr.radlr")
+      .canonicalize()
+      .expect("Grammar not found"),
   )?;
   let db = RadlrGrammar::new().add_source(&resolved_root_path)?.build_db(resolved_root_path, Default::default())?;
 
   let adb: AscriptDatabase = db.into();
 
-  dbg!(adb);
+  std::hint::black_box(adb);
+
+  //dbg!(adb.structs);
+
+  Ok(())
+}
+
+#[test]
+fn builds_rum_lang_grammar_ast() -> RadlrResult<()> {
+  let resolved_root_path = RadlrGrammar::resolve_to_grammar_file(
+    &PathBuf::from("/home/work/projects/lib_rum_common/crates/language/grammar/low_level.radlr")
+      .canonicalize()
+      .expect("Grammar not found"),
+  )?;
+  let db = RadlrGrammar::new().add_source(&resolved_root_path)?.build_db(resolved_root_path, Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+  let multis = AscriptMultis::new(&adb);
+  let value = multis.types.iter().find(|v| v.name == "block_list_Value").unwrap();
+  dbg!(&multis.types.iter().zip(adb.multi_types.iter()).zip(adb.multi_type_lu.iter()).enumerate().collect::<Vec<_>>());
+
+  let name = StringId("LL_Num".to_string().to_token());
+  let ty = AscriptType::Scalar(AscriptScalarType::Struct(name, false));
+
+  dbg!(
+    AscriptType::Scalar(AscriptScalarType::Struct(name, false)),
+    value.types.0.iter().any(|d| {
+      dbg!(*d == ty);
+      *d == ty
+    })
+  );
+
+  assert!(value.types.iter().any(|d| { *d == ty }));
+
+  //dbg!(&adb);
+
+  std::hint::black_box(adb);
 
   Ok(())
 }

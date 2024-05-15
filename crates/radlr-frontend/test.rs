@@ -1,4 +1,4 @@
-use crate::parser::parse_grammar_input;
+use crate::parser_core::parse_grammar_input;
 
 #[test]
 fn simple_nonterminal() {
@@ -20,6 +20,7 @@ fn simple_nonterminal_regex() {
 
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+
   std::hint::black_box(result);
 }
 
@@ -27,7 +28,7 @@ fn simple_nonterminal_regex() {
 fn class_symols() {
   const INPUT: &'static str = r##"
 
-<> test > \n \s \is \sym \any \tab \vtab \test \wildtest
+<> test > \n \sp \is \sym \any \tab \vtab \test \wildtest
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
 
@@ -60,10 +61,11 @@ fn at_least_once_repeat() {
 fn ignore_scope() {
   const INPUT: &'static str = r##"
 
-  IGNORE { \s } IGNORE { \s } { <> A > \n |\s }
+  EXPORT A as A IGNORE { \s } IGNORE { \s } { <> A > \n |\s }
 
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+
   std::hint::black_box(result);
 }
 
@@ -86,5 +88,24 @@ fn equivalent_token_expressions() {
 
   "##;
   let result = parse_grammar_input::<String>(INPUT).expect("Did not parse input");
+
   std::hint::black_box(result);
+}
+
+mod ir {
+  use crate::parser_core::parse_ir_input;
+
+  #[test]
+  fn simple_ir_match_expression() {
+    const INPUT: &'static str = r##"
+
+  test => match : PRODUCTION {
+    ( tiger ) { pass }
+  }"##;
+    let result = parse_ir_input::<String>(INPUT).expect("Did not parse input");
+
+    dbg!(&result);
+
+    std::hint::black_box(result);
+  }
 }

@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use crate::{deprecate::*, types::*, utf8::get_token_class_from_codepoint};
 use std::{
   alloc::{alloc, dealloc, Layout},

@@ -1,9 +1,18 @@
 use crate::{build_db, AscriptMultis, AscriptRules, AscriptScalarType, AscriptStructs, AscriptTypes};
-use radlr_core::{proxy::OrderedSet, CachedString, IString, ParserDatabase, RadlrDatabase, RadlrError, RadlrResult};
+use radlr_core::{
+  proxy::OrderedSet,
+  CachedString,
+  DBNonTermKey,
+  IString,
+  ParserDatabase,
+  RadlrDatabase,
+  RadlrError,
+  RadlrResult,
+};
 use radlr_formatter::*;
 use std::{fmt::Debug, io::Write, sync::Arc};
 
-pub type MultiTypeRef = (String, OrderedSet<AscriptScalarType>);
+pub type MultiTypeRef = (DBNonTermKey, OrderedSet<AscriptScalarType>, OrderedSet<usize>);
 
 /// Stores resolved type and construction information used to create
 /// AST constructors based on `:ast` expressions extracted from a

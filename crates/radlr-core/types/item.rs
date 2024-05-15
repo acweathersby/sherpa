@@ -407,6 +407,10 @@ impl Item {
     }
   }
 
+  pub fn nonterm_index_at_sym_parser(&self, db: &ParserDatabase) -> Option<DBNonTermKey> {
+    self.nonterm_index_at_sym(GraphType::Parser, db)
+  }
+
   /// Returns the [IndexedProdId] of the active symbol if the symbol
   /// is a NonTerm, or return `None`
   pub fn nonterm_index_at_sym(&self, mode: GraphType, db: &ParserDatabase) -> Option<DBNonTermKey> {
