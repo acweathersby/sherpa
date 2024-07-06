@@ -3,7 +3,7 @@
 use crate::types::*;
 use std::fmt::Debug;
 
-pub trait Tk: Clone + Default + std::hash::Hash {
+pub trait Tk: Clone + Default + std::hash::Hash + Debug {
   fn to_string(&self) -> String;
   fn trim(&self, start: usize, end: usize) -> Self;
   fn from_range(start: usize, end: usize, line_number: u32, line_offset: u32, id: u32, source: SharedSymbolBuffer) -> Self;

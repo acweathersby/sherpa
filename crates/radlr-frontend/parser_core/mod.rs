@@ -1,14 +1,14 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, rc::Rc, sync::Arc};
 
 use radlr_rust_runtime::{
   parsers::ast::{AstDatabase, Tk},
   types::{ParserError, RuntimeDatabase, StringInput},
 };
 
-mod ast;
+pub mod ast;
 mod parser;
 
-pub fn parse_grammar_input<Token: Tk + Debug>(input: &str) -> Result<ast::GrammarDefinition<Token>, ParserError> {
+pub fn parse_grammar_input<Token: Tk + Debug>(input: &str) -> Result<Arc<ast::GrammarDefinition<Token>>, ParserError> {
   let parser_db = parser::ParserDB::new();
 
   let result = parser_db.build_ast(
@@ -21,7 +21,7 @@ pub fn parse_grammar_input<Token: Tk + Debug>(input: &str) -> Result<ast::Gramma
     Err(err) => Err(err),
     Ok(result) => match result.into_GrammarDefinition() {
       None => Err(ParserError::Unexpected),
-      Some(grammar) => Ok(*grammar),
+      Some(grammar) => Ok(grammar),
     },
   }
 }

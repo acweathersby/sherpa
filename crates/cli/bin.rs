@@ -115,6 +115,10 @@ fn main() -> RadlrResult<()> {
     build_config.lib_out = &_lib_out_dir;
     build_config.source_out = &out_dir;
 
+    if let Some(name) = &name {
+      build_config.name_prefix = Some(name);
+    }
+
     build_config.parser_type = match true {
       _ => radlr_build::ParserType::Bytecode,
     };

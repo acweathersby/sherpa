@@ -55,7 +55,8 @@ impl<'node, 'db> Printer<'node, 'db> {
 
   pub fn print(&self) {
     let mut stdout = std::io::stdout();
-    self.write(&mut stdout).unwrap()
+    self.write(&mut stdout).unwrap();
+    stdout.flush().unwrap();
   }
 
   pub fn print_all(&self) {

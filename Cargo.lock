@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "radlr-cli"
-version = "1.0.1-beta1"
+version = "1.0.1-beta2"
 dependencies = [
  "clap",
  "radlr_ascript",
@@ -288,9 +288,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "radlr_compiler_frontend"
+version = "1.0.1-beta1"
+dependencies = [
+ "radlr_build",
+ "radlr_core_common",
+ "radlr_rust_runtime",
+]
+
+[[package]]
 name = "radlr_core"
 version = "1.0.1-beta2"
 dependencies = [
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_core_common"
+version = "1.0.1-beta1"
+dependencies = [
+ "once_cell",
  "radlr_rust_runtime",
 ]
 
@@ -308,14 +325,6 @@ version = "1.0.1-beta1"
 dependencies = [
  "inkwell",
  "radlr_core",
- "radlr_rust_runtime",
-]
-
-[[package]]
-name = "radlr_parser"
-version = "1.0.1-beta1"
-dependencies = [
- "radlr_build",
  "radlr_rust_runtime",
 ]
 

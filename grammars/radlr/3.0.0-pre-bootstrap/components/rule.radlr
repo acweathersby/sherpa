@@ -24,20 +24,16 @@ IMPORT ast as ast
 
 <> rule 
   
-  > ( [ ( sym::annotated_symbol | not_empty )(*)^s end_of_input?^eoi ]  :ast [$s, $eoi] )^s 
-    
-    //ast_definition?^a
-
-    //:ast { t_Rule, symbols:$s, ast:$a, tok }
+  > ( [ ( sym::annotated_symbol | not_empty )(*)^s end_of_input?^eoi ]  :ast [$s, $eoi] )^s  ast_definition?^a
 
     :ast { t_Rule, symbols:$s, ast:$a, tok }
 
 
-/* <> ast_definition 
+<> ast_definition 
 
   > ":ast" ast::body^ast
 
-    :ast  { t_Ascript, ast:$ast, tok } */
+    :ast  { t_Ascript, ast:$ast, tok }
 
 
 <> not_empty 

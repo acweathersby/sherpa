@@ -14,6 +14,7 @@ pub fn build_ast_source(
   script: &str,
   ast_path: std::path::PathBuf,
   build_config: BuildConfig<'_>,
+  extra_config_properties: &[(&str, &str)],
 ) -> RadlrResult<()> {
   let adb: AscriptDatabase = db.into();
   Ok(if let Some(errors) = adb.get_errors() {
@@ -23,7 +24,7 @@ pub fn build_ast_source(
   } else {
     let parser = OpenOptions::new().append(false).truncate(true).write(true).create(true).open(&ast_path)?;
 
-    adb.format(script, parser, 100, build_config.ast_struct_name)?.flush()?;
+    adb.format(script, parser, 100, build_config.ast_struct_name, extra_config_properties)?.flush()?;
   })
 }
 
@@ -92,6 +93,7 @@ pub fn build_parser_source(
   ctx.set_val("state_to_token_ids_map", Value::Obj(&state_to_token_ids_map));
   ctx.set_val("token_maps", Value::Obj(&token_maps));
   ctx.set_val("ALLOW_UPPER_ATTRIBUTES", Value::Int(0));
+
   ctx.max_width = 100;
 
   let f: Formatter = FormatterResult::from(parser_script).into_result()?;

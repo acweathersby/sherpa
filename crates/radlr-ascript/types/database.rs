@@ -54,13 +54,34 @@ impl Debug for AscriptDatabase {
 impl AscriptDatabase {
   /// Format and print this database to a string using the a formatting
   /// script.
-  pub fn format_string(&self, script: &str, max_width: usize, ast_struct_name: &str) -> RadlrResult<String> {
-    unsafe { Ok(String::from_utf8_unchecked(self.format(script, Vec::with_capacity(1024), max_width, ast_struct_name)?)) }
+  pub fn format_string(
+    &self,
+    script: &str,
+    max_width: usize,
+    ast_struct_name: &str,
+    extra_config_properites: &[(&str, &str)],
+  ) -> RadlrResult<String> {
+    unsafe {
+      Ok(String::from_utf8_unchecked(self.format(
+        script,
+        Vec::with_capacity(1024),
+        max_width,
+        ast_struct_name,
+        extra_config_properites,
+      )?))
+    }
   }
 
   /// Format and print this database to the given buffer using a formatting
   /// script.
-  pub fn format<W: Write>(&self, script: &str, writer: W, max_width: usize, ast_struct_name: &str) -> RadlrResult<W> {
+  pub fn format<W: Write>(
+    &self,
+    script: &str,
+    writer: W,
+    max_width: usize,
+    ast_struct_name: &str,
+    extra_config_properites: &[(&str, &str)],
+  ) -> RadlrResult<W> {
     let mut ctx: FormatterContext = FormatterContext::new("AscriptForm", self.db.string_store().clone());
 
     let multi = AscriptMultis::new(self);
@@ -70,6 +91,12 @@ impl AscriptDatabase {
     ctx.set_val("MULTI_ENUMS", Value::Obj(&multi));
     ctx.set_val("AST_NAME", Value::Str(ast_struct_name.intern(self.db.string_store())));
     ctx.set_val("ALLOW_UPPER_ATTRIBUTES", Value::Int(0));
+
+    for (name, value) in extra_config_properites {
+      ctx.set_val(name, Value::Str(value.intern(self.db.string_store())));
+    }
+
+    // The type of heap allocation to use for ast nodes. example: `std::sync::Arc`
     ctx.max_width = max_width;
 
     let f: Formatter = FormatterResult::from(script).into_result()?;

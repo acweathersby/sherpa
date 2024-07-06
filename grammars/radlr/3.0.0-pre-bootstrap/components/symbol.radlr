@@ -8,7 +8,7 @@ IMPORT regex as re
   
   > repetition^s [tk:reference^r? "?"^o?  precedence?^p ]!?
 
-    :ast { t_AnnotatedSymbol, precedence:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
+    :ast { t_Annotated_Symbol, precedence:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
 
 
 <> repetition 
@@ -50,29 +50,29 @@ IMPORT regex as re
 
   > prim::string
 
-  :ast { t_TerminalToken, val:str(tok<1,1>), tok, is_exclusive:true } 
+  :ast { t_Token_Symbol, val:str(tok<1,1>), tok, is_exclusive:true } 
 
   | prim::quote
 
-  :ast { t_TokenSymbol, val:str(tok<1,1>), tok }
+  :ast { t_Token_Symbol, val:str(tok<1,1>), tok }
 
   | re::grammar_regex
 
-  :ast { t_RegexSymbol, val:$1 }
+  :ast { t_Regex_Symbol, val:$1 }
 
 
 <> token_non_terminal >
 
     "tk:" nonterm
 
-        :ast { t_NonTerminal_Terminal_Symbol, nonterm:$2, tok }
+        :ast { t_Token_NonTerm_Symbol, nonterm:$2, tok }
 
 
 <> class 
 
   > ( '\\n' | '\\s' | '\\id' | '\\sym' | '\\any' | '\\tab' | '\\vtab' | tk:( "\\" c:id+) )
 
-        :ast { t_ClassSymbol, val:str($1<1,0>),  tok }
+        :ast { t_Class_Symbol, val:str($1<1,0>),  tok }
 
 
 <> precedence 
@@ -99,11 +99,11 @@ IMPORT regex as re
 
     > prim::id '::' prim::id
 
-        :ast { t_NonTermSymbolImportSymbol, module:str($1), name:str($3), tok }
+        :ast { t_Import_NonTerm_Symbol, module:str($1), name:str($3), tok }
 
 
 <> nonterm_symbol 
   
   > prim::id
 
-  :ast { t_NonTermSymbol, val:str($1), tok }
+  :ast { t_NonTerm_Symbol, val:str($1), tok }

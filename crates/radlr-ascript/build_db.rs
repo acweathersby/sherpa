@@ -89,16 +89,28 @@ fn resolve_multi_types(adb: &mut AscriptDatabase) {
         continue;
       };
 
+      if adb.multi_type_lu[j] != j {
+        continue;
+      }
+
       let target = &adb.multi_types[i];
       let other = &adb.multi_types[j];
 
       if other.0 < target.0 && other.1 == target.1 {
-        adb.multi_type_lu[i] = j;
+        assert_eq!(other.1.len(), target.1.len());
+
         let converts = adb.multi_types[i].2.clone();
         adb.multi_types[j].2.extend(converts);
-        adb.multi_types[j].2.remove(&i);
-        adb.multi_types[j].2.remove(&j);
+
+        // Remap all multis that mapped to i to j
+        for k in adb.multi_type_lu.iter_mut() {
+          *k = if *k == i { j } else { *k }
+        }
       }
+    }
+
+    for (i, k) in adb.multi_type_lu.iter().enumerate() {
+      adb.multi_types[*k].2.remove(&i);
     }
   }
 }
@@ -578,10 +590,10 @@ pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> 
       )
     }
 
-    let index: usize = rule_in_process.into();
+    let rule_index: usize = rule_in_process.into();
     let item = Item::from((rule_in_process, db));
 
-    let ty = match &adb.rules.get(index) {
+    let ty = match &adb.rules.get(rule_index) {
       Some(AscriptRule::Invalid(..)) => AscriptType::Undefined,
       Some(AscriptRule::Struct(_, id)) => AscriptType::Scalar(AscriptScalarType::Struct(
         id.name,
@@ -669,8 +681,8 @@ fn resolve_nonterm_values(
 
   let mut struct_rules = OrderedMap::<StringId, OrderedSet<(usize, DBNonTermKey)>>::new();
 
-  for (index, ast_rule) in rules.iter_mut().enumerate() {
-    let item = Item::from((DBRuleKey::from(index), db));
+  for (rule_index, ast_rule) in rules.iter_mut().enumerate() {
+    let item = Item::from((DBRuleKey::from(rule_index), db));
     let mut selected_indices = HashSet::new();
     let selected_indices = &mut selected_indices;
     let rule_key = ast_rule.get_db_key();
@@ -679,7 +691,7 @@ fn resolve_nonterm_values(
 
     match ast_rule {
       AscriptRule::Expression(_, init) => {
-        let node = create_graph_node(
+        let mut node = create_graph_node(
           GraphResolveData {
             db,
             item,
@@ -694,7 +706,26 @@ fn resolve_nonterm_values(
           },
           nt_key,
         )?;
-        init.ty = node.get_type().clone();
+
+        if rule_index == 152 || rule_index == 151 || rule_index == 150 {
+          println!("\n\n{rule_index} {node:?} {expected_type:?}");
+        }
+
+        let ty = *expected_type;
+        let node_type = node.get_type();
+
+        if ty.is_multi() {
+          if ty.get_multi_type_index() != node_type.get_multi_type_index() {
+            if node_type.is_vector() {
+              debug_assert!(ty.is_vector());
+              node = GraphNode::MultiConvert(Rc::new(node), ty)
+            } else {
+              node = GraphNode::MultiConvert(Rc::new(node), ty)
+            }
+          }
+        }
+
+        init.ty = ty;
         init.output_graph = Some(node);
       }
       AscriptRule::ListInitial(_, init) => {
@@ -720,10 +751,7 @@ fn resolve_nonterm_values(
               *ty = last.get_type().clone();
               *output_graph = Some(last);
             } else {
-              let last = GraphNode::Vec(
-                GraphNodeVecInits(vec![last.clone()]),
-                AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: last.get_type().as_scalar().unwrap() }),
-              );
+              let last = GraphNode::Vec(GraphNodeVecInits(vec![last.clone()]), *expected_type);
               *ty = last.get_type().clone();
               *output_graph = Some(last);
             }
@@ -747,17 +775,11 @@ fn resolve_nonterm_values(
 
         if ty.is_multi() {
           if ty.get_multi_type_index() != last.get_type().get_multi_type_index() {
-            last = GraphNode::MultiConvert(
-              Rc::new(last),
-              AscriptType::Scalar(AscriptScalarType::Multi(ty.get_multi_type_index().unwrap())),
-            )
+            last = GraphNode::MultiConvert(Rc::new(last), *expected_type)
           }
 
           if ty.get_multi_type_index() != first.get_type().get_multi_type_index() {
-            first = GraphNode::MultiConvert(
-              Rc::new(first),
-              AscriptType::Scalar(AscriptScalarType::Multi(ty.get_multi_type_index().unwrap())),
-            )
+            first = GraphNode::MultiConvert(Rc::new(first), *expected_type)
           }
         }
 
@@ -778,7 +800,7 @@ fn resolve_nonterm_values(
       }
       AscriptRule::Struct(_, rule_struct) => {
         let struct_name: StringId = rule_struct.name;
-        struct_rules.entry(struct_name).or_default().insert((index, nt_key));
+        struct_rules.entry(struct_name).or_default().insert((rule_index, nt_key));
       }
       _r => todo!("handle rule {{_r:?}}"),
     }
@@ -807,42 +829,33 @@ fn resolve_nonterm_values(
                     radlr_core::SymbolId::DBNonTerminal { key } => db.nonterm_friendly_name(key) == prop_name.0,
                     _ => false,
                   }) {
-                    Some(item) => {
-                      println!("--------------------1");
-                      (
-                        graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
-                        item.nonterm_index_at_sym_parser(db).unwrap_or_default(),
-                      )
-                    }
-                    None => {
-                      println!("--------------------");
-                      (AscriptType::Undefined, db_nt_key)
-                    }
+                    Some(item) => (
+                      graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
+                      item.nonterm_index_at_sym_parser(db).unwrap_or_default(),
+                    ),
+                    None => (AscriptType::Undefined, db_nt_key),
                   },
                 }
               }
-              Some(node) => {
-                println!("--------------------3, {init:?}");
-                (
-                  get_graph_type(
-                    GraphResolveData {
-                      db,
-                      item,
-                      node,
-                      nonterm_types: &nonterm_types,
-                      default_nonterm_type: None,
-                    },
-                    &mut GraphMutData {
-                      selected_indices: &mut HashSet::new(),
-                      multi_indices:    multi_type_lu,
-                      multi_maps:       multi_types,
-                    },
-                    Default::default(),
-                  )
-                  .expect("Could not resolve prop type"),
-                  db_nt_key,
+              Some(node) => (
+                get_graph_type(
+                  GraphResolveData {
+                    db,
+                    item,
+                    node,
+                    nonterm_types: &nonterm_types,
+                    default_nonterm_type: None,
+                  },
+                  &mut GraphMutData {
+                    selected_indices: &mut HashSet::new(),
+                    multi_indices:    multi_type_lu,
+                    multi_maps:       multi_types,
+                  },
+                  Default::default(),
                 )
-              }
+                .expect("Could not resolve prop type"),
+                db_nt_key,
+              ),
             };
 
             if let Some(archetype_struct) = structs.get_mut(&struct_name) {

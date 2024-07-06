@@ -15,8 +15,8 @@ pub fn construct_error_recovering_parser() -> RadlrResult<()> {
   
    "#;
 
-  //let input = r#"fn(das:2){}{}green toast;;"#;
-  let input = r#"d"#;
+  let input = r#"fn(das:2){}{}green toast;;"#;
+  //let input = r#"d"#;
 
   let root_path = PathBuf::from("test.sg");
   let mut grammar = RadlrGrammar::new();

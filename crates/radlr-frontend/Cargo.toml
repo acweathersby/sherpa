@@ -1,5 +1,5 @@
 [package]
-name = "radlr_compiler_fe"
+name = "radlr_compiler_frontend"
 version = "1.0.1-beta1"
 edition = "2021"
 
@@ -13,6 +13,7 @@ radlr_build    = { path="../radlr-build" }
 
 [dependencies]
 radlr_rust_runtime    = { path="../radlr-rust-runtime" }
+radlr_core_common    = { path="../radlr-core-common" }
 
 
 

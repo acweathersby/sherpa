@@ -988,7 +988,7 @@ fn get_nonterminal_symbol<'a>(
 /// - [ASTNode::State]
 /// - [ASTNode::PrattProduction]
 /// - [ASTNode::PegProduction]
-/// - [ASTNode::CFProduction]
+/// - [ASTNode::CFProduction]`
 fn get_nonterminal_id_from_ast_node(g_data: &GrammarData, node: &ASTNode, s_store: &IStringStore) -> RadlrResult<NonTermId> {
   match get_nonterminal_symbol(g_data, node) {
     (Some(nterm), None) => Ok(NonTermId::from((g_data.id.guid, nterm.name.as_str()))),

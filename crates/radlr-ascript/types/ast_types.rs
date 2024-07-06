@@ -825,6 +825,14 @@ impl ValueObj for GraphNode {
         TokSym(_, last_ref, ..) => Value::Int(*last_ref as isize),
         _ => Value::None,
       },
+      "to" => match self {
+        MultiConvert(_, ty) => Value::Obj(ty),
+        _ => Value::None,
+      },
+      "from" => match self {
+        MultiConvert(val, ..) => Value::Obj(val.as_ref()),
+        _ => Value::None,
+      },
       "init" => match self {
         MultiConvert(val, ..) => Value::Obj(val.as_ref()),
         Map(_, val, ..) => Value::Obj(val.as_ref()),

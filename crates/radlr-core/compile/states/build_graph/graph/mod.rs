@@ -136,7 +136,7 @@ pub enum GraphType {
 }
 
 /// Indicates the State type that generated
-/// the item
+/// the initial position of an item
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[allow(non_camel_case_types)]
 pub enum Origin {
@@ -154,7 +154,7 @@ pub enum Origin {
   __OOS_CLOSURE__,
   __OOS_ROOT__,
   __OOS_SCANNER_ROOT__(PrecedentDBTerm),
-  /// Generated when the a goal non-terminal is completed.
+  /// Generated when the targeted non-terminal is completed.
   /// Goal non-terminals are determined by the
   /// root state (`StateId(0)`) kernel items
   GoalCompleteOOS,

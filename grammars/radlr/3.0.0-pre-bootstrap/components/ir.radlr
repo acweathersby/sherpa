@@ -8,40 +8,38 @@ IMPORT comment as cmt
 IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
 
 
-<> state > 
+<> state 
+  
+  > sym::nonterm^id "=>" statement
 
-    sym::nonterm^id "=>" statement
+    :ast { t_State, id, statement, tok }
 
-        :ast { t_State, id, statement, tok }
+  | sym::nonterm^id "=!>" statement
 
-    | sym::nonterm^id "=!>" statement
-
-        :ast { t_State, catches:true, id, statement, tok }
+    :ast { t_State, catches:true, id, statement, tok }
 
 
-<> statement >
+<> statement 
 
-    transitive_statement^transitive 
-     ( "then" non_branch_statement(+"then")^non_branch )?
-     ( "then" pop^pop )?
-     ( "then" branch_statement^branch )?
+  > transitive_statement^transitive 
+    ( "then" non_branch_statement(+"then")^non_branch )?
+    ( "then" pop^pop )?
+    ( "then" branch_statement^branch )?
 
-     :ast { t_Statement, transitive, non_branch, pop, branch }
+    :ast { t_Statement, transitive, non_branch, pop, branch }
 
-     |
+  | non_branch_statement(+"then")^non_branch
+    ( "then" pop^pop )?
+    ( "then" branch_statement^branch )?
 
-     non_branch_statement(+"then")^non_branch
-     ( "then" pop^pop )?
-     ( "then" branch_statement^branch )?
+    :ast { t_Statement, non_branch, branch, pop }
 
-     :ast { t_Statement, non_branch, branch, pop }
+  | ( pop^pop "then" )?
+    branch_statement^branch 
 
-    | ( pop^pop "then" )?
-      branch_statement^branch 
+    :ast { t_Statement, branch, pop }
 
-     :ast { t_Statement, branch, pop }
-
-    | pop^pop :ast { t_Statement, pop }
+  | pop^pop :ast { t_Statement, pop }
 
 
 <> branch_statement 
@@ -64,9 +62,9 @@ IGNORE { c:sp c:nl tk:cmt::line tk:cmt::block }
     :ast { t_Reset, ptr_type:str($2), tok }
 
 
-<> terminal_statement >
+<> terminal_statement 
 
-  "fail"          
+  > "fail"          
     
     :ast { t_Fail, tok }
 

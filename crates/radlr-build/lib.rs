@@ -31,6 +31,11 @@ pub struct BuildConfig<'a> {
   /// Path of the root grammar file.
   root_grammar_path: &'a Path,
 
+  /// Compile grammar into a parser
+  ///
+  /// Defaults to true
+  pub build_parser: bool,
+
   /// Create an ast artifact file in the target language based on `:ast`
   /// definitions found in grammar files.
   ///
@@ -68,6 +73,9 @@ pub struct BuildConfig<'a> {
 
   /// Configurations specific to the Rust language target
   pub rust: RustConfig,
+
+  /// Name prefix to add to output files
+  pub name_prefix: Option<&'a str>,
 }
 
 impl<'a> BuildConfig<'a> {
@@ -77,11 +85,13 @@ impl<'a> BuildConfig<'a> {
       lib_out:               &root_grammar.parent().unwrap_or(root_grammar),
       source_out:            &root_grammar.parent().unwrap_or(root_grammar),
       build_ast:             true,
+      build_parser:          true,
       include_debug_symbols: false,
       root_grammar_path:     root_grammar,
       parser_type:           ParserType::Bytecode,
       include_paths:         &[],
       rust:                  Default::default(),
+      name_prefix:           Default::default(),
     }
   }
 }
@@ -242,6 +252,23 @@ fn builds_radlr_lang() -> RadlrResult<()> {
   let mut build_config = BuildConfig::new(&path);
   build_config.source_out = &output;
   build_config.lib_out = &output;
+  build_config.build_parser = false;
+
+  fs_build(build_config, Default::default(), TargetLanguage::Rust)?;
+
+  Ok(())
+}
+
+#[test]
+fn builds_rum_lang() -> RadlrResult<()> {
+  let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).canonicalize()?;
+
+  let path = root.join("../../../lib_rum_common/crates/language/grammar/low_level.radlr").canonicalize()?;
+  let output = root.join("build");
+
+  let mut build_config = BuildConfig::new(&path);
+  build_config.source_out = &output;
+  build_config.lib_out = &output;
 
   fs_build(build_config, Default::default(), TargetLanguage::Rust)?;
 
@@ -261,6 +288,35 @@ fn build_test() -> RadlrResult<()> {
 
   <> B >  "nest" :ast { t_B }
     
+   "##;
+
+  let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).canonicalize()?;
+  let output = root.join("build");
+  let default_path: PathBuf = "grammar.radlr".into();
+
+  let mut build_config = BuildConfig::new(&default_path);
+  build_config.source_out = &output;
+  build_config.lib_out = &output;
+
+  source_string_build(build_config, Default::default(), source, TargetLanguage::Rust)?;
+
+  Ok(())
+}
+
+#[test]
+fn builds_values() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> A > C 
+
+  <> C > B | "R" :ast  { t_R }
+
+  <> B > "X" :ast {t_X} | "Y" :ast {t_Y} | "Z" :ast {t_Z} | W
+
+  <> W > "W" :ast { t_W }
+  
+
    "##;
 
   let root = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).canonicalize()?;

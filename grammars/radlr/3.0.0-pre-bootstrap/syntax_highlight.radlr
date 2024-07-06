@@ -1,0 +1,43 @@
+IGNORE { c:sp }
+
+<> rules 
+  
+  > rule(+)
+
+
+<> rule 
+
+  > nonterm_name^name rule_id? symbol_set(+)^sym
+
+    :ast { t_Rule, name:str($name), rule_id:$2, sym: $sym }
+
+
+<> nonterm_name 
+
+  > tk:( ( c:num | "-" | "_" | c:id )+ ) 
+
+    :ast str($1)
+
+
+<> rule_id 
+  
+  > "["{:9999} tk:(c:num+) "]" 
+
+    :ast { t_RuleId, index: u32($2) }
+
+
+<> symbol_set 
+  
+  > "{"{:9999} ( tk:num :ast i32($1) )(+",") color_data? "}"{:9999} :ast { t_SymSet, syms: $2, col:$3 }
+
+
+<> color_data 
+
+  > tk:( ( c:num | "-" | "_" | c:id ) ( c:num | "-" | "_" | c:id | c:sp | c:sym )+ )
+
+    :ast str($1)
+
+
+<> num 
+  
+  > "-"? c:num+

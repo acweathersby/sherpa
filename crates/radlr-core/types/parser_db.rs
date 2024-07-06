@@ -51,6 +51,7 @@ pub struct ParserDatabase {
   /// Item closures, stores the closure of all items, excluding the closure's of
   /// items that are complete.
   item_closures:           Array<Array<Array<ItemIndex>>>,
+  
   ///NonTerminal Recursion Type
   recursion_types:         Array<u8>,
   /// Reduction types
@@ -448,11 +449,11 @@ impl ParserDatabase {
   /// Returns the closure of the item.
   /// > note: The closure does not include the item used as the seed for the
   /// > closure.
+  #[inline]
   pub fn get_closure<'db>(&'db self, item: &Item) -> impl ItemContainerIter + 'db {
     let item = *item;
     self.item_closures[item.rule_id().0 as usize][item.sym_index() as usize].iter().map(move |s| {
       let item = Item::from((*s, self)).as_from(item);
-
       item
     })
   }

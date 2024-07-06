@@ -1,7 +1,7 @@
 use super::common::{build_ast_source, build_parser_source, build_parser_states};
 use crate::BuildConfig;
 use radlr_core::*;
-use std::{fs::*, io::Write};
+use std::{fmt::format, fs::*, io::Write};
 
 const SCRIPT: &'static str = include_str!("rust_ast_script.atat");
 const BC_SCRIPT: &'static str = include_str!("rust_bytecode_script.atat");
@@ -17,24 +17,32 @@ pub struct RustConfig {
 pub fn build(db: &RadlrDatabase, build_config: BuildConfig, parser_config: ParserConfig) -> RadlrResult<()> {
   let (out_dir, lib_dir) = (build_config.source_out, build_config.lib_out);
 
-  let parser = build_parser_states(db, parser_config)?;
+  let (binary_path, parser_path, ast_path) = if let Some(name_prefix) = build_config.name_prefix {
+    (
+      lib_dir.join(format!("{name_prefix}_parser.bin")),
+      out_dir.join(format!("{name_prefix}_parser.rs")),
+      out_dir.join(format!("{name_prefix}_ast.rs")),
+    )
+  } else {
+    (lib_dir.join("parser.bin"), out_dir.join("parser.rs"), out_dir.join("ast.rs"))
+  };
 
-  let bytecode = radlr_bytecode::compile_bytecode(&parser, false)?;
+  if build_config.build_parser {
+    let parser = build_parser_states(db, parser_config)?;
 
-  let binary_path = lib_dir.join("parser.bin");
-  let parser_path = out_dir.join("parser.rs");
-  let ast_path = out_dir.join("ast.rs");
+    let bytecode = radlr_bytecode::compile_bytecode(&parser, false)?;
 
-  {
-    let mut parser_binary = OpenOptions::new().append(false).truncate(true).write(true).create(true).open(&binary_path)?;
-    bytecode.write_binary(&mut parser_binary)?;
-    parser_binary.flush()?;
+    {
+      let mut parser_binary = OpenOptions::new().append(false).truncate(true).write(true).create(true).open(&binary_path)?;
+      bytecode.write_binary(&mut parser_binary)?;
+      parser_binary.flush()?;
+    }
+
+    build_parser_source(db, BC_SCRIPT, bytecode, binary_path, parser_path)?;
   }
 
-  build_parser_source(db, BC_SCRIPT, bytecode, binary_path, parser_path)?;
-
   if build_config.build_ast {
-    build_ast_source(db, SCRIPT, ast_path, build_config)?;
+    build_ast_source(db, SCRIPT, ast_path, build_config, &[("RUST_NODE_WRAPPER", "std::sync::Arc")])?;
   }
 
   if build_config.rust.add_mod {

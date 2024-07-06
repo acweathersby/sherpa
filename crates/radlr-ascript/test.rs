@@ -269,6 +269,33 @@ fn builds_values_2() -> RadlrResult<()> {
 }
 
 #[test]
+fn aliased_struct_properties_are_tracked() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp c:nl }
+
+  <> A > "begin" D?^test_prop
+
+        :ast { t_TestStruct, test_prop, other_prop: $2 }
+
+  <> D > "test"
+"##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let mut adb: AscriptDatabase = db.into();
+
+  assert_eq!(adb.structs.len(), 1);
+
+  let (_, strct) = adb.structs.pop_first().expect("should have that one struct here");
+
+  assert_eq!(strct.properties.len(), 2);
+
+  dbg!(strct);
+
+  Ok(())
+}
+
+#[test]
 fn builds_rum_lang() -> RadlrResult<()> {
   let source = r##"
   IGNORE { c:sp c:nl }
@@ -373,13 +400,14 @@ fn builds_radlr_grammar_ast() -> RadlrResult<()> {
       .canonicalize()
       .expect("Grammar not found"),
   )?;
+
   let db = RadlrGrammar::new().add_source(&resolved_root_path)?.build_db(resolved_root_path, Default::default())?;
 
-  let adb: AscriptDatabase = db.into();
+  let adb: AscriptDatabase = db.clone().into();
+
+  dbg!(&adb);
 
   std::hint::black_box(adb);
-
-  //dbg!(adb.structs);
 
   Ok(())
 }

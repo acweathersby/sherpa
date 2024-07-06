@@ -215,7 +215,7 @@ pub(crate) fn handle_regular_complete_groups(
         if lookahead_pairs.iter().to_kernel().items_are_the_same_rule() {
           handle_completed_item(gb, pred, config, lookahead_pairs, prec_sym)?;
         } else {
-          todo!("(anthony) Handle Error: default completed item conflicts (e.i. kernel goal items)")
+          create_peek(gb, pred, config, prec_sym, [].iter(), Some(lookahead_pairs.iter()))?.include_with_goto_state().commit(gb);
         }
       } else if lookahead_pairs.iter().to_kernel().indices().len() == 1 {
         // The same non-terminal is generated from this completed item, regardless
@@ -234,7 +234,7 @@ pub(crate) fn handle_regular_complete_groups(
               .commit(gb);
           }
           ReduceReduceConflictResolution::Reduce(item) => {
-            todo!("Handle Error: reduce result from reduce-reduce conflict resolution")
+            todo!("Reduce result from a reduce-reduce  resolution")
           }
           ReduceReduceConflictResolution::Peek(max_k, follow_pairs) => {
             create_peek(gb, pred, config, prec_sym, [].iter(), Some(follow_pairs.iter()))?.include_with_goto_state().commit(gb);

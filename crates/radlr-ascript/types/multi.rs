@@ -69,14 +69,11 @@ impl<'db> AscriptMultis<'db> {
 
           let name = db.db.nonterm_friendly_name(*name).to_string(db.db.string_store());
 
-          AscriptMulti {
-            name: format!("{}_Value", name),
-            requires_template: types.iter().any(|t| t.requires_template(db)),
-            types,
-            used,
-            root,
-            converts_from: converts.iter().cloned().filter(|j| *j != remapped_index && *j != i).collect(),
-          }
+          let converts_from = converts.iter().cloned().filter(|j| *j != remapped_index && *j != i).collect();
+          let name = format!("{}_Value", name);
+          let requires_template = types.iter().any(|t| t.requires_template(db));
+
+          AscriptMulti { name, requires_template, types, used, root, converts_from }
         })
         .collect(),
     }

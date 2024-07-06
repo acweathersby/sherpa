@@ -29,7 +29,7 @@ pub fn build(db: &RadlrDatabase, build_config: BuildConfig, parser_config: Parse
   } */
 
   if build_config.build_ast {
-    build_ast_source(db, SCRIPT, ast_path, build_config)?;
+    build_ast_source(db, SCRIPT, ast_path, build_config, &[])?;
   }
 
   Ok(())

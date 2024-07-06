@@ -47,6 +47,30 @@ pub fn build_parse_states_from_source_str<'a, T>(
   }
 }
 
+pub fn build_parse_states_from_multi_sources2<'a, T>(
+  sources: &[&str],
+  source_path: PathBuf,
+  optimize: bool,
+  test_fn: &dyn Fn(TestPackage) -> RadlrResult<T>,
+  config: ParserConfig,
+) -> RadlrResult<T> {
+  let mut grammar = RadlrGrammar::new();
+
+  #[cfg(not(feature = "wasm-target"))]
+  let pool = crate::types::worker_pool::StandardPool::new_with_max_workers()?;
+
+  #[cfg(feature = "wasm-target")]
+  let pool = crate::types::worker_pool::SingleThreadPool {};
+
+  grammar.add_source(source_path.clone())?;
+
+  if optimize {
+    test_fn(grammar.build_db(source_path, config)?.build_states(config, &pool)?.build_ir_parser(true, false, &pool)?.into())
+  } else {
+    test_fn(grammar.build_db(source_path, config)?.build_states(config, &pool)?.build_ir_parser(false, false, &pool)?.into())
+  }
+}
+
 pub fn build_parse_states_from_multi_sources<'a, T>(
   sources: &[&str],
   source_path: PathBuf,

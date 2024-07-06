@@ -10,7 +10,8 @@ members = [
     "./crates/radlr-test",
     "./crates/radlr-formatter",
     "./crates/radlr-ascript",
-    "./crates/radlr-parser",
+    "./crates/radlr-frontend",
+    "./crates/radlr-core-common",
 ]
 
 exclude = [
@@ -25,3 +26,7 @@ debug = 2
 [profile.release]
 opt-level=3
 debug = 0
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
