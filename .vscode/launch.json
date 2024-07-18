@@ -1,12 +1,27 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-             "name": "GDB64",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${workspaceFolder}/target/debug/test_basic_grammar_llvm_bin",
-            "cwd": "${workspaceFolder}",
-        },
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GDB64",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/target/debug/test_basic_grammar_llvm_bin",
+      "cwd": "${workspaceFolder}",
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug UI (Release)",
+      "program": "${workspaceFolder}/target/release-with-debug/radlr",
+      "args": [
+        "build",
+        "-o",
+        "test",
+        "-n",
+        "json",
+        "./grammars/radlr/2.0.0/grammar.sg"
+      ],
+      "cwd": "${workspaceFolder}"
+    },
+  ]
 }

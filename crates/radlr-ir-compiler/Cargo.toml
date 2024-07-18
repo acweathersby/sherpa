@@ -1,0 +1,15 @@
+[package]
+name = "radlr_ir_compiler"
+version = "1.0.1-beta1"
+edition = "2021"
+
+[lib]
+path = "./lib.rs"
+
+[dependencies]
+radlr_rust_runtime   = { path="../radlr-rust-runtime" }
+radlr_core_common    = { path="../radlr-core-common" }
+radlr_compiler_frontend = { path="../radlr-frontend" }
+
+
+

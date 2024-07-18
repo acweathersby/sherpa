@@ -11,6 +11,7 @@ members = [
     "./crates/radlr-formatter",
     "./crates/radlr-ascript",
     "./crates/radlr-frontend",
+    "./crates/radlr-ir-compiler",
     "./crates/radlr-core-common",
 ]
 

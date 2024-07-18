@@ -105,7 +105,7 @@ fn handle_cst_actions(gb: &mut ConcurrentGraphBuilder, pred: &SharedGraphNode, c
 }
 
 /// Iterate over each item's closure and collect the terminal transition symbols
-/// of each item. The item's are then catagorized by these nonterminal symbols.
+/// of each item. The item's are then categorized by these nonterminal symbols.
 /// Completed items are catagorized by the default symbol.
 fn get_firsts(gb: &mut ConcurrentGraphBuilder, pred: &GraphNode, config: &ParserConfig) -> RadlrResult<GroupedFirsts> {
   let mut oos_scan_completed_tokens = OrderedSet::<PrecedentDBTerm>::new();

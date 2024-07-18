@@ -320,6 +320,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "radlr_ir_compiler"
+version = "1.0.1-beta1"
+dependencies = [
+ "radlr_compiler_frontend",
+ "radlr_core_common",
+ "radlr_rust_runtime",
+]
+
+[[package]]
 name = "radlr_llvm"
 version = "1.0.1-beta1"
 dependencies = [

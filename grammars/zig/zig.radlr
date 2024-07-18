@@ -1,0 +1,389 @@
+IGNORE { c:sp c:nl }
+
+<> Root > doc_comment? ContainerMembers $
+
+// *** Top level ***
+<> ContainerMembers > ContainerDeclarations (ContainerField)(*",") (ContainerField | ContainerDeclarations)
+
+<> ContainerDeclarations > (TestDecl | ComptimeDecl | doc_comment? "pub"? Decl)+
+
+<> TestDecl > "test" (STRINGLITERALSINGLE | IDENTIFIER)? Block
+
+<> ComptimeDecl > "comptime" Block
+
+<> Decl
+     > ( "export" | "extern" STRINGLITERALSINGLE? | "inline" | "noinline")? FnProto ( ";" | Block)
+     | ( "export" | "extern" STRINGLITERALSINGLE?)? "threadlocal"? GlobalVarDecl
+     | "usingnamespace" Expr ";:"
+
+<> FnProto > "fn" IDENTIFIER? "(" ParamDeclList ")" ByteAlign? AddrSpace? LinkSection? CallConv? "!"? TypeExpr
+
+<> VarDeclProto > ("const" | "var") IDENTIFIER (":" TypeExpr)? ByteAlign? AddrSpace? LinkSection?
+
+<> GlobalVarDecl > VarDeclProto ("=" Expr)? ";:"
+
+<> ContainerField > doc_comment? "comptime"? "fn" (IDENTIFIER ":")? TypeExpr ByteAlign? ("=" Expr)?
+
+// *** Block Level ***
+<> Statement
+     > "comptime" ComptimeStatement
+     | "nosuspend" BlockExprStatement
+     | "suspend" BlockExprStatement
+     | "defer" BlockExprStatement
+     | "errdefer" Payload? BlockExprStatement
+     | IfStatement
+     | LabeledStatement
+     | SwitchExpr
+     | VarDeclExprStatement
+
+<> ComptimeStatement
+     > BlockExpr
+     | VarDeclExprStatement
+
+<> IfStatement
+     > IfPrefix BlockExpr ( "else" Payload? Statement )?
+     | IfPrefix AssignExpr ( ";:" | "else" Payload? Statement )
+
+<> LabeledStatement > BlockLabel? (Block | LoopStatement)
+
+<> LoopStatement > "inline"? (ForStatement | WhileStatement)
+
+<> ForStatement
+     > ForPrefix BlockExpr ( "else" Statement )?
+     | ForPrefix AssignExpr ( ";:" | "else" Statement )
+
+<> WhileStatement
+     > WhilePrefix BlockExpr ( "else" Payload? Statement )?
+     | WhilePrefix AssignExpr ( ";:" | "else" Payload? Statement )
+
+<> BlockExprStatement
+     > BlockExpr
+     | AssignExpr ";:"
+
+<> BlockExpr > BlockLabel? Block
+
+// An expression, assignment, or any destructure, as a statement.
+
+<> VarDeclExprStatement
+     > VarDeclProto ("," (VarDeclProto | Expr))* "=" Expr ";:"
+     | Expr (AssignOp Expr | ("," (VarDeclProto | Expr))+ "=" Expr)? ";:"
+
+// *** Expression Level ***
+
+// An assignment or a destructure whose LHS are all lvalue expressions.
+
+<> AssignExpr > Expr (AssignOp Expr | ("," Expr)+ "=" Expr)?
+
+<> SingleAssignExpr > Expr (AssignOp Expr)?
+
+<> Expr > BoolOrExpr
+
+<> BoolOrExpr > BoolAndExpr ("or" BoolAndExpr)*
+
+<> BoolAndExpr > CompareExpr ("and" CompareExpr)*
+
+<> CompareExpr > BitwiseExpr (CompareOp BitwiseExpr)?
+
+<> BitwiseExpr > BitShiftExpr (BitwiseOp BitShiftExpr)*
+
+<> BitShiftExpr > AdditionExpr (BitShiftOp AdditionExpr)*
+
+<> AdditionExpr > MultiplyExpr (AdditionOp MultiplyExpr)*
+
+<> MultiplyExpr > PrefixExpr (MultiplyOp PrefixExpr)*
+
+<> PrefixExpr > PrefixOp* PrimaryExpr
+
+<> PrimaryExpr
+     > AsmExpr
+     | IfExpr
+     | "break" BreakLabel? Expr?
+     | "comptime" Expr
+     | "nosuspend" Expr
+     | "continue" BreakLabel?
+     | "resume" Expr
+     | "return" Expr?
+     | BlockLabel? LoopExpr
+     | Block
+     | CurlySuffixExpr
+
+<> IfExpr > IfPrefix Expr ("else" Payload? Expr)?
+
+<> Block > "{" Statement* "}"
+
+<> LoopExpr > "inline"? (ForExpr | WhileExpr)
+
+<> ForExpr > ForPrefix Expr ("else" Expr)?
+
+<> WhileExpr > WhilePrefix Expr ("else" Payload? Expr)?
+
+<> CurlySuffixExpr > TypeExpr InitList?
+
+<>  InitList
+     > "{" FieldInit(+",") ","? "}"
+     | "{" Expr("," Expr)(+",") ","? "}"
+     | "{" "}"
+
+<> TypeExpr > PrefixTypeOp* ErrorUnionExpr
+
+<> ErrorUnionExpr > SuffixExpr ("!" TypeExpr)?
+
+<> SuffixExpr
+     > "async" PrimaryTypeExpr SuffixOp* FnCallArguments
+     | PrimaryTypeExpr (SuffixOp | FnCallArguments)*
+
+<> PrimaryTypeExpr
+     > IDENTIFIER FnCallArguments
+     | CHAR_LITERAL
+     | ContainerDecl
+     | "." IDENTIFIER
+     | "." InitList
+     | ErrorSetDecl
+     | INTEGER
+     | FnProto
+     | GroupedExpr
+     | LabeledTypeExpr
+     | IDENTIFIER
+     | IfTypeExpr
+     | INTEGER
+     | "comptime" TypeExpr
+     | "error" "." IDENTIFIER
+     | "anyframe"
+     | "unreachable"
+     | STRINGLITERAL
+     | SwitchExpr
+
+<> ContainerDecl > ("extern" | "packed")? ContainerDeclAuto
+
+<> ErrorSetDecl > "error" "{" IdentifierList? "}"
+
+<> GroupedExpr > "(" Expr ")"
+
+<> IfTypeExpr > IfPrefix TypeExpr ("else" Payload? TypeExpr)?
+
+<>  LabeledTypeExpr
+     > BlockLabel Block
+     | BlockLabel? LoopTypeExpr
+
+<> LoopTypeExpr > "inline"? (ForTypeExpr | WhileTypeExpr)
+
+<> ForTypeExpr > ForPrefix TypeExpr ("else" TypeExpr)?
+
+<> WhileTypeExpr > WhilePrefix TypeExpr ("else" Payload? TypeExpr)?
+
+<> SwitchExpr > "switch" "(" Expr ")" "{" SwitchProngList? "}"
+
+// *** Assembly ***
+<> AsmExpr > "asm" "volatile"? "(" Expr AsmOutput? ")"
+
+<> AsmOutput > ":" AsmOutputList? AsmInput?
+
+<> AsmOutputItem > "{" IDENTIFIER "}" STRINGLITERAL "(" ("->" TypeExpr | IDENTIFIER) ")"
+
+<> AsmInput > ":" AsmInputList? AsmClobbers?
+
+<> AsmInputItem > "{" IDENTIFIER "}" STRINGLITERAL "(" Expr ")"
+
+<> AsmClobbers > ":" StringList?
+
+// *** Helper grammar ***
+<> BreakLabel > ":" IDENTIFIER
+
+<> BlockLabel > IDENTIFIER ":"
+
+<> FieldInit > "." IDENTIFIER "=" Expr
+
+<> WhileContinueExpr > ":" "(" AssignExpr ")"
+
+<> LinkSection > "linksection" "(" Expr ")"
+
+<> AddrSpace > "addrspace" "(" Expr ")"
+
+// Fn specific
+<> CallConv > "callconv" "(" Expr ")"
+
+<> ParamDecl
+     > doc_comment? ("noalias" | "comptime")? (IDENTIFIER ":")? ParamType
+     | "..."
+
+<> ParamType
+     > "anytype"
+     | TypeExpr
+
+// Control flow prefixes
+<> IfPrefix > "if" "(" Expr ")" PtrPayload?
+
+<> WhilePrefix > "while" "(" Expr ")" PtrPayload? WhileContinueExpr?
+
+<> ForPrefix > "for" "(" ForArgumentsList ")" PtrListPayload
+
+// Payloads
+<> Payload > "|" IDENTIFIER "|"
+
+<> PtrPayload > "|" "*"? IDENTIFIER "|"
+
+<> PtrIndexPayload > "|" "*"? IDENTIFIER ("," IDENTIFIER)? "|"
+
+<> PtrListPayload > "|" "*"? IDENTIFIER ("," "*"? IDENTIFIER)* ","? "|"
+
+// Switch specific
+<> SwitchProng > "inline"? SwitchCase "=>" PtrIndexPayload? SingleAssignExpr
+
+<> SwitchCase
+     > SwitchItem ("," SwitchItem)* ","?
+     | "else"
+
+<> SwitchItem > Expr ("..." Expr)?
+
+// For specific
+<> ForArgumentsList > ForItem ("," ForItem)* ","?
+
+<> ForItem > Expr (".." Expr?)?
+
+// Operators
+<> AssignOp
+     > "*="
+     | "*|="
+     | "/="
+     | "%="
+     | "+="
+     | "+|="
+     | "-="
+     | "-|="
+     | ">>="
+     | ">>|="
+     | "<<="
+     | "&="
+     | "^="
+     | "|"
+     | "*%="
+     | "+%="
+     | "-%="
+     | "="
+
+<> CompareOp
+     > "=="
+     | "!="
+     | "<"
+     | ">"
+     | "<="
+     | ">="
+
+<> BitwiseOp
+     > "&"
+     | "^"
+     | "|"
+     | "orelse"
+     | "catch" Payload?
+
+<> BitShiftOp
+    > ">>"
+     | "<<"
+     | "<<|"
+
+<> AdditionOp
+    > "+"
+     | "-"
+     | "++"
+     | "+%"
+     | "-%"
+     | "+|"
+     | "-|"
+
+<> MultiplyOp
+     > "||"
+     | "*"
+     | "/"
+     | "%"
+     | "**"
+     | "*%"
+     | "*|"
+
+<> PrefixOp
+     > "!"
+     | "-"
+     | "~"
+     | "-%"
+     | "&"
+     | "try"
+     | "await"
+
+<> PrefixTypeOp
+     > "?"
+     | "anyframe" "->"
+     | SliceTypeStart (ByteAlign | AddrSpace | "const" | "volatile" | "allow_zero")*
+     | PtrTypeStart (AddrSpace | "align" "(" Expr (":" Expr ":" Expr)? ")" | "const" | "volatile" | "allow_zero")*
+     | ArrayTypeStart
+
+<> SuffixOp
+     > "{" Expr (".." (Expr? (":" Expr)?)?)? "}"
+     | "." IDENTIFIER
+     | ".*"
+     | ".?"
+
+<> FnCallArguments > "(" ExprList? ")"
+
+// Ptr specific
+<> SliceTypeStart > "{" (":" Expr)? "}"
+
+<> PtrTypeStart
+     > "*"
+     | "**"
+     | "{" "*" (tk:("C" | "c") | ":" Expr)? "}"
+
+<> ArrayTypeStart > "{" Expr (":" Expr)? "}"
+
+// ContainerDecl specific
+<> ContainerDeclAuto > ContainerDeclType "{" doc_comment? ContainerMembers "}"
+
+<> ContainerDeclType
+     > "struct" ("(" Expr ")")?
+     | "opaque"
+     | "enum" ("(" Expr ")")?
+     | "union" ("(" ("enum" ("(" Expr ")")? | Expr) ")")?
+
+// Alignment
+<> ByteAlign > "align" "(" Expr ")"
+
+// Lists
+<> IdentifierList > (doc_comment? IDENTIFIER)(+",")
+
+<> SwitchProngList > (SwitchProng)(+",")
+
+<> AsmOutputList > (AsmOutputItem)(+",")
+
+<> AsmInputList > (AsmInputItem)(+",")
+
+<> StringList > (STRINGLITERAL)(+",")
+
+<> ParamDeclList > (ParamDecl)(+",") ParamDecl?
+
+<> ExprList > (Expr)(+",") Expr?
+
+
+<> doc_comment > tk:("|||" ( c:num | c:id | c:sym )* (c:sp | c:nl)* )+
+
+<> IDENTIFIER 
+
+  > tk:( ( "-" | "_" | c:id ) ( c:id | '_' | '-' | c:num )(*) )
+
+<> STRINGLITERAL 
+
+  > tk:( "\"" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\"" )
+
+<> STRINGLITERALSINGLE
+
+  > tk:( "\"" ( c:id | c:num | c:nl | c:sym | c:sp | escaped ) "\"" )
+
+<> CHAR_LITERAL
+
+  > tk:( "\'" ( c:id | c:num | c:nl | c:sym | c:sp | escaped ) "\'" )
+
+
+<> escaped 
+
+  > "\\"{:9999} ( c:sym | c:num | c:sp | c:id )
+
+<> INTEGER
+
+  > tk:( "-"? c:num(+) )

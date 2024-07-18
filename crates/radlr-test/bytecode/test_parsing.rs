@@ -5,6 +5,7 @@ use crate::{
     TestParser,
     _write_disassembly_to_temp_file_,
     _write_states_to_temp_file_,
+    compile_and_run_grammars2,
   },
   *,
 };
@@ -778,6 +779,20 @@ fn json_parser() -> RadlrResult<()> {
   compile_and_run_grammars(
     &[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()],
     &[("default", r##"[]"##, true), ("default", r##"{"test":[{ "test":"12\"34", "test":"12\"34"}]}"##, true)],
+    Default::default(),
+  )
+}
+
+#[test]
+fn rum_raw_parser() -> RadlrResult<()> {
+  let grammar_source_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    .join("../../../lib_rum_common/crates/language/grammar/raw/raw.radlr")
+    .canonicalize()
+    .unwrap();
+  compile_and_run_grammars2(
+    &[std::fs::read_to_string(grammar_source_path.as_path())?.as_str()],
+    grammar_source_path,
+    &[("raw_expression", r##"2+2"##, true), ("raw_expression", r##"2*8"##, true)],
     Default::default(),
   )
 }

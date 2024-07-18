@@ -63,7 +63,8 @@ pub(crate) fn create_call<'a, T: TransitionPairRefIter<'a> + Clone>(
   }
 
   // We'll need to climb the closure graph to find the highest mutual non-terminal
-  // that is not left recursive. This is only allowed if the system allows LR
+  // that is not left recursive. This is only allowed if the system allows BU
+  // parsing
   if !____allow_ra____ {
     return None;
   };

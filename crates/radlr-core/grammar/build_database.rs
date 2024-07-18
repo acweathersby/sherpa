@@ -581,8 +581,9 @@ fn extract_nterm_syms(
             // We've already merged in the non-terminal's sub-nonterminals
           }
         },
-        SymbolId::NonTerminalToken { id, .. } => {
-          let name = o_to_r(nonterminals.get(&id.as_parse_prod()), "Non-terminal not found")?.guid_name;
+        SymbolId::NonTerminalToken { id } => {
+          let name =
+            o_to_r(nonterminals.get(&id.as_parse_prod()), format!("Non-terminal not found,  {id:?}").as_str())?.guid_name;
           let name = ("tk:".to_string() + &name.to_string(s_store)).intern(s_store);
           insert_symbol(symbols, &sym, tok.clone());
           token_names.insert(id.as_parse_prod().as_tok_sym(), name);

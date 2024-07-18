@@ -1,5 +1,5 @@
 use super::{grammar_object_ids::GrammarIdentities, rule::Rule, *};
-use crate::{grammar_db_compiler::ASTToken, types::item::*};
+use crate::{array_vec::ArrayVec, grammar_db_compiler::ASTToken, types::item::*};
 use radlr_core_common::{CachedString, OrderedMap, OrderedSet};
 use radlr_rust_runtime::types::TokenRange;
 use std::{collections::VecDeque, sync::Arc};
@@ -22,7 +22,7 @@ pub struct ParserDatabase {
   /// their bodies.
   pub nonterm_symbol_to_rules: OrderedMap<DBNonTermKey, OrderedSet<DBRuleKey>>,
   /// Table mapping non-terminal indices to rule indices.
-  pub nonterm_nterm_rules:     Vec<Vec<DBRuleKey>>,
+  pub nonterm_rules:           Vec<Vec<DBRuleKey>>,
   /// Table of all rules within the grammar and the non-terminal they reduce
   /// to.
   pub rules:                   Vec<Rule>,
@@ -42,11 +42,13 @@ pub struct ParserDatabase {
   pub follow_items:            Vec<Vec<ItemIndex>>,
   /// Item closures, stores the closure of all items, excluding the closure's of
   /// items that are complete.
-  pub item_closures:           Vec<Vec<Vec<ItemIndex>>>,
+  pub item_closures:           Vec<Vec<ArrayVec<4, Item>>>,
   ///NonTerminal Recursion Type
   pub recursion_types:         Vec<u8>,
   /// Reduction types
   pub reduction_types:         Vec<ReductionType>,
+  /// Sets of skipped symbols
+  pub skip_sets:               Vec<OrderedSet<SymbolId>>,
 }
 
 impl AsRef<[Rule]> for ParserDatabase {
@@ -195,11 +197,11 @@ impl ParserDatabase {
     self.tokens.get(key.0 as usize).map(|s| s.sym_id).unwrap_or_default()
   }
 
-  /// Given a nonterm [DBNonTermKey] returns an [Vec] of [DBRuleKey]
+  /// Given a nonterm [DBNonTermKey] returns an [Vec] of [DBRuleKey]s
   /// belonging to rules that reduce to that nonterm, or `None` if the id is
   /// invalid.
-  pub fn nonterm_rules(&self, key: DBNonTermKey) -> Option<&Vec<DBRuleKey>> {
-    self.nonterm_nterm_rules.get(key.0 as usize)
+  pub fn nonterm_producing_rules(&self, key: DBNonTermKey) -> Option<&Vec<DBRuleKey>> {
+    self.nonterm_rules.get(key.0 as usize)
   }
 
   /// Returns the internal Rules
@@ -260,12 +262,9 @@ impl ParserDatabase {
   /// > note: The closure does not include the item used as the seed for the
   /// > closure.
   #[inline]
-  pub fn get_closure<'db>(&'db self, item: &Item) -> impl ItemContainerIter + 'db {
+  pub fn get_closure<'db>(&'db self, item: &Item) -> &[Item] {
     let item = *item;
-    self.item_closures[item.rule_id().0 as usize][item.sym_index() as usize].iter().map(move |s| {
-      let item = Item::from((*s, self.as_ref())).as_from(item);
-      item
-    })
+    &self.item_closures[item.rule_id().0 as usize][item.sym_index() as usize].as_slice()
   }
 
   /// Returns all regular (non token) nonterminals.

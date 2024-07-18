@@ -6,9 +6,9 @@ use crate::types::*;
 pub type RadlrResult<T> = std::result::Result<T, RadlrError>;
 
 /// Converts an Option to a RadlrResult
-pub fn o_to_r<T>(result: Option<T>, error_msg: &'static str) -> RadlrResult<T> {
+pub fn o_to_r<T>(result: Option<T>, error_msg: &str) -> RadlrResult<T> {
   match result {
     Some(r) => Ok(r),
-    None => Err(RadlrError::StaticText(error_msg)),
+    None => Err(RadlrError::Text(error_msg.to_string())),
   }
 }

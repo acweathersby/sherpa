@@ -15,102 +15,6 @@ pub enum ItemType {
   Completed(DBNonTermKey),
 }
 
-/// Indicates the State type that generated
-/// the item
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-#[allow(non_camel_case_types)]
-pub enum Origin {
-  None,
-  /// The goal non-terminal that this item or it's predecessors will reduce to
-  NonTermGoal(DBNonTermKey),
-  /// The goal symbol id that this item or its predecessors will recognize
-  TerminalGoal(DBTermKey, u16),
-  /// The hash and state of the goal items set the peek item will resolve to
-  Peek(u32),
-  Fork(DBRuleKey),
-  Closure,
-  Goto,
-  __OOS_CLOSURE__,
-  __OOS_ROOT__,
-  __OOS_SCANNER_ROOT__(PrecedentDBTerm),
-  /// Generated when the a goal non-terminal is completed.
-  /// Goal non-terminals are determined by the
-  /// root state (`StateId(0)`) kernel items
-  GoalCompleteOOS,
-}
-
-impl Hash for Origin {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    match self {
-      Origin::Peek(resolve_id) => resolve_id.hash(state),
-      Origin::TerminalGoal(resolve_id, prec) => {
-        resolve_id.hash(state);
-        prec.hash(state);
-      }
-      Origin::Fork(resolve_id) => {
-        resolve_id.hash(state);
-      }
-      _ => {}
-    }
-
-    std::mem::discriminant(self).hash(state)
-  }
-}
-
-impl Default for Origin {
-  fn default() -> Self {
-    Self::None
-  }
-}
-
-impl Origin {
-  #[cfg(debug_assertions)]
-  pub fn _debug_string_(&self) -> String {
-    match self {
-      Origin::NonTermGoal(nterm) => {
-        format!("NonTermGoal[ {:?} ]", nterm)
-      }
-      Origin::TerminalGoal(sym_id, prec) => {
-        format!("TerminalGoal[ {:?} {prec} ]", sym_id)
-      }
-      _ => format!("{:?}", self),
-    }
-  }
-
-  pub fn is_none(&self) -> bool {
-    matches!(self, Origin::None)
-  }
-
-  pub fn is_out_of_scope(&self) -> bool {
-    matches!(self, Origin::GoalCompleteOOS | Origin::__OOS_CLOSURE__ | Origin::__OOS_ROOT__ | Origin::__OOS_SCANNER_ROOT__(..))
-  }
-
-  pub fn is_scanner_oos(&self) -> bool {
-    matches!(self, Origin::__OOS_SCANNER_ROOT__(..))
-  }
-
-  pub fn get_symbol(&self, db: &ParserDatabase) -> SymbolId {
-    match self {
-      Origin::TerminalGoal(sym_id, ..) => db.sym(*sym_id),
-      _ => SymbolId::Undefined,
-    }
-  }
-
-  pub fn get_symbol_key(&self) -> DBTermKey {
-    match self {
-      Origin::TerminalGoal(sym_id, ..) => *sym_id,
-      _ => DBTermKey::default(),
-    }
-  }
-
-  pub fn is_oos(&self) -> bool {
-    match self {
-      Self::__OOS_ROOT__ | Self::__OOS_CLOSURE__ | Self::__OOS_SCANNER_ROOT__(..) => true,
-      _ => false,
-    }
-  }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ItemHeritage {
   index: ItemIndex,
@@ -130,7 +34,7 @@ impl From<&Item> for ItemHeritage {
 }
 
 /// Stores an item in a compact form.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct ItemIndex(u32);
 
 impl ItemIndex {
@@ -210,30 +114,26 @@ pub struct ItemLane {
   curr: u32,
 }
 
-#[derive(Clone, Copy)]
-#[repr(align(32))]
+#[derive(Clone, Copy, Default)]
+#[repr(align(8))]
 pub struct Item {
-  /// The form of the state the item's initial position originates from.
-  pub origin:           Origin,
-  /// The graph state the item originated from
-  pub origin_state:     StateId,
   pub index:            ItemIndex,
   pub from:             ItemIndex,
   pub len:              u16,
-  pub goto_distance:    u8,
+  pub goto_distance:    u16,
   pub from_goto_origin: bool,
 }
 
 impl Hash for Item {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.index, self.from, self.origin, self.origin_state).hash(state)
+    (self.index, self.from).hash(state)
   }
 }
 
 impl PartialEq for Item {
   fn eq(&self, other: &Self) -> bool {
-    let a = (self.index, self.origin, self.from, self.origin_state);
-    let b = (other.index, other.origin, other.from, other.origin_state);
+    let a = (self.index, self.from);
+    let b = (other.index, other.from);
     a == b
   }
 }
@@ -242,8 +142,8 @@ impl Eq for Item {}
 
 impl PartialOrd for Item {
   fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    let a = (self.origin, self.index, self.from, self.origin_state);
-    let b = (other.origin, other.index, other.from, other.origin_state);
+    let a = (self.index, self.from);
+    let b = (other.index, other.from);
     Some(a.cmp(&b))
   }
 }
@@ -257,15 +157,7 @@ impl Ord for Item {
 impl From<(ItemIndex, &[Rule])> for Item {
   /// Creates an item from an [ItemIndex] and its corresponding [ParserDatabase]
   fn from((index, rules): (ItemIndex, &[Rule])) -> Self {
-    let mut item = Self {
-      origin: Default::default(),
-      origin_state: StateId::default(),
-      index,
-      from: index,
-      len: 0,
-      goto_distance: 0,
-      from_goto_origin: false,
-    };
+    let mut item = Self { index, from: index, len: 0, goto_distance: 0, from_goto_origin: false };
     item.len = item.rule(rules).symbols.len() as u16;
     item
   }
@@ -373,11 +265,6 @@ impl Item {
     self.index.get_parts().1
   }
 
-  #[inline]
-  pub fn is_oos(&self) -> bool {
-    self.origin.is_oos()
-  }
-
   /// Returns true if the rule of this item has some form of direct
   /// or indirect recursion.
   #[inline]
@@ -447,15 +334,6 @@ impl Item {
     match mode {
       GraphType::Parser => self.symbol_precedence(rules),
       GraphType::Scanner => self.token_precedence(rules),
-    }
-  }
-
-  /// The precedence of this items origin if this item has a
-  /// [Origin::TerminalGoal] origin type.
-  pub fn origin_precedence(&self) -> u16 {
-    match self.origin {
-      Origin::TerminalGoal(_, prec) => prec,
-      _ => 0,
     }
   }
 
@@ -586,11 +464,6 @@ impl Item {
   }
 
   #[inline]
-  pub fn to_origin(&self, origin: Origin) -> Self {
-    Self { origin, ..self.clone() }
-  }
-
-  #[inline]
   pub fn as_from(&self, other: Self) -> Self {
     Self { from: other.index, ..self.clone() }
   }
@@ -603,11 +476,6 @@ impl Item {
   #[inline]
   pub fn to_extend_from(&self) -> Self {
     Self { from: ItemIndex::oos(), ..self.clone() }
-  }
-
-  #[inline]
-  pub fn to_origin_state(&self, origin_state: StateId) -> Self {
-    Self { origin_state, ..self.clone() }
   }
 
   #[inline]
@@ -638,45 +506,10 @@ impl Item {
     Self { index: self.index, len: self.len, ..other.clone() }
   }
 
-  #[inline]
-  pub fn is_canonical(&self) -> bool {
-    *self == self.to_canonical()
-  }
-
-  #[inline]
-  pub fn to_canonical(&self) -> Self {
-    Self {
-      origin: Default::default(),
-      origin_state: StateId::default(),
-      goto_distance: 0,
-      from_goto_origin: false,
-      ..self.clone()
-    }
-  }
-
   /// Increment the goto counter, which tracks the number of GOTO states that
   /// proceed the state this item originates from.
   pub(crate) fn increment_goto(&self) -> Self {
     return Self { goto_distance: self.goto_distance + 1, ..self.clone() };
-  }
-
-  /// Returns an iterator over this item's closure.
-  /// > note: The closure will be over canonical items, except fo the kernel
-  /// > item `self`
-  pub fn closure_iter<'db>(&self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
-    [*self].into_iter().chain(db.get_closure(self))
-  }
-
-  /// Same as `Item::closure_iter`, except takes an extra `Item` as an
-  /// argument, from which the meta attributes will be assigned to the closure
-  /// items (note: the kernel item `self` is left untouched.)
-  pub fn closure_iter_align<'db>(&self, other: Self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
-    [*self].into_iter().chain(db.get_closure(self).map(move |i| i.align(&other)))
-  }
-
-  pub fn closure_iter_align_with_lane_split<'db>(&self, other: Self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
-    let from = self.index;
-    [*self].into_iter().chain(db.get_closure(self).map(move |i| i.align(&other).as_from_index(from)))
   }
 
   // --------------- DEBUGGING ORIENTED METHODS
@@ -702,13 +535,13 @@ impl Item {
     if self.is_null() {
       "null".to_string()
     } else {
-      #[cfg(debug_assertions)]
+      /*       #[cfg(debug_assertions)]
       let mut string = self
         .origin
         .is_none()
         .then_some(String::new())
-        .unwrap_or_else(|| format!("<[{}-{:?}]  ", self.origin._debug_string_(), self.origin_state));
-      #[cfg(not(debug_assertions))]
+        .unwrap_or_else(|| format!("<[{}-{:?}]  ", self.origin._debug_string_(), self.origin_state)); */
+
       let mut string = String::new();
 
       string += &("( ".to_string() + &self.index._debug_string_() + " ");
@@ -719,13 +552,13 @@ impl Item {
         string += ") ";
       }
 
-      if !self.is_canonical() {
+      /*       if !self.is_canonical() {
         if self.from_goto_origin {
           string += &(" @".to_string() + &("[".to_string() + &self.goto_distance.to_string() + "] "));
         } else {
           string += &("[".to_string() + &self.goto_distance.to_string() + "] ");
         }
-      }
+      } */
 
       string.replace("\n", "\\n")
     }
@@ -756,14 +589,14 @@ impl Item {
 
         string += &i.sym_id(db.rules()).debug_string(db);
 
-        if !self.is_canonical() {
+        /*       if !self.is_canonical() {
           string += &match (i.symbol_precedence(db.rules()), i.token_precedence(db.rules())) {
             (0, 0) => String::default(),
             (sym, 0) => "{".to_string() + &sym.to_string() + "}",
             (0, tok) => "{:".to_string() + &tok.to_string() + "}",
             (sym, tok) => "{".to_string() + &sym.to_string() + ":" + &tok.to_string() + "}",
           };
-        }
+        } */
 
         item = i.increment();
       }
@@ -775,396 +608,4 @@ impl Item {
       string.replace("\n", "\\n")
     }
   }
-}
-
-/// Represents either a FIRST or a FOLLOW depending on whether the root item
-/// is incomplete or not.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct TransitionPair {
-  pub kernel:       Item,
-  pub next:         Item,
-  pub sym:          SymbolId,
-  pub allow_assign: bool,
-  pub prec:         u16,
-}
-
-pub type Lookahead = TransitionPair;
-pub type Lookaheads = Vec<Lookahead>;
-
-impl TransitionPair {
-  pub fn is_kernel_terminal(&self) -> bool {
-    !self.is_eoi_complete() && self.kernel.index == self.next.index
-  }
-
-  /// True if the kernel item is the same as the next item, and both are
-  /// complete. Indicates a situation where the item has reached some goal
-  /// state and the FOLLOW set is empty.
-  pub fn is_eoi_complete(&self) -> bool {
-    self.kernel.is_complete() && self.kernel.index == self.next.index
-  }
-
-  pub fn is_out_of_scope(&self) -> bool {
-    self.kernel.is_oos()
-  }
-
-  #[cfg(debug_assertions)]
-  pub fn _debug_string_(&self, db: &ParserDatabase) -> String {
-    format!(
-      "\nsym {}{{{}}} oos:{}\n  base: {}\n  next: {}",
-      self.sym.debug_string(db),
-      self.prec,
-      self.is_out_of_scope(),
-      self.kernel._debug_string_w_db_(db),
-      self.next._debug_string_w_db_(db)
-    )
-  }
-}
-
-impl From<(Item, Item, GraphType, &[Rule])> for TransitionPair {
-  fn from((root, next, mode, rules): (Item, Item, GraphType, &[Rule])) -> Self {
-    Self {
-      kernel: root,
-      next,
-      allow_assign: true,
-      sym: if next.is_complete() { SymbolId::Default } else { next.sym_id(rules) },
-      prec: next.precedence(mode, rules),
-    }
-  }
-}
-
-impl From<(&Item, &Item, GraphType, &[Rule])> for TransitionPair {
-  fn from((root, next, mode, rules): (&Item, &Item, GraphType, &[Rule])) -> Self {
-    (*root, *next, mode, rules).into()
-  }
-}
-
-pub trait TransitionPairIter: Iterator<Item = TransitionPair> + Sized + Clone {
-  fn to_next(self) -> StackVec<32, Item> {
-    self.map(|i| i.next).into()
-  }
-
-  fn to_root(self) -> StackVec<32, Item> {
-    self.map(|i| i.kernel).into()
-  }
-}
-
-impl<'db, T: Iterator<Item = TransitionPair> + Sized + Clone> TransitionPairIter for T {}
-
-pub trait TransitionPairRefIter<'a>: Iterator<Item = &'a TransitionPair> + Sized + Clone {
-  fn to_next(self) -> StackVec<32, &'a Item> {
-    self.map(|i| &i.next).into()
-  }
-
-  fn to_kernel(self) -> StackVec<32, &'a Item> {
-    self.map(|i| &i.kernel).into()
-  }
-
-  fn max_precedence(self) -> u16 {
-    self.map(|i| i.prec).max().unwrap_or_default()
-  }
-
-  fn in_scope(self) -> StackVec<32, &'a TransitionPair> {
-    self.filter(|i| !i.is_out_of_scope()).into()
-  }
-
-  fn out_scope(self) -> StackVec<32, &'a TransitionPair> {
-    self.filter(|i| i.is_out_of_scope()).into()
-  }
-
-  fn kernel_nonterm_sym(self, mode: GraphType, rules: &[Rule]) -> BTreeSet<Option<DBNonTermKey>> {
-    self.map(|p| p.kernel.nonterm_index_at_sym(mode, rules)).collect()
-  }
-
-  #[cfg(debug_assertions)]
-  fn _debug_print_(self, db: &ParserDatabase, message: &str) {
-    eprintln!("=====> {}\n{}\n=====<\n", message, self._debug_string_(db))
-  }
-
-  #[cfg(debug_assertions)]
-  fn _debug_string_(self, db: &ParserDatabase) -> String {
-    format!("{}", self.map(|i| i._debug_string_(db)).collect::<Vec<_>>().join("\n"))
-  }
-}
-
-impl<'a: 'a, T: Iterator<Item = &'a TransitionPair> + Sized + Clone> TransitionPairRefIter<'a> for T {}
-
-pub type ItemSet = BTreeSet<Item>;
-pub type Items = Vec<Item>;
-
-impl ItemContainer for ItemSet {}
-impl ItemContainer for Items {}
-
-impl<'a: 'a, T: Clone + Iterator<Item = &'a Item>> ItemRefContainerIter<'a> for T {}
-impl<'db, T: Clone + Iterator<Item = Item>> ItemContainerIter for T {}
-
-macro_rules! common_iter_functions {
-  () => {
-    fn get_max_precedence(self, mode: GraphType, rules: &[Rule]) -> u16 {
-      match mode {
-        GraphType::Parser => self.get_max_symbol_precedence(rules),
-        GraphType::Scanner => self.get_max_token_precedence(rules),
-      }
-    }
-
-    fn get_max_origin_precedence(self) -> u16 {
-      self.map(|i| i.origin_precedence()).max().unwrap_or_default()
-    }
-
-    fn get_max_token_precedence(self, rules: &[Rule]) -> u16 {
-      self.map(|i| i.token_precedence(rules)).max().unwrap_or_default()
-    }
-
-    fn get_max_symbol_precedence(self, rules: &[Rule]) -> u16 {
-      self.map(|i| i.symbol_precedence(rules)).max().unwrap_or_default()
-    }
-
-    fn intersects(&mut self, set: &ItemSet) -> bool {
-      self.any(|i| set.contains(&i))
-    }
-
-    #[cfg(debug_assertions)]
-    fn _debug_print_(self, _comment: &str) {
-      eprintln!("------>{} \n {}", _comment, self.to_debug_string("\n\n"));
-    }
-
-    fn to_debug_string(self, sep: &str) -> String {
-      self.map(|i| i._debug_string_()).collect::<Vec<_>>().join(sep)
-    }
-
-    /// Returns the [DBNonTermKey] of the symbol in non-terminal items. Items that
-    /// do not have a nonterm as the active symbol are skipped.
-    fn nonterm_ids_at_index(self, mode: GraphType, rules: &[Rule]) -> BTreeSet<DBNonTermKey> {
-      self.filter_map(move |i| i.nonterm_index_at_sym(mode, rules)).collect()
-    }
-
-    /// Returns a set of all non-terminal ids the items reduce to.
-    fn rule_nonterm_ids(&mut self, rules: &[Rule]) -> BTreeSet<DBNonTermKey> {
-      self.map(|i| i.nonterm_index(rules)).collect()
-    }
-
-    fn peek_is_resolved(&mut self) -> bool {
-      self.all_items_are_from_same_peek_origin()
-    }
-
-    fn follow_items_are_the_same(&mut self) -> bool {
-      self.map(|i| i.index()).collect::<BTreeSet<_>>().len() == 1
-    }
-
-    fn contains_out_of_scope(&mut self) -> bool {
-      self.any(|i| i.is_oos())
-    }
-
-    fn all_are_out_of_scope(&mut self) -> bool {
-      self.all(|i| i.is_oos())
-    }
-
-    fn all_items_are_from_same_peek_origin(&mut self) -> bool {
-      let origin_set = self.map(|i| i.origin).collect::<BTreeSet<_>>();
-      match (origin_set.len(), origin_set.first()) {
-        (1, Some(Origin::Peek(..))) => true,
-        _ => false,
-      }
-    }
-
-    fn items_are_the_same_rule(self) -> bool {
-      let mut base_rule: Option<_> = None;
-      for next in self {
-        if *(base_rule.get_or_insert(next.rule_id())) != next.rule_id() {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    fn nonterm_items<T: ItemContainer>(self, mode: GraphType, rules: &[Rule]) -> T {
-      self.filter_map(|i| i.is_nonterm(mode, rules).then(|| i.clone())).collect()
-    }
-
-    fn term_items<T: ItemContainer>(self, mode: GraphType, rules: &[Rule]) -> T {
-      self.filter_map(|i| i.is_term(mode, rules).then(|| i.clone())).collect()
-    }
-
-    fn null_items<T: ItemContainer>(self) -> T {
-      self.filter_map(|i| i.is_null().then(|| i.clone())).collect()
-    }
-
-    fn incomplete_items<T: ItemContainer>(self) -> T {
-      self.filter_map(|i| (!i.is_complete()).then(|| i.clone())).collect()
-    }
-
-    fn completed_items<T: ItemContainer>(self) -> T {
-      self.filter_map(|i| (i.is_complete()).then(|| i.clone())).collect()
-    }
-
-    fn inscope_items<T: ItemContainer>(self) -> T {
-      self.filter_map(|i| (!i.is_oos()).then(|| i.clone())).collect()
-    }
-
-    fn outscope_items<T: ItemContainer>(self) -> T {
-      self.filter_map(|i| (!i.is_oos()).then(|| i.clone())).collect()
-    }
-
-    fn to_canonical<T: ItemContainer>(self) -> T {
-      self.map(|i| i.to_canonical()).collect()
-    }
-
-    fn indices(self) -> BTreeSet<ItemIndex> {
-      self.map(|i| i.index).collect()
-    }
-
-    fn heritage(self) -> BTreeSet<ItemHeritage> {
-      self.map(|i| i.into()).collect()
-    }
-
-    fn to_origin<T: ItemContainer>(self, origin: Origin) -> T {
-      self.map(|i| i.to_origin(origin)).collect()
-    }
-
-    #[inline(always)]
-    fn try_increment(self) -> Items {
-      self.map(|i| i.try_increment()).collect()
-    }
-
-    #[inline(always)]
-    fn try_decrement(self) -> Items {
-      self.map(|i| if i.sym_index() > 0 { i.decrement().unwrap() } else { i.clone() }).collect()
-    }
-
-    fn terminals(self, mode: GraphType, rules: &[Rule]) -> BTreeSet<SymbolId> {
-      self.filter_map(|i| (!i.is_nonterm(mode, rules)).then_some(i.sym_id(rules))).collect()
-    }
-  };
-}
-
-pub trait ItemContainerIter: Iterator<Item = Item> + Sized + Clone {
-  fn to_set(self) -> ItemSet {
-    self.collect()
-  }
-
-  fn to_vec(self) -> Items {
-    self.collect()
-  }
-
-  fn to_origin_state_iter(self, state_id: StateId) -> StackVec<32, Item> {
-    self.map(move |i| i.to_origin_state(state_id)).into()
-  }
-
-  fn align_iter(self, a: &Item) -> StackVec<32, Item> {
-    self.map(|i| i.align(a)).into()
-  }
-
-  fn term_items_iter(self, is_scanner: bool, rules: &[Rule]) -> StackVec<32, Item> {
-    self
-      .filter(move |i| match i.get_type(rules) {
-        ItemType::Completed(_) | ItemType::Terminal(_) => true,
-        ItemType::TokenNonTerminal(..) if !is_scanner => true,
-        _ => false,
-      })
-      .into()
-  }
-
-  common_iter_functions!();
-}
-
-pub trait ItemRefContainerIter<'a: 'a>: Iterator<Item = &'a Item> + Sized + Clone {
-  fn to_set(self) -> ItemSet {
-    self.cloned().collect()
-  }
-
-  fn to_vec(self) -> Items {
-    self.cloned().collect()
-  }
-
-  common_iter_functions!();
-}
-
-pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> {
-  /// Given a [CompileDatabase] and [DBProdId] returns the initial
-  /// items of the non-terminal.
-  fn start_items(nterm: DBNonTermKey, db: &ParserDatabase) -> Self {
-    let Some(rules) = db.nonterm_rules(nterm) else { panic!("Could not get rules") };
-    rules.iter().map(|r| Item::from((*r, db.as_ref()))).collect()
-  }
-
-  fn nonterm_items(self, mode: GraphType, rules: &[Rule]) -> Self {
-    self.into_iter().filter(|i| i.is_nonterm(mode, rules)).collect()
-  }
-
-  fn term_items(self, mode: GraphType, rules: &[Rule]) -> Self {
-    self.into_iter().filter(|i| i.is_term(mode, rules)).collect()
-  }
-
-  fn null_items(self) -> Self {
-    self.into_iter().filter(|i| i.is_null()).collect()
-  }
-
-  fn incomplete_items(self) -> Self {
-    self.into_iter().filter(|i| !i.is_complete()).collect()
-  }
-
-  fn completed_items(self) -> Self {
-    self.into_iter().filter(|i| i.is_complete()).collect()
-  }
-
-  fn inscope_items(self) -> Self {
-    self.into_iter().filter(|i| !i.is_oos()).collect()
-  }
-
-  fn outscope_items(self) -> Self {
-    self.into_iter().filter(|i| i.is_oos()).collect()
-  }
-
-  fn uncompleted_items(self) -> Self {
-    self.into_iter().filter(|i| !i.is_complete()).collect()
-  }
-
-  fn to_origin(self, origin: Origin) -> Self {
-    self.into_iter().map(|i| i.to_origin(origin)).collect()
-  }
-
-  fn to_origin_state(self, origin: StateId) -> Self {
-    self.into_iter().map(|i| i.to_origin_state(origin)).collect()
-  }
-
-  #[inline(always)]
-  fn try_increment(&self) -> Items {
-    self.clone().to_vec().into_iter().map(|i| i.try_increment()).collect()
-  }
-
-  #[inline(always)]
-  fn try_decrement(&self) -> Items {
-    self.clone().to_vec().into_iter().map(|i| if i.sym_index() > 0 { i.decrement().unwrap() } else { i }).collect()
-  }
-
-  fn _debug_print_(&self, db: &ParserDatabase, _comment: &str) {
-    debug_items(_comment, self.clone(), db);
-  }
-
-  fn to_debug_string(&self, db: &ParserDatabase, sep: &str) -> String {
-    self.clone().to_vec().iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join(sep)
-  }
-
-  fn to_set(self) -> ItemSet {
-    self.into_iter().collect()
-  }
-
-  fn to_vec(self) -> Items {
-    self.into_iter().collect()
-  }
-}
-
-#[allow(unused)]
-fn debug_items<'db, T: IntoIterator<Item = Item>>(comment: &str, items: T, db: &ParserDatabase) {
-  eprintln!("\n {} --> ", comment);
-
-  for item in items {
-    eprintln!("    {}", item._debug_string_w_db_(db));
-  }
-}
-
-pub struct CompletedItemArtifacts {
-  pub lookahead_pairs: BTreeSet<TransitionPair>,
-  /// Items that completed a nonterminal that did not lead to a transition
-  /// in the root closure.
-  pub default_only:    ItemSet,
 }

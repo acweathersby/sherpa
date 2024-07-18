@@ -7,9 +7,9 @@ const RADLR_GRAMMAR_ROOT: &'static str = "radlr.radlr";
 
 const BUILD_OUTPUT_PATH: &'static str = "./parser/";
 
-fn main_() {}
+fn main() {}
 
-fn main() -> RadlrResult<()> {
+fn main_() -> RadlrResult<()> {
   let cargo_file = PathBuf::from(
     String::from_utf8(
       std::process::Command::new(env!("CARGO"))

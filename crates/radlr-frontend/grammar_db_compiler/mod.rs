@@ -30,16 +30,19 @@ use std::{
   fmt::{Debug, Display},
   path::PathBuf,
   sync::Arc,
+  vec,
 };
 
 use crate::{
+  array_vec::ArrayVec,
   parser_core::{
     ast::{ast_Value, nonterm_Value, nonterm_declarations_Value, token_Value, ExportPreamble, NontermDeclaration},
     parse_grammar_input,
   },
+  parser_db::DBTokenData,
   types::{
     grammar_object_ids::{GrammarId, GrammarIdentities},
-    item::{Item, ItemIndex, ItemSet, ItemType, Items},
+    item::{Item, ItemIndex, ItemType},
     parser_db::{ParserDatabase, RecursionType, ReductionType},
     rule::Rule,
     symbol::SymbolId,
@@ -488,8 +491,6 @@ fn extract_rules(
         rule_set.clear();
         rule_set.extend(new_rules_sets);
         rule_set.extend(rest);
-
-        dbg!(&rule_set);
       }
 
       ast::rule_group_2_Value::EOFSymbol(eof) => {
@@ -618,6 +619,8 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
   let mut nonterm_rules: Vec<Vec<DBRuleKey>> = vec![];
   let mut known_nonterms = Map::new();
   let mut entry_points = vec![];
+  let mut skip_sets = vec![];
+  let mut tokens = vec![];
 
   let mut out_rules = Vec::new();
 
@@ -711,10 +714,19 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
 
             match known_symbols.entry(uu_name) {
               std::collections::hash_map::Entry::Vacant(entry) => {
-                let sym_index = symbol_rules.len();
                 let non_term_key = DBNonTermKey(nonterm_ids.len() as u32);
 
+                let tok_data = DBTokenData {
+                  name:       friendly_name,
+                  nonterm_id: non_term_key,
+                  sym_id:     SymbolId::Token { val: friendly_name },
+                  tok_id:     DBTermKey(tokens.len() as u16),
+                };
+
+                tokens.push(tok_data);
+
                 nonterm_rules.push(vec![]);
+
                 nonterm_ids.push(NonTermId {
                   db_key: non_term_key,
                   friendly_name,
@@ -744,7 +756,7 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
                   ..Default::default()
                 });
 
-                let result = SymbolId::DBToken { key: DBTermKey(sym_index as u32) };
+                let result = SymbolId::DBToken { key: tok_data.tok_id };
 
                 entry.insert(result);
 
@@ -783,8 +795,6 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
   for (rule_index, rule) in out_rules.iter().enumerate() {
     let item_index = ItemIndex::from((DBRuleKey(rule_index as u32), 0));
     items.push(Item {
-      origin:           Default::default(),
-      origin_state:     StateId::default(),
       index:            item_index,
       from:             item_index,
       len:              rule.symbols.len() as u16,
@@ -798,7 +808,7 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
   // Calculate closure for all items, and follow sets and recursion type for all
   // non-terminals.
 
-  let mut item_closures: Vec<Vec<Vec<ItemIndex>>> = Vec::with_capacity(out_rules.len());
+  let mut item_closures: Vec<Vec<ArrayVec<4, Item>>> = Vec::with_capacity(out_rules.len());
   let mut reduction_types: Vec<ReductionType> = vec![Default::default(); out_rules.len()];
   let mut nonterm_predecessors: OrderedMap<DBNonTermKey, OrderedSet<DBNonTermKey>> = OrderedMap::default();
   let mut recursion_types: Vec<u8> = vec![Default::default(); nonterm_ids.len()];
@@ -814,8 +824,6 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
     let item_index = ItemIndex::from((DBRuleKey(rule_index as u32), 0));
     let sym_len = rule.symbols.len();
     let mut item = Item {
-      origin:           Default::default(),
-      origin_state:     StateId::default(),
       index:            item_index,
       from:             item_index,
       len:              sym_len as u16,
@@ -863,7 +871,7 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
     //-------------------------------------------------------------------------------------------
     // Calculate closures for uncompleted items.
 
-    fn create_closure(value: Item, mode: GraphType, rules: &[Rule], nonterm_rules: &Vec<Vec<DBRuleKey>>) -> Items {
+    fn create_closure(value: Item, mode: GraphType, rules: &[Rule], nonterm_rules: &Vec<Vec<DBRuleKey>>) -> Vec<Item> {
       if let Some(nterm) = value.nonterm_index_at_sym(mode, &rules) {
         if let Some(nt_rules) = nonterm_rules.get(nterm.0 as usize) {
           nt_rules.iter().map(|r| Item::from((*r, rules))).collect()
@@ -877,11 +885,11 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
 
     let root_nonterm = item.nonterm_index(&out_rules);
     let mut recursion_encountered = false;
-    let mut closure = ItemSet::from_iter([]);
+    let mut closure = ArrayVec::<4, Item>::from_iter([]);
     let mut queue = VecDeque::from_iter([item]);
 
     while let Some(kernel_item) = queue.pop_front() {
-      if closure.insert(kernel_item) {
+      if closure.insert_ordered(kernel_item).is_ok() {
         match kernel_item.get_type(&out_rules) {
           ItemType::TokenNonTerminal(nonterm, _) => {
             if is_scanner {
@@ -907,12 +915,9 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
     }
 
     // Don't include the root item.
-    closure.remove(&item);
+    closure.remove(closure.find_ordered(&item).unwrap());
 
-    item_closures
-      .get_mut(item.rule_id().0 as usize)
-      .unwrap()
-      .insert(item.sym_index() as usize, closure.into_iter().map(|i| i.index).collect::<Vec<_>>());
+    item_closures.get_mut(item.rule_id().0 as usize).unwrap().insert(item.sym_index() as usize, closure);
 
     //-------------------------------------------------------------------------------------------
     // Update recursion type
@@ -926,8 +931,8 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
   }
 
   let db = ParserDatabase {
-    tokens: vec![],
-    nonterm_nterm_rules: nonterm_rules,
+    tokens,
+    nonterm_rules,
     follow_items,
     nonterm_symbol_to_rules,
     nonterm_ids,
@@ -938,6 +943,7 @@ pub fn merge_grammars(grammars: &[&IRGrammar]) -> Result<ParserDatabase, Grammar
     reduction_types,
     nonterm_predecessors,
     recursion_types,
+    skip_sets,
     valid: true,
   };
 
@@ -1092,7 +1098,7 @@ impl From<ParserError> for GrammarCompilerError {
 
 #[derive(Debug)]
 /// Grammar data generated by a successful parse of a grammar input string.
-struct PreCompileGrammarData {
+pub struct PreCompileGrammarData {
   grammar_ast: Arc<ast::GrammarDefinition<Token>>,
   path:        Option<PathBuf>,
   cwd_path:    Option<PathBuf>,

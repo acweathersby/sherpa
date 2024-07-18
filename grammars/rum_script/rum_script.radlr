@@ -1,0 +1,82 @@
+IGNORE { c:sp c:nl }
+
+<> RS 
+   
+   > ( table_definition | Block )(+)
+
+   :ast { t_Rs, val:$1 }
+
+<> table_definition 
+   
+   > table_identifier table_row_aliases(*) table_row_types
+
+     :ast { t_Table }
+
+<> table_identifier 
+
+   > "[" id sub_table_id primary_key_table? table_attributes? "]"
+
+<> table_attributes 
+
+   > ":" id(+)
+
+<> primary_key_table 
+   
+   > "#" id
+
+<> sub_table_id 
+   
+   > "." id
+
+<> table_row_aliases 
+   
+   > "[" (id(+))(+"-") "]"
+
+<> table_row_types 
+   
+   > "(" (id table_attributes? )(*",") ")"
+
+// Statements
+
+<> for_in_table_stmt > 
+
+  "for" id "in" ( id | select_expression ) stmt_block 
+
+<> stmt_block > "{" "}"
+
+
+
+// Expressions
+
+<> select_expression > id "{" "}"
+
+
+<> t_expr 
+   > t_expr "|" t_expr 
+
+<> row_method > "todo" 
+
+<> table_method > "todo" 
+
+<> expr > expr "+" expr
+        | expr "-" expr
+        | expr "*" expr
+        | expr "/" expr
+        | expr "^" expr
+        | expr "-" expr
+        | expr "&" expr
+        | expr "|" expr
+        | expr "&&" expr
+        | expr "||" expr
+        | "-" expr
+        | "~" expr
+
+
+<> num > tk:( "-"? c:num(+) ( "." ( c:num(+) )? ( ("e" | "E") c:num(*) )? ) )
+
+<> id > tk:(  ( c:id | "_" ) ( c:id | "_" | c:num )(*) | c:num(+) ( c:id ) ( c:id | "_" | c:num )(*)  )
+
+
+<> Block > "{" "}"
+
+  :ast { t_Block }

@@ -1,0 +1,116 @@
+NAME radlr_symbol
+
+IGNORE { c:sp c:nl }
+
+IMPORT ./token as tok
+IMPORT ./ascript as ast
+
+
+<> annotated_symbol 
+
+    > list^s [tk:reference?^r "?" ?^o  precedence?^p ]!
+
+        :ast { t_AnnotatedSymbol, precedence:$p, symbol:$s, is_optional:bool($o), reference:str($r), tok  }
+
+    | list
+
+
+<> precedence 
+
+    > "{" tk:precedence_num? ( ":" tk:precedence_num? :ast u32($2) )? '}' 
+      
+      :ast { t_Precedence, sym_prec: u32($2), kot_prec: $3 }
+
+    | "{" ( tk:precedence_num^prec ":" )? "kw" '}' 
+    
+      :ast { t_Precedence, sym_prec: u32($prec), is_keyword: true }
+
+
+<> precedence_num > c:num(+)
+
+
+<> list 
+
+    > symbol '+'
+
+            :ast { t_List_Rules, symbol:$1, tok }
+
+    | symbol "*"
+
+            :ast { t_List_Rules, symbol:$1, tok, optional: true }
+
+    | symbol "(+" ( token | class )? ')'
+
+            :ast { t_List_Rules, terminal_symbol:$3, symbol:$1, tok }
+
+    | symbol "(*" ( token | class )? ')'
+
+            :ast { t_List_Rules, terminal_symbol:$3, symbol:$1, tok, optional:true }
+
+    | symbol
+
+
+<> symbol > nonterminal | template_nonterminal | terminal
+
+<> template_nonterminal 
+
+    >  nonterminal "::<" template_arg(+",")^template_args ">"
+
+            :ast { t_Template_NonTerminal_Symbol, name:$1, template_args, tok }
+
+<> template_arg 
+    
+    > list 
+
+    | ast::type_identifier 
+                
+            :ast { t_AST_STRUCT_TEMPLATE_NAME, typ: str(tok)  }
+
+<> nonterminal > nonterminal_symbol | import_nonterminal_symbol
+
+<> nonterminal_symbol 
+    
+    > tok::id
+
+            :ast { t_NonTerminal_Symbol, name:str($1), tok}
+
+
+<> import_nonterminal_symbol 
+
+    > tok::id '::' tok::id
+
+        :ast { t_NonTerminal_Import_Symbol, module:str($1), name:str($3), tok}
+
+
+<> terminal > token | token_non_terminal | class
+
+
+<> class >
+
+    "c:" ( 'num' | 'nl' | 'sp' | 'id' | 'sym' | 'any' | 'tab' | 'vtab' | tk:(c:id+) )
+
+        :ast { t_ClassSymbol, val:str($2),  tok }
+
+
+<> token_non_terminal >
+
+    "tk:" nonterminal
+
+        :ast { t_NonTerminal_Terminal_Symbol, nonterminal:$2, tok }
+
+
+<> token >
+
+    tok::string
+
+        :ast { t_TerminalToken, val:str(tok<1,1>), tok, is_exclusive:true } 
+
+    |  tok::quote
+
+        :ast { t_TerminalToken, val:str(tok<1,1>), tok }
+
+
+<> reference > "^" tok::id
+
+
+<> end_of_input > "$" :ast { t_EOFSymbol, tok }

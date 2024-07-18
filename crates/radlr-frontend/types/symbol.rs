@@ -180,6 +180,7 @@ impl SymbolId {
   pub fn debug_string(&self, db: &ParserDatabase) -> String {
     use SymbolId::*;
     let mut w = CodeWriter::new(vec![]);
+
     match *self {
       Undefined => &mut w + "Undefine",
       Default => &mut w + "Default",

@@ -1,0 +1,140 @@
+NAME at_at_formatter
+
+IGNORE { c:sp c:nl }
+
+<> at_at_formatter > script_statement+
+
+<> script_statement > text | assignment | function | format | call | object | literal_space | block::<t_SBlock, script_statement*>
+
+<> function_statement > text | assignment | format | call | match | literal_space | object | block::<t_SBlock, function_statement*>
+
+<> function > fn_name param* '{' ( function_statement | function )* "}"{1}
+                                    
+                                        :ast { t_Funct, name: str($1), params:$2, content: $4, tok }
+<> param > id ":" type              
+                                        :ast { t_Param, name: $1, ty: str($3), tok }
+<> type 
+    > "obj"                             :ast { t_ObjType, tok }
+    | "num"                             :ast { t_NumType, tok }
+    | "int"                             :ast { t_IntType, tok }
+    | "flt"                             :ast { t_FloatType, tok }
+    | "str"                             :ast { t_StringType, tok }
+
+<> call > fn_name args                  :ast { t_Call, name: str($1), args: $2, tok }
+
+<> args > "(" expr(*",") ")" 
+                                        :ast { [$2] }
+<> format 
+    > tk:( '@' "+"{:9999})              :ast { t_Indent, tok }
+    | tk:( '@' "-"{:9999})              :ast { t_Dedent, tok }
+    | tk:( '@' ";"{:9999})              :ast { t_BreakPoint, tok }
+    | '@' tk:(c:num+)                   :ast { t_Space, count: u32($2), tok }
+    | tk:( "\\" " "{:9999})             :ast { t_Space, tok }
+    | tk:( "\\" "n"{:9999})             :ast { t_NewLine, tok }
+
+
+<> literal_format 
+    > tk:( c:tab )                      :ast { t_Tab, tok }
+    | tk:( " " )                        :ast { t_Space, tok }
+    | tk:( c:nl )                       :ast { t_NewLine, tok }
+    
+
+<> text 
+    > ( c:sym | '.' )
+                                        :ast { t_Text, val: str(tok), tok }
+    | tk:( "\\" c:any ) 
+                                        :ast { t_Text, val: str(tok<1>), tok }
+    | num
+
+    | at_string_literal
+
+    | expression
+    
+<> expression 
+    > "@["  expr  "]"                   :ast { t_Expression, val: $2, tok }
+
+<> expr 
+    > expr "+"{1} expr{1}               :ast { t_Add, l:$1, r:$3, tok }
+    | expr "-"{1} expr{1}               :ast { t_Sub, l:$1, r:$3, tok }
+    | expr "*"{3} expr{3}               :ast { t_Mul, l:$1, r:$3, tok }
+    | expr "^"{4} expr{4}               :ast { t_Pow, l:$1, r:$3, tok }
+    | expr "/"{2} expr{2}               :ast { t_Div, l:$1, r:$3, tok }
+    | num
+    | object
+    | call
+    | at_string_literal
+    | plain_string_literal
+
+<> num > tk:( c:num+ ) 
+                                        :ast { t_Num, val: str(tok), tok }
+
+<> literal_space > "@{"  literal_space_statement+  "}"     
+                                        :ast { t_LiteralSpace, content: $2, tok }
+
+<> literal_space_statement > text | format | literal_format | call | object | block::<t_SBlock, literal_space_statement+>
+
+<> at_string_literal > "@\""  tk:( c:any | "\\" c:any )+  "\""     
+                                        :ast { t_Literal, val: str($2), tok }
+
+<> plain_string_literal > "\""  tk:( c:any | "\\" c:any )+  "\""     
+                                        :ast { t_Literal, val: str($2), tok }
+
+<t_T:ast, Content:sym> block 
+    >   "[" Content? "]"{1}             :ast { t_T, ty: str($1), content: $2, tok }
+    |   "(" Content? ")"{1}             :ast { t_T, ty: str($1), content: $2, tok }
+    |   "{" Content? "}"{1}             :ast { t_T, ty: str($1), content: $2, tok }
+    
+<> match > "match" tuple "{"  match_arm*  "}" 
+                                        :ast { t_Match, expr: $2, matches:$4, tok }
+
+<> match_arm 
+    
+    > tuple(+"|") "{" ( function_statement )*{2} "}"
+                                        :ast { t_MatchArm, match_expressions: $1, content: $3, tok }
+
+    | "{" ( function_statement )*{2} "}"
+                                        :ast { t_MatchArm, default: true, content: $2, tok }
+
+<> tuple 
+    > "(" tuple_ele(+",") ")" 
+                                        :ast { t_ExprTuple, expressions: $2 }
+    | tuple_ele
+                                        :ast { t_ExprTuple, expressions: [$1] }
+
+<> tuple_ele 
+  > expr 
+  | "_"                                 :ast { t_Ignore }
+  | "*"                                 :ast { t_Ignore }
+  | "true"                              :ast { t_True }
+  | "false"                             :ast { t_False }
+  | "Some"                              :ast { t_NotNone }
+  | "&"                                 :ast { t_NotNone }
+  | "None"                              :ast { t_None }
+
+<> assignment 
+    > binding_id "={"{:9999} expr "}"
+                                        :ast { t_Assign, id: $1, expr: $3, tok }
+
+<> object 
+    > id  object_accessor*        
+                                        :ast { t_Obj, id: $1, path:$2, tok }
+
+<> object_accessor 
+    > tk:( '.' non_binding_id)          :ast { t_Prop, name: str(tok<1>), tok }
+    | tk:( '.' "[") expr "]"            :ast { t_Index, expr: $2, tok }
+    | tk:( '.' "(") expr(*",") ")"      :ast { t_TypeCall, expressions: $2, tok }
+    | tk:( '.' "#type")                 :ast { t_Type, tok }
+    | tk:( '.' "#keys")                 :ast { t_Keys, tok }
+    | tk:( '.' "#len")                  :ast { t_Length, tok }
+    | tk:( '.' 'ite' "r") call          :ast { t_Iterator, call, tok }
+
+<> id 
+    > binding_id | non_binding_id
+    
+<> binding_id  
+    > tk:( '@' ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )
+                                        :ast { t_Id, name: str($1), at: true, tok }
+<> non_binding_id 
+    > tk:( ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )
+                                        :ast { t_Id, name: str($1), tok }
+<> fn_name > tk:( '#' ( c:id | "_" | '-' ) ( c:id | "_" | '-' | c:num )* )  
