@@ -10,7 +10,6 @@
 
 #![allow(non_snake_case)]
 #![feature(box_patterns)]
-#![feature(return_position_impl_trait_in_trait)]
 
 mod builder;
 mod compile;

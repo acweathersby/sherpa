@@ -307,6 +307,7 @@ use std::collections::HashMap;
         } 
       }
 
+
       #raw_type_to_multi to:obj MULTI_NAME:str {
         @to_type    ={ #multi_rust_type(to)    }
         @to_name    ={ @to.name }
@@ -365,9 +366,29 @@ use std::collections::HashMap;
         fn\ from(value:\ @enum_type )\ ->\ Self\ {
           Self::@self.name(value) @;
         }@;
+      } \n\n
+
+
+      #token_trait_single to:obj {
+        match (@to.requires_template) {
+          true  { <Token:Tk> }
+        } 
       }
 
-      \n\n
+      #token_trait_single_invert to:obj {
+        match (@to.requires_template) {
+          false  { <Token:Tk> }
+        } 
+      }
+
+      impl#token_trait_single(self)\ @enum_type { 
+        pub\ fn\ to_ast#token_trait_single_invert(self)(self)\ ->\ @AST_NAME<Token>\ { @;
+          mat ch\ self\ {
+            @self.types.iter#multi_convert_from("Self", @AST_NAME)
+            _\ =>\ @AST_NAME::None,@;
+          }
+        }
+      } \n\n
     }
 
     @self.iter#impls()
@@ -570,16 +591,13 @@ use std::collections::HashMap;
       ("Map",  "Vec") { map_vec }
 
       ("Vec",  _) {
-        match self.right.val.#type {
-          { 
-            let\ mut\ @ref\ =\ @ref_l; @;
-            @ref . push ( @ref_r ) ; @;
-          }
-        }
+        let\ mut\ @ref\ =\ @ref_l; @;
+        @ref . push ( @ref_r ) ; @;
       }
-
-      (_,  "Vec") { add_vec }
-
+      (_,  "Vec") { 
+        let\ mut\ @ref\ =\ @ref_r; @;
+        @ref . insert ( 0, @ref_l ) ; @;
+      }
       ("Map",  _) { map_add }
 
       (_,  "Map") { add_map }

@@ -51,11 +51,11 @@ pub struct ParserDatabase {
   /// Item closures, stores the closure of all items, excluding the closure's of
   /// items that are complete.
   item_closures:           Array<Array<Array<ItemIndex>>>,
-  
+
   ///NonTerminal Recursion Type
-  recursion_types:         Array<u8>,
+  recursion_types: Array<u8>,
   /// Reduction types
-  reduction_types:         Array<ReductionType>,
+  reduction_types: Array<ReductionType>,
 }
 
 impl ParserDatabase {

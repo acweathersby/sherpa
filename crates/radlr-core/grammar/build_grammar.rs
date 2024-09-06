@@ -218,7 +218,7 @@ pub fn extract_nonterminals<'a>(
           }
           (_, Some(name_sym)) => {
             let import_grammar_name = name_sym.module.to_string().intern(s_store);
-            let import_g_id = o_to_r(g_data.imports.get(&import_grammar_name), "could not find grammar")?;
+            let import_g_id = o_to_r(g_data.imports.get(&import_grammar_name), "could not find grammar E")?;
             let (guid_name, f_name) = nterm_names(name_sym.name.as_str(), import_g_id, s_store);
             let id = NonTermId::from((import_g_id.guid, name_sym.name.as_str()));
             nterms.push((create_bare_nonterm_struct(id, guid_name, f_name, import_g_id, tok), prod_rule));
@@ -739,7 +739,7 @@ fn process_rule_symbols(
         // Add the ProductionID as a non-term symbol
         // to the beginning of each rule, making the
         // resulting list non-terminal left recursive.
-        for rule in &mut secondary_rules {
+        for (index, rule) in secondary_rules.iter_mut().enumerate() {
           rule.ast = Some(ASTToken::ListIterate(tok.get_tok_range()));
 
           rule.tok = tok.clone();
@@ -749,6 +749,7 @@ fn process_rule_symbols(
             annotation: annotation.intern(s_store),
             loc: tok.clone(),
             original_index: 0,
+            symbol_precedence: index as u16,
             ..Default::default()
           });
 
