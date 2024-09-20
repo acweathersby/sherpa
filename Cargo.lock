@@ -288,26 +288,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "radlr_compiler_frontend"
-version = "1.0.1-beta1"
-dependencies = [
- "radlr_build",
- "radlr_core_common",
- "radlr_rust_runtime",
-]
-
-[[package]]
 name = "radlr_core"
 version = "1.0.1-beta2"
 dependencies = [
- "radlr_rust_runtime",
-]
-
-[[package]]
-name = "radlr_core_common"
-version = "1.0.1-beta1"
-dependencies = [
- "once_cell",
  "radlr_rust_runtime",
 ]
 
@@ -316,15 +299,6 @@ name = "radlr_formatter"
 version = "1.0.1-beta1"
 dependencies = [
  "radlr_core",
- "radlr_rust_runtime",
-]
-
-[[package]]
-name = "radlr_ir_compiler"
-version = "1.0.1-beta1"
-dependencies = [
- "radlr_compiler_frontend",
- "radlr_core_common",
  "radlr_rust_runtime",
 ]
 
