@@ -16,7 +16,7 @@ permissions:
 # However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 # Default to bash
 defaults:
@@ -33,11 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      WASM_DIR: ./web/radlr-wasm
-      WEB_SOURCE_DIR: ./web/doc
-      LAB_SRC_DIR: ./web/doc/assets/js/radlr
-      LAB_PUB_DIR: ./web/doc/static/js/lab
-      DOC_PUB_DIR: ./web/doc/public
+      WASM_DIR: ./crates/radlr-wasm
+      WEB_SOURCE_DIR: ./site
+      LAB_SRC_DIR: ./site/assets/js/radlr
+      LAB_PUB_DIR: ./site/static/js/lab
+      DOC_PUB_DIR: ./site/public
 
     steps:
       - uses: actions/checkout@v3
