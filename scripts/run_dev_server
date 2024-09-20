@@ -1,0 +1,28 @@
+#! /bin/zsh
+
+# Move to project root
+pushd .
+pushd ${0:a:h}/..
+
+##########################
+# Setup environment variables
+# this should always be sourced from the root directory
+. ./scripts/env_vars
+##########################
+
+
+##########################
+## Startup dev environment
+pushd $RADLR_WEB_SOURCE_DIR
+echo $PWD
+npm install
+
+hugo version
+hugo server --disableFastRender --bind 0.0.0.0
+
+popd
+##########################
+
+popd
+popd
+echo "DONE"

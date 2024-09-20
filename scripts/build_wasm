@@ -1,0 +1,38 @@
+#! /usr/bin/env zsh
+
+# Move to project root
+pushd .
+pushd ${0:a:h}/..
+
+##########################
+# Setup environment variables
+# this should always be sourced from the root directory
+. ./scripts/env_vars
+##########################
+
+##########################
+## RADLR WASM
+pushd $RADLR_WASM_DIR
+
+# Build the wasm library
+if [[ "$1" == "dev" ]]
+then    
+    echo "BULDING DEV"
+    wasm-pack build --dev --target web
+else 
+    echo "BULDING RELEASE"
+    wasm-pack build --target web
+fi
+
+# Move the wasm data to out lab directory
+
+mkdir -p $RADLR_LAB_SRC_DIR
+mkdir -p $RADLR_LAB_PUB_DIR
+cp ./pkg/* $RADLR_LAB_SRC_DIR
+cp $RADLR_LAB_SRC_DIR/radlr_wasm_bg.wasm $RADLR_LAB_PUB_DIR/
+
+popd
+##########################
+
+popd
+popd

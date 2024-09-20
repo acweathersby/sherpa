@@ -1,19 +1,23 @@
 # Radlr
 
-A parser compiler Swiss-army knife.
+A flexible parser compiler for experimentation and rapid syntax development. 
 
-Radlr is a general purpose parser compiler toolchain that provides a rich set of features to easily create powerful parsers upon which advanced language services, compilers, and other tooling can be built. Radlr uses a novel multi-paradigm parser compiler pipeline that can generate parsers that replicate the behavior of LL, LR, recursive descent, and recursive ascent algorithms, with unlimited lookahead, and the option to make general through parser context fork.
+- Syntax highlighting
+- Code Formatting
+- Predictive and recovering syntax analysis
+- Automatic generation of AST definitions
+- Simple shift/reduce parser interface
 
-### Features
+- Support for ambiguous grammars (though not recommended)
+- Context sensitive lexing (scanning)
+- Parsing algorithm detection
+- Arbitrary lookahead
 
-- Incremental Parsing
-- CST and AST construction
-- Bytecode and binary parser compilation
 
-### Docs 
+## Whats in a name?
 
-Checkout out the online documentation [here](https://rum-craft.github.io/radlr/docs).
+As can be inferred, RADLR is a **r**ecursive **d**escent and **a**scent parser compiler; the LR is just to make it match common naming conventions (though it is capable of producing parsers that are equivalent to LR algorithms)
 
-## License
+# State of the code
 
-Radlr is released with a split license structure. The main toolchain is licensed under the [GNU General Public License v3](./LICENSE.md), wherease generated and runtime code covered under MIT Licenses. This allows users to use Radlr parsers however they see fit, while protecting the integrity of the core project. 
+My interest have moved away from development of Radlr and towards using it io create other languages and tools. At this point it is still incomplete, and if or when I do restart active development of Radlr, it will be to reimplement it in a new language (preferably one in which it is itself implemented in terms of Radlr; yeah, turtles all the way down).

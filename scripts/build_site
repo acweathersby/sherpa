@@ -1,0 +1,48 @@
+#! /bin/zsh
+
+# Move to project root
+pushd .
+pushd ${0:a:h}/..
+
+##########################
+# Setup environment variables
+# this should always be sourced from the root directory
+. ./scripts/env_vars
+##########################
+
+
+##########################
+# Setup directories 
+echo "CLEANING PUBLIC FOLDER"
+
+mkdir -p $PUBLIC_WEB_FOLDER
+
+rm -rf $PUBLIC_WEB_FOLDER/*
+##########################
+
+
+##########################
+## RADLR WASM
+$ROOT_DIR/scripts/build_wasm
+##########################
+
+
+##########################
+## RADLR DOC
+pushd $RADLR_WEB_SOURCE_DIR
+
+# remove old public dir
+rm -rf $RADLR_DOC_PUB_DIR
+
+# build files
+hugo
+
+# Copy public folder to public/lab
+cp -fr $RADLR_DOC_PUB_DIR/* $PUBLIC_WEB_FOLDER
+
+popd
+##########################
+
+popd
+popd
+echo "DONE"

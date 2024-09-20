@@ -1,0 +1,78 @@
+// Base Style Bootstrap
+
+@font-face
+  font-family: "LexandDeca"
+  src: url('{{ urls.JoinPath .Site.BaseURL "./webfonts/LexandDeca/LexendDeca-VariableFont_wght.ttf" }}')
+
+@font-face
+  font-family: "Catamaran"
+  src: url('{{ urls.JoinPath .Site.BaseURL "./webfonts/Catamaran/Catamaran-VariableFont_wght.ttf" }}')
+
+@font-face
+  font-family: "Outfit"
+  src: url('{{ urls.JoinPath .Site.BaseURL "./webfonts/Outfit/Outfit-VariableFont_wght.ttf" }}')
+
+body
+  position: relative
+  background-color: rgb(255, 255, 255)
+  border: none
+  padding: 0
+  margin: 0
+  left: 0
+  top: 0
+  top: 0
+  left: 0
+  bottom: 0
+  right: 0
+  padding: 0
+  margin: 0
+  font-family: Catamaran, Arial, Helvetica, sans-serif
+  font-size: 14px
+  opacity: 1
+
+  &.hidden  content
+    opacity: 0
+
+    content
+    opacity: 1
+    transition: opacity 200ms
+
+h1, h2, h3, h4, h5, h6
+
+  font-family: Outfit, Arial, Helvetica, sans-serif
+  font-weight: 400
+
+div, h1, h2, h3, h4, h5, h6, span, button a
+  box-sizing: border-box
+
+a
+  text-decoration: none
+  color: rgb(121, 121, 121)
+
+  &:hover
+    color: rgb(36, 153, 221)
+
+ul, li
+  text-decoration: none
+  list-style: none
+  padding: 0
+  margin: 0
+
+body.preload
+  opacity: 0
+
+button
+  border: none
+  margin: 10px
+  font-size: 1.2em
+  padding: 5px 10px
+  border-radius: 20px
+  color: rgb(107, 107, 107)
+  transition: all 150ms
+
+button:hover
+  background-color: #5fc7f0
+  color: white
+  cursor: pointer
+
+@import "./color"

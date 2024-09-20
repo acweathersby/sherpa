@@ -1,0 +1,15 @@
+{{ define "main" -}}
+{{ .Scratch.Set "headerSubtext" "docs" }}
+
+<body class="docs">
+  {{ partial "scripts/soft_load.html" . }}
+  {{ partial "header/header.html" . }}
+  <main>
+    {{ partial "nav/docs_nav.html" . }}
+    <content>
+      {{ .Content }}
+    </content>
+    {{ partial "nav/doc_nav.html" . }}
+  </main>
+</body>
+{{ end }}
