@@ -26,10 +26,9 @@
     <div id="page-category"><span id="page-category-name">{{ . }} </span></div>
     {{ end }}
     {{ if eq .Kind "home" }}
-    <a href="/docs"><button> docs </button></a>
-    <a href="/lab"><button> lab </button></a>
+    <a href="https://github.com/acweathersby/radlr/tree/public-main/docs"><button> docs </button></a>
     {{ with $.Site.Data.resource_locations }}
-    <a href="{{  .github_repo_url }}"><img src="{{ relURL "/img/github-mark.svg"}}"></a>
+    <a href="{{  .github_repo_url }}"><img width=20 height="20" src="{{ relURL "/img/github-mark.svg"}}"></a>
     {{end}}
     {{end}}
 </header>

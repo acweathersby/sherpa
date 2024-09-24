@@ -6,7 +6,7 @@ use std::{
   rc::Rc,
 };
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct BytecodeParserDB {
   pub bytecode:               Vec<u8>,
   pub ir_token_lookup:        BTreeMap<u32, Token>,

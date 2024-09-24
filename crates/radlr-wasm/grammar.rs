@@ -7,11 +7,19 @@ use radlr_rust_runtime::{
     bytecode::{ByteCodeIterator, Instruction, Opcode},
     entrypoint,
     BytecodeParserDB,
+    EntryPoint,
     RuntimeDatabase,
     TableHeaderData,
+    Token,
   },
 };
-use std::{path::PathBuf, rc::Rc};
+use serde::Serialize;
+use std::{
+  collections::{BTreeMap, HashMap},
+  hash::Hash,
+  path::PathBuf,
+  rc::Rc,
+};
 use wasm_bindgen::prelude::*;
 
 use crate::{error::PositionedErrors, JSParserClassification, JSParserConfig};
@@ -193,7 +201,221 @@ pub fn create_rust_ast_output(js_db: &JSParserDB) -> Result<String, PositionedEr
   Ok(output) */
 }
 
-/// Temporary simple AST output implementation.
+/// Temporary simple disassembly implementation.
+pub fn create_bytecode(states: &JSIRParser) -> Result<JSBytecodeParserDB, PositionedErrors> {
+  match compile_bytecode(states.states.as_ref(), true) {
+    Err(errors) => Result::Err(convert_journal_errors(errors)),
+    Ok(pkg) => Ok(JSBytecodeParserDB(Rc::new(pkg))),
+  }
+}
+
+/// Import a bytecode database from a JS ArrayBuffer
+#[wasm_bindgen]
+pub fn import_bytecode_db(buffer: ArrayBuffer) -> Result<JSBytecodeParserDB, PositionedErrors> {
+  let buffer: Vec<u8> = Uint8Array::new(&buffer).to_vec();
+
+  let mut db = BytecodeParserDB::default();
+  let mut offset = 0;
+
+  let bc_len = read_primitive_at_offset::<u32>(&buffer, &mut offset) as usize;
+  db.bytecode = buffer[offset..offset + bc_len].to_vec();
+  offset += bc_len;
+
+  db.address_to_state_name = read_hash_id_str(&buffer, &mut offset);
+  db.token_id_to_str = read_hash_id_str(&buffer, &mut offset);
+  db.state_name_to_address = read_hash_of_str_id(&buffer, &mut offset);
+  db.nonterm_name_to_id = read_hash_of_str_id(&buffer, &mut offset);
+  db.state_to_token_ids_map = read_hash_of_id_vecu32(&buffer, &mut offset);
+  db.nonterm_id_to_address = read_primitive_hash(&buffer, &mut offset);
+  db.default_entry = read_primitive_at_offset(&buffer, &mut offset);
+
+  Ok(JSBytecodeParserDB(Rc::new(db)))
+}
+
+fn write_hash_of_id_str<T: Clone + Copy>(buffer: &mut Vec<u8>, data: &HashMap<T, String>) {
+  write_primitive_to_bytes(buffer, data.len() as u32);
+  for (id, str) in data {
+    write_primitive_to_bytes(buffer, *id);
+    write_primitive_to_bytes(buffer, str.len() as u32);
+    write_bytes(buffer, str.as_bytes());
+  }
+}
+
+fn read_hash_id_str<T: Copy + Clone + Default + Eq + Hash>(buffer: &[u8], offset: &mut usize) -> HashMap<T, String> {
+  let entry_count = read_primitive_at_offset::<u32>(buffer, offset) as usize;
+  let mut hash = HashMap::with_capacity(entry_count);
+  for _ in 0..entry_count {
+    let k = read_primitive_at_offset::<T>(buffer, offset);
+    let str_len = read_primitive_at_offset::<u32>(buffer, offset) as usize;
+    let v = unsafe { String::from_utf8_unchecked(buffer[*offset..*offset + str_len].to_vec()) };
+    *offset += str_len;
+    hash.insert(k, v);
+  }
+  hash
+}
+
+fn write_hash_of_str_id<T: Clone + Copy>(buffer: &mut Vec<u8>, data: &HashMap<String, T>) {
+  write_primitive_to_bytes(buffer, data.len() as u32);
+  for (str, id) in data {
+    write_primitive_to_bytes(buffer, *id);
+    write_primitive_to_bytes(buffer, str.len() as u32);
+    write_bytes(buffer, str.as_bytes());
+  }
+}
+
+fn read_hash_of_str_id<T: Copy + Clone + Default + Eq + Hash>(buffer: &[u8], offset: &mut usize) -> HashMap<String, T> {
+  let entry_count = read_primitive_at_offset::<u32>(buffer, offset) as usize;
+  let mut hash = HashMap::with_capacity(entry_count);
+  for _ in 0..entry_count {
+    let v = read_primitive_at_offset::<T>(buffer, offset);
+    let str_len = read_primitive_at_offset::<u32>(buffer, offset) as usize;
+    let k = unsafe { String::from_utf8_unchecked(buffer[*offset..*offset + str_len].to_vec()) };
+    *offset += str_len;
+    hash.insert(k, v);
+  }
+  hash
+}
+
+fn write_primitive_hash<K: Clone + Copy, V: Clone + Copy>(buffer: &mut Vec<u8>, data: &HashMap<K, V>) {
+  write_primitive_to_bytes(buffer, data.len() as u32);
+  for (k, v) in data {
+    write_primitive_to_bytes(buffer, *k);
+    write_primitive_to_bytes(buffer, *v);
+  }
+}
+
+fn read_primitive_hash<K: Clone + Copy + Eq + Hash + Default, V: Clone + Copy + Default>(
+  buffer: &[u8],
+  offset: &mut usize,
+) -> HashMap<K, V> {
+  let entry_count = read_primitive_at_offset::<u32>(buffer, offset) as usize;
+  let mut hash = HashMap::with_capacity(entry_count);
+  for _ in 0..entry_count {
+    let k = read_primitive_at_offset::<K>(buffer, offset);
+    let v = read_primitive_at_offset::<V>(buffer, offset);
+    hash.insert(k, v);
+  }
+  hash
+}
+
+fn write_hash_of_id_vecu32<T: Clone + Copy>(buffer: &mut Vec<u8>, data: &HashMap<T, Vec<u32>>) {
+  write_primitive_to_bytes(buffer, data.len() as u32);
+  for (k, v) in data {
+    write_primitive_to_bytes(buffer, *k);
+    write_primitive_to_bytes(buffer, v.len() as u32);
+    write_bytes(buffer, v.as_slice());
+  }
+}
+
+fn read_hash_of_id_vecu32<T: Copy + Clone + Default + Eq + Hash>(buffer: &[u8], offset: &mut usize) -> HashMap<T, Vec<u32>> {
+  let entry_count = read_primitive_at_offset::<u32>(buffer, offset) as usize;
+  let mut hash = HashMap::with_capacity(entry_count);
+  for _ in 0..entry_count {
+    let k = read_primitive_at_offset::<T>(buffer, offset);
+    let vec_size = read_primitive_at_offset::<u32>(buffer, offset) as usize;
+    let byte_len = vec_size * size_of::<u32>();
+
+    let mut v = Vec::<u32>::with_capacity(vec_size);
+    unsafe {
+      v.set_len(vec_size);
+      buffer.as_ptr().offset(*offset as isize).copy_to(std::mem::transmute(v.as_mut_ptr()), byte_len);
+    }
+
+    *offset += byte_len;
+
+    hash.insert(k, v);
+  }
+  hash
+}
+
+/// Export a bytecode database into a JS ArrayBuffer
+#[wasm_bindgen]
+pub fn export_bytecode_db(states: &JSIRParser) -> Result<ArrayBuffer, PositionedErrors> {
+  let bc = match compile_bytecode(states.states.as_ref(), true) {
+    Err(errors) => return Result::Err(convert_journal_errors(errors)),
+    Ok(pkg) => pkg,
+  };
+
+  let mut size = bc.bytecode.len() + 4;
+
+  // address_to_state_name:     HashMap<u32, String>
+  size += 4 + bc.address_to_state_name.iter().fold(0, |size, d| size + 8 + d.1.as_bytes().len());
+
+  // token_id_to_str:           HashMap<u32, String>
+  size += 4 + bc.token_id_to_str.iter().fold(0, |size, d| size + 8 + d.1.as_bytes().len());
+
+  // nonterm_id_to_address:     HashMap<u32, u32>
+  size += 4 + bc.nonterm_id_to_address.len() * 8;
+
+  // nonterm_name_to_id:        HashMap<String, u32>
+  size += 4 + bc.nonterm_name_to_id.iter().fold(0, |size, d| size + 8 + d.0.as_bytes().len());
+
+  // state_name_to_address:       HashMap<String, u32>
+  size += 4 + bc.state_name_to_address.iter().fold(0, |size, d| size + 8 + d.0.as_bytes().len());
+
+  // state_to_token_ids_map:    HashMap<u32, Vec<u32>>
+  size += 4 + bc.state_to_token_ids_map.iter().fold(0, |size, d| size + 4 + d.1.len() * 4);
+
+  // ir_token_lookup:           BTreeMap<u32, Token>
+  size += 4 + bc.ir_token_lookup.iter().fold(0, |size, d| size + 4 + size_of::<Token>());
+
+  // default_entry
+  size += size_of::<EntryPoint>();
+
+  let mut buffer = Vec::<u8>::with_capacity(size);
+
+  write_primitive_to_bytes(&mut buffer, bc.bytecode.len() as u32);
+  write_bytes(&mut buffer, &bc.bytecode);
+  write_hash_of_id_str(&mut buffer, &bc.address_to_state_name);
+  write_hash_of_id_str(&mut buffer, &bc.token_id_to_str);
+  write_hash_of_str_id(&mut buffer, &bc.state_name_to_address);
+  write_hash_of_str_id(&mut buffer, &bc.nonterm_name_to_id);
+  write_hash_of_id_vecu32(&mut buffer, &bc.state_to_token_ids_map);
+  write_primitive_hash(&mut buffer, &bc.nonterm_id_to_address);
+  write_primitive_to_bytes(&mut buffer, bc.default_entry);
+
+  let array_buffer = ArrayBuffer::new(buffer.len() as u32);
+
+  let output = Uint8Array::new(&array_buffer);
+
+  output.copy_from(&buffer);
+
+  Ok(array_buffer)
+}
+
+fn write_bytes<T: Copy + Clone>(buffer: &mut Vec<u8>, data: &[T]) {
+  unsafe {
+    let size: usize = size_of::<T>();
+    let off: usize = buffer.len();
+    let byte_size = data.len() * size;
+    buffer.set_len(off + byte_size);
+    let ptr: *const u8 = std::mem::transmute(data.as_ptr());
+    ptr.copy_to(buffer.as_mut_ptr().offset(off as isize), byte_size);
+  }
+}
+
+fn write_primitive_to_bytes<T: Copy>(buffer: &mut Vec<u8>, data: T) {
+  unsafe {
+    let size: usize = size_of::<T>();
+    let off: usize = buffer.len();
+    let bytes: *const u8 = std::mem::transmute(&data);
+    buffer.set_len(off + size);
+    bytes.copy_to(buffer.as_mut_ptr().offset(off as isize), size);
+  }
+}
+
+fn read_primitive_at_offset<T: Copy + Default>(buffer: &[u8], offset: &mut usize) -> T {
+  unsafe {
+    let size: usize = size_of::<T>();
+    let data: T = Default::default();
+    let bytes: *mut u8 = std::mem::transmute(&data);
+    buffer.as_ptr().offset(*offset as isize).copy_to(bytes, size);
+    *offset += size;
+    data
+  }
+}
+
+///
 #[wasm_bindgen]
 pub fn create_parser_states(
   js_db: &JSParserDB,
@@ -219,15 +441,6 @@ fn convert_journal_errors(in_errors: RadlrError) -> PositionedErrors {
   errors.extend_from_refs(&in_errors.flatten());
 
   errors
-}
-
-/// Temporary simple disassembly implementation.
-#[wasm_bindgen]
-pub fn create_bytecode(states: &JSIRParser) -> Result<JSBytecodeParserDB, PositionedErrors> {
-  match compile_bytecode(states.states.as_ref(), true) {
-    Err(errors) => Result::Err(convert_journal_errors(errors)),
-    Ok(pkg) => Ok(JSBytecodeParserDB(Rc::new(pkg))),
-  }
 }
 
 /// Temporary simple disassembly implementation.

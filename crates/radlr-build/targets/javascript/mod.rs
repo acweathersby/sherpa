@@ -12,7 +12,6 @@ pub fn build(db: &RadlrDatabase, build_config: BuildConfig, parser_config: Parse
   let (out_dir, lib_dir) = (build_config.source_out, build_config.lib_out);
 
   let pool = radlr_core::worker_pool::SingleThreadPool {};
-
   let states = db.build_states(Default::default(), &pool)?;
   let parser = states.build_ir_parser(true, false, &pool)?;
 

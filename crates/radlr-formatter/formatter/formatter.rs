@@ -12,7 +12,7 @@ pub const fn formatter_error_class() -> ErrorClass {
 
 /// A formatter for complicated code.
 ///
-/// The Radlr formatter is a scriptable formatter that uses a turing complete
+/// The Radlr formatter is a programable formatter that uses a turing complete
 /// formatting language to write input objects into a suitable output text based
 /// format.
 ///

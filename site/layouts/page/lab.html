@@ -1,29 +1,34 @@
 {{- $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm" "sourcemap" "inline") -}}
+{{- $labWorkerScript := resources.Get "js/lab/wasm_bytecode_compiler.worker.ts" | js.Build (dict "target" "esnext" "format" "esm" "sourcemap" "inline") -}}
 <!doctype html>
 <html lang="{{ .Site.Params.languageTag | default " en-US" }}">
 {{ partial "head/head.html" . }}
 
 <body class="lab">
-    {{ partial "scripts/soft_load.html" . }}
     {{ .Scratch.Set "headerSubtext" "lab" }}
     {{ partial "header/header.html" . }}
-    <main id="lab" >
-        <div id="documents-host" class="loading adjustable">
-            <iframe id="documents-frame" class="frame"></iframe>
-        </div>
-        <div id="lab-host">
-          <noscript>Javascript must be enabled to run Radlr Lab</noscript>
-        </div>
-    </main>
+
+    <div id="notebook"></div>
 
     <script type="module">
-        import { lab_handler, docs_handler } from "{{ $labScript.Permalink }}";
-        // Connect docs handler to iframe manage interaction between
-        // docs and lab.
-        docs_handler(document.getElementById("documents-frame"), document.getElementById("documents-host"));
-        lab_handler(document.getElementById("lab-host"));
-      
+        
+        import { init } from "{{ $labScript.Permalink }}";
+
+        init("{{$labWorkerScript.Permalink}}");
     </script>
+
+<template id="panel">
+  <div class="nb-frame"> 
+    <div class="nb-header">
+      <div class="nb-label"></div>
+      <div class="nb-loader">
+        <div class="loader-div"></div>
+      </div>
+    </div>
+    <div class="nb-body"></div>
+  </div>
+</template>
+
 <template id="debugger-template">
     <div class="controls">
       <span>
