@@ -116,7 +116,7 @@ export class GrammarDB extends PipelineNode<{
   "loading": void
   "loaded": void
   "failed": void
-  "bytecode_ready": void
+  "bytecode_ready": string
 }> {
   static worker_path: string = ""
 

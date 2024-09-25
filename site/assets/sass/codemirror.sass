@@ -1,0 +1,99 @@
+
+// Codemirror -------------------------------
+
+.cm-editor
+  font-family: monospace
+  color: #000
+  direction: ltr
+  left: 0
+  right: 0
+  top: 0
+  bottom: 0
+  outline: none
+  position: absolute !important
+
+  .cm-gutters
+    border: none
+    background-color: $accent-color
+    width: 40px
+    text-align: right
+
+    .syn-prod
+      color: #9f9f9f
+
+    .syn-term
+      color: #008cc3
+
+    .syn-prod-id
+      color: rgb(72, 77, 85)
+      font-weight: 800
+
+    .syn-class
+      color: #e27923
+      font-weight: 800
+
+    .cm-scroller
+      overflow: hidden
+
+.cm-focused
+  outline: none !important
+
+.cst-node
+  outline: none
+  text-decoration: none
+  font-size: 16px
+
+.cst-root
+  min-width: 20px
+
+.cst-tk
+  font-weight: bold
+  margin-right: 2px
+
+.cm-activeLine
+  background-color: #626060 !important
+
+.cm-editor
+  color: #9f9f9f
+
+.cm-content
+  padding: 0 !important
+
+.nterm-test
+  background-color: yellow
+  color: black
+
+.term-test
+  background-color: blue
+  color: black
+
+.parse-test
+  background-color: green
+  color: black
+
+.scan-test
+  border: 1px solid red
+  border-left: unset
+
+.tok-test
+  background-color: orange
+
+.skip-test
+  background-color: #4f91a9
+
+.pos-test
+  border-left: 1px solid #eecd14
+  position: relative
+  display: inline-block
+
+.pos-test::after
+  color: #eecd14
+  content: "^parser"
+  position: absolute
+  bottom: -9px
+  left: -2px
+  display: block
+  font-size: 8px
+  font-weight: 900
+
+@import "./lab"

@@ -1,0 +1,44 @@
+header
+  position: relative
+  top: 0
+  box-sizing: border-box
+  flex-direction: row
+  align-items: center
+  z-index: 10
+  height: 40px
+  display: flex
+  align-items: center
+  padding-right: 10px
+
+  a
+    display: contents
+
+  #header-logo
+    display: inline-block
+    height: 16px
+    margin-left: 10px
+    margin-right: 4px
+
+    #radlr-logo
+      fill: #aeaeae !important
+      transition: fill 200ms
+
+    &:hover #radlr-logo
+      fill: #f0f0f0 !important
+
+  #page-category
+    border-left: 1px solid #7777773a
+    padding-left: 4px
+    margin-left: 2px
+    line-height: 1em
+    position: relative
+    font-size: 20px
+    height: 20px
+    text-transform: uppercase
+
+  #page-category-name
+    font-size: .75em
+
+@media screen and (max-width: 1000px)
+  header
+    background-color: white !important

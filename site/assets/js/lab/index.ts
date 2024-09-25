@@ -1,25 +1,32 @@
 import * as pipeline from "./pipeline";
 import radlr_init, * as radlr from "js/radlr/radlr_wasm.js";
-import { EditorField } from "./journal_elements";
+import { NB, NBEditorField } from "./journal_elements";
 
 export async function init(compiler_worker_path: string) {
   radlr_init();
 
+  let nb = new NB(2);
+
+  let grammar_input = nb.addField(new NBEditorField("Grammar"))
+  grammar_input.setContentVisible(true);
+  grammar_input.setText("<> name > \"names\"+");
+
+  let grammar_input2 = nb.addField(new NBEditorField("Grammar"))
+  grammar_input2.setContentVisible(true);
+  grammar_input2.setText("<> name > \"names\"+");
+
+  let bytecode_output = nb.addField(new NBEditorField("Bytecode Output"), 1);
+  bytecode_output.setContentVisible(false);
+
 
   pipeline.GrammarDB.worker_path = compiler_worker_path;
 
-  let grammar_input = new EditorField("Grammar");
-  grammar_input.setContentVisible(true);
-
-  let bytecode_output = new EditorField("Bytecode Output");
-  bytecode_output.setContentVisible(false);
-
-  let parser_input = new EditorField("Parser Input");
+  let parser_input = nb.addField(new NBEditorField("Parser Input"), 1);
   parser_input.setContentVisible(true);
 
-  let formatting_rules = new EditorField("Formatting Rules");
-  let highlighting_rules = new EditorField("Highlighting Rules");
-  let ast_atat = new EditorField("Ascript AST @@");
+  let formatting_rules = new NBEditorField("Formatting Rules");
+  let highlighting_rules = new NBEditorField("Highlighting Rules");
+  let ast_atat = new NBEditorField("Ascript AST @@");
 
   ast_atat.setText("temp");
 
@@ -32,7 +39,6 @@ export async function init(compiler_worker_path: string) {
   parser_input.addMsg(0, 5, "test1");
   parser_input.addMsg(5, 4, "test2");
 
-  grammar_input.setText("<> name > \"names\"+");
 
 
   grammar_input.addListener("text_changed", grammar_input => {

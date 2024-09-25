@@ -1,0 +1,67 @@
+// Inputs -----------------------------------------
+
+input[type="checkbox"]
+  background-color: black !important
+
+input[type="checkbox"]:active
+  background-color: unset
+
+input[type="checkbox"]::before
+  background-color: #9f9f9f !important
+
+input[type="checkbox"]
+  position: relative
+  appearance: none
+  display: inline-block
+  background-color: #fff
+  margin: auto 4px auto 6px
+  font: inherit
+  color: currentColor
+  width: 1em
+  height: 1em
+  line-height: 1em
+  border-radius: 2px
+  transform: translateY(-0.075em)
+  place-content: center
+  display: flex
+  align-items: center
+
+input[type="checkbox"]:active
+  background-color: unset
+
+input[type="checkbox"]::before
+  display: inline-block
+  content: ""
+  width: 70%
+  height: 70%
+  border-radius: 2px
+  transform: scale(0)
+  transition: 100ms transform ease-in-out
+  box-shadow: inset 1em 1em var(--form-control-color)
+  background-color: $debugger-action-red
+
+input[type="checkbox"]:checked::before
+  transform: scale(1)
+
+  .lab
+    background-color: white
+
+  a
+    color: inherit
+
+  h1
+    position: relative
+    display: inline-block
+    line-height: 1em
+    font-size: 2em
+    margin: 0
+    padding: 10px 5px 10px 20px
+    line-height: 2em
+    height: 100%
+
+  & .buttons
+    position: absolute
+    right: 20px
+
+body
+  font-size: 12px
