@@ -3,7 +3,7 @@
 
 .cm-editor
   font-family: monospace
-  color: #000
+  color: white
   direction: ltr
   left: 0
   right: 0
@@ -12,11 +12,29 @@
   outline: none
   position: absolute !important
 
+  .cm-line
+    background: none
+    box-sizing: border-box
+
+    &.cm-activeLine
+      background-color: $inc-1-bg-color
+      color: $inc-1-fg-color
+      border-radius: 2px
+
+  .cm-cursor
+    border-color: #ac3e3e
+    border-right: 1.5px solid #ac3e3e
+
   .cm-gutters
     border: none
-    background-color: $accent-color
     width: 40px
     text-align: right
+    background-color: $basic-bg-color
+    color: $inactive-color
+
+    .cm-activeLineGutter
+      color: $active-color
+      background: none
 
     .syn-prod
       color: #9f9f9f
@@ -49,9 +67,6 @@
 .cst-tk
   font-weight: bold
   margin-right: 2px
-
-.cm-activeLine
-  background-color: #626060 !important
 
 .cm-editor
   color: #9f9f9f

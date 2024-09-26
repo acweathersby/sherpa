@@ -43,6 +43,10 @@ pub fn command() -> ArgMatches {
           .default_value("bytecode")
         )
         .arg(
+          arg!( --lab "Export the built parser to the RADLR online lab" )
+          .required(false)
+        )
+        .arg(
           arg!( -a --ast "Create AST code, in the target language, from AScripT definitions" )
           .required(false)
         )

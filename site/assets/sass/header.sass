@@ -3,19 +3,28 @@ header
   top: 0
   box-sizing: border-box
   flex-direction: row
-  align-items: center
   z-index: 10
-  height: 40px
+  height: 80px
   display: flex
   align-items: center
-  padding-right: 10px
+  justify-content: space-between
+  padding: 0 20px
 
   a
     display: contents
 
+  .header-left, .header-right
+    display: flex
+    align-items: center
+    flex-direction: row
+    justify-content: space-between
+
+  .header-right
+    width: 100px
+
   #header-logo
     display: inline-block
-    height: 16px
+    height: 2em
     margin-left: 10px
     margin-right: 4px
 
@@ -30,11 +39,12 @@ header
     border-left: 1px solid #7777773a
     padding-left: 4px
     margin-left: 2px
-    line-height: 1em
+    line-height: 20px
     position: relative
-    font-size: 20px
+    font-size: 2em
     height: 20px
     text-transform: uppercase
+    float: right
 
   #page-category-name
     font-size: .75em

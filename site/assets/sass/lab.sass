@@ -1,13 +1,12 @@
 #notebook
   user-select: none
   position: relative
-  width: 100%
   height: 100%
   bottom: 0px
   display: flex
   flex-direction: row
   align-content: center
-  top:
+  margin: 20px 40px
 
 .nb-row
   position: relative
@@ -25,7 +24,7 @@
   &.dragging
     position: fixed
     z-index: 1000
-    background-color: $background-color
+    background-color: $basic-bg-color
     box-shadow: 2px 2px 10px black
 
   &.nb-blank-field
@@ -33,37 +32,39 @@
     transition: height 200ms
 
   &.nb-content-field
-    color: white
     border-radius: 5px
     overflow: hidden
-    font-size: 18px
+    padding: 20px 0
 
     .nb-header
       position: relative
-      //background: $nb-header-background
       height: 20px
       display: flex
       flex-direction: row
+      justify-content: space-between
       align-items: center
-      transition: background 200ms
-      font-size: 12px
+      font-size: 1em
       font-weight: 800
+      border-radius: 2px
+      color: $inc-1-fg-color
+      transition: all 200ms
 
       &:hover
-        background: red
+        color: $nb-header-fg-color
+        background: $nb-header-bg-color
 
       .nb-label
         padding: 0 20px
 
       .nb-loader
-        width: 100px
+        width: 25%
         height: 10px
         background-color: $loader-bg
         border: 2px solid $loader-bg
         border-radius: 10px
         box-sizing: content-box
         padding: 0 10px
-        margin: 0 20px
+        margin-right: 10px
         opacity: 0
         visibility: hidden
         transition: opacity 100ms, visibility 100ms
@@ -82,7 +83,7 @@
           width: 10px
 
         50%
-          width: 20px
+          width: 30%
 
         100%
           left: 100%
@@ -91,23 +92,20 @@
     .nb-body
       position: relative
       background: none
-
       height: 400px
       padding: 20px
       margin-top: 20px
-      //height: 400px
       overflow: hidden
       opacity: 0
-      font-size: 14px
+      font-size: 1.35em
       flex-grow: 1
-
       transition: height 200ms, padding 200ms, margin 200ms, opacity 100ms
 
     &.collapsed .nb-body
       height: 0
+      opacity: 0
       margin-top: 0
       padding: 0px 20px
-      opacity: 0
 
     &.loading .nb-loader
       visibility: visible
@@ -116,28 +114,3 @@
     &.content-visible .nb-body
       height: unset
       opacity: 1
-
-  .cm-editor
-
-    color: white
-
-    .cm-cursor
-      border-color: red
-      border-right: 1.5px solid red
-
-    .cm-line
-      background: none
-      box-sizing: border-box
-
-      &.cm-activeLine
-        background: none !important
-        border-top: 1px solid $active-color
-        border-bottom: 1px solid $active-color
-
-    .cm-gutters
-      background: none
-      color: $inactive-color
-
-      .cm-activeLineGutter
-        color: $active-color
-        background: none

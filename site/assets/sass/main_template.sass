@@ -2,8 +2,6 @@
 
 @import "color"
 
-$tab-height: 24px
-
 @font-face
   font-family: "LexandDeca"
   src: url('{{ urls.JoinPath .Site.BaseURL "./webfonts/LexandDeca/LexendDeca-VariableFont_wght.ttf" }}')
@@ -18,8 +16,6 @@ $tab-height: 24px
 
 body
   position: relative
-
-  background-color: rgb(255, 255, 255)
   border: none
 
   top: 0
@@ -33,12 +29,13 @@ body
   margin: 0
 
   font-family: Catamaran, Arial, Helvetica, sans-serif
-  font-size: 14px
+  font-size: 12px
+  letter-spacing: 0.08em
 
   opacity: 1
 
-  color: #7a7a7a
-  background-color: $background-color
+  color: $basic-fg-color
+  background-color: $basic-bg-color
 
   display: flex
   flex-direction: column
@@ -75,22 +72,28 @@ body.preload
   opacity: 0
 
 button
+  background: $basic-bg-color
   border: none
-  margin: 10px
-  font-size: 1.2em
-  padding: 5px 10px
-  border-radius: 20px
-  color: rgb(107, 107, 107)
+  font-size: 1.5em
+  border-radius: 1.5em
+  padding: 10px 10px
   transition: all 150ms
-  background-color: none
+  display: flex
+  flex-direction: row
+  align-items: center
+  color: $basic-fg-color
+  transition: color 250ms, background 250ms
+
+  path
+    fill: $basic-fg-color
+    transition: fill 250ms
 
 button:hover
-  background-color: #5fc7f0
-  color: white
   cursor: pointer
-
-button
-  font-size: 14px
+  background-color: $inc-1-bg-color
+  color: $inc-1-fg-color
+  path
+    fill: $inc-1-fg-color
 
 @import "./codemirror"
 @import "./header"
