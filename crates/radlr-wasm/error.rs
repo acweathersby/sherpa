@@ -46,6 +46,20 @@ impl From<&Vec<RadlrError>> for PositionedErrors {
   }
 }
 
+impl From<Vec<RadlrError>> for PositionedErrors {
+  fn from(mut errors: Vec<RadlrError>) -> Self {
+    let mut out = PositionedErrors { vec: vec![] };
+    out.extend(&mut errors);
+    out
+  }
+}
+
+impl From<RadlrError> for PositionedErrors {
+  fn from(mut err: RadlrError) -> Self {
+    PositionedErrors { vec: convert_error(&err) }
+  }
+}
+
 impl From<&Vec<&RadlrError>> for PositionedErrors {
   fn from(errors: &Vec<&RadlrError>) -> Self {
     let mut out = PositionedErrors { vec: vec![] };

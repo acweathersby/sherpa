@@ -432,7 +432,7 @@ fn build_match<'db>(
       // What remains are hash collisions. We use simple linear
       // probing to find the next available slot, and
       // attach it to the probing chain using a signed
-      // delta index.
+      // delta offset.
       for (val, offset) in leftover_pairs {
         let mut pointer;
         let mut prev_node = (val & mod_mask) as usize;
