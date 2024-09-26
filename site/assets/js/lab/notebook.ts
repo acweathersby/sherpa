@@ -3,12 +3,10 @@ import { StateEffect, StateField, Range } from "@codemirror/state";
 import { Decoration, EditorView } from "@codemirror/view";
 import { Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { basicSetup } from "codemirror";
-import { sleep } from "./pipeline";
+import { MoveFieldDragOperation, ResizeFieldOperation } from "./dragndrop_operations";
 
 export const highlight_effect = StateEffect.define<Range<Decoration>[]>();
 export const filter_effects = StateEffect.define<((from: number, to: number, decoration: Decoration & { attrs: any }) => boolean)>();
-
-
 
 export class NB {
   ele: HTMLElement
@@ -31,9 +29,6 @@ export class NB {
     } else {
       throw "Could not locate #notebook element"
     }
-
-    document.addEventListener("pointermove", this.pointerMove.bind(this));
-    document.addEventListener("pointerup", this.pointerUp.bind(this));
   }
 
   addField<T extends NBField>(field: T, col: number = 0, row: number = Infinity): T {
@@ -61,201 +56,18 @@ export class NB {
 
     field.col = -1;
     field.v_row = -1;
+    field.r_row = -1;
     field.nb_host = null;
 
     return true
   }
 
-  private static drag_delay_ms: number = 200;
 
-  active_drag = false;
-
-  pointer_timeout = 0;
-  drag_field: NBField | null = null;
-  drag_start_col: number = -1;
-  drag_start_row: number = -1;
-
-  drag_target_col: number = -1;
-  drag_target_row: number = -1;
-  placeholder: NBBlankField | null = null;
-
-  mouse_up_trigger_count = 0;
-
-  drag_committed = false;
-  move_threshold = 10;
-
-  start_pos_x = 0;
-  start_pos_y = 0;
-  curr_pos_x = 0;
-  curr_pos_y = 0;
-  offset_x = 0;
-  offset_y = 0;
-  start_width = 0;
-  start_height = 0;
-
-  async queueFieldDrag(e: PointerEvent, field: NBField): Promise<boolean> {
-    let col_index = -1;
+  calculateHeights() {
     for (const col of this.columns) {
-      col_index++;
-      let row_index = col.find(field);
-      if (row_index >= 0) {
-        let trigger_start = this.mouse_up_trigger_count;
-
-        await sleep(NB.drag_delay_ms);
-
-        if (trigger_start != this.mouse_up_trigger_count) {
-          return false;
-        } else {
-          this.startFieldDrag(e, field, col_index, row_index);
-          return true;
-        }
-      }
+      col.latchHeights();
+      col.distributeHeight();
     }
-
-    return false;
-  }
-
-  private startFieldDrag(e: PointerEvent, field: NBField, col: number, row: number) {
-    this.drag_field = field;
-    this.drag_start_col = col;
-    this.drag_start_row = row;
-
-    this.drag_target_col = col;
-    this.drag_target_row = row;
-
-    let { x, y } = e;
-    let { x: ele_x, y: ele_y, width, height } = field.ele.getBoundingClientRect();
-
-    this.offset_x = ele_x;
-    this.offset_y = ele_y;
-
-    this.start_height = height;
-    this.start_width = width;
-
-    this.start_pos_x = x;
-    this.start_pos_y = y;
-
-    this.curr_pos_x = x;
-    this.curr_pos_y = y;
-
-    this.drag_committed = false;
-    this.active_drag = true;
-  }
-
-  private updateDragPos(field: NBField) {
-    let { x, y } = this.getDragPos();
-    field.ele.style.top = `${y}px`;
-    field.ele.style.left = `${x}px`;
-  }
-
-  private getDragPos() {
-    let x = (this.curr_pos_x - this.start_pos_x) + this.offset_x;
-    let y = (this.curr_pos_y - this.start_pos_y) + this.offset_y;
-    return { x, y };
-  }
-
-  private commitFieldDrag() {
-    if (this.drag_field) {
-      for (const col of this.columns) {
-        for (const cell of col.cells) {
-          cell.latchHeight();
-        }
-      }
-
-      this.drag_committed = true;
-      this.drag_field.ele.classList.add("dragging");
-      this.updateDragPos(this.drag_field)
-      this.drag_field.ele.style.width = this.start_width + "px";
-      this.drag_field.ele.style.height = this.start_height + "px";
-
-      // Remove the field from the host row and insert a placeholder of the correct dimensions.
-      // the active field should now be attached the document body. 
-      const col = this.columns[this.drag_start_col];
-
-      col.remove(this.drag_field);
-
-      this.placeholder = new NBBlankField(this.start_width, this.start_height, true);
-      col.add(this.placeholder, this.drag_start_row);
-
-      document.body.appendChild(this.drag_field.ele);
-    }
-  }
-
-  private updateFieldDrag() {
-    if (this.active_drag && this.drag_committed) {
-      if (this.drag_field) {
-        this.updateDragPos(this.drag_field);
-
-        for (const col of this.columns) {
-          const insert_data = col.pointInside(this.curr_pos_x, this.curr_pos_y);
-
-          if (insert_data && (this.drag_target_col != col.index || this.drag_target_row != insert_data.insert_row)) {
-            this.drag_target_col = col.index;
-            this.drag_target_row = insert_data.insert_row;
-
-            if (this.placeholder) {
-              this.placeholder.delete();
-              this.placeholder = null;
-            }
-
-            this.placeholder = new NBBlankField(this.start_width, this.start_height);
-            col.add(this.placeholder, this.drag_target_row);
-          }
-        }
-      }
-    }
-  }
-
-  private endFieldDrag() {
-    if (this.active_drag && this.drag_committed) {
-
-      if (this.drag_field) {
-        this.drag_field.ele.classList.remove("dragging");
-        this.drag_field.ele.style.top = ``;
-        this.drag_field.ele.style.left = ``;
-        this.drag_field.ele.style.width = ``;
-        this.drag_field.ele.style.height = ``;
-
-        this.addField(this.drag_field, this.drag_target_col, this.drag_target_row);
-
-        if (this.placeholder) {
-          this.removeField(this.placeholder);
-          this.placeholder = null;
-        }
-      }
-    }
-
-    this.drag_committed = false;
-    this.active_drag = false;
-  }
-
-  private pointerMove(e: PointerEvent) {
-    if (this.active_drag) {
-
-      let { x, y } = e;
-
-      this.curr_pos_x = x;
-      this.curr_pos_y = y;
-
-      if (!this.drag_committed) {
-        const abs_diff = Math.sqrt((x - this.start_pos_x) ** 2 + (y - this.start_pos_y) ** 2);
-        if (abs_diff >= this.move_threshold) {
-          this.commitFieldDrag();
-
-        }
-      } else {
-        this.updateFieldDrag();
-      }
-
-      if (e.stopPropagation) e.stopPropagation();
-      if (e.preventDefault) e.preventDefault();
-      return false;
-    }
-  }
-
-  private pointerUp(e: PointerEvent) {
-    this.mouse_up_trigger_count++;
-    this.endFieldDrag();
   }
 }
 
@@ -267,7 +79,7 @@ export class NBColumn {
 
   constructor(nb_host: NB, index: number) {
     this.ele = document.createElement("div");
-    this.ele.classList.add("nb-row");
+    this.ele.classList.add("nb-column");
     this.cells = [];
     this.nb_host = nb_host;
     this.index = index;
@@ -283,6 +95,7 @@ export class NBColumn {
       field.col = -1;
       field.v_row = -1;
 
+      this.cells.forEach((i, index) => i.r_row = index);
       this.cells.filter(n => !(n instanceof NBBlankField)).forEach((i, index) => i.v_row = index);
     }
   }
@@ -303,6 +116,7 @@ export class NBColumn {
     field.col = this.index;
     field.v_row = -1;
 
+    this.cells.forEach((i, index) => i.r_row = index);
     this.cells.filter(n => !(n instanceof NBBlankField)).forEach((i, index) => i.v_row = index);
   }
 
@@ -354,15 +168,66 @@ export class NBColumn {
 
     return null;
   }
+
+  latchHeights() {
+    this.cells.forEach(c => c.latchHeight())
+  }
+
+
+  distributeHeight(fixed_heights_settings: { index: number, height: number }[] = []) {
+
+    let real_height = this.ele.getBoundingClientRect().height;
+
+    let cell_heights = this.cells.map((c, i) => {
+
+      if (c instanceof NBBlankField && c.deleting) {
+        return { f: false, h: 0 }
+      }
+
+      let v = fixed_heights_settings.find(f => f.index == i);
+      if (v) {
+        return { f: true, h: v.height }
+      } else {
+        return { f: false, h: c.latched_height }
+      }
+    });
+
+    let cell_height_sum = cell_heights.reduce((r, l) => {
+      if (l.f) { r.f += l.h } else { r.l += l.h }
+      return r
+    }, { f: 0, l: 0 });
+
+    let remainder_percentage = 1 / (cell_height_sum.l / (real_height - cell_height_sum.f));
+    let inv_real_height = 1 / real_height;
+
+
+    let normalized_heights = [];
+    for (let i = 0; i < this.cells.length; i++) {
+      let height = cell_heights[i];
+      if (height.f) {
+        normalized_heights.push(height.h * inv_real_height);
+      } else {
+        normalized_heights.push(height.h * remainder_percentage * inv_real_height);
+      }
+    }
+    let normalized_value = 1 / normalized_heights.reduce((v, a) => v + a, 0);
+    for (let i = 0; i < this.cells.length; i++) {
+      this.cells[i].setRelativeHeight(normalized_heights[i] * normalized_value);
+    }
+  }
 }
 
 
 export class NBField {
   ele: HTMLElement;
   nb_host: null | NB = null
+  // The index of the row excluding any blank cells
   v_row: number = 0;
+  // The index of the row including blank cells
+  r_row: number = 0;
   col: number = 0;
   latched_height: number = 0
+  collapsed: boolean = false;
 
   constructor(ele = document.createElement("div")) {
     this.ele = ele;
@@ -373,9 +238,22 @@ export class NBField {
     const { height } = this.ele.getBoundingClientRect();
     this.latched_height = height;
   }
+
+  /**
+   * @param height - a ratio of the parent containers height
+   */
+  setRelativeHeight(height: number) {
+    this.ele.style.height = `${height * 100}%`
+  }
+
+  unsetRelativeHeight() {
+    this.ele.style.height = ""
+  }
 }
 
 export class NBBlankField extends NBField {
+  deleting: boolean = false
+
   constructor(width: number, height: number, force_height: boolean = false) {
     super()
     this.ele.classList.add("nb-blank-field");
@@ -392,9 +270,12 @@ export class NBBlankField extends NBField {
   }
 
   delete() {
+
+    this.deleting = true;
+
     if (this.nb_host) {
       let nb_host = this.nb_host;
-      this.ele.style.height = `${0}px`
+      //this.ele.style.height = `${0}px`
       setTimeout(() => { nb_host.removeField(this); }, 100)
     } else {
       if (this.ele.parentElement)
@@ -407,6 +288,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
   header: HTMLElement;
   body: HTMLElement;
   label: HTMLElement;
+  resize_handle: HTMLElement;
   collapsed: boolean = false;
   listeners: Map<event_names, ((arg: EventObj) => void)[]> = new Map;
 
@@ -419,12 +301,18 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
     this.header = <any>this.ele.querySelector(".nb-header");
     this.label = <any>this.ele.querySelector(".nb-label");
     this.body = <any>this.ele.querySelector(".nb-body");
+    this.resize_handle = <any>this.ele.querySelector(".nb-resize-handle");
 
     this.label.innerHTML = name;
 
+    this.resize_handle.addEventListener("pointerdown", e => {
+      new ResizeFieldOperation(e, this);
+    })
+
     this.header.addEventListener("pointerdown", async e => {
       if (this.nb_host) {
-        if (!await this.nb_host.queueFieldDrag(e, this)) {
+        let drag_op = new MoveFieldDragOperation(e, this);
+        if (!await drag_op.willDrag()) {
           this.setExpanded(this.ele.classList.contains("collapsed"))
         }
       } else {

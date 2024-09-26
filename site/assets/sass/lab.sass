@@ -7,8 +7,9 @@
   flex-direction: row
   align-content: center
   margin: 20px 40px
+  overflow: hidden
 
-.nb-row
+.nb-column
   position: relative
   height: 100%
   width: 50%
@@ -18,8 +19,41 @@
 
 .nb-field
 
+  $header-height: 20px
+  $base-transition-speed: 200ms
+  $bts: $base-transition-speed
+
   position: relative
   background-color: none
+  display: flex
+  flex-direction: column
+  transition: height $bts
+
+  .nb-resize-handle-area
+    position: relative
+    bottom: -20px
+    height: 20px
+    width: 100%
+    display: flex
+    flex-direction: row
+    justify-content: center
+    align-items: center
+
+    .nb-resize-handle
+      text-align: center
+      line-height: 0em
+      font-size: 2em
+      position: relative
+      width: 100px
+      height: 10px
+      border-radius: 2px
+      color: $dec-1-fg-color
+      background-color: $dec-1-bg-color
+
+      &:hover, &:active
+        color: $inc-2-fg-color
+        background-color: $inc-2-bg-color
+        cursor: ns-resize
 
   &.dragging
     position: fixed
@@ -29,7 +63,6 @@
 
   &.nb-blank-field
     height: 0
-    transition: height 200ms
 
   &.nb-content-field
     border-radius: 5px
@@ -38,16 +71,16 @@
 
     .nb-header
       position: relative
-      height: 20px
+      height: $header-height
       display: flex
       flex-direction: row
       justify-content: space-between
       align-items: center
       font-size: 1em
-      font-weight: 800
+      font-weight: 600
       border-radius: 2px
       color: $inc-1-fg-color
-      transition: all 200ms
+      transition: all $bts
 
       &:hover
         color: $nb-header-fg-color
@@ -57,6 +90,7 @@
         padding: 0 20px
 
       .nb-loader
+        position: relative
         width: 25%
         height: 10px
         background-color: $loader-bg
@@ -67,7 +101,8 @@
         margin-right: 10px
         opacity: 0
         visibility: hidden
-        transition: opacity 100ms, visibility 100ms
+        top: 5px
+        transition: opacity $bts * 2, visibility $bts * 2, top $bts * 2.5
 
       .loader-div
         width: 10px
@@ -89,28 +124,65 @@
           left: 100%
           width: 10px
 
+    .nb-loading-screen
+      position: absolute
+      top: $header-height + 20px
+      bottom: 0
+      left: 0
+      right: 0
+      display: flex
+      align-items: center
+      justify-content: center
+      opacity: 0
+      transition: padding $bts, margin $bts, opacity 100ms
+      background-color: $basic-bg-color
+      color: $inc-2-fg-color
+      pointer-events: none
+
     .nb-body
-      position: relative
       background: none
-      height: 400px
+      position: relative
       padding: 20px
       margin-top: 20px
       overflow: hidden
-      opacity: 0
+      opacity: 1
       font-size: 1.35em
       flex-grow: 1
-      transition: height 200ms, padding 200ms, margin 200ms, opacity 100ms
+      transition: padding $bts, margin $bts, opacity $bts
 
-    &.collapsed .nb-body
-      height: 0
-      opacity: 0
-      margin-top: 0
-      padding: 0px 20px
+      top: $header-height
+      bottom: 0
+      width: 100%
 
-    &.loading .nb-loader
-      visibility: visible
-      opacity: 1
+      //background-color: red
 
-    &.content-visible .nb-body
-      height: unset
-      opacity: 1
+      .cm-editor
+        top: 0
+        bottom: 0
+        left: 0
+        right: 0
+
+    &.loading
+      .nb-loader
+        visibility: visible
+        opacity: 1
+        top: 0
+
+      .nb-body
+        opacity: 0
+
+      .nb-loading-screen
+        opacity: 1
+
+    &.collapsed
+      height: $header-height !important
+
+      .nb-body
+        opacity: 0
+        margin-top: 0
+        padding: 0px 20px
+
+      .nb-loading-screen
+        opacity: 0
+        margin-top: 0
+        padding: 0px 20px

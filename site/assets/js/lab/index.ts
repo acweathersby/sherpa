@@ -1,11 +1,11 @@
 import * as pipeline from "./pipeline";
 import radlr_init, * as radlr from "js/radlr/radlr_wasm.js";
-import { NB, NBEditorField } from "./journal_elements";
+import { NB, NBEditorField } from "./notebook";
 
 export async function init(compiler_worker_path: string) {
   radlr_init();
 
-  let nb = new NB(2);
+  let nb = new NB(3);
 
   let grammar_input = nb.addField(new NBEditorField("Grammar"))
   grammar_input.setContentVisible(true);
@@ -57,11 +57,11 @@ export async function init(compiler_worker_path: string) {
   })
 
   grammar.addListener("bytecode_ready", async bytecode => {
+    await pipeline.sleep(100);
     bytecode_output.setText(bytecode);
-
-    await pipeline.sleep(500);
-
+    await pipeline.sleep(600);
     bytecode_output.setLoading(false);
+    await pipeline.sleep(600);
     bytecode_output.setContentVisible(true);
   })
 
@@ -84,4 +84,8 @@ export async function init(compiler_worker_path: string) {
   parser.addListener("step", action => {
     console.log("Parser Stepped", action);
   });
+
+  await pipeline.sleep(10);
+
+  nb.calculateHeights()
 }
