@@ -40,6 +40,7 @@
     flex-direction: row
     justify-content: center
     align-items: center
+    transition: opacity $bts
 
     .nb-resize-handle
       text-align: center
@@ -52,6 +53,9 @@
 
       &:hover, &:active
         cursor: ns-resize
+
+  &:last-child .nb-resize-handle-area
+    opacity: 0
 
   &.dragging
     position: fixed

@@ -1,5 +1,5 @@
 import { sleep } from "./pipeline";
-import { NBField, NBBlankField, NB, NBColumn, MIN_EXPANDED_FIELD_HEIGHT } from "./notebook";
+import { NBField as NBCell, NBBlankField, NB, NBColumn, MIN_EXPANDED_FIELD_HEIGHT } from "./notebook";
 
 class DragOperation {
   pointer_timeout = 0;
@@ -29,16 +29,17 @@ class DragOperation {
     this.move_threshold = move_threshold;
     this.bound_pointer_up = this.pointerUp.bind(this);
     this.bound_pointer_move = this.pointerMove.bind(this);
+    document.body.setPointerCapture(e.pointerId);
     document.addEventListener("pointermove", this.bound_pointer_move);
     document.addEventListener("pointerup", this.bound_pointer_up);
   }
 
   initialize(e: PointerEvent) {
+
     this.will_drag = this.init_async(e);
   }
 
   async init_async(e: PointerEvent): Promise<boolean> {
-
     if (this.criteriaMet()) {
       let trigger_start = this.mouse_up_trigger_count;
 
@@ -85,7 +86,7 @@ class DragOperation {
   protected criteriaMet(): boolean { return true; }
   protected start(e: PointerEvent) { }
   protected commit() { }
-  protected update() { }
+  protected update(e: PointerEvent) { }
   protected end() { }
 
   private pointerMove(e: PointerEvent) {
@@ -101,10 +102,10 @@ class DragOperation {
         if (abs_diff >= this.move_threshold) {
           this.drag_committed = true;
           this.commit();
-          this.update();
+          this.update(e);
         }
       } else {
-        this.update();
+        this.update(e);
       }
 
       if (e.stopPropagation) e.stopPropagation();
@@ -119,7 +120,7 @@ class DragOperation {
     if (this.drag_committed) {
       this.end();
     }
-
+    document.body.releasePointerCapture(e.pointerId);
     document.removeEventListener("pointermove", this.bound_pointer_move);
     document.removeEventListener("pointerup", this.bound_pointer_up);
   }
@@ -128,7 +129,7 @@ class DragOperation {
 
 export class MoveFieldDragOperation extends DragOperation {
 
-  drag_field: NBField;
+  drag_field: NBCell;
   drag_start_col: number = -1;
   drag_start_row: number = -1;
 
@@ -141,7 +142,7 @@ export class MoveFieldDragOperation extends DragOperation {
 
   nb: NB;
 
-  constructor(e: PointerEvent, drag_field: NBField) {
+  constructor(e: PointerEvent, drag_field: NBCell) {
     super(e);
     if (drag_field.nb_host) {
       this.nb = drag_field.nb_host;
@@ -150,6 +151,10 @@ export class MoveFieldDragOperation extends DragOperation {
       this.drag_start_row = this.drag_field.v_row;
       this.drag_target_col = this.drag_field.col;
       this.drag_target_row = this.drag_field.v_row;
+
+
+
+
       this.initialize(e);
     } else {
       throw "Notebook host not found";
@@ -178,7 +183,7 @@ export class MoveFieldDragOperation extends DragOperation {
     this.start_width = width;
   }
 
-  protected updateDragPos(field: NBField) {
+  protected updateDragPos(field: NBCell) {
     let { x, y } = this.getDragPos();
     field.ele.style.top = `${y}px`;
     field.ele.style.left = `${x}px`;
@@ -281,66 +286,129 @@ export class MoveFieldDragOperation extends DragOperation {
 
 export class ResizeFieldOperation extends DragOperation {
 
-  top_field: NBField;
-  bottom_field: NBField;
-  target_column: NBColumn
+  static stick_zone_size = 20;
 
-  drag_target_col: number = -1;
-  drag_target_row: number = -1;
   placeholder: NBBlankField | null = null;
+  steps: number[] = []
 
-  start_total_height = 0;
-  start_top_height = 0;
+  sets: {
+    offset_y: number,
+    start_total_height: number,
+    start_top_height: number
+    top: NBCell,
+    bottom: NBCell,
+    col: NBColumn
+  }[] = []
 
   nb: NB;
 
-  constructor(e: PointerEvent, drag_field: NBField) {
+  constructor(e: PointerEvent, start_cell: NBCell) {
     super(e, 1, 0);
-    if (drag_field.nb_host) {
-      this.nb = drag_field.nb_host;
-      this.top_field = drag_field;
-      this.bottom_field = drag_field;
-      this.target_column = this.nb.columns[drag_field.col];
+    if (start_cell.nb_host) {
+      this.nb = start_cell.nb_host;
+
+      this.addSet(start_cell);
+
+      const adjust_adjacent = e.altKey;
+
+      let { y, height } = start_cell.ele.getBoundingClientRect();
+      let main_step = y + height;
+
+      for (const col of this.nb.columns) {
+        for (const cell of col.cells) {
+          let { y, height } = cell.ele.getBoundingClientRect();
+          let step = y + height;
+
+          if (main_step == step && adjust_adjacent && cell != start_cell) {
+            this.addSet(cell);
+          } else {
+            this.steps.push(step);
+          }
+        }
+      }
+
+      console.log(this.steps);
+
       this.initialize(e);
     } else {
       throw "Notebook host not found";
     }
   }
 
+  private addSet(cell: NBCell) {
+    this.sets.push({
+      offset_y: 0,
+      start_total_height: 0,
+      start_top_height: 0,
+      top: cell,
+      bottom: cell,
+      col: this.nb.columns[cell.col]
+    });
+  }
+
   protected criteriaMet(): boolean {
-    return this.top_field.r_row < this.target_column.cells.length - 1;
+
+    this.sets = this.sets.filter((set) => {
+      return set.top.r_row < set.col.cells.length - 1
+    })
+
+
+    return this.sets.length > 0;
   }
 
   protected start(e: PointerEvent) {
-    let { x: ele_x, y: ele_y, width, height } = this.top_field.ele.getBoundingClientRect();
+    for (const set of this.sets) {
 
-    this.bottom_field = this.target_column.cells[this.top_field.r_row + 1];
+      let { y: ele_y } = set.top.ele.getBoundingClientRect();
 
-    this.offset_x = ele_x;
-    this.offset_y = ele_y;
+      set.bottom = set.col.cells[set.top.r_row + 1];
 
-    this.target_column.latchHeights()
-    this.start_total_height = this.top_field.latched_height + this.bottom_field.latched_height;
-    this.start_top_height = this.top_field.latched_height;
+      set.offset_y = ele_y;
+
+      set.col.latchHeights()
+      set.start_total_height = set.top.latched_height + set.bottom.latched_height;
+      set.start_top_height = set.top.latched_height;
+    }
   }
 
-  protected update(): void {
-    let top_height = Math.min(Math.max(MIN_EXPANDED_FIELD_HEIGHT, this.start_top_height + this.diff_y), this.start_total_height - MIN_EXPANDED_FIELD_HEIGHT);
-    let bottom_height = this.start_total_height - top_height;
+  protected update(e: PointerEvent): void {
 
-    this.top_field.ele.style.height = `${top_height}px`;
-    this.bottom_field.ele.style.height = `${bottom_height}px`;
+    let stick_zone_size = e.ctrlKey ? ResizeFieldOperation.stick_zone_size : 0;
 
-    this.top_field.ele.style.transition = "unset"
-    this.bottom_field.ele.style.transition = "unset"
+    for (const set of this.sets) {
+
+      let top_height = Math.min(Math.max(MIN_EXPANDED_FIELD_HEIGHT, set.start_top_height + this.diff_y), set.start_total_height - MIN_EXPANDED_FIELD_HEIGHT);
+
+      if (stick_zone_size > 0) {
+
+        for (const step of this.steps) {
+
+          let diff = (top_height + set.offset_y) - step;
+
+          if (Math.abs(diff) < stick_zone_size) {
+            console.log(top_height + set.offset_y);
+            top_height -= diff;
+            break
+          }
+        }
+      }
+
+      let bottom_height = set.start_total_height - top_height;
+
+      set.top.ele.style.height = `${top_height}px`;
+      set.bottom.ele.style.height = `${bottom_height}px`;
+
+      set.top.ele.style.transition = "unset"
+      set.bottom.ele.style.transition = "unset"
+    }
   }
 
   protected end(): void {
-
-    this.target_column.latchHeights()
-    this.target_column.distributeHeight();
-
-    this.top_field.ele.style.transition = ""
-    this.bottom_field.ele.style.transition = ""
+    for (const set of this.sets) {
+      set.col.latchHeights()
+      set.col.distributeHeight();
+      set.top.ele.style.transition = ""
+      set.bottom.ele.style.transition = ""
+    }
   }
 }

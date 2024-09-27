@@ -5,7 +5,7 @@ import { NB, NBEditorField } from "./notebook";
 export async function init(compiler_worker_path: string) {
   radlr_init();
 
-  let nb = new NB(3);
+  let nb = new NB(2);
 
   let grammar_input = nb.addField(new NBEditorField("Grammar"))
   grammar_input.setContentVisible(true);
@@ -18,10 +18,13 @@ export async function init(compiler_worker_path: string) {
   let bytecode_output = nb.addField(new NBEditorField("Bytecode Output"), 1);
   bytecode_output.setContentVisible(false);
 
+  let bytecode_output2 = nb.addField(new NBEditorField("Bytecode Output"), 1);
+  bytecode_output2.setContentVisible(false);
+
 
   pipeline.GrammarDB.worker_path = compiler_worker_path;
 
-  let parser_input = nb.addField(new NBEditorField("Parser Input"), 2);
+  let parser_input = nb.addField(new NBEditorField("Parser Input"), 1);
   parser_input.setContentVisible(true);
 
   let formatting_rules = new NBEditorField("Formatting Rules");
