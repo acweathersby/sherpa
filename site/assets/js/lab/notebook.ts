@@ -8,9 +8,13 @@ import { MoveFieldDragOperation, ResizeFieldOperation } from "./dragndrop_operat
 export const highlight_effect = StateEffect.define<Range<Decoration>[]>();
 export const filter_effects = StateEffect.define<((from: number, to: number, decoration: Decoration & { attrs: any }) => boolean)>();
 
+const TRANSITION_DURATION_MS = 100;
+export const MIN_EXPANDED_FIELD_HEIGHT = 160;
+
 export class NB {
   ele: HTMLElement
   columns: NBColumn[];
+  max_columns: number = 3;
 
   constructor(num_of_columns: number) {
 
@@ -21,7 +25,7 @@ export class NB {
 
       num_of_columns = Math.min(Math.max(1, num_of_columns), 3);
 
-      this.columns = new Array(num_of_columns).fill(0).map((_, i) => new NBColumn(this, i))
+      this.columns = new Array(num_of_columns).fill(0).map((_, i) => new NBColumn(this, i, false))
 
       for (const row of this.columns) {
         this.ele.append(row.ele);
@@ -62,6 +66,40 @@ export class NB {
     return true
   }
 
+  removeCol(col_index: number) {
+    if (col_index >= 0 && col_index < this.columns.length) {
+      let col = this.columns[col_index];
+
+      if (col.cell_count > 0) {
+        throw "Attempted to delete a non-empty column"
+      }
+
+      this.columns.splice(col_index, 1);
+      console.log({ cc: this.columns.length })
+      this.columns.forEach((col, i) => col.setIndex(i));
+      col.delete();
+    }
+  }
+
+
+  insertCol(col_index: number) {
+    let new_col = new NBColumn(this, col_index, false);
+    this.columns.splice(col_index, 0, new_col);
+
+    if (new_col != this.columns[col_index]) {
+      throw "wt"
+    }
+
+    this.columns.forEach((col, i) => col.setIndex(i));
+
+    if (col_index == 0) {
+      this.ele.prepend(new_col.ele)
+    } else {
+      this.ele.insertBefore(new_col.ele, <any>this.columns[col_index - 1].ele.nextElementSibling);
+    }
+
+  }
+
 
   calculateHeights() {
     for (const col of this.columns) {
@@ -77,12 +115,28 @@ export class NBColumn {
   nb_host: NB
   index: number
 
-  constructor(nb_host: NB, index: number) {
+  constructor(nb_host: NB, index: number, animate_in: boolean) {
     this.ele = document.createElement("div");
     this.ele.classList.add("nb-column");
     this.cells = [];
     this.nb_host = nb_host;
     this.index = index;
+
+    if (animate_in) {
+      this.ele.style.width = "0"
+      setTimeout(() => {
+        this.ele.style.width = ""
+      }, 10)
+    }
+  }
+
+
+  max_free(): number {
+    return this.ele.getBoundingClientRect().height - this.cell_count * MIN_EXPANDED_FIELD_HEIGHT;
+  }
+
+  delete() {
+    this.ele.parentElement?.removeChild(this.ele);
   }
 
   remove(field: NBField) {
@@ -95,8 +149,7 @@ export class NBColumn {
       field.col = -1;
       field.v_row = -1;
 
-      this.cells.forEach((i, index) => i.r_row = index);
-      this.cells.filter(n => !(n instanceof NBBlankField)).forEach((i, index) => i.v_row = index);
+      this.setIndex()
     }
   }
 
@@ -113,10 +166,15 @@ export class NBColumn {
     }
 
     field.nb_host = this.nb_host;
-    field.col = this.index;
     field.v_row = -1;
 
-    this.cells.forEach((i, index) => i.r_row = index);
+    this.setIndex()
+  }
+
+  setIndex(col_index: number = this.index) {
+    console.log({ col_index })
+    this.index = col_index;
+    this.cells.forEach((i, index) => { i.r_row = index; i.col = col_index });
     this.cells.filter(n => !(n instanceof NBBlankField)).forEach((i, index) => i.v_row = index);
   }
 
@@ -136,7 +194,7 @@ export class NBColumn {
     return this.cells.length
   }
 
-  pointInside(x: number, y: number): { insert_row: number } | null {
+  pointInside(x: number, y: number, edge_size: number = 0): { insert_row: number, alignment: number } | null {
 
     const { x: col_x, y: col_y, width, height } = this.ele.getBoundingClientRect();
     const col_max_x = col_x + width;
@@ -145,6 +203,14 @@ export class NBColumn {
     const inside_y = y > col_y && y < col_max_y;
 
     if (inside_x && inside_y) {
+      let alignment = 0;
+
+      if (x - col_x <= edge_size) {
+        alignment = 1
+      } else if (col_max_x - x <= edge_size) {
+        alignment = 2
+      }
+
       let target_offset = y - col_y;
       const real_cells = this.cells.filter(f => !(f instanceof NBBlankField));
       for (const cell of real_cells) {
@@ -152,10 +218,10 @@ export class NBColumn {
         if (target_offset <= height) {
           if (target_offset < (height / 2)) {
             // Insert before field
-            return { insert_row: cell.v_row }
+            return { insert_row: cell.v_row, alignment }
           } else {
             // Insert after field
-            return { insert_row: cell.v_row + 1 }
+            return { insert_row: cell.v_row + 1, alignment }
           }
 
         } else {
@@ -163,7 +229,7 @@ export class NBColumn {
         }
       }
 
-      return { insert_row: real_cells.length }
+      return { insert_row: real_cells.length, alignment }
     }
 
     return null;
@@ -171,6 +237,10 @@ export class NBColumn {
 
   latchHeights() {
     this.cells.forEach(c => c.latchHeight())
+  }
+
+  get cell_count(): number {
+    return this.cells.filter(f => !(f instanceof NBBlankField)).length
   }
 
 
@@ -187,6 +257,8 @@ export class NBColumn {
       let v = fixed_heights_settings.find(f => f.index == i);
       if (v) {
         return { f: true, h: v.height }
+      } else if (c.latched_height <= MIN_EXPANDED_FIELD_HEIGHT) {
+        return { f: true, h: MIN_EXPANDED_FIELD_HEIGHT }
       } else {
         return { f: false, h: c.latched_height }
       }
@@ -232,6 +304,8 @@ export class NBField {
   constructor(ele = document.createElement("div")) {
     this.ele = ele;
     this.ele.classList.add("nb-field")
+
+
   }
 
   latchHeight() {
@@ -260,11 +334,9 @@ export class NBBlankField extends NBField {
 
     if (!force_height) {
       setTimeout(() => {
-        this.ele.style.width = `${width}px`
         this.ele.style.height = `${height}px`
       }, 10)
     } else {
-      this.ele.style.width = `${width}px`
       this.ele.style.height = `${height}px`
     }
   }
@@ -276,7 +348,7 @@ export class NBBlankField extends NBField {
     if (this.nb_host) {
       let nb_host = this.nb_host;
       //this.ele.style.height = `${0}px`
-      setTimeout(() => { nb_host.removeField(this); }, 100)
+      setTimeout(() => { nb_host.removeField(this); }, TRANSITION_DURATION_MS)
     } else {
       if (this.ele.parentElement)
         this.ele.parentElement.removeChild(this.ele)

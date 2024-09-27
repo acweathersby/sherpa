@@ -21,7 +21,7 @@ export async function init(compiler_worker_path: string) {
 
   pipeline.GrammarDB.worker_path = compiler_worker_path;
 
-  let parser_input = nb.addField(new NBEditorField("Parser Input"), 1);
+  let parser_input = nb.addField(new NBEditorField("Parser Input"), 2);
   parser_input.setContentVisible(true);
 
   let formatting_rules = new NBEditorField("Formatting Rules");

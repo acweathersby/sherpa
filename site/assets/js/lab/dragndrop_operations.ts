@@ -1,5 +1,5 @@
 import { sleep } from "./pipeline";
-import { NBField, NBBlankField, NB, NBColumn } from "./notebook";
+import { NBField, NBBlankField, NB, NBColumn, MIN_EXPANDED_FIELD_HEIGHT } from "./notebook";
 
 class DragOperation {
   pointer_timeout = 0;
@@ -174,7 +174,7 @@ export class MoveFieldDragOperation extends DragOperation {
     this.offset_x = ele_x;
     this.offset_y = ele_y;
 
-    this.start_height = height;
+    this.start_height = this.nb.columns[this.drag_field.col].cell_count == 1 ? height / 2 : height;
     this.start_width = width;
   }
 
@@ -209,34 +209,57 @@ export class MoveFieldDragOperation extends DragOperation {
     col.add(this.placeholder, this.drag_start_row);
 
     document.body.appendChild(this.drag_field.ele);
-
   }
 
   protected update() {
     this.updateDragPos(this.drag_field);
 
     for (const col of this.nb.columns) {
-      const insert_data = col.pointInside(this.curr_pos_x, this.curr_pos_y);
+      const insert_data = col.pointInside(this.curr_pos_x, this.curr_pos_y, 100);
 
-      if (insert_data && (this.drag_target_col != col.index || this.drag_target_row != insert_data.insert_row)) {
+      if (insert_data) {
+        const different_pos = (this.drag_target_col != col.index || this.drag_target_row != insert_data.insert_row);
+        const insert_column = (insert_data.alignment > 0 && col.cell_count > 0);
+        const max_columns = this.nb.columns.length >= this.nb.max_columns;
 
-        if (this.placeholder) {
-          this.placeholder.delete();
-          this.placeholder = null;
-          this.nb.columns[this.drag_target_col].distributeHeight();
+        if (different_pos || (insert_column && !max_columns)) {
+
+          let exiting_empty = false;
+
+          if (this.placeholder) {
+            this.placeholder.delete();
+            this.placeholder = null;
+            let target_col = this.nb.columns[this.drag_target_col];
+            target_col.distributeHeight();
+
+            if (target_col.cell_count == 0) {
+              this.nb.removeCol(this.drag_target_col);
+              exiting_empty = true;
+            }
+          }
+
+          if (insert_data.alignment > 0 && !exiting_empty && !max_columns) {
+            let insertion_index = insert_data.alignment == 1 ? col.index : col.index + 1;
+            this.nb.insertCol(insertion_index);
+            console.log({ al: insert_data.alignment, insertion_index, start_col: col.index });
+            this.drag_target_col = insertion_index;
+            this.drag_target_row = 0;
+          } else {
+            this.drag_target_col = col.index;
+            this.drag_target_row = insert_data.insert_row;
+          }
+
+          {
+            let col = this.nb.columns[this.drag_target_col];
+            this.placeholder = new NBBlankField(this.start_width, this.start_height);
+
+            col.add(this.placeholder, this.drag_target_row);
+            col.distributeHeight([{ index: this.placeholder.r_row, height: Math.min(this.start_height, col.max_free()) }]);
+          }
         }
-
-        this.drag_target_col = col.index;
-        this.drag_target_row = insert_data.insert_row;
-
-        this.placeholder = new NBBlankField(this.start_width, this.start_height);
-        col.add(this.placeholder, this.drag_target_row);
-        this.nb.columns[this.drag_target_col].distributeHeight([{ index: this.placeholder.r_row, height: this.start_height }]);
       }
     }
-
   }
-
   protected end() {
     this.drag_field.ele.classList.remove("dragging");
     this.drag_field.ele.style.top = ``;
@@ -302,7 +325,7 @@ export class ResizeFieldOperation extends DragOperation {
   }
 
   protected update(): void {
-    let top_height = Math.min(Math.max(160, this.start_top_height + this.diff_y), this.start_total_height - 160);
+    let top_height = Math.min(Math.max(MIN_EXPANDED_FIELD_HEIGHT, this.start_top_height + this.diff_y), this.start_total_height - MIN_EXPANDED_FIELD_HEIGHT);
     let bottom_height = this.start_total_height - top_height;
 
     this.top_field.ele.style.height = `${top_height}px`;
