@@ -47,18 +47,13 @@
       width: 100px
       height: 10px
       border-radius: 2px
-      color: $dec-1-fg-color
-      background-color: $dec-1-bg-color
 
       &:hover, &:active
-        color: $inc-2-fg-color
-        background-color: $inc-2-bg-color
         cursor: ns-resize
 
   &.dragging
     position: fixed
     z-index: 1000
-    background-color: $basic-bg-color
     box-shadow: 2px 2px 10px black
 
   &.nb-blank-field
@@ -79,22 +74,25 @@
       font-size: 1em
       font-weight: 600
       border-radius: 2px
-      color: $inc-1-fg-color
       transition: all $bts
 
-      &:hover
-        color: $nb-header-fg-color
-        background: $nb-header-bg-color
+      .nb-header-left-side
+        display: flex
+        flex-direction: row
 
-      .nb-label
-        padding: 0 20px
+        .nb-collapsed-indicator
+          opacity: 0
+          padding: 0 10px
+          transition: opacity $bts
+
+        .nb-label
+          padding: 0 0px
 
       .nb-loader
         position: relative
         width: 25%
         height: 10px
-        background-color: $loader-bg
-        border: 2px solid $loader-bg
+        border: 2px solid none
         border-radius: 10px
         box-sizing: content-box
         padding: 0 10px
@@ -109,7 +107,6 @@
         height: 10px
         position: relative
         border-radius: 5px
-        background: $loader-fg
         animation: cylon_loader 550ms ease-in-out infinite alternate
 
       @keyframes cylon_loader
@@ -135,8 +132,6 @@
       justify-content: center
       opacity: 0
       transition: padding $bts, margin $bts, opacity 100ms
-      background-color: $basic-bg-color
-      color: $inc-2-fg-color
       pointer-events: none
 
     .nb-body
@@ -177,6 +172,9 @@
     &.collapsed
       height: $header-height !important
 
+      .nb-header .nb-collapsed-indicator
+        opacity: 1
+
       .nb-body
         opacity: 0
         margin-top: 0
@@ -186,3 +184,39 @@
         opacity: 0
         margin-top: 0
         padding: 0px 20px
+
+// Colors ------------------------------------------
+
+.nb-field
+  background-color: none
+
+  .nb-resize-handle-area
+    .nb-resize-handle
+      color: $dec-1-fg-color
+      background-color: $dec-1-bg-color
+
+      &:hover, &:active
+        color: $inc-2-fg-color
+        background-color: $inc-2-bg-color
+
+  &.dragging
+    background-color: $basic-bg-color
+
+  &.nb-content-field
+    .nb-header
+      color: $inc-1-fg-color
+
+      &:hover
+        color: $nb-header-fg-color
+        background: $nb-header-bg-color
+
+      .nb-loader
+        background-color: $loader-bg
+        border-color: $loader-bg
+
+      .loader-div
+        background: $loader-fg
+
+    .nb-loading-screen
+      background-color: $basic-bg-color
+      color: $inc-2-fg-color

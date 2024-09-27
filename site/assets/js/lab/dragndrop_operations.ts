@@ -31,7 +31,6 @@ class DragOperation {
     this.bound_pointer_move = this.pointerMove.bind(this);
     document.addEventListener("pointermove", this.bound_pointer_move);
     document.addEventListener("pointerup", this.bound_pointer_up);
-
   }
 
   initialize(e: PointerEvent) {
