@@ -10,6 +10,7 @@ export const filter_effects = StateEffect.define<((from: number, to: number, dec
 
 const TRANSITION_DURATION_MS = 100;
 export const MIN_EXPANDED_FIELD_HEIGHT = 160;
+const COLLAPSED_FIELD_HEIGHT = 60;
 
 export class NB {
   ele: HTMLElement
@@ -75,7 +76,6 @@ export class NB {
       }
 
       this.columns.splice(col_index, 1);
-      console.log({ cc: this.columns.length })
       this.columns.forEach((col, i) => col.setIndex(i));
       col.delete();
     }
@@ -131,6 +131,44 @@ export class NBColumn {
   }
 
 
+  swap(other_field: NBField, own_index: number) {
+    let own_field = this.cells[own_index];
+
+    if (own_field && own_field != other_field && other_field.nb_host == this.nb_host) {
+
+
+      let other_col = this.nb_host.columns[other_field.col]
+
+      if (!other_col) return;
+
+      let own_height = own_field.latched_height;
+      let other_height = other_field.latched_height;
+
+      own_field.latched_height = other_height;
+      other_field.latched_height = own_height;
+
+      let other_index = other_field.r_row;
+
+      let temp_ele = document.createElement("span");
+      let own_ele = own_field.ele;
+      let other_ele = other_field.ele;
+
+      this.cells[own_index] = other_field;
+      other_col.cells[other_index] = own_field;
+
+      this.setIndex();
+      other_col.setIndex();
+
+      this.distributeHeight();
+      other_col.distributeHeight();
+
+      this.ele.replaceChild(temp_ele, own_ele);
+      other_col.ele.replaceChild(own_ele, other_ele);
+      this.ele.replaceChild(other_ele, temp_ele);
+    }
+  }
+
+
   max_free(): number {
     return this.ele.getBoundingClientRect().height - this.cell_count * MIN_EXPANDED_FIELD_HEIGHT;
   }
@@ -153,8 +191,8 @@ export class NBColumn {
     }
   }
 
-  add(field: NBField, row: number = Infinity) {
-    row = this.findRealIndex(row);
+  add(field: NBField, row: number = Infinity, using_real_index: boolean = false) {
+    row = using_real_index ? row : this.findRealIndex(row);
 
     if (row < this.cells.length) {
       this.cells.splice(row, 0, field);
@@ -172,7 +210,6 @@ export class NBColumn {
   }
 
   setIndex(col_index: number = this.index) {
-    console.log({ col_index })
     this.index = col_index;
     this.cells.forEach((i, index) => { i.r_row = index; i.col = col_index });
     this.cells.filter(n => !(n instanceof NBBlankField)).forEach((i, index) => i.v_row = index);
@@ -257,6 +294,8 @@ export class NBColumn {
       let v = fixed_heights_settings.find(f => f.index == i);
       if (v) {
         return { f: true, h: v.height }
+      } else if (c.collapsed) {
+        return { f: true, h: COLLAPSED_FIELD_HEIGHT }
       } else if (c.latched_height <= MIN_EXPANDED_FIELD_HEIGHT) {
         return { f: true, h: MIN_EXPANDED_FIELD_HEIGHT }
       } else {
@@ -309,6 +348,8 @@ export class NBField {
   }
 
   latchHeight() {
+    if (this.collapsed) return;
+
     const { height } = this.ele.getBoundingClientRect();
     this.latched_height = height;
   }
@@ -331,6 +372,7 @@ export class NBBlankField extends NBField {
   constructor(width: number, height: number, force_height: boolean = false) {
     super()
     this.ele.classList.add("nb-blank-field");
+    this.latched_height = height;
 
     if (!force_height) {
       setTimeout(() => {
@@ -362,6 +404,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
   label: HTMLElement;
   resize_handle: HTMLElement;
   collapsed: boolean = false;
+  pre_collapse_size: number = 0
   listeners: Map<event_names, ((arg: EventObj) => void)[]> = new Map;
 
   constructor(name: string = "") {
@@ -387,8 +430,6 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
         if (!await drag_op.willDrag()) {
           this.setExpanded(this.ele.classList.contains("collapsed"))
         }
-      } else {
-        this.setExpanded(this.ele.classList.contains("collapsed"))
       }
     });
   }
@@ -410,10 +451,19 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
   }
 
   setExpanded(is_expanded: boolean) {
+    if (!this.nb_host) return;
+
     if (!is_expanded) {
+      this.nb_host.calculateHeights();
+      this.pre_collapse_size = this.latched_height
       this.ele.classList.add("collapsed");
+      this.collapsed = true
+      this.nb_host.calculateHeights();
     } else {
       this.ele.classList.remove("collapsed");
+      this.collapsed = false
+      this.latched_height = this.pre_collapse_size
+      this.nb_host.columns[this.col].distributeHeight()
     }
   }
 
