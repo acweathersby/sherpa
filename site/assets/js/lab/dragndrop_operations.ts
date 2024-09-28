@@ -29,9 +29,12 @@ class DragOperation {
     this.move_threshold = move_threshold;
     this.bound_pointer_up = this.pointerUp.bind(this);
     this.bound_pointer_move = this.pointerMove.bind(this);
+    document.addEventListener("pointermove", this.bound_pointer_move, { capture: true, passive: false });
+    document.addEventListener("pointerup", this.bound_pointer_up, { capture: true, passive: false, once: true });
+
+    document.body.style.touchAction = "none";
     document.body.setPointerCapture(e.pointerId);
-    document.addEventListener("pointermove", this.bound_pointer_move);
-    document.addEventListener("pointerup", this.bound_pointer_up);
+    this.squashEvent(e);
   }
 
   initialize(e: PointerEvent) {
@@ -108,26 +111,34 @@ class DragOperation {
         this.update(e);
       }
 
-      if (e.stopPropagation) e.stopPropagation();
-      if (e.preventDefault) e.preventDefault();
+      this.squashEvent(e);
       return false;
     }
 
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
+    this.squashEvent(e);
     return false;
   }
 
-  private pointerUp(e: PointerEvent) {
+  private squashEvent(e: PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }
+
+  private pointerUp(e: PointerEvent): boolean {
+
     this.mouse_up_trigger_count++;
 
     if (this.drag_committed) {
       this.end();
     }
+
     document.body.releasePointerCapture(e.pointerId);
-    document.removeEventListener("pointermove", this.bound_pointer_move);
-    document.removeEventListener("pointerup", this.bound_pointer_up);
+    document.removeEventListener("pointermove", this.bound_pointer_move, { capture: true });
+    document.removeEventListener("pointerup", this.bound_pointer_up, { capture: true });
+
+    this.squashEvent(e);
+    return false;
   }
 }
 
@@ -314,6 +325,7 @@ export class MoveFieldDragOperation extends DragOperation {
       }
     }
   }
+
   protected end() {
     this.drag_field.ele.classList.remove("dragging");
     this.drag_field.ele.style.top = ``;
@@ -368,7 +380,11 @@ export class ResizeFieldOperation extends DragOperation {
           let { y, height } = cell.ele.getBoundingClientRect();
           let step = y + height;
 
-          if (main_step == step && adjust_adjacent && cell != start_cell) {
+
+
+          let diff = Math.abs(main_step - step);
+
+          if (diff <= 5 && adjust_adjacent && cell != start_cell) {
             this.addSet(cell);
           } else {
             this.steps.push(step);

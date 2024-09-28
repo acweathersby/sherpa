@@ -1,4 +1,4 @@
-{{ $sassTemplate := resources.Get "sass/main_template.sass" }}
+{{ $sassTemplate := resources.Get "sass/main.sass" }}
 {{ $main_style := $sassTemplate | resources.ExecuteAsTemplate "main.scss" . | resources.ToCSS -}}
-<link rel="stylesheet" type="text/css" href="{{ $main_style.Permalink }}">
 <link rel="stylesheet" type="text/css" href="/css/all.min.css">
+<link rel="stylesheet" type="text/css" href="{{ $main_style.Permalink }}">

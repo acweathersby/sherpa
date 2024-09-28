@@ -1,104 +1,129 @@
 {{- $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm" "sourcemap" "inline") -}}
 {{- $labWorkerScript := resources.Get "js/lab/wasm_bytecode_compiler.worker.ts" | js.Build (dict "target" "esnext" "format" "esm" "sourcemap" "inline") -}}
+
 <!doctype html>
+
 <html lang="{{ .Site.Params.languageTag | default " en-US" }}">
+
 {{ partial "head/head.html" . }}
 
-<body class="lab">
+
+<body class="lab please-dont-debug">
     {{ .Scratch.Set "headerSubtext" "lab" }}
     {{ partial "header/header.html" . }}
 
     <div id="notebook"></div>
 
+    <div id="settings-panel" class="inactive">
+        <div class="close-button">x</div>
+        <h1>Themes</h1>
+        <div class="theme-section">
+            {{- $themes_kludge := resources.Get "sass/themes.sass" | resources.ExecuteAsTemplate "main.scss" . | resources.ToCSS -}}
+            {{- range $themes_kludge.Content | findRESubmatch `theme(.*)emeht` }}
+            {{ index . 1 | safeHTML -}}
+            {{ end }}
+        </div>
+    </div>
+
     <script type="module">
-        
+
         import { init } from "{{ $labScript.Permalink }}";
 
         init("{{$labWorkerScript.Permalink}}");
     </script>
 
-<template id="panel">
-  <div class="nb-content-field"> 
-    <div class="nb-header">
-      <div class="nb-header-left-side">
-        <div class="nb-collapsed-indicator">+</div>
-        <div class="nb-label"></div>
-      </div>
-      <div class="nb-loader">
-        <div class="loader-div"></div>
-      </div>
-    </div>
-    <div class="nb-body"></div>
-    <div class="nb-loading-screen">
-      <h1>Loading...</h1>
-    </div>
-    <div class="nb-resize-handle-area">
-      <div class="nb-resize-handle">...</div>
-    </div>
-  </div>
-</template>
+    <footer>
+        <button id="open-settings-button">
+            <i class="fa fa-cog" aria-hidden="true"></i>
+        </button>
+    </footer>
 
-<template id="debugger-template">
-    <div class="controls">
-      <span>
-        <div class="debugger-button" id="profile" title="profile parser ( alt+p )">
-            <i class="fa-solid fa-chart-line active hover inactive"></i>
+    <template id="theme-entry-template">
+        <div class="theme-entry">
+            <div class="theme"></div>
+            <div class="theme-entry-title"></div>
         </div>
-        <div class="debugger-button" id="build" title="build parser ( alt+b )">
-            <i class="fa-solid fa-wrench hover inactive"></i>
-            <i class="fa-solid fa-check  active"></i>
-        </div>
-        <div class="debugger-button" id="restart" title="restart parser ( alt+r )">
-            <i class="fa-solid fa-rotate-left active hover inactive"></i>
-        </div>
-        <div class="debugger-button" id="step"  title="step to next instruction ( alt+n )">
-            <i class="fa-solid fa-forward-step active hover inactive"></i>
-        </div>
-        <div class="debugger-button" id="step-action" title="step to next parser action ( alt+a )">
-            <i class="fa-solid fa-forward-fast hover inactive active"></i>
-        </div>
-        <div class="debugger-button" id="play" title="continue parsing ( alt+space )" >
-            <i class="fa-solid fa-forward hover inactive "></i>
-            <i class="fa-solid fa-pause active"></i>
-        </div>
-        <select id="debugger-entry-dropdown" title="exported entrypoint"></select>
-      </span>
+    </template>
 
-      <span>
-        <label title="optimize parser IR">  
-            <input class="debugger-checkbox" type="checkbox" id="op-enable" checked="true"></input>
-            optimize
-        </label>
-        <label title="use a context free scanner">
-            <input class="debugger-checkbox" type="checkbox" id="cf-enable"></input>
-            CF
-        </label>
-        <label title="enable LR style parsing">
-            <input class="debugger-checkbox" type="checkbox" id="lr-enable"></input>
-            LR
-        </label>
-        <label title="enable LA style parsing">
-            <input class="debugger-checkbox" type="checkbox" id="la-enable"></input>
-            LA
-        </label>
-        <label title="enable recursive descent style parsing">
-            <input class="debugger-checkbox" type="checkbox" id="rd-enable"></input>
-            RD
-        </label>
-        <label title="enable fork (GLR/GLL/GHYBRID)"> 
-            <input class="debugger-checkbox" type="checkbox" id="fk-enable"></input>
-            FK
-        </label>
-        <label title="enable a look ahead greater than k=1"> 
-            <input class="debugger-checkbox" type="checkbox" id="pk-enable"></input>
-            PK
-        </label>
-        </span>
-    </div>
-</template>
+    <template id="panel">
+        <div class="nb-content-field">
+            <div class="nb-header">
+                <div class="nb-header-left-side">
+                    <div class="nb-collapsed-indicator">+</div>
+                    <div class="nb-label"></div>
+                </div>
+                <div class="nb-loader">
+                    <div class="loader-div"></div>
+                </div>
+            </div>
+            <div class="nb-body"></div>
+            <div class="nb-loading-screen">
+                <h1>Loading...</h1>
+            </div>
+            <div class="nb-resize-handle-area">
+                <div class="nb-resize-handle">...</div>
+            </div>
+        </div>
+    </template>
 
+    <template id="debugger-template">
+        <div class="controls">
+            <span>
+                <div class="debugger-button" id="profile" title="profile parser ( alt+p )">
+                    <i class="fa-solid fa-chart-line active hover inactive"></i>
+                </div>
+                <div class="debugger-button" id="build" title="build parser ( alt+b )">
+                    <i class="fa-solid fa-wrench hover inactive"></i>
+                    <i class="fa-solid fa-check  active"></i>
+                </div>
+                <div class="debugger-button" id="restart" title="restart parser ( alt+r )">
+                    <i class="fa-solid fa-rotate-left active hover inactive"></i>
+                </div>
+                <div class="debugger-button" id="step" title="step to next instruction ( alt+n )">
+                    <i class="fa-solid fa-forward-step active hover inactive"></i>
+                </div>
+                <div class="debugger-button" id="step-action" title="step to next parser action ( alt+a )">
+                    <i class="fa-solid fa-forward-fast hover inactive active"></i>
+                </div>
+                <div class="debugger-button" id="play" title="continue parsing ( alt+space )">
+                    <i class="fa-solid fa-forward hover inactive "></i>
+                    <i class="fa-solid fa-pause active"></i>
+                </div>
+                <select id="debugger-entry-dropdown" title="exported entrypoint"></select>
+            </span>
+
+            <span>
+                <label title="optimize parser IR">
+                    <input class="debugger-checkbox" type="checkbox" id="op-enable" checked="true"></input>
+                    optimize
+                </label>
+                <label title="use a context free scanner">
+                    <input class="debugger-checkbox" type="checkbox" id="cf-enable"></input>
+                    CF
+                </label>
+                <label title="enable LR style parsing">
+                    <input class="debugger-checkbox" type="checkbox" id="lr-enable"></input>
+                    LR
+                </label>
+                <label title="enable LA style parsing">
+                    <input class="debugger-checkbox" type="checkbox" id="la-enable"></input>
+                    LA
+                </label>
+                <label title="enable recursive descent style parsing">
+                    <input class="debugger-checkbox" type="checkbox" id="rd-enable"></input>
+                    RD
+                </label>
+                <label title="enable fork (GLR/GLL/GHYBRID)">
+                    <input class="debugger-checkbox" type="checkbox" id="fk-enable"></input>
+                    FK
+                </label>
+                <label title="enable a look ahead greater than k=1">
+                    <input class="debugger-checkbox" type="checkbox" id="pk-enable"></input>
+                    PK
+                </label>
+            </span>
+        </div>
+    </template>
 </body>
-
-
 
 </html>

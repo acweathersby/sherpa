@@ -1,14 +1,18 @@
-header
+@import "layout_constants"
+@import "color"
+
+@mixin flex-centered-row
   position: relative
-  top: 0
   box-sizing: border-box
-  flex-direction: row
-  z-index: 10
-  height: 80px
   display: flex
   align-items: center
+  flex-direction: row
   justify-content: space-between
+  height: $header-height
   padding: 0 20px
+
+header
+  @include flex-centered-row
 
   a
     display: contents
@@ -29,14 +33,9 @@ header
     margin-right: 4px
 
     #radlr-logo
-      fill: #aeaeae !important
       transition: fill 200ms
 
-    &:hover #radlr-logo
-      fill: #f0f0f0 !important
-
   #page-category
-    border-left: 1px solid #7777773a
     padding-left: 4px
     margin-left: 2px
     line-height: 20px
@@ -49,6 +48,24 @@ header
   #page-category-name
     font-size: .75em
 
-@media screen and (max-width: 1000px)
+footer
+  @include flex-centered-row
+
+@mixin header-footer-themable($theme-map)
+
   header
-    background-color: white !important
+
+    #header-logo
+      #radlr-logo
+        fill: map-get($theme-map, fg-basic) !important
+
+      &:hover #radlr-logo
+        fill: map-get($theme-map, fg-inc-1) !important
+
+    #page-category-name
+      color: map-get($theme-map, fg-basic) !important
+
+    #page-category
+      border-color: map-get($theme-map, fg-inc-1)
+
+  footer

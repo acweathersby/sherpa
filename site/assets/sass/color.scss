@@ -1,0 +1,95 @@
+$theme-please-dont-debug: ( // 
+    class-name: "please-dont-debug",
+    accent-color: #9f9f9f,
+    // Main Colors
+    bg-inc-2: #eeeeee,
+    bg-inc-1: #e1e1e1,
+    bg-basic: #cdcdcd,
+    bg-dec-1: #878787,
+    bg-dec-2: #828282,
+
+    fg-inc-2: #e2e2e2,
+    fg-inc-1: #b5b5b5,
+    fg-basic: #676767,
+    fg-dec-1: #393939,
+    fg-dec-2: #000000,
+
+    // field header colors on hover
+    field-header-bg: red,
+    field-header-fg: #ffffff,
+    loader-bg: green,
+    loader-fg: red,
+    //
+    border-color: #ff0000,
+    debugger-action-red: #f17559,
+    // codemirror
+    active-color: #828282,
+    inactive-color: #4a4a4a,
+
+    button-fg: rgb(187, 187, 187),
+    button-bg: red,
+    button-active-fg: rgb(255, 255, 255),
+    button-active-bg: rgb(251, 94, 94),
+);
+
+$theme-industrial-solace: ( //
+    class-name: "industrial-solace",
+    accent-color: #9f9f9f,
+    // Main Colors
+    bg-inc-2: #9b9b9b,
+    bg-inc-1: #373737,
+    bg-basic: #2c2c2c,
+    bg-dec-1: #1f1f1f,
+    bg-dec-2: #000000,
+
+    fg-inc-2: #ffffff,
+    fg-inc-1: #d5d5d5,
+    fg-basic: #b0b0b0,
+    fg-dec-1: #909090,
+    fg-dec-2: #5f5f5f,
+    // field header colors on hover
+    field-header-bg: #c53131,
+    field-header-fg: #ffffff,
+    loader-bg: #bdbdbd,
+    loader-fg: #c53131,
+    //
+    border-color: #e4e4e4,
+    debugger-action-red: #f17559,
+    // codemirror
+    active-color: #828282,
+    inactive-color: #4a4a4a,
+);
+
+$theme-desperados-unite: ( //
+    class-name: "desperados-unite",
+    accent-color: #9f9f9f,
+    // Main Colors
+    bg-inc-2: #9b9b9b,
+    bg-inc-1: #63009d,
+    bg-basic: #4d007a,
+    bg-dec-1: #1f1f1f,
+    bg-dec-2: #000000,
+
+    fg-inc-2: #ffffff,
+    fg-inc-1: #ffd94e,
+    fg-basic: #e29d1c,
+    fg-dec-1: #909090,
+    fg-dec-2: #5f5f5f,
+    // field header colors on hover
+    field-header-bg: #ed8e0a,
+    field-header-fg: #ffffff,
+    loader-bg: #bdbdbd,
+    loader-fg: #c53131,
+    //
+    border-color: #e4e4e4,
+    debugger-action-red: #f17559,
+    // codemirror
+    active-color: #828282,
+    inactive-color: #4a4a4a,
+);
+
+
+$themes : ( //
+    $theme-industrial-solace,
+    $theme-please-dont-debug,
+    $theme-desperados-unite, );

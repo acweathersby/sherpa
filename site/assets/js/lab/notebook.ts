@@ -1,12 +1,7 @@
 
-import { StateEffect, StateField, Range } from "@codemirror/state";
-import { Decoration, EditorView } from "@codemirror/view";
-import { Diagnostic, setDiagnostics } from "@codemirror/lint";
-import { basicSetup } from "codemirror";
+
 import { MoveFieldDragOperation, ResizeFieldOperation } from "./dragndrop_operations";
 
-export const highlight_effect = StateEffect.define<Range<Decoration>[]>();
-export const filter_effects = StateEffect.define<((from: number, to: number, decoration: Decoration & { attrs: any }) => boolean)>();
 
 const TRANSITION_DURATION_MS = 100;
 export const MIN_EXPANDED_FIELD_HEIGHT = 160;
@@ -422,7 +417,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
 
     this.resize_handle.addEventListener("pointerdown", e => {
       new ResizeFieldOperation(e, this);
-    })
+    }, { capture: true, passive: false })
 
     this.header.addEventListener("pointerdown", async e => {
       if (this.nb_host) {
@@ -431,7 +426,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
           this.setExpanded(this.ele.classList.contains("collapsed"))
         }
       }
-    });
+    }, { capture: true, passive: false });
   }
 
   setContentVisible(is_content_visible: boolean) {
@@ -482,16 +477,58 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
   }
 }
 
+import * as language from "@codemirror/language";
+import * as state from "@codemirror/state";
+import * as view from "@codemirror/view";
+import * as commands from "@codemirror/commands";
+import * as autocomplete from "@codemirror/autocomplete";
+import * as search from "@codemirror/search";
+import * as lint from "@codemirror/lint";
+
+const basicSetup = (() => [
+  view.EditorView.theme({ "*": { "color": "unset !important", "background-color": "unset !important" } }),
+  autocomplete.autocompletion(),
+  autocomplete.closeBrackets(),
+  commands.history(),
+  language.bracketMatching(),
+  language.foldGutter(),
+  language.indentOnInput(),
+  language.syntaxHighlighting(language.defaultHighlightStyle, { fallback: true }),
+  search.highlightSelectionMatches(),
+  state.EditorState.allowMultipleSelections.of(true),
+  view.crosshairCursor(),
+  view.drawSelection(),
+  view.dropCursor(),
+  view.highlightActiveLine(),
+  view.highlightActiveLineGutter(),
+  view.highlightSpecialChars(),
+  view.lineNumbers(),
+  view.rectangularSelection(),
+  view.keymap.of([
+    ...autocomplete.closeBracketsKeymap,
+    ...commands.defaultKeymap,
+    ...search.searchKeymap,
+    ...commands.historyKeymap,
+    ...language.foldKeymap,
+    ...autocomplete.completionKeymap,
+    ...lint.lintKeymap
+  ])
+])();
+
+export const highlight_effect = state.StateEffect.define<state.Range<view.Decoration>[]>();
+export const filter_effects = state.StateEffect.define<((from: number, to: number, decoration: view.Decoration & { attrs: any }) => boolean)>();
+
+
 export class NBEditorField extends NBContentField<NBEditorField, "text_changed"> {
 
-  cm: EditorView;
-  diagnostics: Diagnostic[] = [];
+  cm: view.EditorView;
+  diagnostics: lint.Diagnostic[] = [];
 
   constructor(name: string) {
     super(name);
-    this.cm = new EditorView({
+    this.cm = new view.EditorView({
       doc: "",
-      extensions: [basicSetup, EditorView.domEventHandlers({
+      extensions: [basicSetup, view.EditorView.domEventHandlers({
         input: () => {
           this.emit("text_changed");
         },
@@ -499,8 +536,8 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
         blur: () => {
         },
         paste: event => { },
-      }), StateField.define({
-        create() { return Decoration.none; },
+      }), state.StateField.define({
+        create() { return view.Decoration.none; },
         update(value, tr) {
           value = value.map(tr.changes);
 
@@ -511,11 +548,12 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
 
           return value;
         },
-        provide(f) { return EditorView.decorations.from(f); }
+        provide(f) { return view.EditorView.decorations.from(f); }
       })],
       parent: this.body
     });
   }
+
 
 
   setText(text: string) {
@@ -533,7 +571,7 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
   addHighlight(start_char: number, end_char: number, color: string) {
     this.cm.dispatch({
       effects: [highlight_effect.of([
-        Decoration.mark({ attributes: { style: `color: ${color} `, } }).range(start_char, end_char)
+        view.Decoration.mark({ attributes: { style: `color: ${color} `, } }).range(start_char, end_char)
       ])]
     });
   }
@@ -555,13 +593,13 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
       severity: "warning",
     });
 
-    this.cm.dispatch(setDiagnostics(this.cm.state, this.diagnostics));
+    this.cm.dispatch(lint.setDiagnostics(this.cm.state, this.diagnostics));
 
 
   }
 
   removeMsgs() {
-    this.cm.dispatch(setDiagnostics(this.cm.state, this.diagnostics));
+    this.cm.dispatch(lint.setDiagnostics(this.cm.state, this.diagnostics));
   };
 }
 

@@ -1,13 +1,17 @@
+@import "layout_constants"
+@import "color"
+
 #notebook
-  user-select: none
   position: relative
-  height: 100%
-  bottom: 0px
   display: flex
   flex-direction: row
   align-content: center
-  margin: 20px 0px
   overflow: hidden
+  width: 100%
+  padding: 0 20px
+  bottom: 0px
+  user-select: none
+  flex-grow: 1
 
 .nb-column
   position: relative
@@ -17,7 +21,6 @@
   display: flex
   flex-direction: column
   transition: width 100ms
-  padding: 20px
 
 .nb-field
 
@@ -156,11 +159,16 @@
 
       //background-color: red
 
-      .cm-editor
+      .cm-editor.main
         top: 0
         bottom: 0
         left: 0
         right: 0
+
+        *
+          color: none
+          background-color: none
+          border-color: none
 
     &.loading
       .nb-loader
@@ -192,36 +200,37 @@
 
 // Colors ------------------------------------------
 
-.nb-field
-  background-color: none
+@mixin lab-themable($theme-map)
+  .nb-field
+    background-color: none
 
-  .nb-resize-handle-area
-    .nb-resize-handle
-      color: $dec-1-fg-color
-      background-color: $inc-1-bg-color
+    .nb-resize-handle-area
+      .nb-resize-handle
+        color: map-get($theme-map, fg-dec-1)
+        background-color: map-get($theme-map, bg-inc-1)
 
-      &:hover, &:active
-        color: $inc-2-fg-color
-        background-color: $inc-2-bg-color
+        &:hover, &:active
+          color: map-get($theme-map, fg-inc-2)
+          background-color: map-get($theme-map, bg-inc-2)
 
-  &.dragging
-    background-color: $basic-bg-color
+    &.dragging
+      background-color: map-get($theme-map, bg-basic)
 
-  &.nb-content-field
-    .nb-header
-      color: $inc-1-fg-color
+    &.nb-content-field
+      .nb-header
+        color: map-get($theme-map, fg-basic)
 
-      &:hover
-        color: $nb-header-fg-color
-        background: $nb-header-bg-color
+        &:hover
+          color: map-get($theme-map, "field-header-fg")
+          background: map-get($theme-map, "field-header-bg")
 
-      .nb-loader
-        background-color: $loader-bg
-        border-color: $loader-bg
+        .nb-loader
+          background-color: map-get($theme-map, "loader-bg")
+          border-color: map-get($theme-map, "loader-bg")
 
-      .loader-div
-        background: $loader-fg
+        .loader-div
+          background: map-get($theme-map, "loader-fg")
 
-    .nb-loading-screen
-      background-color: $basic-bg-color
-      color: $inc-2-fg-color
+      .nb-loading-screen
+        background-color: map-get($theme-map, "bg-basic")
+        color: map-get($theme-map, "fg-inc-2")

@@ -1,7 +1,5 @@
 // Base Style Bootstrap
 
-@import "color"
-
 @font-face
   font-family: "LexandDeca"
   src: url('{{ urls.JoinPath .Site.BaseURL "./webfonts/LexandDeca/LexendDeca-VariableFont_wght.ttf" }}')
@@ -34,9 +32,6 @@ body
 
   opacity: 1
 
-  color: $basic-fg-color
-  background-color: $basic-bg-color
-
   display: flex
   flex-direction: column
 
@@ -57,10 +52,6 @@ div, h1, h2, h3, h4, h5, h6, span, button a
 
 a
   text-decoration: none
-  color: rgb(121, 121, 121)
-
-  &:hover
-    color: rgb(36, 153, 221)
 
 ul, li
   text-decoration: none
@@ -72,7 +63,6 @@ body.preload
   opacity: 0
 
 button
-  background: $basic-bg-color
   border: none
   font-size: 1.5em
   border-radius: 1.5em
@@ -81,21 +71,47 @@ button
   display: flex
   flex-direction: row
   align-items: center
-  color: $basic-fg-color
-  transition: color 250ms, background 250ms
 
   path
-    fill: $basic-fg-color
     transition: fill 250ms
 
 button:hover
   cursor: pointer
-  background-color: $inc-1-bg-color
-  color: $inc-1-fg-color
-  path
-    fill: $inc-1-fg-color
+
+@mixin main-themable($theme-map)
+  &
+    color: map-get($theme-map, "fg-basic")
+    background-color: map-get($theme-map, "bg-basic")
+
+  button
+    background: map-get($theme-map, "bg-basic")
+    color: map-get($theme-map, "fg-basic")
+    path
+      fill: map-get($theme-map, "fg-basic")
+
+    &:hover
+      background-color: map-get($theme-map, "bg-inc-1")
+      color: map-get($theme-map, "fg-inc-1")
+      path
+        fill: map-get($theme-map, "fg-inc-1")
 
 @import "./codemirror"
 @import "./header"
 @import "./inputs"
 @import "./lab"
+@import "./settings-panel"
+
+@mixin themables($theme-name, $theme-map)
+  body.#{$theme-name}
+    *
+      transition: color 200ms, background-color 200ms
+
+    @include main-themable($theme-map)
+    @include lab-themable($theme-map)
+    @include cm-themable($theme-map)
+    @include inputs-themable($theme-map)
+    @include settings-panel-themable($theme-map)
+    @include header-footer-themable($theme-map)
+
+@each $theme in $themes
+  @include themables(map-get($theme, class-name), $theme)

@@ -1,0 +1,105 @@
+@import "layout_constants"
+@import "color"
+
+#settings-panel
+  position: absolute
+  z-index: 100000
+  left: 80px
+  right: 80px
+  height: 80vh
+  border-radius: 5px
+  overflow: hidden
+  padding: 20px
+  box-shadow: 2px 2px 10px #00000010
+
+  &.active
+    transition: opacity 100ms, bottom 300ms, visibility 0ms
+    visibility: visible
+    opacity: 1
+    bottom: 100px
+
+  &.inactive
+    transition: opacity 100ms, bottom 300ms, visibility 300ms
+    opacity: 0
+    bottom: 80px
+    visibility: hidden
+
+  @keyframes reveal
+
+  .close-button
+    $size: 25px
+    position: absolute
+    font-weight: 600
+    font-size: $size * 0.75
+    line-height: $size
+    text-align: center
+    width: $size
+    height: $size
+    top: 10px
+    right: 10px
+    border-radius: $size / 2
+    user-select: none
+
+    &:hover
+      cursor: pointer
+
+  .theme-section
+
+    display: flex
+    width: 100%
+    margin:
+
+    .theme-entry
+      display: flex
+      flex-direction: row
+      justify-content: left
+      align-items: center
+      margin: 2.5% 20px
+      width: 20%
+      height: 40px
+      border-radius: 20px
+      padding: 8px
+      font-weight: 500
+      opacity: 0.8
+
+      &:hover, &.active
+        opacity: 1
+        cursor: pointer
+
+      .theme
+        box-sizing: border-box
+        position: relative
+        background-color: red
+        border-color: green
+        border: 8px solid
+        height: 30px
+        width: 30px
+        border-radius: 15px
+        margin-right: 10px
+
+// Colors ------------------------------------------
+
+@mixin settings-panel-themable($theme-map)
+
+  #settings-panel
+    background-color: map-get($theme-map, bg-inc-1)
+
+    .close-button
+      background-color: map-get($theme-map, button-bg)
+      color: map-get($theme-map, button-fg)
+
+      &:hover
+        background-color: map-get($theme-map, button-active-bg)
+        color: map-get($theme-map, button-active-fg)
+
+    .theme-entry
+      background-color: map-get($theme-map, bg-inc-2)
+      color: map-get($theme-map, fg-inc-2)
+
+      &:hover
+        background-color: map-get($theme-map, bg-dec-1)
+        color: map-get($theme-map, fg-inc-1)
+
+      &.active
+        background-color: map-get($theme-map, bg-dec-1)
+        color: map-get($theme-map, fg-inc-1)

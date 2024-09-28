@@ -1,3 +1,4 @@
+import "./settings-panel";
 import * as pipeline from "./pipeline";
 import radlr_init, * as radlr from "js/radlr/radlr_wasm.js";
 import { NB, NBEditorField } from "./notebook";
