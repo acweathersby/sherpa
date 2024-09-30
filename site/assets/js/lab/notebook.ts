@@ -5,7 +5,7 @@ import { MoveFieldDragOperation, ResizeFieldOperation } from "./dragndrop_operat
 
 const TRANSITION_DURATION_MS = 100;
 export const MIN_EXPANDED_FIELD_HEIGHT = 160;
-const COLLAPSED_FIELD_HEIGHT = 60;
+const COLLAPSED_FIELD_HEIGHT = 40;
 
 export class NB {
   ele: HTMLElement
@@ -368,12 +368,15 @@ export class NBBlankField extends NBField {
     super()
     this.ele.classList.add("nb-blank-field");
     this.latched_height = height;
+    this.ele.appendChild(document.createElement("div"))
 
     if (!force_height) {
       setTimeout(() => {
+        this.ele.style.opacity = "1"
         this.ele.style.height = `${height}px`
       }, 10)
     } else {
+      this.ele.style.opacity = "1"
       this.ele.style.height = `${height}px`
     }
   }
@@ -381,10 +384,10 @@ export class NBBlankField extends NBField {
   delete() {
 
     this.deleting = true;
+    this.ele.style.opacity = `${0}px`
 
     if (this.nb_host) {
       let nb_host = this.nb_host;
-      //this.ele.style.height = `${0}px`
       setTimeout(() => { nb_host.removeField(this); }, TRANSITION_DURATION_MS)
     } else {
       if (this.ele.parentElement)
@@ -445,10 +448,10 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
     }
   }
 
-  setExpanded(is_expanded: boolean) {
+  setExpanded(is_collapsed: boolean) {
     if (!this.nb_host) return;
 
-    if (!is_expanded) {
+    if (!is_collapsed) {
       this.nb_host.calculateHeights();
       this.pre_collapse_size = this.latched_height
       this.ele.classList.add("collapsed");

@@ -37,7 +37,7 @@ $theme-industrial-solace: ( //
     accent-color: #9f9f9f,
     // Main Colors
     bg-inc-2: #9b9b9b,
-    bg-inc-1: #373737,
+    bg-inc-1: #434343,
     bg-basic: #2c2c2c,
     bg-dec-1: #1f1f1f,
     bg-dec-2: #000000,
@@ -88,8 +88,44 @@ $theme-desperados-unite: ( //
     inactive-color: #4a4a4a,
 );
 
+$theme-pencil: ( //
+    class-name: "pencil",
+    accent-color: #9f9f9f,
+    // Main Colors
+    bg-inc-2: #ffffff,
+    bg-inc-1: #eeeeee,
+    bg-basic: #e6e6e6,
+    bg-dec-1: #7c7c7c67,
+    bg-dec-2: #586464,
+
+    fg-inc-2: #e2e2e2,
+    fg-inc-1: #cfcfcf,
+    fg-basic: #a2a2a2,
+    fg-dec-1: #393939,
+    fg-dec-2: #000000,
+
+    // field header colors on hover
+    field-header-bg: rgb(59, 158, 228),
+    field-header-fg: #ffffff,
+    loader-bg: green,
+    loader-fg: red,
+    //
+    border-color: #ff0000,
+    debugger-action-red: #f17559,
+    // codemirror
+    active-color: #828282,
+    inactive-color: #4a4a4a,
+
+    button-fg: rgb(187, 187, 187),
+    button-bg: red,
+    button-active-fg: rgb(255, 255, 255),
+    button-active-bg: rgb(251, 94, 94),
+);
+
 
 $themes : ( //
-    $theme-industrial-solace,
-    $theme-please-dont-debug,
-    $theme-desperados-unite, );
+$theme-pencil,
+$theme-industrial-solace,
+$theme-please-dont-debug,
+$theme-desperados-unite,
+);

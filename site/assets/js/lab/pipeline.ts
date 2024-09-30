@@ -28,11 +28,11 @@ class PipelineNode<event_names = any> {
 
   protected disable() {
     this.ENABLED = false;
+    this.end();
     this.signal();
   }
 
-
-  protected async changed(source: string, data: any) { }
+  protected async end() { }
   protected async start(data: object) { }
   protected async stop() { }
 
@@ -210,6 +210,9 @@ export class Parser extends PipelineNode<{
   "parser-created": {
     /*     parser: JSByteCodeParser */
   },
+  "parser-destroyed": {
+    /*     parser: JSByteCodeParser */
+  },
   "parser-reset": {
     /*     parser: JSByteCodeParser */
   },
@@ -240,6 +243,14 @@ export class Parser extends PipelineNode<{
   protected name() { return "Parser" }
   protected data() { return {}; }
 
+  protected async end() {
+    if (this.parser) {
+      this.parser.free; this.parser = null;
+      this.emit("destroyed", { type: "destroyed" });
+    }
+
+  }
+
   protected async start(data: any) {
     // Submit job for the compiler
 
@@ -249,10 +260,12 @@ export class Parser extends PipelineNode<{
     }
 
     if (data.GrammarDB) {
+      this.emit("parser-created", { type: "destroyed" });
       this.db = data.GrammarDB.parser_db;
       this.restart();
     }
 
+    this.createParser();
     this.enable();
   }
 

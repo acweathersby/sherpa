@@ -8,6 +8,7 @@ const themes = [
 
 function setupSetting() {
   let setting_panel = document.querySelector("#settings-panel");
+
   if (!setting_panel) return;
 
   let close_button = <HTMLDivElement>setting_panel.querySelector(".close-button");
@@ -34,7 +35,9 @@ function setupSetting() {
 }
 
 function setupThemes(setting_panel: Element) {
-  let active_theme = "please-dont-debug";
+
+  let default_theme = document.body.dataset.defaulttheme;
+  let active_theme = <string>default_theme;
   //document.body.classList.add(active_theme);
   let node = <HTMLTemplateElement>document.querySelector("#theme-entry-template");
 

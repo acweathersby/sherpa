@@ -12,7 +12,11 @@
   font-family: "Outfit"
   src: url('{{ urls.JoinPath .Site.BaseURL "./webfonts/Outfit/Outfit-VariableFont_wght.ttf" }}')
 
+*
+  transition: color 200ms, background-color 200ms, fill 200ms
+  
 body
+
   position: relative
   border: none
 
@@ -35,12 +39,12 @@ body
   display: flex
   flex-direction: column
 
-  &.hidden  content
-    opacity: 0
-
-    content
+  content
     opacity: 1
     transition: opacity 200ms
+
+  &.hidden  content
+    opacity: 0
 
 h1, h2, h3, h4, h5, h6
 
@@ -67,19 +71,40 @@ button
   font-size: 1.5em
   border-radius: 1.5em
   padding: 10px 10px
-  transition: all 150ms
   display: flex
   flex-direction: row
   align-items: center
 
-  path
-    transition: fill 250ms
-
 button:hover
   cursor: pointer
 
+
+.noscript
+  font-size: 1.2em
+  position: absolute
+  display: flex
+  flex-direction: column
+  align-items: center
+  align-content: center
+  justify-items: center
+  justify-content: center 
+  flex-wrap: wrap
+  top: 0
+  bottom: 0
+  left: 0
+  right: 0
+  background: white
+  z-index: 100000
+
+  header
+    width: 40%
+
+  p
+    width: 500px
+  
+
 @mixin main-themable($theme-map)
-  &
+  &, .noscript
     color: map-get($theme-map, "fg-basic")
     background-color: map-get($theme-map, "bg-basic")
 
@@ -103,8 +128,6 @@ button:hover
 
 @mixin themables($theme-name, $theme-map)
   body.#{$theme-name}
-    *
-      transition: color 200ms, background-color 200ms
 
     @include main-themable($theme-map)
     @include lab-themable($theme-map)
@@ -115,3 +138,6 @@ button:hover
 
 @each $theme in $themes
   @include themables(map-get($theme, class-name), $theme)
+
+
+

@@ -290,6 +290,7 @@ export class MoveFieldDragOperation extends DragOperation {
           if (different_pos || (insert_column && !max_columns)) {
 
             let exiting_empty = false;
+            let new_col = false;
 
             if (this.placeholder) {
               this.placeholder.delete();
@@ -308,6 +309,7 @@ export class MoveFieldDragOperation extends DragOperation {
               this.nb.insertCol(insertion_index);
               this.drag_target_col = insertion_index;
               this.drag_target_row = 0;
+              new_col = true;
             } else {
               this.drag_target_col = col.index;
               this.drag_target_row = insert_data.insert_row;
@@ -316,9 +318,10 @@ export class MoveFieldDragOperation extends DragOperation {
             {
               let col = this.nb.columns[this.drag_target_col];
               this.placeholder = new NBBlankField(this.start_width, this.start_height);
-
+              const height = new_col  ? col.max_free() : Math.min(this.start_height, col.max_free());
+              console.log({height})
               col.add(this.placeholder, this.drag_target_row);
-              col.distributeHeight([{ index: this.placeholder.r_row, height: Math.min(this.start_height, col.max_free()) }]);
+              col.distributeHeight([{ index: this.placeholder.r_row, height }]);
             }
           }
         }

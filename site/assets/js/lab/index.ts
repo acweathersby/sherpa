@@ -2,6 +2,7 @@ import "./settings-panel";
 import * as pipeline from "./pipeline";
 import radlr_init, * as radlr from "js/radlr/radlr_wasm.js";
 import { NB, NBEditorField } from "./notebook";
+import { Controls } from "./control";
 
 export async function init(compiler_worker_path: string) {
   radlr_init();
@@ -12,16 +13,8 @@ export async function init(compiler_worker_path: string) {
   grammar_input.setContentVisible(true);
   grammar_input.setText("<> name > \"names\"+");
 
-  let grammar_input2 = nb.addField(new NBEditorField("Grammar"))
-  grammar_input2.setContentVisible(true);
-  grammar_input2.setText("<> name > \"names\"+");
-
   let bytecode_output = nb.addField(new NBEditorField("Bytecode Output"), 1);
   bytecode_output.setContentVisible(false);
-
-  let bytecode_output2 = nb.addField(new NBEditorField("Bytecode Output"), 1);
-  bytecode_output2.setContentVisible(false);
-
 
   pipeline.GrammarDB.worker_path = compiler_worker_path;
 
@@ -34,6 +27,8 @@ export async function init(compiler_worker_path: string) {
 
   ast_atat.setText("temp");
 
+  const controls = new Controls();
+
   const input = new pipeline.InputNode();
   const grammar = new pipeline.GrammarDB([input],);
   const parser = new pipeline.Parser([grammar]);
@@ -42,7 +37,6 @@ export async function init(compiler_worker_path: string) {
   parser_input.addHighlight(0, 5, "red");
   parser_input.addMsg(0, 5, "test1");
   parser_input.addMsg(5, 4, "test2");
-
 
 
   grammar_input.addListener("text_changed", grammar_input => {
@@ -77,7 +71,14 @@ export async function init(compiler_worker_path: string) {
   parser.addListener("destroyed", data => {
     // Disable transport controls
     console.log("Parser Destroyed");
+    controls.setActive(false);
   })
+
+  parser.addListener("parser-created", data => {
+    // Enable transport controls
+    controls.setActive(true);
+  })
+
 
   parser.addListener("reset", data => {
     // Enable transport controls
@@ -92,4 +93,6 @@ export async function init(compiler_worker_path: string) {
   await pipeline.sleep(10);
 
   nb.calculateHeights()
+
+  input.update("<> a > a")
 }

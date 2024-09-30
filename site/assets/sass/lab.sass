@@ -8,10 +8,10 @@
   align-content: center
   overflow: hidden
   width: 100%
-  padding: 0 20px
   bottom: 0px
   user-select: none
   flex-grow: 1
+  padding: 0 5px
 
 .nb-column
   position: relative
@@ -24,7 +24,7 @@
 
 .nb-field
 
-  $header-height: 20px
+  $header-height: 40px
   $base-transition-speed: 200ms
   $bts: $base-transition-speed
 
@@ -33,44 +33,52 @@
   flex-direction: column
   transition: height $bts
 
+  &.dragging
+    position: fixed
+    z-index: 1000
+    box-shadow: 2px 2px 10px black
+
   .nb-resize-handle-area
-    position: relative
-    bottom: -20px
+    position: absolute
+    bottom: 0px
     height: 20px
     width: 100%
     display: flex
     flex-direction: row
     justify-content: center
     align-items: center
-    transition: opacity $bts
+    transition: opacity 200ms
+    opacity: 1
 
     .nb-resize-handle
       text-align: center
       line-height: 0em
       font-size: 2em
       position: relative
-      width: 100px
+      width: 80%
       height: 10px
       border-radius: 2px
 
       &:hover, &:active
         cursor: ns-resize
-
-  &:last-child .nb-resize-handle-area
-    opacity: 0
-
-  &.dragging
-    position: fixed
-    z-index: 1000
-    box-shadow: 2px 2px 10px black
-
+  
   &.nb-blank-field
     height: 0
+    opacity: 0
+    box-sizing: border-box
+    padding: 10px
+    transition: height 200ms, opacity 100ms
 
+    div
+      width: 100%
+      height: 100%
+      border-radius: 5px
+      border: 1px solid red
+      
+  
   &.nb-content-field
     border-radius: 5px
     overflow: hidden
-    padding: 20px 0
 
     .nb-header
       position: relative
@@ -83,6 +91,9 @@
       font-weight: 500
       border-radius: 2px
       transition: all $bts
+
+      @include mobile-screens
+        font-size: 1em
 
       .nb-header-left-side
         display: flex
@@ -131,7 +142,7 @@
 
     .nb-loading-screen
       position: absolute
-      top: $header-height + 20px
+      top: $header-height
       bottom: 0
       left: 0
       right: 0
@@ -145,25 +156,20 @@
     .nb-body
       background: none
       position: relative
-      padding: 20px
-      margin-top: 20px
+      padding: 5px 5px
       overflow: hidden
       opacity: 1
       font-size: 1.35em
       flex-grow: 1
       transition: padding $bts, margin $bts, opacity $bts
-
-      top: $header-height
-      bottom: 0
       width: 100%
-
-      //background-color: red
+      margin-bottom: 20px
 
       .cm-editor.main
         top: 0
-        bottom: 0
         left: 0
         right: 0
+        bottom: 0
 
         *
           color: none
@@ -183,7 +189,12 @@
         opacity: 1
 
     &.collapsed
+
       height: $header-height !important
+
+      .nb-resize-handle-area
+        display: none
+        opacity: 0
 
       .nb-header .nb-collapsed-indicator
         opacity: 1
@@ -191,18 +202,83 @@
       .nb-body
         opacity: 0
         margin-top: 0
-        padding: 0px 20px
+        padding: 0
+        margin-bottom: 0
 
       .nb-loading-screen
         opacity: 0
         margin-top: 0
         padding: 0px 20px
 
+  &:last-child 
+    
+    .nb-resize-handle-area
+      display: none
+      opacity: 0
+
+    .nb-body
+      margin-bottom: 0px
+
+
+#controls
+  position: absolute
+  top: 20px
+  left: 20vw
+  right: 20vw
+  display: flex
+  flex-direction: row
+  background-color: red
+  justify-content: space-around
+  align-items: center
+  border-radius: 20px
+
+  &.inactive
+    opacity: 0
+  
+  @include mobile-screens
+    position: relative
+    left: 0 
+    right: 0
+    border-radius: 0
+
+  .debugger-button
+    font-size: 20px
+    pointer-events: all
+    width: 40px
+
+    & 
+      .active
+        display: none
+      .inactive
+        display: inline-block
+        opacity: 0.5
+
+    &:active 
+      .inactive
+        display: none
+      .active
+        display: inline-block
+
+
+
+
+
+
 // Colors ------------------------------------------
 
 @mixin lab-themable($theme-map)
+  #controls
+    background-color: map-get($theme-map, bg-dec-1)
+    color: map-get($theme-map, fg-dec-1)
+
+    .debugger-button:hover
+      color: map-get($theme-map, fg-inc-1)
+
   .nb-field
     background-color: none
+
+    &.nb-blank-field div
+      border-color: map-get($theme-map, bg-inc-1)
 
     .nb-resize-handle-area
       .nb-resize-handle

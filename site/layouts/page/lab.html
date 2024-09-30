@@ -8,22 +8,90 @@
 {{ partial "head/head.html" . }}
 
 
-<body class="lab please-dont-debug">
-    {{ .Scratch.Set "headerSubtext" "lab" }}
+{{- $themes_kludge := resources.Get "sass/themes.sass" | resources.ExecuteAsTemplate "main.scss" . | resources.ToCSS -}}
+{{- $theme_data := $themes_kludge.Content | findRESubmatch `theme(.*)\|(.*)emeht` }}
+{{- $default_theme := index $theme_data 0 2 -}}
+{{- .Scratch.Set "headerSubtext" "lab" -}}
+
+<body class="{{$default_theme}}" data-defaulttheme="{{$default_theme}}"> 
+    <noscript>
+      <!-- anchor linking to external file -->
+      <div class="noscript">
+        {{ partial "header/header.html" . }}
+        <p>
+          Try as we might, there's just no getting around JavaScript when it comes making this site work. 
+          If you're so inclined, toggle that little scripting flag and pour one out for simpler times.
+        </p>
+      </div>
+    </noscript>
+
     {{ partial "header/header.html" . }}
+
+    <div id="controls" class="inactive">
+        <div class="debugger-button" id="restart" title="restart parser ( alt+r )">
+            <i class="fa-solid fa-rotate-left active hover inactive"></i>
+        </div>
+        <div class="debugger-button" id="step" title="step to next instruction ( alt+n )">
+            <i class="fa-solid fa-forward-step active hover inactive"></i>
+        </div>
+        <div class="debugger-button" id="jump" title="step to next parser action ( alt+a )">
+            <i class="fa-solid fa-forward-fast hover inactive active"></i>
+        </div>
+        <div class="debugger-button" id="play" title="continue parsing ( alt+space )">
+            <i class="fa-solid fa-forward hover inactive "></i>
+            <i class="fa-solid fa-pause active"></i>
+        </div>
+    </div>
 
     <div id="notebook"></div>
 
     <div id="settings-panel" class="inactive">
-        <div class="close-button">x</div>
-        <h1>Themes</h1>
-        <div class="theme-section">
-            {{- $themes_kludge := resources.Get "sass/themes.sass" | resources.ExecuteAsTemplate "main.scss" . | resources.ToCSS -}}
-            {{- range $themes_kludge.Content | findRESubmatch `theme(.*)emeht` }}
-            {{ index . 1 | safeHTML -}}
-            {{ end }}
+      <div id="settings-content">
+          <div class="close-button">x</div>
+            <h1>Themes</h1>
+            <div class="theme-section">
+                {{- $themes_kludge := resources.Get "sass/themes.sass" | resources.ExecuteAsTemplate "main.scss" . | resources.ToCSS -}}
+                {{- range $theme_data }}
+                {{ index . 1 | safeHTML -}}
+                {{ end }}
+            </div>
+            <h1>Data Usage and Local Resources </h1>
+              <p>
+                By enabling 'Local Workflow', you acknowledge and accept the use of web technologies that enable RADLR to store data 
+                on you local machine and communicate with locally installed RADLR software.  This includes, but is not limited to, 
+                the use of technologies such as WebSockets, LocalStorage and SessionStorage.
+              </p>
+
+              <label>
+                <div class=title>Enable Local Workflow</div>
+                <div class=note>Enables the following settings</div>
+                <input type="checkbox" checked="false"/>
+              </label>
+
+
+              <label>
+                <div class=title>Local RADLR server port</div>
+                <div class=note>Port on which RADLR server will listen on and serve parsing requests. <a href="#">Learn More</a></div>
+                <input type="text" disabled="true" placeholder="15995"/>
+              </label>
+
+              <label>
+                <div class=title>Clear Session Caches</div>
+                <div class=note>This will clear all data and reset local setting to default. All data will be lost.</div>
+                <input type="button" disabled="true" value="Clear">
+              </label>
+
+
+
+            <div class="theme-section"></div>
         </div>
     </div>
+
+    <footer>
+        <button id="open-settings-button">
+            <i class="fa fa-cog" aria-hidden="true"></i>
+        </button>
+    </footer>
 
     <script type="module">
 
@@ -31,12 +99,6 @@
 
         init("{{$labWorkerScript.Permalink}}");
     </script>
-
-    <footer>
-        <button id="open-settings-button">
-            <i class="fa fa-cog" aria-hidden="true"></i>
-        </button>
-    </footer>
 
     <template id="theme-entry-template">
         <div class="theme-entry">
@@ -66,64 +128,39 @@
         </div>
     </template>
 
-    <template id="debugger-template">
-        <div class="controls">
-            <span>
-                <div class="debugger-button" id="profile" title="profile parser ( alt+p )">
-                    <i class="fa-solid fa-chart-line active hover inactive"></i>
-                </div>
-                <div class="debugger-button" id="build" title="build parser ( alt+b )">
-                    <i class="fa-solid fa-wrench hover inactive"></i>
-                    <i class="fa-solid fa-check  active"></i>
-                </div>
-                <div class="debugger-button" id="restart" title="restart parser ( alt+r )">
-                    <i class="fa-solid fa-rotate-left active hover inactive"></i>
-                </div>
-                <div class="debugger-button" id="step" title="step to next instruction ( alt+n )">
-                    <i class="fa-solid fa-forward-step active hover inactive"></i>
-                </div>
-                <div class="debugger-button" id="step-action" title="step to next parser action ( alt+a )">
-                    <i class="fa-solid fa-forward-fast hover inactive active"></i>
-                </div>
-                <div class="debugger-button" id="play" title="continue parsing ( alt+space )">
-                    <i class="fa-solid fa-forward hover inactive "></i>
-                    <i class="fa-solid fa-pause active"></i>
-                </div>
-                <select id="debugger-entry-dropdown" title="exported entrypoint"></select>
-            </span>
-
-            <span>
-                <label title="optimize parser IR">
-                    <input class="debugger-checkbox" type="checkbox" id="op-enable" checked="true"></input>
-                    optimize
-                </label>
-                <label title="use a context free scanner">
-                    <input class="debugger-checkbox" type="checkbox" id="cf-enable"></input>
-                    CF
-                </label>
-                <label title="enable LR style parsing">
-                    <input class="debugger-checkbox" type="checkbox" id="lr-enable"></input>
-                    LR
-                </label>
-                <label title="enable LA style parsing">
-                    <input class="debugger-checkbox" type="checkbox" id="la-enable"></input>
-                    LA
-                </label>
-                <label title="enable recursive descent style parsing">
-                    <input class="debugger-checkbox" type="checkbox" id="rd-enable"></input>
-                    RD
-                </label>
-                <label title="enable fork (GLR/GLL/GHYBRID)">
-                    <input class="debugger-checkbox" type="checkbox" id="fk-enable"></input>
-                    FK
-                </label>
-                <label title="enable a look ahead greater than k=1">
-                    <input class="debugger-checkbox" type="checkbox" id="pk-enable"></input>
-                    PK
-                </label>
-            </span>
-        </div>
+    <template id="parser-config">
+      <span>
+        <label title="optimize parser IR">
+            <input class="debugger-checkbox" type="checkbox" id="op-enable" checked="true"/>
+            optimize
+        </label>
+        <label title="use a context free scanner">
+            <input class="debugger-checkbox" type="checkbox" id="cf-enable"/>
+            CF
+        </label>
+        <label title="enable LR style parsing">
+            <input class="debugger-checkbox" type="checkbox" id="lr-enable"/>
+            LR
+        </label>
+        <label title="enable LA style parsing">
+            <input class="debugger-checkbox" type="checkbox" id="la-enable"/>
+            LA
+        </label>
+        <label title="enable recursive descent style parsing">
+            <input class="debugger-checkbox" type="checkbox" id="rd-enable"/>
+            RD
+        </label>
+        <label title="enable fork (GLR/GLL/GHYBRID)">
+            <input class="debugger-checkbox" type="checkbox" id="fk-enable"/>
+            FK
+        </label>
+        <label title="enable a look ahead greater than k=1">
+            <input class="debugger-checkbox" type="checkbox" id="pk-enable"/>
+            PK
+        </label>
+    </span>
     </template>
+    {{ partial "head/styles.html" .}}
 </body>
 
 </html>

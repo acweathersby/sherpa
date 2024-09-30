@@ -83,15 +83,18 @@
     color: white
 
     .cm-line
-      background-color: map-get($theme-map, "bg-basic")
+      background-color: none
       color: map-get($theme-map, fg-dec-1)
 
       &.cm-activeLine
-        background-color: map-get($theme-map, "bg-basic")
+        background-color: none
         color: map-get($theme-map, fg-basic)
 
     .cm-cursor
       border-color: #ac3e3e
+
+    .cm-selectionBackground
+      background-color: map-get($theme-map, bg-dec-1) !important
 
     .cm-gutters
       color: map-get($theme-map, fg-dec-2)
