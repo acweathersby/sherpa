@@ -63,7 +63,7 @@ pub(super) fn resolve_reduce_reduce_conflict(
             follow_pairs.into_iter().map(|i| vec![i]).collect::<Vec<_>>().as_slice(),
             &format!("Either peeking or forking must be enabled to resolve this ambiguity, which requires a lookahead of k={k}"),
           );
-        } else if k > config.max_k {
+        } else if k as u32 > config.max_k {
           return peek_not_allowed_error(
             gb,
             follow_pairs.into_iter().map(|i| vec![i]).collect::<Vec<_>>().as_slice(),
@@ -187,7 +187,7 @@ pub(super) fn resolve_shift_reduce_conflict<'a, T: TransitionPairRefIter<'a> + C
             &format!("Either peeking or forking must be enabled to resolve this ambiguity, which requires a lookahead of k={k}"),
           )
         }
-      } else if k > config.max_k {
+      } else if k as u32 > config.max_k {
         peek_not_allowed_error(gb, &[shifts.cloned().collect(), reduces.cloned().collect()], "")
       } else {
         Ok(ShiftReduceConflictResolution::Peek(k as u16))

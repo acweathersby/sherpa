@@ -472,6 +472,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
   }
 
   addListener(event: event_names, listener: (arg: EventObj) => void) {
+
     if (!this.listeners.get(event)) {
       this.listeners.set(event, [listener]);
     } else {
@@ -529,29 +530,47 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
 
   constructor(name: string) {
     super(name);
+
+    let change_interval_id = -1;
+
     this.cm = new view.EditorView({
       doc: "",
-      extensions: [basicSetup, view.EditorView.domEventHandlers({
+      extensions: [basicSetup, state.StateField.define({
+        create() {
+          return state.RangeSet.of([]);
+
+        },
+        update(value, tr) {
+
+          value = value.map(tr.changes)
+
+          for (let effect of tr.effects) {
+            if (effect.is(highlight_effect)) {
+              value = value.update({ add: effect.value, filterTo: 20, sort: true })
+            }
+            else if (effect.is(filter_effects)) value = value.update({ filter: effect.value });
+          }
+
+          return value.map(tr.changes)
+        },
+        provide: f => view.EditorView.decorations.from(<any>f)
+      }), view.EditorView.domEventHandlers({
         input: () => {
-          this.emit("text_changed");
+          if (change_interval_id >= 0) {
+            // Disable current interval and create a new one
+            clearTimeout(change_interval_id);
+          }
+
+          change_interval_id = setTimeout(() => {
+            change_interval_id = -1;
+            this.emit("text_changed")
+          }, 100);
+          ;
         },
         scroll: () => { },
         blur: () => {
         },
         paste: event => { },
-      }), state.StateField.define({
-        create() { return view.Decoration.none; },
-        update(value, tr) {
-          value = value.map(tr.changes);
-
-          for (let effect of tr.effects) {
-            if (effect.is(highlight_effect)) value = value.update({ add: effect.value, sort: true });
-            else if (effect.is(filter_effects)) value = value.update({ filter: effect.value });
-          }
-
-          return value;
-        },
-        provide(f) { return view.EditorView.decorations.from(f); }
       })],
       parent: this.body
     });
@@ -572,9 +591,11 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
   }
 
   addHighlight(start_char: number, end_char: number, color: string) {
+    end_char = Math.min(this.cm.state.doc.length, end_char);
+    if (start_char == end_char) return;
     this.cm.dispatch({
       effects: [highlight_effect.of([
-        view.Decoration.mark({ attributes: { style: `color: ${color} `, } }).range(start_char, end_char)
+        view.Decoration.mark({ attributes: { style: `color: ${color} !important`, } }).range(start_char, end_char)
       ])]
     });
   }
@@ -582,16 +603,20 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
   removeHighlight() {
     this.cm.dispatch({
       effects: [filter_effects.of((from, to, decoration) => {
-        return true;
+        return false;
       })]
     });
   }
 
-  addMsg(start_char: number, len: number, msg: string) {
+  addMsg(start_char: number, end_char: number, msg: string) {
 
+    end_char = Math.min(this.cm.state.doc.length, end_char);
+    if (start_char == end_char || start_char > end_char) return;
+
+    console.log({ start_char, end_char })
     this.diagnostics.push({
       from: start_char,
-      to: start_char + len,
+      to: end_char,
       message: msg,
       severity: "warning",
     });
@@ -602,6 +627,7 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
   }
 
   removeMsgs() {
+    this.diagnostics.length = 0;
     this.cm.dispatch(lint.setDiagnostics(this.cm.state, this.diagnostics));
   };
 }

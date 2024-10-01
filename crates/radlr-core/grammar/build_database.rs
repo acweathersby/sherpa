@@ -80,7 +80,7 @@ pub(crate) fn build_compile_db<'a>(
 
   let grammar_headers = grammar_headers.read()?;
 
-  let root_grammar = o_to_r(grammar_headers.get(&g.guid), "Could not find grammar")?.as_ref();
+  let root_grammar = o_to_r(grammar_headers.get(&g.guid), &format!("Could not find grammar assigned to: \nUUID: {:?}\n {}", g.guid, g.guid_name.to_string(s_store)))?.as_ref();
 
   // Build non-terminal list.
   let mut symbols = OrderedMap::from_iter(vec![(SymbolId::Default, (Token::default(), 0))]);

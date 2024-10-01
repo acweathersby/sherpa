@@ -333,24 +333,22 @@ fn convert_state_to_ir<'graph: 'graph>(
 
       out.push((state_id, base_state));
     }
-    #[cfg(debug_assertions)]
-    debug_assert!(
-      !out.is_empty()
-        || matches!(
-          state.ty,
-          StateType::NonTerminalComplete
-            | StateType::NonTermCompleteOOS
-            | StateType::ScannerCompleteOOS
-            | StateType::CompleteToken
-            | StateType::AssignToken(..)
-        ),
-      "Graph state failed to generate ir states:\nSTATE\n\n {:?} \n\nGraph\n{}\n{}",
-      state,
-      "", // state.graph._debug_string_(),
-      precursor.successors.values().map(|s| format!("{s:?}")).collect::<Vec<_>>().join("\n\n")
+
+    let non_leaf_empty_state = out.is_empty()
+    && !matches!(
+      state.ty,
+      StateType::NonTerminalComplete
+        | StateType::NonTermCompleteOOS
+        | StateType::ScannerCompleteOOS
+        | StateType::CompleteToken
+        | StateType::AssignToken(..)
     );
 
-    Ok(out)
+    if non_leaf_empty_state {
+       Err(RadlrError::Text(format!("Created a state without children that is not a leaf\n State:\n{:?}", state)))
+    } else {
+      Ok(out)
+    }
   }
 }
 

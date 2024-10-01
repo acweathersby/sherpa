@@ -1,6 +1,7 @@
 use clap::{arg, value_parser, ArgMatches, Command};
 use radlr_build::BuildConfig;
 use radlr_core::{ParserConfig, RadlrError, RadlrResult};
+use radlr_lab::run_lab_server;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -30,6 +31,7 @@ pub fn command() -> ArgMatches {
         )
         .arg_required_else_help(true)
     )
+    .subcommand(Command::new("lab-mode").about("Starts the RADLR lab server, providing local resources to the RADLR lab browser app"))
     .subcommand(
       Command::new("build")
         .about("Constructs a parser from a Radlr grammar.")
@@ -103,38 +105,44 @@ fn main() -> RadlrResult<()> {
   let matches = command();
 
   if let Some(matches) = matches.subcommand_matches("build") {
-    let (_, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
-    let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
-    let name = matches.get_one::<String>("name").cloned();
-
-    let debug = matches.get_one::<bool>("debug").cloned().unwrap_or_default();
-    let target_language = match true {
-      _ => radlr_build::TargetLanguage::Rust,
-    };
-
-    let mut build_config = BuildConfig::new(&grammar_sources.as_slice()[0]);
-
-    build_config.include_debug_symbols = debug;
-    build_config.build_ast = matches.get_one::<bool>("ast").cloned().unwrap_or_default();
-    build_config.lib_out = &_lib_out_dir;
-    build_config.source_out = &out_dir;
-
-    if let Some(name) = &name {
-      build_config.name_prefix = Some(name);
-    }
-
-    build_config.parser_type = match true {
-      _ => radlr_build::ParserType::Bytecode,
-    };
-
-    let parser_config = ParserConfig::default();
-
-    radlr_build::fs_build(build_config, parser_config, target_language)
+    process_build_command(matches, pwd)
   } else if matches.subcommand_matches("disassemble").is_some() {
     RadlrResult::Ok(())
+  } else if let Some(matches) = matches.subcommand_matches("lab-mode") {
+    run_lab_server(8080)
   } else {
     RadlrResult::Err(RadlrError::from("Command Not Recognized"))
   }
+}
+
+fn process_build_command(matches: &ArgMatches, pwd: PathBuf) -> Result<(), RadlrError> {
+  let (_, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
+  let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
+  let name = matches.get_one::<String>("name").cloned();
+
+  let debug = matches.get_one::<bool>("debug").cloned().unwrap_or_default();
+  let target_language = match true {
+    _ => radlr_build::TargetLanguage::Rust,
+  };
+
+  let mut build_config = BuildConfig::new(&grammar_sources.as_slice()[0]);
+
+  build_config.include_debug_symbols = debug;
+  build_config.build_ast = matches.get_one::<bool>("ast").cloned().unwrap_or_default();
+  build_config.lib_out = &_lib_out_dir;
+  build_config.source_out = &out_dir;
+
+  if let Some(name) = &name {
+    build_config.name_prefix = Some(name);
+  }
+
+  build_config.parser_type = match true {
+    _ => radlr_build::ParserType::Bytecode,
+  };
+
+  let parser_config = ParserConfig::default();
+
+  radlr_build::fs_build(build_config, parser_config, target_language)
 }
 
 #[test]

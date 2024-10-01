@@ -1,43 +1,182 @@
+import { Eventable } from "./eventable";
 import { sleep } from "./pipeline";
 
-const themes = [
-  { name: "please-dont-debug", eCol1: "", eCol2: "", eCol3: "" },
-  { name: "industrial-solace", eCol1: "", eCol2: "", eCol3: "" },
-]
 
+export enum LocalStoreKeys {
+  ParseInput = "lab-parser-input",
+  GrammarInput = "lab-grammar-input",
+  StorageEnabled = "lab-local-data-enabled",
+  LocalRADLRPort = "lab-radlr-port",
+  ParserConfig = "lab-parser-config",
+  ActiveTheme = "lab-active-theme",
+}
+
+export function localStorageEnabled() {
+  return window.localStorage.getItem(LocalStoreKeys.StorageEnabled) == "true";
+}
+
+export function setLocalValue(key: LocalStoreKeys, value: string) {
+  if (localStorageEnabled()) {
+    localStorage.setItem(key, value);
+  }
+}
+
+export function getLocalValue(key: LocalStoreKeys): string {
+  if (localStorageEnabled()) {
+    return localStorage.getItem(key) || "";
+  } else {
+    return ""
+  }
+}
 
 function setupSetting() {
   let setting_panel = document.querySelector("#settings-panel");
 
   if (!setting_panel) return;
 
-  let close_button = <HTMLDivElement>setting_panel.querySelector(".close-button");
+  const data_enable = new SettingInput(<HTMLLabelElement>setting_panel.querySelector(".data-enable"));
+  const data_controls = Array.from(setting_panel.querySelectorAll(".data-control")).map(e => new SettingInput(<HTMLLabelElement>e));
+  const data_settings_lu = new Map(data_controls.map(e => [e.setting_id, e]));
 
-  let open_button = <HTMLDivElement>document.body.querySelector("#open-settings-button");
-  open_button.classList.add("inactive");
 
-  open_button.addEventListener("click", () => {
-    if (setting_panel.classList.contains("inactive")) {
-      setting_panel.classList.replace("inactive", "active");
-      open_button.classList.replace("inactive", "active");
-    } else {
-      setting_panel.classList.replace("active", "inactive");
-      open_button.classList.replace("active", "inactive");
+  data_settings_lu.get("port")?.on("changed", value => {
+    if (value) {
+      setLocalValue(LocalStoreKeys.LocalRADLRPort, value);
     }
   })
 
-  close_button.addEventListener("click", () => {
-    setting_panel.classList.replace("active", "inactive");
-    open_button.classList.replace("active", "inactive");
+  if (getLocalValue(LocalStoreKeys.LocalRADLRPort))
+    data_settings_lu.get("port").input.value = getLocalValue(LocalStoreKeys.LocalRADLRPort)
+
+  data_enable.on("checked", _ => {
+    localStorage.setItem(LocalStoreKeys.StorageEnabled, "true");
+    for (const input of data_settings_lu.values()) {
+      input.enable(true);
+    }
   })
 
+  data_enable.on("unchecked", _ => {
+    for (const key in LocalStoreKeys) {
+      let value = <any>LocalStoreKeys[key];
+      console.log(value)
+      window.localStorage.removeItem(value);
+    }
+
+    for (const input of data_settings_lu.values()) {
+      input.enable(false);
+    }
+  })
+
+  if (getLocalValue(LocalStoreKeys.StorageEnabled) == "true") {
+    data_enable.input.checked = true;
+
+    for (const input of data_settings_lu.values()) {
+      input.enable(true);
+    }
+  } else {
+    data_enable.input.checked = false;
+
+    for (const input of data_settings_lu.values()) {
+      input.enable(false);
+    }
+  }
+
+  setupOpenCloseTriggers(setting_panel);
   setupThemes(setting_panel);
+}
+
+
+type SettingInputEvents = {
+  "checked": undefined,
+  "unchecked": undefined,
+  "changed": any
+};
+/**
+ * @description Takes a Label composed as fig.1, and extracts and binds values to 
+ * convenient getters and methods.
+ * 
+ * ```
+ * <label>
+ *  <div class="title"/>
+ *  <div class="note"/>
+ *  <input/>
+ * </label>
+ * ```
+ * fig.1
+ */
+class SettingInput extends Eventable<SettingInputEvents> {
+  input: HTMLInputElement
+  title: HTMLDivElement
+  note: HTMLDivElement
+  setting_id: string
+
+  event_handlers: Map<string, (e: any) => any> = new Map;
+
+  constructor(label: HTMLLabelElement) {
+    super()
+    this.setting_id = <string>label.dataset.setting_id;
+    this.title = <HTMLDivElement>label.querySelector(".title")
+    this.note = <HTMLDivElement>label.querySelector(".note")
+    this.input = <HTMLInputElement>label.querySelector("input")
+
+    this.input.addEventListener("change", e => {
+      if (this.input.type == "checkbox") {
+        if (this.input.checked) {
+          this.emit("checked", undefined);
+        } else {
+          this.emit("unchecked", undefined);
+        }
+      } else {
+        this.emit("changed", this.input.value)
+      }
+    });
+  }
+
+  is(setting_id: string): boolean {
+    return setting_id == this.setting_id;
+  }
+
+  on<T extends keyof SettingInputEvents, A = SettingInputEvents[T], D = (arg: A) => void>(event: T, listener: D): void {
+    super.addListener(event, listener);
+  }
+
+  enable(set_enabled: boolean) {
+    if (set_enabled) {
+      this.input.removeAttribute("disabled")
+    } else {
+      this.input.setAttribute("disabled", "");
+    }
+  }
+}
+
+export function setupOpenCloseTriggers(panel: Element, button_selector: string = "#open-settings-button") {
+  let close_button = <HTMLDivElement>panel.querySelector(".close-button");
+
+  let open_button = <HTMLDivElement>document.body.querySelector(button_selector);
+  open_button.classList.add("inactive");
+
+  open_button.addEventListener("click", () => {
+    if (panel.classList.contains("inactive")) {
+      panel.classList.replace("inactive", "active");
+      open_button.classList.replace("inactive", "active");
+    } else {
+      panel.classList.replace("active", "inactive");
+      open_button.classList.replace("active", "inactive");
+    }
+  });
+
+  close_button.addEventListener("click", () => {
+    panel.classList.replace("active", "inactive");
+    open_button.classList.replace("active", "inactive");
+  });
 }
 
 function setupThemes(setting_panel: Element) {
 
-  let default_theme = document.body.dataset.defaulttheme;
-  let active_theme = <string>default_theme;
+  let default_theme = <string>document.body.dataset.defaulttheme;
+  let active_theme = getLocalValue(LocalStoreKeys.ActiveTheme) || default_theme;
+
+  console.log({ default_theme, active_theme })
   //document.body.classList.add(active_theme);
   let node = <HTMLTemplateElement>document.querySelector("#theme-entry-template");
 
@@ -64,6 +203,7 @@ function setupThemes(setting_panel: Element) {
       if (active_theme != target_class) {
         let old_theme = active_theme;
         active_theme = <string>target_class;
+        setLocalValue(LocalStoreKeys.ActiveTheme, active_theme);
         document.body.classList.replace(old_theme, active_theme);
         //document.body.classList.remove(old_theme);
         await sleep(400);
@@ -72,12 +212,16 @@ function setupThemes(setting_panel: Element) {
 
     theme.parentElement?.replaceChild(theme_entry, theme);
 
+
+    if (default_theme != active_theme) {
+      document.body.classList.replace(default_theme, active_theme);
+    }
+
+
     return {
       theme_entry, bg, fg, target_class
     };
   });
-
-  console.log(themes);
 }
 
 

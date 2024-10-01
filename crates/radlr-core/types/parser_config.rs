@@ -1,10 +1,10 @@
 #![allow(non_snake_case, unused)]
 #[derive(Clone, Copy)]
-
 /// Settings for configuring the type of parser Radlr will generate.
 #[derive(Debug)]
+#[repr(C)]
 pub struct ParserConfig {
-  /// When enable, recursive descent style `Call` states will be generated
+  /// When enable, recursive descent style s`Call` states will be generated
   pub ALLOW_CALLS: bool,
   /// When enable, LR style states may be produced. In general, this
   /// allows more advanced grammar constructs to be parsed, such
@@ -56,18 +56,7 @@ pub struct ParserConfig {
   pub ALLOW_LOOKAHEAD_SCANNERS: bool,
   /// The maximum number of lookead symbols allowed before parser construction
   /// is aborted or a different disambiguating strategy is employed.
-  pub max_k: usize,
-}
-
-/// Configuration for the creation of a grammar from grammar sources.
-pub struct GrammarConfig {
-  /// An anonymous non-terminal, aka grouped rules `e.g ( symA symB | symC | ..
-  /// )`, may be inlined into the body of its host rule if none of the grouped
-  /// rules contain semantic actions, such as `:ast` definitions.  
-  ///
-  /// Parsers created with this type of optimization tend to perform poorly when
-  /// used for error correcting.
-  pub ALLOW_ANONYMOUS_NONTERM_INLINING: bool,
+  pub max_k: u32,
 }
 
 pub struct OptimizeConfig {
@@ -91,7 +80,7 @@ impl Default for ParserConfig {
       ALLOW_ANONYMOUS_NONTERM_INLINING: true,
       ALLOW_BYTE_SEQUENCES: false,
       ALLOW_LOOKAHEAD_SCANNERS: false,
-      max_k: usize::MAX,
+      max_k: u32::MAX,
     }
   }
 }
@@ -133,7 +122,7 @@ impl ParserConfig {
     self.recursive_descent_k(8).use_fork_states(true)
   }
 
-  pub fn recursive_descent_k(mut self, k: usize) -> Self {
+  pub fn recursive_descent_k(mut self, k: u32) -> Self {
     self.ALLOW_CALLS = true;
     self.ALLOW_LR = false;
     self.set_k(k)
@@ -151,14 +140,14 @@ impl ParserConfig {
     self
   }
 
-  pub fn lrk(mut self, k: usize) -> Self {
+  pub fn lrk(mut self, k: u32) -> Self {
     self.ALLOW_CALLS = false;
     self.ALLOW_CONTEXT_SPLITTING = false;
     self.ALLOW_LR = true;
     self.set_k(k)
   }
 
-  pub fn llk(mut self, k: usize) -> Self {
+  pub fn llk(mut self, k: u32) -> Self {
     self.ALLOW_CALLS = false;
     self.ALLOW_LR = false;
     self.ALLOW_CONTEXT_SPLITTING = false;
@@ -172,7 +161,7 @@ impl ParserConfig {
     self
   }
 
-  pub fn set_k(mut self, k: usize) -> Self {
+  pub fn set_k(mut self, k: u32) -> Self {
     self.ALLOW_PEEKING = k > 1;
     self.max_k = k;
     self

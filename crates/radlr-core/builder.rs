@@ -103,7 +103,7 @@ impl RadlrGrammar {
       }
     }
 
-    if errors.len() > 1 {
+    if !errors.is_empty() {
       Err(RadlrError::Multi(errors))
     } else {
       Ok(self)
@@ -148,7 +148,7 @@ impl RadlrGrammar {
       }
     }
 
-    if errors.len() > 1 {
+    if !errors.is_empty() {
       Err(RadlrError::Multi(errors))
     } else {
       Ok(())
@@ -178,7 +178,7 @@ impl RadlrGrammar {
       };
     }
 
-    if errors.len() > 1 {
+    if !errors.is_empty() {
       Err(RadlrError::Multi(errors))
     } else {
       Ok(self)

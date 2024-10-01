@@ -1,29 +1,23 @@
-use js_sys::{Array, ArrayBuffer, JsString, Number, Object, Uint8Array};
+use js_sys::{Array, ArrayBuffer, JsString, Number, Uint8Array};
 use radlr_bytecode::compile_bytecode;
 use radlr_core::{worker_pool::SingleThreadPool, RadlrDatabase, RadlrGrammar, *};
 use radlr_rust_runtime::{
   kernel::{disassemble_bytecode, disassemble_parse_block},
   types::{
     bytecode::{ByteCodeIterator, Instruction, Opcode},
-    entrypoint,
-    serialize,
     BytecodeParserDB,
-    EntryPoint,
     RuntimeDatabase,
     TableHeaderData,
-    Token,
   },
 };
-use serde::Serialize;
-use std::{
-  collections::{BTreeMap, HashMap},
-  hash::Hash,
-  path::PathBuf,
-  rc::Rc,
-};
+use std::{path::PathBuf, rc::Rc};
 use wasm_bindgen::prelude::*;
 
-use crate::{error::PositionedErrors, JSParserClassification, JSParserConfig};
+use crate::{
+  error::{ErrorOrigin, PositionedErrors},
+  JSParserClassification,
+  JSParserConfig,
+};
 
 /// A Grammar Identity
 #[wasm_bindgen]
@@ -106,8 +100,8 @@ impl AsRef<[u8]> for JSBytecodeParserDB {
   }
 }
 
-fn to_err(e: RadlrError) -> PositionedErrors {
-  (&vec![e]).into()
+fn to_err(e: RadlrError, origin: ErrorOrigin) -> PositionedErrors {
+  (&vec![e], origin).into()
 }
 
 #[wasm_bindgen]
@@ -150,7 +144,7 @@ impl JSRadlrGrammar {
     let path = &PathBuf::from(&path);
     let grammar = self.as_mut();
 
-    grammar.add_source_from_string(&grammar_source, &path, true).map_err(to_err)?;
+    grammar.add_source_from_string(&grammar_source, &path, true).map_err(|e| to_err(e, ErrorOrigin::Grammar))?;
 
     let id: GrammarIdentities = grammar.path_to_id(path);
 
@@ -183,7 +177,8 @@ pub fn create_parse_db(
 ) -> Result<JSParserDB, PositionedErrors> {
   let grammar = soup.as_ref();
 
-  let parser_db = grammar.build_db(&PathBuf::from(grammar_id), config.into()).map_err(to_err)?;
+  let parser_db =
+    grammar.build_db(&PathBuf::from(grammar_id), (*config).into()).map_err(|e| to_err(e, ErrorOrigin::ParserBuild))?;
 
   Ok(JSParserDB(Box::new(parser_db)))
 }
@@ -215,9 +210,9 @@ pub fn create_bytecode(states: &JSIRParser) -> Result<JSBytecodeParserDB, Positi
 pub fn import_bytecode_db(buffer: ArrayBuffer) -> Result<JSBytecodeParserDB, PositionedErrors> {
   let buffer: Vec<u8> = Uint8Array::new(&buffer).to_vec();
 
-  match BytecodeParserDB::import_bytecode_db(&buffer) {
+  match radlr_lab::serialize::bytecode_db::import_bytecode_db(&buffer) {
     Ok(db) => Ok(JSBytecodeParserDB(Rc::new(db))),
-    Err(err) => Err(RadlrError::from(err).into()),
+    Err(err) => Err((RadlrError::from(err), ErrorOrigin::BytecodeImport).into()),
   }
 }
 
@@ -229,7 +224,7 @@ pub fn export_bytecode_db(states: &JSIRParser) -> Result<ArrayBuffer, Positioned
     Ok(pkg) => pkg,
   };
 
-  let buffer = bc.export_bytecode_db();
+  let buffer = radlr_lab::serialize::bytecode_db::export_bytecode_db(&bc);
 
   let array_buffer = ArrayBuffer::new(buffer.len() as u32);
 
@@ -262,11 +257,11 @@ pub fn create_parser_states(
 
   let db = js_db.as_ref();
 
-  let parser = db.build_states(config.into(), &pool).map_err(to_err)?;
+  let parser = db.build_states((*config).into(), &pool).map_err(|e| to_err(e, ErrorOrigin::StatesCreation))?;
 
   let parser =
     (if optimize_states { parser.build_ir_parser(true, true, &pool) } else { parser.build_ir_parser(false, true, &pool) })
-      .map_err(to_err)?;
+      .map_err(|e| to_err(e, ErrorOrigin::StatesCreation))?;
 
   Ok(JSIRParser { states: Box::new(parser) })
 }
@@ -274,7 +269,7 @@ pub fn create_parser_states(
 fn convert_journal_errors(in_errors: RadlrError) -> PositionedErrors {
   let mut errors = PositionedErrors::default();
 
-  errors.extend_from_refs(&in_errors.flatten());
+  errors.extend_from_refs(&in_errors.flatten(), ErrorOrigin::StatesCreation);
 
   errors
 }

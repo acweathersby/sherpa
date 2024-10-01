@@ -1,5 +1,18 @@
+use std::default;
+
 use radlr_core::RadlrError;
 use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+#[derive(Clone, Copy, Default)]
+pub enum ErrorOrigin {
+  #[default]
+  Grammar, 
+  ParserBuild, 
+  StatesCreation,
+  Ir,
+  BytecodeImport
+}
 
 #[wasm_bindgen]
 #[derive(Clone, Default)]
@@ -9,6 +22,7 @@ pub struct JSRadlrSourceError {
   pub len:          u32,
   pub start_offset: u32,
   pub end_offset:   u32,
+  pub origin:       ErrorOrigin,
   message:          String,
 }
 
@@ -38,47 +52,47 @@ impl PositionedErrors {
   }
 }
 
-impl From<&Vec<RadlrError>> for PositionedErrors {
-  fn from(errors: &Vec<RadlrError>) -> Self {
+impl From<(&Vec<RadlrError>, ErrorOrigin)> for PositionedErrors {
+  fn from((errors, origin): (&Vec<RadlrError>, ErrorOrigin)) -> Self {
     let mut out = PositionedErrors { vec: vec![] };
-    out.extend(errors);
+    out.extend(errors, origin);
     out
   }
 }
 
-impl From<Vec<RadlrError>> for PositionedErrors {
-  fn from(mut errors: Vec<RadlrError>) -> Self {
+impl From<(Vec<RadlrError>,  ErrorOrigin)> for PositionedErrors {
+  fn from((mut errors, origin): (Vec<RadlrError>, ErrorOrigin)) -> Self {
     let mut out = PositionedErrors { vec: vec![] };
-    out.extend(&mut errors);
+    out.extend(&mut errors, origin);
     out
   }
 }
 
-impl From<RadlrError> for PositionedErrors {
-  fn from(mut err: RadlrError) -> Self {
-    PositionedErrors { vec: convert_error(&err) }
+impl From<(RadlrError, ErrorOrigin)> for PositionedErrors {
+  fn from( (err, origin): (RadlrError, ErrorOrigin)) -> Self {
+    PositionedErrors { vec: convert_error(&err, origin) }
   }
 }
 
-impl From<&Vec<&RadlrError>> for PositionedErrors {
-  fn from(errors: &Vec<&RadlrError>) -> Self {
+impl From<(&Vec<&RadlrError>, ErrorOrigin)> for PositionedErrors {
+  fn from((errors, origin): (&Vec<&RadlrError>, ErrorOrigin)) -> Self {
     let mut out = PositionedErrors { vec: vec![] };
-    out.extend_from_refs(&errors.into_iter().map(|e| (*e).clone()).collect());
+    out.extend_from_refs(&errors.into_iter().map(|e| (*e).clone()).collect(),  origin);
     out
   }
 }
 
 impl PositionedErrors {
-  pub fn extend_from_refs(&mut self, errors: &Vec<RadlrError>) {
-    self.vec.extend(errors.iter().map(|e| convert_error(e)).flatten())
+  pub fn extend_from_refs(&mut self, errors: &Vec<RadlrError>, origin: ErrorOrigin) {
+    self.vec.extend(errors.iter().map(|e| convert_error(e, origin)).flatten())
   }
 
-  pub fn extend(&mut self, errors: &Vec<RadlrError>) {
-    self.vec.extend(errors.iter().map(|e| convert_error(e)).flatten())
+  pub fn extend(&mut self, errors: &Vec<RadlrError>, origin: ErrorOrigin) {
+    self.vec.extend(errors.iter().map(|e| convert_error(e, origin)).flatten())
   }
 }
 
-fn convert_error(err: &RadlrError) -> Vec<JSRadlrSourceError> {
+fn convert_error(err: &RadlrError, origin: ErrorOrigin) -> Vec<JSRadlrSourceError> {
   match err {
     RadlrError::SourcesError { sources, msg: base_message, .. } => sources
       .iter()
@@ -90,7 +104,7 @@ fn convert_error(err: &RadlrError) -> Vec<JSRadlrSourceError> {
           len:          loc.len() as u32,
           start_offset: loc.get_start() as u32,
           end_offset:   loc.get_end() as u32,
-          message:      base_message.clone() + ":\n " + msg,
+          message:      base_message.clone() + ":\n " + msg,origin
         }
       })
       .collect(),
@@ -104,6 +118,7 @@ fn convert_error(err: &RadlrError) -> Vec<JSRadlrSourceError> {
         start_offset: loc.get_start() as u32,
         end_offset:   loc.get_end() as u32,
         message:      msg.clone(),
+        origin
       }]
     }
     RadlrError::StaticText(text) => {
@@ -112,7 +127,7 @@ fn convert_error(err: &RadlrError) -> Vec<JSRadlrSourceError> {
     RadlrError::Text(text) => {
       vec![JSRadlrSourceError { message: text.to_string(), ..Default::default() }]
     }
-    RadlrError::Multi(errors) => errors.iter().map(|e| convert_error(e)).flatten().collect(),
+    RadlrError::Multi(errors) => errors.iter().map(|e| convert_error(e, origin)).flatten().collect(),
     RadlrError::PoisonError(..) => vec![JSRadlrSourceError { message: "Poison Error".into(), ..Default::default() }],
     RadlrError::IOError(..) => vec![JSRadlrSourceError { message: "Io Error".into(), ..Default::default() }],
     RadlrError::Error(err) => vec![JSRadlrSourceError { message: err.to_string(), ..Default::default() }],

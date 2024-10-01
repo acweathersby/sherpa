@@ -10,7 +10,8 @@ members = [
     "./crates/radlr-test",
     "./crates/radlr-formatter",
     "./crates/radlr-ascript",
-    "./crates/radlr-wasm"
+    "./crates/radlr-wasm",
+    "./crates/radlr-lab"
 ]
 
 exclude = [

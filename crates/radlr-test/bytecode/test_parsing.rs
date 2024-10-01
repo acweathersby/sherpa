@@ -1,14 +1,10 @@
-use crate::{
-  utils::{
+use crate::utils::{
     compile_and_run_grammars,
     map_reduce_function,
     TestParser,
     _write_disassembly_to_temp_file_,
     _write_states_to_temp_file_,
-    compile_and_run_grammars2,
-  },
-  *,
-};
+  };
 use radlr_bytecode::compile_bytecode;
 use radlr_core::{test::utils::build_parse_states_from_source_str, *};
 use radlr_rust_runtime::types::{ASTConstructor, AstSlotNew, EntryPoint, ParserInitializer, StringInput};
@@ -29,6 +25,21 @@ pub fn group_inline() -> RadlrResult<()> {
     &[("default", "abdob", true)],
     ParserConfig::default(),
   )
+}
+
+
+#[test]
+pub fn should_fail_on_infinity_recursive_non_terminal() -> RadlrResult<()> {
+  compile_and_run_grammars(
+    &[r#"
+    <> A > A
+
+  "#],
+    &[("default", "", false)],
+    ParserConfig::default(),
+  ).expect_err("Should have thrown an error");
+
+  Ok(())
 }
 
 #[test]

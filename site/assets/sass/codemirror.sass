@@ -84,11 +84,11 @@
 
     .cm-line
       background-color: none
-      color: map-get($theme-map, fg-dec-1)
+      color: map-get($theme-map, fg-basic) !important
 
       &.cm-activeLine
         background-color: none
-        color: map-get($theme-map, fg-basic)
+        color: map-get($theme-map, fg-dec-2) !important
 
     .cm-cursor
       border-color: #ac3e3e
@@ -97,11 +97,11 @@
       background-color: map-get($theme-map, bg-dec-1) !important
 
     .cm-gutters
-      color: map-get($theme-map, fg-dec-2)
-      background-color: map-get($theme-map, bg-basic)
+      color: map-get($theme-map, fg-inc-1) !important
+      background-color: map-get($theme-map, bg-basic) !important
 
       .cm-activeLineGutter
-        color: map-get($theme-map, fg-basic)
+        color: map-get($theme-map, fg-dec-1) !important
         background-color: map-get($theme-map, bg-basic)
 
       .syn-prod

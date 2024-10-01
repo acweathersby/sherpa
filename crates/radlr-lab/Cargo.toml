@@ -1,20 +1,25 @@
 [package]
-name = "radlr-cli"
+name = "radlr_lab"
 version = "1.0.1-beta2"
 edition = "2021"
 
-[[bin]]
-name = "radlr"
-path = "./bin.rs"
+[lib]
+name = "radlr_lab"
+path = "./lib.rs"
 
 [dependencies]
-clap                = { version="4.0.29" }
 radlr_core          = { path="../radlr-core" }
 radlr_ascript       = { path="../radlr-ascript" }
 radlr_bytecode      = { path="../radlr-bytecode" }
 radlr_formatter     = { path="../radlr-formatter" }
 radlr_build         = { path="../radlr-build" }
-radlr_lab           = { path="../radlr-lab", features=["host"] }
+radlr_rust_runtime  = { path="../radlr-rust-runtime" }
+tungstenite         = { version="0.24.0", optional = true }
+
+
+[features]
+host = ["tungstenite"]
+client =  []
 
 [profile.release]
 opt-level=3

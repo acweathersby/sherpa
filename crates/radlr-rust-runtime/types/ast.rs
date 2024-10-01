@@ -145,7 +145,7 @@ pub trait ASTConstructor<T: ParserInput>: ParserIterator<T> + ParserInitializer 
           }
 
           return Err(ParserError::InputError {
-            inline_message:   "Unrecognized Token".into(),
+            inline_message:   "Unrecognized Token [1]".into(),
             last_nonterminal: 0,
             loc:              TokenRange {
               line_num: last_input.line_num,
@@ -154,7 +154,7 @@ pub trait ASTConstructor<T: ParserInput>: ParserIterator<T> + ParserInitializer 
               off:      start as u32,
             }
             .to_token_from_ref(input.get_owned_ref()),
-            message:          "Unrecognized Token".into(),
+            message:          "Unrecognized Token [2]".into(),
           });
         }
         _ => {
@@ -162,7 +162,7 @@ pub trait ASTConstructor<T: ParserInput>: ParserIterator<T> + ParserInitializer 
             inline_message:   Default::default(),
             last_nonterminal: 0,
             loc:              Default::default(),
-            message:          "Unrecognized Token".into(),
+            message:          "Unrecognized Token [3]".into(),
           });
         }
       }

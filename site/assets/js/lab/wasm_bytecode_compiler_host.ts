@@ -1,9 +1,12 @@
 import { JSParserConfig } from "js/radlr/radlr_wasm";
+import { RadlrError } from "./error";
 
 type WorkerEvents = {
   "error": null,
   "grammar_compiled": null,
+  "grammar_compile_errors": RadlrError[],
   "parser_compiled": ArrayBuffer
+  "states_ready": String
 }
 
 export class WasmBytecodeCompiler {
@@ -14,25 +17,24 @@ export class WasmBytecodeCompiler {
 
 
   constructor(worker_path: string) {
-    // Create an object to later interact with 
-    const proxy = {};
-
-    // Keep track of the messages being sent
-    // so we can resolve them correctly
-    let id = 0;
-    let idPromises = {};
-
 
     const worker = new Worker(worker_path, { type: "module" });
     this.worker = worker;
 
 
     worker.addEventListener('message', (event) => {
-      if (event.data.type == "parser_compiled") {
-        this.emit("parser_compiled", event.data.bytecode_db_export)
+      switch (event.data.type) {
+        case "states_ready": {
+          this.emit("states_ready", event.data.classification)
+        } break;
+        case "parser_compiled": {
+          this.emit("parser_compiled", event.data.bytecode_db_export)
+        } break;
+        case "grammar_compile_errors": {
+          this.emit("grammar_compile_errors", event.data.errors)
+        } break
       }
     });
-
 
 
     worker.addEventListener("error", function (error) {
@@ -41,7 +43,6 @@ export class WasmBytecodeCompiler {
 
     this._ready = new Promise((res, rej) => {
       worker.addEventListener('message', function (event) {
-        console.log(event.data.type)
         if (event.data.type == "ready") {
           res(true);
         }
@@ -59,7 +60,7 @@ export class WasmBytecodeCompiler {
   // parser that is transferred through the `parser_generated`  event, with data that should be imported
   // into the host radlr instance.
   compileGrammar(grammar: string, config: JSParserConfig) {
-    this.worker.postMessage({ type: "compile_grammar", eventData: { grammar, config }, })
+    this.worker.postMessage({ type: "compile_grammar", eventData: { grammar, config: config.export() }, })
   }
 
 

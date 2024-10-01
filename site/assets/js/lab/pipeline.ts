@@ -1,6 +1,7 @@
 import { JSDebugEvent } from "js/radlr/radlr_wasm";
 import * as radlr from "js/radlr/radlr_wasm.js";
 import { WasmBytecodeCompiler } from "js/lab/wasm_bytecode_compiler_host";
+import { RadlrError } from "./error";
 
 export async function sleep(time_in_ms: number) {
   return new Promise(function (res) {
@@ -111,12 +112,32 @@ export class InputNode extends PipelineNode {
   }
 }
 
+export class ConfigNode extends PipelineNode {
+  config: radlr.JSParserConfig | null = null;
+
+  protected name() { return "ConfigNode" }
+  protected data() { return this.config; }
+
+
+  update(config: radlr.JSParserConfig) {
+    if (this.config) {
+      this.config.free()
+      this.config = null;
+    }
+
+    this.config = config;
+
+    this.enable();
+  }
+}
+
 
 export class GrammarDB extends PipelineNode<{
   "loading": void
   "loaded": void
-  "failed": void
+  "failed": RadlrError[],
   "bytecode_ready": string
+  "grammar-classification": string
 }> {
   static worker_path: string = ""
 
@@ -133,11 +154,18 @@ export class GrammarDB extends PipelineNode<{
   constructor(...args: any[]) {
     super(...args);
 
-    console.log("AA");
-
     this.compiler.addListener("grammar_compiled", () => {
       console.log("Grammar Compiled");
     });
+
+    this.compiler.addListener("grammar_compile_errors", errors => {
+      this.emit("failed", errors)
+      this.disable()
+    });
+
+    this.compiler.addListener("states_ready", classification => {
+      this.emit("grammar-classification", classification);
+    })
 
     this.compiler.addListener("parser_compiled", bytecode_db_export => {
       try {
@@ -168,7 +196,7 @@ export class GrammarDB extends PipelineNode<{
     }
 
     this.emit("loading", void 0);
-    this.compiler.compileGrammar(data.InputNode, {});
+    this.compiler.compileGrammar(data.InputNode, data.ConfigNode);
 
     return;
   }
@@ -389,7 +417,6 @@ export class Parser extends PipelineNode<{
 
   public step() {
     if (this.ENABLED) {
-      debugger
       this.next(false, false);
     }
   }

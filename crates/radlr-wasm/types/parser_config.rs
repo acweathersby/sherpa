@@ -1,164 +1,204 @@
-use radlr_core::{ParserClassification, ParserConfig, ParserMetrics};
+//! More or less a direct translation of 'radlre_core::{ParserClassification,
+//! ParserConfig, ParserMetrics}'.
 
+#![allow(non_snake_case, unused)]
+use std::ptr::slice_from_raw_parts;
+
+use js_sys::{ArrayBuffer, Uint8Array};
+use radlr_core::{ParserClassification, ParserConfig, ParserMetrics};
+use serde::{Deserialize, Serialize};
+use serde_wasm_bindgen::preserve;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-#[allow(non_snake_case)]
-#[derive(Clone, Copy)]
+#[repr(C)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct JSParserConfig {
-  _config: ParserConfig,
-}
-
-#[wasm_bindgen]
-impl JSParserConfig {
-  #[wasm_bindgen(constructor)]
-  pub fn new() -> Self {
-    Self::default()
-  }
-
-  pub fn cst_editor() -> Self {
-    Self { _config: ParserConfig::default().cst_editor() }
-  }
-
   /// When enable, recursive descent style `Call` states will be generated
-  #[wasm_bindgen(getter = ALLOW_CALLS)]
-  pub fn ALLOW_CALLS(&self) -> bool {
-    self._config.ALLOW_CALLS
-  }
-
-  #[wasm_bindgen(setter = ALLOW_CALLS)]
-  pub fn set_ALLOW_CALLS(&mut self, val: bool) {
-    self._config.ALLOW_CALLS = val;
-  }
-
-  /// When enable, LR style states can be produced, in general
-  /// allowing more advanced grammar constructs to be parsed, such
+  pub ALLOW_CALLS: bool,
+  /// When enable, LR style states may be produced. In general, this
+  /// allows more advanced grammar constructs to be parsed, such
   /// as left recursive rules.
   ///
   /// When disabled, grammars with rules that require LR style parse states
   /// will be rejected, and relevant errors will be reported.
-  #[wasm_bindgen(getter = ALLOW_LR)]
-  pub fn ALLOW_LR(&self) -> bool {
-    self._config.ALLOW_LR
-  }
-
-  #[wasm_bindgen(setter = ALLOW_LR)]
-  pub fn set_ALLOW_LR(&mut self, val: bool) {
-    self._config.ALLOW_LR = val;
-  }
-
+  pub ALLOW_LR: bool,
   /// When enabled, unrestricted lookahead states states will be generated
   ///
   /// When disabled, grammars with rules that require a lookahead that is
   ///  `k>1` will be rejected, and relevant errors will be reported.
-  #[wasm_bindgen(getter = ALLOW_PEEKING)]
-  pub fn ALLOW_PEEKING(&self) -> bool {
-    self._config.ALLOW_PEEKING
-  }
-
-  #[wasm_bindgen(setter = ALLOW_PEEKING)]
-  pub fn set_ALLOW_PEEKING(&mut self, val: bool) {
-    self._config.ALLOW_PEEKING = val;
-  }
-
-  /// The maximum number of lookead symbols allowed before parser construction
-  /// is aborted or a different disambiguating strategy is employed.
-  #[wasm_bindgen(getter = max_k)]
-  pub fn max_k(&self) -> usize {
-    self._config.max_k
-  }
-
-  #[wasm_bindgen(setter = max_k)]
-  pub fn set_max_k(&mut self, val: usize) {
-    self._config.max_k = val;
-  }
-
-  /// Allow the parser to split its context to handle ambiguous rules. This may
-  /// lead to a CSF (Concrete Syntax Forest) or a CSDAG (Concrete Syntax DAG)
-  /// being returned by the parser instead of a CST
-  #[wasm_bindgen(getter = ALLOW_CONTEXT_SPLITTING)]
-  pub fn ALLOW_CONTEXT_SPLITTING(&self) -> bool {
-    self._config.ALLOW_CONTEXT_SPLITTING
-  }
-
-  #[wasm_bindgen(setter = ALLOW_CONTEXT_SPLITTING)]
-  pub fn set_ALLOW_CONTEXT_SPLITTING(&mut self, val: bool) {
-    self._config.ALLOW_CONTEXT_SPLITTING = val;
-  }
-
+  pub ALLOW_PEEKING: bool,
+  /// Allow the parser to split its context to handle ambiguity. This
+  /// may lead to a CSF (Concrete Syntax Forest) or a CSDAG (Concrete Syntax
+  /// DAG) being returned by the parser instead of a CST
+  pub ALLOW_CONTEXT_SPLITTING: bool,
   /// Creates a single scanner instead of multiple contextual scanners. More
   /// likely to report terminal conflicts.
-  #[wasm_bindgen(getter = CONTEXT_FREE)]
-  pub fn CONTEXT_FREE(&self) -> bool {
-    self._config.CONTEXT_FREE
-  }
-
-  #[wasm_bindgen(setter = CONTEXT_FREE)]
-  pub fn set_CONTEXT_FREE(&mut self, val: bool) {
-    self._config.CONTEXT_FREE = val;
-  }
-
+  pub CONTEXT_FREE: bool,
   /// Creates states that directly handle transitions on terminals, allowing the
-  /// creation of parsers that can patch existing CST structures.
-  #[wasm_bindgen(getter = AllOW_CST_MERGING)]
-  pub fn AllOW_CST_MERGING(&self) -> bool {
-    self._config.AllOW_CST_MERGING
-  }
-
-  #[wasm_bindgen(setter = AllOW_CST_MERGING)]
-  pub fn set_AllOW_CST_MERGING(&mut self, val: bool) {
-    self._config.AllOW_CST_MERGING = val;
-  }
-
+  /// creation of parsers that can patch existing CST data structures.
+  pub AllOW_CST_MERGING: bool,
+  /// Export all non-terminals as entry points in to the parser. This implies
+  /// an RD or RAD parser.
+  pub EXPORT_ALL_NONTERMS: bool,
   /// Allow the parser to shift on CST non-term nodes.
-  #[wasm_bindgen(getter = ALLOW_CST_NONTERM_SHIFT)]
-  pub fn ALLOW_CST_NONTERM_SHIFT(&self) -> bool {
-    self._config.ALLOW_CST_NONTERM_SHIFT
-  }
+  pub ALLOW_CST_NONTERM_SHIFT: bool,
+  /// Allow inlining of scanners that yield single codepoint tokens.
+  ///
+  /// Parsers created with this type of optimization tend to perform poorly when
+  /// used for error correction.
+  pub ALLOW_SCANNER_INLINING: bool,
+  /// An anonymous non-terminal, aka grouped rules `e.g ( symA symB | symC | ..
+  /// )`, may be inlined into the body of its host rule if none of the grouped
+  /// rules contain semantic actions, such as `:ast` definitions.  
+  ///
+  /// Parsers created with this type of optimization tend to perform poorly when
+  /// used for error correcting.
+  pub ALLOW_ANONYMOUS_NONTERM_INLINING: bool,
+  /// Enables using wide data types ( u16 | u32 | u64 | u128 ) to recognize a
+  /// sequence of characters.
+  pub ALLOW_BYTE_SEQUENCES: bool,
+  /// Enables FOLLOW context sensitive scanners, which will consider the tokens
+  /// that _follow_ the states which the scanner is constructing tokens
+  /// for.
+  ///
+  /// May significantly increase the number scanner states.
+  pub ALLOW_LOOKAHEAD_SCANNERS: bool,
+  /// The maximum number of lookead symbols allowed before parser construction
+  /// is aborted or a different disambiguating strategy is employed.
+  pub max_k: u32,
+}
 
-  #[wasm_bindgen(setter = ALLOW_CST_NONTERM_SHIFT)]
-  pub fn set_ALLOW_CST_NONTERM_SHIFT(&mut self, val: bool) {
-    self._config.ALLOW_CST_NONTERM_SHIFT = val;
-  }
-
-  /// Makes entry points for all non-terminals defined in the grammar.
-  #[wasm_bindgen(getter = EXPORT_ALL_NONTERMS)]
-  pub fn EXPORT_ALL_NONTERMS(&self) -> bool {
-    self._config.EXPORT_ALL_NONTERMS
-  }
-
-  #[wasm_bindgen(setter = EXPORT_ALL_NONTERMS)]
-  pub fn set_EXPORT_ALL_NONTERMS(&mut self, val: bool) {
-    self._config.EXPORT_ALL_NONTERMS = val;
+impl From<ParserConfig> for JSParserConfig {
+  fn from(value: ParserConfig) -> Self {
+    unsafe { std::mem::transmute_copy(&value) }
   }
 }
 
-impl Default for JSParserConfig {
-  fn default() -> Self {
-    Self { _config: Default::default() }
+impl From<JSParserConfig> for ParserConfig {
+  fn from(value: JSParserConfig) -> Self {
+    unsafe { std::mem::transmute_copy(&value) }
   }
 }
 
-impl Into<ParserConfig> for JSParserConfig {
-  fn into(self) -> ParserConfig {
-    self._config
-  }
-}
-
-impl Into<ParserConfig> for &JSParserConfig {
-  fn into(self) -> ParserConfig {
-    (*self).into()
-  }
+pub struct OptimizeConfig {
+  /// Enables using wide data types ( u16 | u32 | u64 | u128+ ) to recognize a
+  /// sequence of bytes.
+  pub ALLOW_BYTE_SEQUENCES: bool,
 }
 
 #[wasm_bindgen]
-#[derive(Default, Clone, Copy)]
+impl JSParserConfig {
+  pub fn export(&self) -> JsValue {
+    serde_wasm_bindgen::to_value(self).expect("Could not serialize JSParserConfig")
+  }
+
+  pub fn import(value: JsValue) -> JSParserConfig {
+    serde_wasm_bindgen::from_value(value).expect("Could not deserialize JSParserConfig")
+  }
+
+  pub fn duplicate(&self) -> Self {
+    *self
+  }
+
+  pub fn size() -> u32 {
+    size_of::<ParserConfig>() as u32
+  }
+
+  pub fn serialize(&self) -> ArrayBuffer {
+    let config = self.native_config();
+    let buffer = vec![config];
+    let array_buffer = ArrayBuffer::new(size_of::<ParserConfig>() as u32);
+    let output = Uint8Array::new(&array_buffer);
+    output.copy_from(unsafe { &*slice_from_raw_parts(buffer.as_ptr() as *const u8, size_of::<ParserConfig>()) });
+    array_buffer
+  }
+
+  #[wasm_bindgen(constructor)]
+  pub fn new() -> Self {
+    ParserConfig::new().into()
+  }
+
+  fn native_config(&self) -> ParserConfig {
+    ParserConfig::from(*self)
+  }
+
+  pub fn to_classification(&self) -> JSParserClassification {
+    self.native_config().to_classification().into()
+  }
+
+  pub fn hybrid(self) -> Self {
+    self.native_config().hybrid().into()
+  }
+
+  pub fn g_hybrid(self) -> Self {
+    self.native_config().g_hybrid().into()
+  }
+
+  pub fn cst_editor(self) -> Self {
+    self.native_config().cst_editor().into()
+  }
+
+  pub fn g_recursive_descent_k(self) -> Self {
+    self.recursive_descent_k(8).use_fork_states(true)
+  }
+
+  pub fn recursive_descent_k(mut self, k: u32) -> Self {
+    self.native_config().recursive_descent_k(k).into()
+  }
+
+  pub fn glr(mut self) -> Self {
+    self.native_config().glr().into()
+  }
+
+  pub fn gll(mut self) -> Self {
+    self.native_config().gll().into()
+  }
+
+  pub fn lrk(mut self, k: u32) -> Self {
+    self.native_config().lrk(k).into()
+  }
+
+  pub fn llk(mut self, k: u32) -> Self {
+    self.native_config().llk(k).into()
+  }
+
+  pub fn ll1(mut self) -> Self {
+    self.native_config().ll1().into()
+  }
+
+  pub fn set_k(mut self, k: u32) -> Self {
+    self.native_config().set_k(k).into()
+  }
+
+  pub fn use_call_states(mut self, enable: bool) -> Self {
+    self.native_config().use_call_states(enable).into()
+  }
+
+  pub fn use_fork_states(mut self, enable: bool) -> Self {
+    self.native_config().use_fork_states(enable).into()
+  }
+
+  pub fn force_context_free(mut self, enable: bool) -> Self {
+    self.native_config().force_context_free(enable).into()
+  }
+
+  /// Adds FOLLOW aware scanning behavior. May significantly increase the
+  /// number of scanner states in more complex grammars.
+  pub fn use_lookahead_scanners(mut self, enable: bool) -> Self {
+    self.native_config().use_lookahead_scanners(enable).into()
+  }
+}
+
+/// Used to track the type of parser that has been created by radlr.
+#[derive(Default, Clone, Copy, Debug)]
+#[wasm_bindgen]
 pub struct JSParserClassification {
-  ///
-  pub bottom_up:     bool,
   /// Maximum peek level used to disambiguate conflicting phrases. If this is
   /// equal to `u16::MAX`, then peeking failed or a fork was used in its place.
   pub max_k:         u16,
+  ///
+  pub bottom_up:     bool,
   /// If set to true then the parser has at least one state that transitions on
   /// non-terminals as well terminals.
   pub gotos_present: bool,
@@ -173,53 +213,31 @@ pub struct JSParserClassification {
   pub forks_present: bool,
 }
 
-#[wasm_bindgen]
-impl JSParserClassification {
-  pub fn get_type(&self) -> String {
-    Into::<ParserClassification>::into(*self).to_string()
-  }
-}
-
 impl From<ParserClassification> for JSParserClassification {
   fn from(value: ParserClassification) -> Self {
-    Self {
-      max_k:         value.max_k,
-      bottom_up:     value.bottom_up,
-      gotos_present: value.gotos_present,
-      calls_present: value.calls_present,
-      peeks_present: value.peeks_present,
-      forks_present: value.forks_present,
-    }
+    unsafe { std::mem::transmute_copy(&value) }
   }
 }
 
-impl Into<ParserClassification> for JSParserClassification {
-  fn into(self) -> ParserClassification {
-    ParserClassification {
-      max_k:         self.max_k,
-      bottom_up:     self.bottom_up,
-      gotos_present: self.gotos_present,
-      calls_present: self.calls_present,
-      peeks_present: self.peeks_present,
-      forks_present: self.forks_present,
-    }
+impl From<JSParserClassification> for ParserClassification {
+  fn from(value: JSParserClassification) -> Self {
+    unsafe { std::mem::transmute_copy(&value) }
   }
 }
 
 #[wasm_bindgen]
-#[derive(Default, Clone, Copy)]
-pub struct JSParserMetrics {
-  pub classification: JSParserClassification,
-  pub num_of_states:  usize,
-  pub optimized:      bool,
-}
-
-impl From<ParserMetrics> for JSParserMetrics {
-  fn from(value: ParserMetrics) -> Self {
-    Self {
-      classification: value.classification.into(),
-      num_of_states:  value.num_of_states,
-      optimized:      value.optimized,
-    }
+impl JSParserClassification {
+  /// Returns the classification as algorithm acronym string.
+  ///
+  /// This can be one of `LL | LR | RD | RAD | GLL | GLR | GRD | GRAD`.
+  ///
+  /// The string may also be postfixed with the maximum level of token
+  /// lookahead, k, required to parse an input.
+  ///
+  /// # Example
+  ///
+  /// `RAD(2)` - Recursive Ascent & Descent with 2 levels of look ahead.
+  pub fn to_string(&self) -> String {
+    ParserClassification::from(*self).to_string()
   }
 }
