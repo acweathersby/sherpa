@@ -1,4 +1,4 @@
-#! /bin/zsh
+#! /usr/bin/env zsh
 
 # This script is used to rebuild the at_at parser
 # This should only ever need to be done if:

@@ -1,4 +1,4 @@
-#! /bin/zsh
+#! /usr/bin/env zsh
 
 # The default parser for radlr is the bytecode parse, which is not ideal
 # for demanding builds. This script uses the bytecode radlr
