@@ -170,8 +170,8 @@ pub(crate) fn handle_regular_incomplete_items(
           .to_classification(ParserClassification { bottom_up: true, ..classification })
           .commit(gb);
       } else {
-        /// If forking is allowed then use that. Other wise this grammar is no
-        /// LL and LR and/or RD has been disabled.
+        /// If forking is allowed then use that. Otherwise, this grammar is not
+        /// LL, and LR and/or RD has been disabled.
         if ____allow_fork____ {
           return Err(RadlrError::Text("Forking has not been implemented".into()));
         } else if !____allow_lr____ {
