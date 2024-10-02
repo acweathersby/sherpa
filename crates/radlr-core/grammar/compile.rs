@@ -1,6 +1,7 @@
 #![allow(unused_mut, unused)]
 use super::{
   build_grammar::{create_grammar_data, extract_nonterminals, parse_grammar, GrammarData},
+  build_grammar_2,
   utils::resolve_grammar_path,
 };
 use crate::{
@@ -111,6 +112,11 @@ fn load_from_path(source_path: PathBuf, soup: &GrammarSoup) -> RadlrResult<Gramm
 }
 
 fn load_from_str(source: &str, source_path: PathBuf, soup: &GrammarSoup) -> RadlrResult<GrammarData> {
+  match build_grammar_2::parse_grammar(source) {
+    Ok(g) => { /* println!("Parser2 built: {g:#?}") */ }
+    Err(g) => println!("Parser2 failed: {g:#?}"),
+  }
+
   let root_grammar = match parse_grammar(&source) {
     RadlrResult::Ok(root_grammar) => root_grammar,
     RadlrResult::Err(err) => {

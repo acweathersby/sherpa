@@ -3,6 +3,7 @@
 
 mod build_database;
 mod build_grammar;
+mod build_grammar_2;
 mod compile;
 pub(crate) mod utils;
 
