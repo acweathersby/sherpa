@@ -19,7 +19,7 @@ EXPORT dt::escaped_string as escaped
 
 <> grammar >
 
-    [preamble(*) ( cf_rules | peg_rules | append_rules | ir::state | template_rule )(+)]
+    [preamble(*) ( cf_rules | peg_rules | append_rules | ir::state | template_rule )(+)] $
 
         :ast { t_Grammar, preamble:$1, rules:$2, tok }
 
