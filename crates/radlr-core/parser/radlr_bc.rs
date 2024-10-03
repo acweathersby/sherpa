@@ -33,7 +33,6 @@
 // 
 use std::hash::Hash;
 use radlr_rust_runtime::{
-  llvm_parser::*,
   types::{ast::*, Token, TokenRange}, deprecate::*,
 };
 
