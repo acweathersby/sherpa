@@ -127,6 +127,25 @@ impl JSParserConfig {
     self.native_config().to_classification().into()
   }
 
+  pub fn lab_default(self) -> Self {
+    let mut config = self.native_config();
+    config.ALLOW_CALLS = false;
+    config.ALLOW_LR = true;
+    config.ALLOW_PEEKING = true;
+    config.ALLOW_CONTEXT_SPLITTING = false;
+    config.CONTEXT_FREE = false;
+    config.AllOW_CST_MERGING = false;
+    config.EXPORT_ALL_NONTERMS = false;
+    config.ALLOW_CST_NONTERM_SHIFT = false;
+    config.ALLOW_SCANNER_INLINING = true;
+    config.ALLOW_ANONYMOUS_NONTERM_INLINING = false;
+    config.ALLOW_BYTE_SEQUENCES = true;
+    config.ALLOW_LOOKAHEAD_SCANNERS = false;
+    config.max_k = 8;
+
+    config.into()
+  }
+
   pub fn hybrid(self) -> Self {
     self.native_config().hybrid().into()
   }

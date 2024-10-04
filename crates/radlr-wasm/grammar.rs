@@ -197,17 +197,6 @@ pub fn create_rust_ast_output(js_db: &JSParserDB) -> Result<String, PositionedEr
   Ok(output) */
 }
 
-/// Temporary simple disassembly implementation.
-pub fn create_bytecode(states: &JSIRParser) -> Result<JSBytecodeParserDB, PositionedErrors> {
-  match compile_bytecode(states.states.as_ref(), true) {
-    Err(errors) => Result::Err(convert_journal_errors(errors)),
-    Ok(pkg) => {
-      let nonterm_id_to_name = pkg.nonterm_name_to_id.iter().map(|(name, id)| (*id, name.clone())).collect();
-      Ok(JSBytecodeParserDB(Rc::new(pkg), nonterm_id_to_name))
-    }
-  }
-}
-
 /// Import a bytecode database from a JS ArrayBuffer
 #[wasm_bindgen]
 pub fn import_bytecode_db(buffer: ArrayBuffer) -> Result<JSBytecodeParserDB, PositionedErrors> {

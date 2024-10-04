@@ -9,14 +9,8 @@ import { setupConfig } from "./config-panel";
 import { Debounce } from "./debounce";
 import { CSTView } from "./cst";
 
-const DefaultGrammar =
-  /**/
-  `IGNORE { c:sp }  
-  
-<> entry > "Hello" "World"
-`.trim();
 
-const DefaultParserInput = "Hello World";
+
 
 export async function init(compiler_worker_path: string) {
   let rad_init = radlr_init();
@@ -25,7 +19,7 @@ export async function init(compiler_worker_path: string) {
 
   let grammar_input_field = nb.addField(new NBEditorField("Grammar"))
   grammar_input_field.setContentVisible(true);
-  grammar_input_field.setText(DefaultGrammar);
+  grammar_input_field.setText("");
 
   let bytecode_output = nb.addField(new NBEditorField("Bytecode Output"), 1);
   bytecode_output.setContentVisible(false);
@@ -33,9 +27,7 @@ export async function init(compiler_worker_path: string) {
   pipeline.GrammarDB.worker_path = compiler_worker_path;
 
   let parser_input_field = nb.addField(new NBEditorField("Parser Input"), 1);
-  parser_input_field.setContentVisible(true);
-
-
+  parser_input_field.setContentVisible(true)
 
 
   let ast = nb.addField(new NBContentField("AST Nodes"), 1);
@@ -63,8 +55,6 @@ export async function init(compiler_worker_path: string) {
   const config_input = new pipeline.ConfigNode();
   const grammar = new pipeline.GrammarDB([grammar_input, config_input],);
   const parser = new pipeline.Parser([grammar, parser_input]);
-
-  parser_input_field.setText(DefaultParserInput)
 
 
   let grammar_input_debounce = new Debounce(() => {
@@ -186,8 +176,6 @@ export async function init(compiler_worker_path: string) {
     } else if (ctx.sym_len > 0) {
       parser_input_field.addCharacterClass(ctx.sym_ptr, ctx.sym_ptr + ctx.sym_len, "dbg-sym");
     }
-
-
   });
 
   parser.addListener("reduce", reduce => {
@@ -215,25 +203,81 @@ export async function init(compiler_worker_path: string) {
 
   nb.calculateHeights();
 
-  var text = getLocalValue(LocalStoreKeys.ParserInput);
-  if (text) {
-    parser_input_field.setText(text);
-  }
-
-  var text = getLocalValue(LocalStoreKeys.GrammarInput) || DefaultGrammar;
-  if (text) {
-    grammar_input_field.setText(text);
-    grammar_input.update(text)
-  }
-
-
-  parser_input_field.setText(DefaultParserInput)
 
   await rad_init;
+
+  let { grammar: example_grammar, input: example_input } = grammar_examples[Math.round(Math.random() * (grammar_examples.length - 1))];
+
+  var text = getLocalValue(LocalStoreKeys.ParserInput) || example_input;
+  parser_input_field.setText(text);
+
+
+  var text = getLocalValue(LocalStoreKeys.GrammarInput) || example_grammar;
+  grammar_input_field.setText(text);
+  grammar_input.update(text)
 
   setupConfig(config => {
     config_input.update(config);
   });
-
 }
 
+const grammar_examples = [
+  {
+    grammar:
+      /**/
+      `IGNORE { c:sp }  
+    
+<> entry > "Hello" "World"
+  `.trim(),
+    input: "Hello World"
+  },
+  {
+    grammar:
+      /**/
+      `IGNORE {c:sp c:nl}
+
+<> json 
+
+  > entry                 :ast { t_JSON, body: $1, tok }
+
+<> entry > obj | array
+  
+<> obj 
+  
+  > "{" key_val(*",") "}" :ast { t_Object, values: $2, tok }
+
+<> array
+  
+  > "[" val(*",") "]"     :ast { t_Array, values: $2, tok }
+
+
+<> key_val 
+
+  > key ":" val           :ast map($1, $3)
+
+
+<> key 
+
+  > tk:string             :ast str(tok<1,1>)
+
+
+<> val 
+  > tk:string :ast str(tok<1,1>)
+  | tk:( c:num(+) )     :ast f64($1)
+  | obj
+  | array
+  | "true"    :ast bool($1)
+  | "false"   :ast bool
+  | "null"    :ast {t_Null}
+
+
+<> string > "\\"" ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) "\\""
+
+<> escaped > "\\\\"{:9999} ( c:id | c:sym | c:num | c:sp | c:nl )
+      
+       
+      
+  `,
+    input: `{ "hello" : "world" }`
+  }
+]

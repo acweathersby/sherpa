@@ -18,7 +18,7 @@ export async function setupConfig(settings_changed: (cfg: radlr.JSParserConfig) 
   if (existing_value) {
     config = radlr.JSParserConfig.import(JSON.parse(existing_value));
   } else {
-    config = (new radlr.JSParserConfig()).cst_editor();
+    config = (new radlr.JSParserConfig()).lab_default();
     setLocalValue(LocalStoreKeys.ParserConfig, JSON.stringify(config.export()));
   }
 

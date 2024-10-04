@@ -33,6 +33,7 @@ path="../radlr-build"
 
 [dependencies.radlr_rust_runtime]
 path="../radlr-rust-runtime"
+features=["wasm-lab"]
 
 [dependencies.radlr_bytecode]
 path="../radlr-bytecode"
