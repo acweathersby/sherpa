@@ -121,7 +121,11 @@ pub(crate) fn handle_nonterminal_shift(
       .sym((target_nonterm.to_sym(), 0).into())
       .ty(nterm_shift_type)
       .include_with_goto_state()
-      .to_classification(ParserClassification { gotos_present: true, ..Default::default() })
+      .to_classification(if contains_completed_kernel_items {
+        ParserClassification { gotos_present: false, ..Default::default() }
+      } else {
+        ParserClassification { gotos_present: true, ..Default::default() }
+      })
       .pnc(
         Box::new(move |s, b, _| {
           if are_shifting_a_goal_nonterm && !contains_completed_kernel_items {
@@ -148,7 +152,7 @@ pub(crate) fn handle_nonterminal_shift(
       .parent(pred.clone())
       .sym((nonterm_id.to_sym(), 0).into())
       .ty(StateType::NonTerminalComplete)
-      .to_classification(ParserClassification { gotos_present: true, ..Default::default() })
+      //.to_classification(ParserClassification { gotos_present: true, ..Default::default() })
       .make_leaf()
       .commit(gb);
   }

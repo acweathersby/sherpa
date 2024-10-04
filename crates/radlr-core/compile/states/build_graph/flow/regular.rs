@@ -93,12 +93,15 @@ pub(crate) fn handle_regular_incomplete_items(
         ____allow_rd____.then(|| create_call(gb, pred, config, in_scope.clone(), prec_sym)).flatten()
       {
         if is_kernel {
-          node.commit(gb);
+          node.to_classification(PC { calls_present: true, ..classification }).commit(gb);
         } else {
           if !____allow_lr____ {
             return lr_disabled_error(gb, pred, _transition_items);
           }
-          node.to_classification(PC { bottom_up: true, ..classification }).include_with_goto_state().commit(gb);
+          node
+            .to_classification(PC { bottom_up: true, calls_present: true, ..classification })
+            .include_with_goto_state()
+            .commit(gb);
         }
       } else if group.iter().all(|p| p.is_kernel_terminal()) {
         StagedNode::new(gb)

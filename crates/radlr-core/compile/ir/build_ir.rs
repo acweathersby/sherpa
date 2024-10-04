@@ -51,7 +51,9 @@ pub(crate) fn build_ir_concurrent<T: WorkerPool>(
               root_name:     par.is_root().then(|| par.root_data.root_name),
             };
 
-            inner_classification |= precursor.node.get_classification();
+            if (!precursor.node.is_scanner()) {
+              inner_classification |= precursor.node.get_classification();
+            }
 
             process_precursor(&precursor, &mut states)?;
           }
