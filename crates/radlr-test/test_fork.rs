@@ -23,7 +23,7 @@ pub fn construct_forking_parser_glr() -> RadlrResult<()> {
   <> A > "id" "()"
   
    "#;
-  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+  let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
 
   let input = r#"id () ! test"#;
 

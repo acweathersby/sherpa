@@ -21,7 +21,7 @@ pub fn build_parse_states_from_source_str<'a, T>(
   test_fn: &dyn Fn(TestPackage) -> RadlrResult<T>,
 ) -> RadlrResult<T> {
   #[cfg(not(feature = "wasm-target"))]
-  let pool = crate::types::worker_pool::StandardPool::new(20).unwrap();
+  let pool = crate::types::worker_pool::StandardPool::new_with_max_workers().unwrap();
 
   #[cfg(feature = "wasm-target")]
   let pool = crate::types::worker_pool::SingleThreadPool {};

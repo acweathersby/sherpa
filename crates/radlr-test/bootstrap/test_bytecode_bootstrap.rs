@@ -18,7 +18,7 @@ fn test_full_grammar() -> RadlrResult<()> {
 
   // Build our parser;
 
-  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+  let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
 
   let radlr_grammar = grammar_folder.join("grammar.sg");
   let mut grammar = RadlrGrammar::new();

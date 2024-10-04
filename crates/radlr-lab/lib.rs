@@ -118,7 +118,7 @@ pub fn run_lab_server(port: u16) -> Result<(), RadlrError> {
                                   parser_config: ParserConfig,
                                   optimize: bool,
                                 ) -> RadlrResult<RadlrIRParser> {
-                                  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+                                  let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
                                   let states = db.build_states(parser_config, &pool)?;
                                   let parser = states.build_ir_parser(optimize, false, &pool)?;
 

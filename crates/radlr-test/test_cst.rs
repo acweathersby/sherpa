@@ -21,7 +21,7 @@ pub fn construct_error_recovering_parser() -> RadlrResult<()> {
   let root_path = PathBuf::from("test.sg");
   let mut grammar = RadlrGrammar::new();
 
-  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+  let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
 
   grammar.add_source_from_string(source, &root_path, false)?;
 

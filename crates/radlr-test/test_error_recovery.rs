@@ -28,7 +28,7 @@ pub fn construct_error_recovering_parser() -> RadlrResult<()> {
   
    "#;
 
-  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+  let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
 
   let input = r#"fn()(}greentoast;;"#;
 
@@ -78,7 +78,7 @@ pub fn construct_error_recovering_erlang_toy() -> RadlrResult<()> {
   let mut grammar = RadlrGrammar::new();
   grammar.add_source_from_string(source, &root_path, false)?;
 
-  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+  let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
 
   let config = ParserConfig::default().cst_editor();
   let parser_data = grammar.build_db(&root_path, config)?.build_states(config, &pool)?.build_ir_parser(false, false, &pool)?;
@@ -122,7 +122,7 @@ pub fn temp_lab_test() -> RadlrResult<()> {
   let mut grammar = RadlrGrammar::new();
   grammar.add_source_from_string(source, &root_path, false)?;
 
-  let pool = radlr_core::worker_pool::StandardPool::new(20).unwrap();
+  let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
 
   let config = ParserConfig::default().cst_editor();
   let parser_data = grammar.build_db(&root_path, config)?.build_states(config, &pool)?.build_ir_parser(false, false, &pool)?;
