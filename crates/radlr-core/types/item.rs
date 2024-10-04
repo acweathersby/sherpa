@@ -1141,7 +1141,7 @@ fn debug_items<'db, T: IntoIterator<Item = Item>>(comment: &str, items: T, db: &
   eprintln!("\n {} --> ", comment);
 
   for item in items {
-    eprintln!("    {}", item._debug_string_w_db_(db));
+    eprintln!("---    {}", item._debug_string_w_db_(db));
   }
 }
 

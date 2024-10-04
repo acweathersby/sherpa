@@ -164,6 +164,9 @@
       width: 100%
       margin-bottom: 20px
 
+      &.debugger-cst-output
+        overflow: scroll
+
       .cm-editor.main
         top: 0
         left: 0
@@ -336,3 +339,47 @@
       .nb-loading-screen
         background-color: map-get($theme-map, "bg-basic")
         color: map-get($theme-map, "fg-inc-2")
+
+
+// CST --------------------------------------------
+
+
+.cst-node
+  position: relative
+  margin-left: 15px
+  width: 100%
+  user-select: none
+  color: white
+
+  .cst-name
+    cursor: pointer
+
+  &.nonterminal > .cst-name
+    position: relative
+    font-weight: bold
+    border-radius: 2px
+    padding: 2px 8px
+    font-size: 11px
+    left: -8px
+    margin: 2px 0px
+
+  .cst-rule-item-expression
+    display: none
+    padding-left: 10px
+
+  &:hover >
+    .cst-name .cst-rule-item-expression
+      display: inline-block
+
+  &.close > .cst-children
+    display: none
+
+  &.open
+    &.nonterminal > .cst-name
+      background-color: #9f9f9f
+
+      .cst-rule-item-expression
+        display: inline-block
+
+    > .cst-children
+      display: block

@@ -1,6 +1,6 @@
 import { JSDebugEvent } from "js/radlr/radlr_wasm";
 import * as radlr from "js/radlr/radlr_wasm.js";
-import { WasmBytecodeCompiler } from "js/lab/wasm_bytecode_compiler_host";
+import { WasmBytecodeCompiler } from "js/lab/lab_client";
 import { RadlrError } from "./error";
 
 export async function sleep(time_in_ms: number) {
@@ -154,20 +154,20 @@ export class GrammarDB extends PipelineNode<{
   constructor(...args: any[]) {
     super(...args);
 
-    this.compiler.addListener("grammar_compiled", () => {
+    this.compiler.addListener("grammar_built", () => {
       console.log("Grammar Compiled");
     });
 
-    this.compiler.addListener("grammar_compile_errors", errors => {
+    this.compiler.addListener("compile_errors", errors => {
       this.emit("failed", errors)
       this.disable()
     });
 
-    this.compiler.addListener("states_ready", classification => {
+    this.compiler.addListener("parser_classification", classification => {
       this.emit("grammar-classification", classification);
     })
 
-    this.compiler.addListener("parser_compiled", bytecode_db_export => {
+    this.compiler.addListener("parser_bytecode_db", bytecode_db_export => {
       try {
         if (this.parser_db) { this.parser_db.free(); this.parser_db = null }
 
@@ -196,17 +196,12 @@ export class GrammarDB extends PipelineNode<{
     }
 
     this.emit("loading", void 0);
-    this.compiler.compileGrammar(data.InputNode, data.ConfigNode);
+    this.compiler.compile_grammar(data.InputNode, data.ConfigNode);
 
     return;
   }
 
   async start(data: any) {
-
-    if (!await this.compiler.ready()) {
-      console.log("Compiler not ready");
-      return;
-    }
 
     // Submit job for the compiler
     this.compile_nonce++;
@@ -220,15 +215,23 @@ export class GrammarDB extends PipelineNode<{
 }
 
 
+export type ReduceStruct = { rule_id: number, symbols: number, non_terminal_id: number, db: radlr.JSBytecodeParserDB };
+export type ShiftStruct = { token: string, byte_offset: number, byte_len: number, col: number, line: number, token_id: number, db: radlr.JSBytecodeParserDB }
+
 export class Parser extends PipelineNode<{
   "error": {
     msg: string
   }
+
+  "shift": ShiftStruct,
+  "reduce": ReduceStruct,
   "eof": void;
   "destroyed": void;
   "reset": void;
   "ready": void;
   "complete": void;
+  "execute_state": radlr.JSDebugPacket,
+  "execute_instruction": radlr.JSDebugPacket,
   "parser-db-created": {
     /*     bc_db: JSBytecodeParserDB */
   },
@@ -280,7 +283,6 @@ export class Parser extends PipelineNode<{
   }
 
   protected async start(data: any) {
-    // Submit job for the compiler
 
     if (this.parser) {
       this.parser.free; this.parser = null;
@@ -288,23 +290,27 @@ export class Parser extends PipelineNode<{
     }
 
     if (data.GrammarDB) {
-      this.emit("parser-created", { type: "destroyed" });
       this.db = data.GrammarDB.parser_db;
-      this.restart();
     }
 
-    this.createParser();
+    if (data.InputNode) {
+      this.input = data.InputNode
+    }
+
+    // Submit job for the compiler
+    this.emit("reset", void 0);
+
     this.enable();
   }
 
-  private createParser() {
-    if (this.parser) {
-      this.parser.free; this.parser = null;
-      this.emit("destroyed", void 0);
-    }
-
+  private createParser(entry_point: string = "default") {
     if (this.input && this.db) {
       this.parser = radlr.JSByteCodeParser.new(this.input, this.db);
+
+      if (this.parser) {
+        this.emit("parser-created", { type: "destroyed" });
+        this.parser.init(entry_point);
+      }
     }
   }
 
@@ -312,13 +318,15 @@ export class Parser extends PipelineNode<{
 
     let parser = this.parser;
     let input = this.input;
+    let db = this.db;
 
-    if (!parser || !input)
+    if (!parser || !input || !db)
       return false;
 
     let step: radlr.JSDebugPacket | undefined = undefined;
 
     outer: while (true) {
+      step_to_next_action = false;
 
       if (step) {
         step.free();
@@ -339,10 +347,17 @@ export class Parser extends PipelineNode<{
       switch (step.event) {
 
         case JSDebugEvent.ExecuteState: {
+          this.emit("execute_state", step);
           break
         };
 
         case JSDebugEvent.ExecuteInstruction: {
+
+          if (radlr.is_instruction_transitory(step.instruction, db)) {
+            this.emit("execute_instruction", step);
+          } else {
+            step_to_next_action = true;
+          }
 
           this.last_step = step;
 
@@ -369,7 +384,26 @@ export class Parser extends PipelineNode<{
           this.emit("eof", { type: "eof" });
           this.PARSING = false;
         } break outer;
-
+        case JSDebugEvent.Shift: {
+          this.emit("shift", <ShiftStruct>{
+            byte_offset: step.offset_start,
+            byte_len: step.offset_end - step.offset_start,
+            col: 0,
+            line: 0,
+            token: this.input.slice(step.offset_start, step.offset_end),
+            token_id: step.ctx.tok_id,
+            db
+          });
+        } break
+        case JSDebugEvent.Reduce: {
+          this.emit("reduce", <ReduceStruct>{
+            non_terminal_id: step.nonterminal_id,
+            rule_id: step.rule_id,
+            symbols: step.symbol_count, db
+          });
+        } break
+        case JSDebugEvent.Skip: break
+        case JSDebugEvent.Undefined:
         default: break outer;
       }
     }
@@ -401,25 +435,28 @@ export class Parser extends PipelineNode<{
         this.clearSteps() */
   }
 
-
-
-  public restart(input: string = this.input, entry_point: string = "default") {
-    if (input != this.input) {
-      this.input = input;
-      this.createParser();
-
-      if (this.parser) {
-        this.parser.init(entry_point);
-        this.emit("reset", void 0);
-      }
-    }
-  }
-
   public step() {
     if (this.ENABLED) {
+      if (!this.parser) {
+        this.createParser();
+      }
+
       this.next(false, false);
     }
   }
+
+  public reset() {
+    if (this.ENABLED) {
+
+      if (this.parser) {
+        this.parser.free();
+        this.emit("reset", void 0);
+      }
+
+      this.createParser();
+    }
+  }
+
   public stepToNextParseState() { }
 }
 

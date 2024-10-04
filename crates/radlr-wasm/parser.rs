@@ -1,5 +1,4 @@
-use crate::grammar::{JSBytecodeParserDB, JSParserDB};
-use js_sys::Array;
+use crate::grammar::JSBytecodeParserDB;
 use radlr_core::parser;
 use radlr_rust_runtime::{
   parsers::Parser,
@@ -8,10 +7,7 @@ use radlr_rust_runtime::{
 use serde::{Deserialize, Serialize};
 
 use std::{
-  borrow::BorrowMut,
-  cell::RefCell,
   collections::VecDeque,
-  default,
   rc::Rc,
   sync::{LockResult, RwLock},
 };

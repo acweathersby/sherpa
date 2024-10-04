@@ -1,5 +1,3 @@
-use std::default;
-
 use radlr_core::RadlrError;
 use wasm_bindgen::prelude::*;
 
@@ -7,11 +5,11 @@ use wasm_bindgen::prelude::*;
 #[derive(Clone, Copy, Default)]
 pub enum ErrorOrigin {
   #[default]
-  Grammar, 
-  ParserBuild, 
+  Grammar,
+  ParserBuild,
   StatesCreation,
   Ir,
-  BytecodeImport
+  BytecodeImport,
 }
 
 #[wasm_bindgen]
@@ -60,7 +58,7 @@ impl From<(&Vec<RadlrError>, ErrorOrigin)> for PositionedErrors {
   }
 }
 
-impl From<(Vec<RadlrError>,  ErrorOrigin)> for PositionedErrors {
+impl From<(Vec<RadlrError>, ErrorOrigin)> for PositionedErrors {
   fn from((mut errors, origin): (Vec<RadlrError>, ErrorOrigin)) -> Self {
     let mut out = PositionedErrors { vec: vec![] };
     out.extend(&mut errors, origin);
@@ -69,7 +67,7 @@ impl From<(Vec<RadlrError>,  ErrorOrigin)> for PositionedErrors {
 }
 
 impl From<(RadlrError, ErrorOrigin)> for PositionedErrors {
-  fn from( (err, origin): (RadlrError, ErrorOrigin)) -> Self {
+  fn from((err, origin): (RadlrError, ErrorOrigin)) -> Self {
     PositionedErrors { vec: convert_error(&err, origin) }
   }
 }
@@ -77,7 +75,7 @@ impl From<(RadlrError, ErrorOrigin)> for PositionedErrors {
 impl From<(&Vec<&RadlrError>, ErrorOrigin)> for PositionedErrors {
   fn from((errors, origin): (&Vec<&RadlrError>, ErrorOrigin)) -> Self {
     let mut out = PositionedErrors { vec: vec![] };
-    out.extend_from_refs(&errors.into_iter().map(|e| (*e).clone()).collect(),  origin);
+    out.extend_from_refs(&errors.into_iter().map(|e| (*e).clone()).collect(), origin);
     out
   }
 }
@@ -99,12 +97,13 @@ fn convert_error(err: &RadlrError, origin: ErrorOrigin) -> Vec<JSRadlrSourceErro
       .map(|(loc, _, msg)| {
         let range = loc.get_range();
         JSRadlrSourceError {
-          col:          range.start_column,
-          line:         range.start_line,
-          len:          loc.len() as u32,
+          col: range.start_column,
+          line: range.start_line,
+          len: loc.len() as u32,
           start_offset: loc.get_start() as u32,
-          end_offset:   loc.get_end() as u32,
-          message:      base_message.clone() + ":\n " + msg,origin
+          end_offset: loc.get_end() as u32,
+          message: base_message.clone() + ":\n " + msg,
+          origin,
         }
       })
       .collect(),
@@ -112,13 +111,13 @@ fn convert_error(err: &RadlrError, origin: ErrorOrigin) -> Vec<JSRadlrSourceErro
     RadlrError::SourceError { loc, msg, .. } => {
       let range = loc.get_range();
       vec![JSRadlrSourceError {
-        col:          range.start_column,
-        line:         range.start_line,
-        len:          loc.len() as u32,
+        col: range.start_column,
+        line: range.start_line,
+        len: loc.len() as u32,
         start_offset: loc.get_start() as u32,
-        end_offset:   loc.get_end() as u32,
-        message:      msg.clone(),
-        origin
+        end_offset: loc.get_end() as u32,
+        message: msg.clone(),
+        origin,
       }]
     }
     RadlrError::StaticText(text) => {

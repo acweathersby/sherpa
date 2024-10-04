@@ -193,25 +193,7 @@ impl JSParserConfig {
 /// Used to track the type of parser that has been created by radlr.
 #[derive(Default, Clone, Copy, Debug)]
 #[wasm_bindgen]
-pub struct JSParserClassification {
-  /// Maximum peek level used to disambiguate conflicting phrases. If this is
-  /// equal to `u16::MAX`, then peeking failed or a fork was used in its place.
-  pub max_k:         u16,
-  ///
-  pub bottom_up:     bool,
-  /// If set to true then the parser has at least one state that transitions on
-  /// non-terminals as well terminals.
-  pub gotos_present: bool,
-  /// If set to true, then the parser has at least one state that jumps to the
-  /// head state of a specific non-terminal
-  pub calls_present: bool,
-  /// If set to true, the parser has at least one state that performs k>1
-  /// lookaheads before selecting an appropriate alternative action.
-  pub peeks_present: bool,
-  /// If set to true, the parser has at least one state that forks the parse
-  /// tree, and performs parsing on separate alternatives in parallel
-  pub forks_present: bool,
-}
+pub struct JSParserClassification(ParserClassification);
 
 impl From<ParserClassification> for JSParserClassification {
   fn from(value: ParserClassification) -> Self {
@@ -227,7 +209,7 @@ impl From<JSParserClassification> for ParserClassification {
 
 #[wasm_bindgen]
 impl JSParserClassification {
-  /// Returns the classification as algorithm acronym string.
+  /// Returns the parser classification as an algorithm acronym string.
   ///
   /// This can be one of `LL | LR | RD | RAD | GLL | GLR | GRD | GRAD`.
   ///
@@ -238,6 +220,22 @@ impl JSParserClassification {
   ///
   /// `RAD(2)` - Recursive Ascent & Descent with 2 levels of look ahead.
   pub fn to_string(&self) -> String {
+    self.0.to_string()
+  }
+
+  pub fn import(&self) -> String {
     ParserClassification::from(*self).to_string()
+  }
+
+  pub fn deserialize(buffer: Uint8Array) -> JSParserClassification {
+    let buffer = buffer.to_vec();
+
+    let mut classification = ParserClassification::default();
+
+    unsafe {
+      std::ptr::copy(buffer.as_ptr(), std::mem::transmute(&mut classification), size_of::<ParserClassification>());
+    };
+
+    JSParserClassification(classification)
   }
 }

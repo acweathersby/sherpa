@@ -192,6 +192,7 @@ impl ParserConfig {
 
 /// Used to track the type of parser that has been created by radlr.
 #[derive(Default, Clone, Copy, Debug)]
+#[repr(C)]
 pub struct ParserClassification {
   /// Maximum peek level used to disambiguate conflicting phrases. If this is
   /// equal to `u16::MAX`, then peeking failed or a fork was used in its place.

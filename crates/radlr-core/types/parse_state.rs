@@ -2,7 +2,7 @@ use radlr_rust_runtime::types::bytecode::MatchInputType;
 
 use super::*;
 use crate::{
-  compile::states::build_graph::graph::ScannerData,
+  compile::states::build_graph::graph::{create_scanner_name, ScannerData},
   parser::{self, ASTNode, State},
   writer::code_writer::CodeWriter,
 };
@@ -152,7 +152,7 @@ impl ParseState {
       self.guid_name.to_string(db.string_store()),
       &self.code.split("\n").collect::<Vec<_>>().join("\n    "),
       &self.get_ast(),
-      self.scanner.as_ref().map(|scanner| { scanner.create_scanner_name(db) })
+      self.scanner.as_ref().map(|scanner| { create_scanner_name(db, scanner.hash) })
     )
   }
 }

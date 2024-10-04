@@ -1,23 +1,50 @@
 //!
 //! # RADLR LAB
-
-use radlr_core::{ParserConfig, ParserStore, RadlrDatabase, RadlrError, RadlrGrammar, RadlrIRParser, RadlrResult};
-use std::path::PathBuf;
-
 pub mod serialize;
 
+use radlr_bytecode::compile_bytecode;
+use radlr_core::{
+  ParserClassification,
+  ParserConfig,
+  ParserStore,
+  RadlrDatabase,
+  RadlrError,
+  RadlrGrammar,
+  RadlrIRParser,
+  RadlrResult,
+};
+
+use std::io;
+#[cfg(feature = "host")]
+use std::path::PathBuf;
+
+#[cfg(feature = "host")]
+use tungstenite::*;
+
+#[cfg(feature = "host")]
+use std::{net::TcpListener, thread::spawn};
+
+#[cfg(feature = "client")]
+use wasm_bindgen::prelude::*;
+
 #[repr(u8)]
-enum WSRequestCodes {
+#[cfg_attr(feature = "client", wasm_bindgen)]
+pub enum WSRequestCodes {
   Undefined    = 0,
   /**
    * Request to build grammar artifacts (parser, states, ast, etc)
    */
   BuildGrammar = 1,
+  Ping         = 2,
 }
 
 #[repr(u8)]
-enum WSResponseCodes {
-  Undefined = 0,
+#[cfg_attr(feature = "client", wasm_bindgen)]
+pub enum WSResponseCodes {
+  Undefined      = 0,
+  Classification = 1,
+  ByteCode       = 2,
+  Pong           = 3,
 }
 
 const DEFAULT_PORT: u16 = 15421;
@@ -26,9 +53,6 @@ const DEFAULT_PORT: u16 = 15421;
 pub fn run_lab_server(port: Option<u16>) -> Result<(), RadlrError> {
   let port = port.unwrap_or(DEFAULT_PORT);
   let ip4 = "0.0.0.0";
-
-  use std::{net::TcpListener, thread::spawn};
-  use tungstenite::*;
 
   let server = TcpListener::bind(&format!("{ip4}:{port}"))?;
 
@@ -66,10 +90,21 @@ pub fn run_lab_server(port: Option<u16>) -> Result<(), RadlrError> {
                     println!("Text received {text_data:?}");
                   }
                   Message::Binary(binary_data) => {
+                    if binary_data.len() == 1 {
+                      if binary_data[0] == WSRequestCodes::Ping as u8 {
+                        websocket.send(Message::Binary(vec![WSResponseCodes::Pong as u8])).unwrap();
+                        websocket.flush().unwrap();
+                        websocket.send(Message::Close(None)).unwrap();
+                      } else {
+                        websocket.send(Message::Close(None)).unwrap();
+                      }
+                    }
+
                     if binary_data.len() == 0 {
                       println!("Ignoring empty binary");
                       continue;
                     }
+
                     match unsafe { std::mem::transmute::<_, WSRequestCodes>(binary_data[0]) } {
                       WSRequestCodes::BuildGrammar => {
                         println!("Request to build grammar");
@@ -137,9 +172,20 @@ pub fn run_lab_server(port: Option<u16>) -> Result<(), RadlrError> {
                                 };
 
                                 println!("Built parser: Type {:?}", parser.get_classification().to_string());
+                                println!("Sending data back!");
 
-                                //Ok(parser)
+                                let classification = parser.get_classification();
+                                if let Err(err) = host_send_classification(classification, &mut websocket) {
+                                  eprintln!("Error encountered sending parser classification data\n {err}");
+                                }
+
+                                if let Err(err) = host_send_bytecode_db(parser, &mut websocket) {
+                                  eprintln!("Error encountered sending bytecode data\n {err}");
+                                };
+
+                                continue;
                               }
+
                               Err(err) => {
                                 eprintln!("Errors encountered in grammar {err}");
                                 continue;
@@ -178,5 +224,42 @@ pub fn run_lab_server(port: Option<u16>) -> Result<(), RadlrError> {
   Ok(())
 }
 
-// - Get Parser States
-// - Get
+#[cfg(feature = "host")]
+
+fn host_send_bytecode_db(
+  parser: RadlrIRParser,
+  websocket: &mut WebSocket<std::net::TcpStream>,
+) -> Result<(), tungstenite::Error> {
+  let bytecode = match compile_bytecode(&parser, true) {
+    Err(err) => return Err(tungstenite::Error::Io(io::Error::new(io::ErrorKind::Other, err.to_string()))),
+    Ok(data) => data,
+  };
+
+  let mut data = serialize::bytecode_db::export_bytecode_db(&bytecode);
+  let mut export_data = Vec::new();
+  export_data.push(WSResponseCodes::ByteCode as u8);
+  export_data.append(&mut data);
+  websocket.write(Message::Binary(export_data))?;
+  websocket.flush()?;
+  Ok(())
+}
+
+#[cfg(feature = "host")]
+/// Emit a message with containing a parser classification structure
+fn host_send_classification(
+  classification: radlr_core::ParserClassification,
+  websocket: &mut tungstenite::WebSocket<std::net::TcpStream>,
+) -> Result<(), tungstenite::Error> {
+  let mut data = [0u8; 1 + size_of::<ParserClassification>()];
+
+  data[0] = WSResponseCodes::Classification as u8;
+
+  unsafe {
+    std::ptr::copy(std::mem::transmute(&classification), data.as_mut_ptr().offset(1), size_of::<ParserClassification>());
+  };
+
+  websocket.write(Message::Binary(data.to_vec()))?;
+  websocket.flush()?;
+
+  Ok(())
+}

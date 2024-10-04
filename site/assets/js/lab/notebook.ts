@@ -523,6 +523,7 @@ export const highlight_effect = state.StateEffect.define<state.Range<view.Decora
 export const filter_effects = state.StateEffect.define<((from: number, to: number, decoration: view.Decoration & { attrs: any }) => boolean)>();
 
 
+
 export class NBEditorField extends NBContentField<NBEditorField, "text_changed"> {
 
   cm: view.EditorView;
@@ -530,8 +531,6 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
 
   constructor(name: string) {
     super(name);
-
-    let change_interval_id = -1;
 
     this.cm = new view.EditorView({
       doc: "",
@@ -554,24 +553,15 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
           return value.map(tr.changes)
         },
         provide: f => view.EditorView.decorations.from(<any>f)
-      }), view.EditorView.domEventHandlers({
-        input: () => {
-          if (change_interval_id >= 0) {
-            // Disable current interval and create a new one
-            clearTimeout(change_interval_id);
+      }), view.ViewPlugin.define(
+        (_) => ({
+          update: (update) => {
+            if (update.docChanged) {
+              this.emit("text_changed");
+            }
           }
-
-          change_interval_id = setTimeout(() => {
-            change_interval_id = -1;
-            this.emit("text_changed")
-          }, 100);
-          ;
-        },
-        scroll: () => { },
-        blur: () => {
-        },
-        paste: event => { },
-      })],
+        })
+      )],
       parent: this.body
     });
   }
@@ -595,7 +585,7 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
     if (start_char == end_char) return;
     this.cm.dispatch({
       effects: [highlight_effect.of([
-        view.Decoration.mark({ attributes: { style: `color: ${color} !important`, } }).range(start_char, end_char)
+        view.Decoration.mark({ attributes: { style: `color: ${color} !important`, } }).spec({ id: "highlight" }).range(start_char, end_char)
       ])]
     });
   }
@@ -603,7 +593,25 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
   removeHighlight() {
     this.cm.dispatch({
       effects: [filter_effects.of((from, to, decoration) => {
-        return false;
+        return !(decoration.spec.id == "highlight")
+      })]
+    });
+  }
+
+  addCharacterClass(start_char: number, end_char: number, _class: string) {
+    end_char = Math.min(this.cm.state.doc.length, end_char);
+    if (start_char == end_char) return;
+    this.cm.dispatch({
+      effects: [highlight_effect.of([
+        view.Decoration.mark({ class: _class, id: "class" }).range(start_char, end_char)
+      ])]
+    });
+  }
+
+  removeCharacterClasses() {
+    this.cm.dispatch({
+      effects: [filter_effects.of((from, to, decoration) => {
+        return !(decoration.spec.id == "class")
       })]
     });
   }
@@ -613,7 +621,6 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
     end_char = Math.min(this.cm.state.doc.length, end_char);
     if (start_char == end_char || start_char > end_char) return;
 
-    console.log({ start_char, end_char })
     this.diagnostics.push({
       from: start_char,
       to: end_char,

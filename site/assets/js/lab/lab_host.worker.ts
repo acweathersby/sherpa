@@ -2,14 +2,18 @@
 
 import radlr_init, * as radlr from "js/radlr/radlr_wasm";
 import { RadlrError } from "./error";
-import { createConnection } from "./lab_mode_client";
-
-
-
+import { LabEngineEvents } from "./lab_client"
 
 let grammar_db: radlr.JSParserDB | null = null;
 let states: radlr.JSIRParser | null = null;
-let connection = createConnection();
+
+function emit<T extends keyof LabEngineEvents, A = LabEngineEvents[T]>(type: T, val: A, is_transferable: boolean = false) {
+  if (is_transferable) {
+    postMessage({ lab_event: { type, val } }, { transfer: [<any>val] });
+  } else {
+    postMessage({ lab_event: { type, val } });
+  }
+}
 
 // Handle incoming messages
 self.addEventListener('message', async function (event) {
@@ -43,11 +47,6 @@ self.addEventListener('message', async function (event) {
 
       cfg = radlr.JSParserConfig.import(config);
 
-      if (await connection.is_valid()) {
-        await connection.build_grammar(grammar, cfg);
-      }
-
-      console.log(cfg)
 
       let optimize = true;
 
@@ -56,14 +55,15 @@ self.addEventListener('message', async function (event) {
       soup.add_grammar(grammar, "main");
       grammar_db = radlr.create_parse_db("main", soup, cfg);
 
-      postMessage({ type: "grammar_ready" });
+      emit("grammar_built", void 0)
+
       states = radlr.create_parser_states(grammar_db, optimize, cfg);
 
-      postMessage({ type: "states_ready", classification: states.classification.to_string() });
+      emit("parser_classification", states.classification.to_string());
 
       let bytecode_db_export = radlr.export_bytecode_db(states);
 
-      postMessage({ type: "parser_compiled", bytecode_db_export }, { transfer: [bytecode_db_export] });
+      emit("parser_bytecode_db", bytecode_db_export, true);
 
     } catch (e) {
       if (e instanceof radlr.PositionedErrors) {
@@ -79,7 +79,7 @@ self.addEventListener('message', async function (event) {
 
         e.free();
 
-        postMessage({ type: "grammar_compile_errors", errors }, { transfer: [] });
+        emit("compile_errors", errors);
       } else {
         console.error(e);
         throw e;

@@ -1,9 +1,10 @@
 import { Eventable } from "./eventable";
+import { LabEngineWebsocketClient } from "./lab_client";
 import { sleep } from "./pipeline";
 
 
 export enum LocalStoreKeys {
-  ParseInput = "lab-parser-input",
+  ParserInput = "lab-parser-input",
   GrammarInput = "lab-grammar-input",
   StorageEnabled = "lab-local-data-enabled",
   LocalRADLRPort = "lab-radlr-port",
@@ -11,18 +12,18 @@ export enum LocalStoreKeys {
   ActiveTheme = "lab-active-theme",
 }
 
-export function localStorageEnabled() {
+export function dataStorageWorkflowsEnabled() {
   return window.localStorage.getItem(LocalStoreKeys.StorageEnabled) == "true";
 }
 
 export function setLocalValue(key: LocalStoreKeys, value: string) {
-  if (localStorageEnabled()) {
+  if (dataStorageWorkflowsEnabled()) {
     localStorage.setItem(key, value);
   }
 }
 
 export function getLocalValue(key: LocalStoreKeys): string {
-  if (localStorageEnabled()) {
+  if (dataStorageWorkflowsEnabled()) {
     return localStorage.getItem(key) || "";
   } else {
     return ""
@@ -38,32 +39,39 @@ function setupSetting() {
   const data_controls = Array.from(setting_panel.querySelectorAll(".data-control")).map(e => new SettingInput(<HTMLLabelElement>e));
   const data_settings_lu = new Map(data_controls.map(e => [e.setting_id, e]));
 
+  let port_input = data_settings_lu.get("port");
+  if (port_input) {
+    port_input.on("changed", async value => {
+      if (value) {
+        setLocalValue(LocalStoreKeys.LocalRADLRPort, value);
+        check_lab_host_connection(value, port_input);
+      }
+    })
 
-  data_settings_lu.get("port")?.on("changed", value => {
-    if (value) {
-      setLocalValue(LocalStoreKeys.LocalRADLRPort, value);
+    if (getLocalValue(LocalStoreKeys.LocalRADLRPort)) {
+      port_input.input.value = getLocalValue(LocalStoreKeys.LocalRADLRPort)
+      check_lab_host_connection(port_input.input.value, port_input);
     }
-  })
 
-  if (getLocalValue(LocalStoreKeys.LocalRADLRPort))
-    data_settings_lu.get("port").input.value = getLocalValue(LocalStoreKeys.LocalRADLRPort)
+  }
 
   data_enable.on("checked", _ => {
     localStorage.setItem(LocalStoreKeys.StorageEnabled, "true");
     for (const input of data_settings_lu.values()) {
-      input.enable(true);
+      input.set_enabled_state(true);
     }
   })
 
   data_enable.on("unchecked", _ => {
     for (const key in LocalStoreKeys) {
+      //@ts-ignore
       let value = <any>LocalStoreKeys[key];
       console.log(value)
       window.localStorage.removeItem(value);
     }
 
     for (const input of data_settings_lu.values()) {
-      input.enable(false);
+      input.set_enabled_state(false);
     }
   })
 
@@ -71,18 +79,27 @@ function setupSetting() {
     data_enable.input.checked = true;
 
     for (const input of data_settings_lu.values()) {
-      input.enable(true);
+      input.set_enabled_state(true);
     }
   } else {
     data_enable.input.checked = false;
 
     for (const input of data_settings_lu.values()) {
-      input.enable(false);
+      input.set_enabled_state(false);
     }
   }
 
   setupOpenCloseTriggers(setting_panel);
   setupThemes(setting_panel);
+}
+
+
+async function check_lab_host_connection(value: any, port_input: SettingInput) {
+  if (!await LabEngineWebsocketClient.ping(value, 100)) {
+    port_input.set_invalid_state(true, "Could not connect to lab server on port " + value);
+  } else {
+    port_input.set_invalid_state(false);
+  }
 }
 
 
@@ -140,14 +157,23 @@ class SettingInput extends Eventable<SettingInputEvents> {
     super.addListener(event, listener);
   }
 
-  enable(set_enabled: boolean) {
+  set_enabled_state(set_enabled: boolean) {
     if (set_enabled) {
       this.input.removeAttribute("disabled")
     } else {
       this.input.setAttribute("disabled", "");
     }
   }
+
+  set_invalid_state(set_invalid: boolean, msg: string = "") {
+    if (set_invalid) {
+      this.input.setAttribute("invalid", "");
+    } else {
+      this.input.removeAttribute("invalid")
+    }
+  }
 }
+
 
 export function setupOpenCloseTriggers(panel: Element, button_selector: string = "#open-settings-button") {
   let close_button = <HTMLDivElement>panel.querySelector(".close-button");

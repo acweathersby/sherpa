@@ -408,6 +408,7 @@ dependencies = [
  "radlr_formatter",
  "radlr_rust_runtime",
  "tungstenite",
+ "wasm-bindgen",
 ]
 
 [[package]]

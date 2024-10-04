@@ -46,61 +46,6 @@ export class DebuggerButton {
   }
 }
 
-
-export class DebuggerCheckbox {
-
-  static className: string = "debugger-checkbox";
-
-  static checkboxes: Map<string, DebuggerCheckbox> = new Map();
-
-  public _ele: HTMLInputElement
-
-  removeEventListener: HTMLElement["removeEventListener"];
-  addEventListener: HTMLElement["addEventListener"];
-
-  constructor(ele: HTMLInputElement) {
-    this._ele = ele;
-    this.addEventListener = ele.addEventListener.bind(ele);
-    this.removeEventListener = ele.removeEventListener.bind(ele);
-  }
-
-  set active(active: boolean) {
-    if (active)
-      this._ele.classList.add("active")
-    else
-      this._ele.classList.remove("active")
-  }
-
-  set disable(active: boolean) {
-    if (active)
-      this._ele.classList.add("disable")
-    else
-      this._ele.classList.remove("disable")
-  }
-
-  get ele(): HTMLInputElement {
-    return this._ele;
-  }
-
-  static gatherCheckBoxes(host_ele: HTMLElement = document.body) {
-    for (const ele of Array.from(host_ele.getElementsByClassName(DebuggerCheckbox.className))) {
-      if (DebuggerCheckbox.checkboxes.has(ele.id)) {
-        if (DebuggerCheckbox.checkboxes.get(ele.id)?._ele != ele) {
-          throw new Error(`Button id ${ele.id} has been obfuscated!`);
-        }
-      } else {
-        DebuggerCheckbox.checkboxes.set(ele.id, new DebuggerCheckbox(<HTMLInputElement>ele));
-      }
-    }
-  }
-
-  static get(check_box_name: string): DebuggerCheckbox {
-    return <any>DebuggerCheckbox.checkboxes.get(check_box_name);
-  }
-}
-
-
-
 export class DebuggerField {
   static className: string = "debugger-field";
 

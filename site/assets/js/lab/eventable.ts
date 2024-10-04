@@ -1,6 +1,7 @@
 export class Eventable<events = {}> {
 
   listeners: Map<any, ((arg: any) => void)[]> = new Map
+  extender: Eventable<events> | null = null
 
   constructor(enabled_by: Eventable<any>[] = []) {
   }
@@ -12,6 +13,10 @@ export class Eventable<events = {}> {
   protected emit<T extends keyof events, A = events[T], D = (arg: A) => void>(event: T, data: A) {
     for (const listener of this.listeners.get(event) ?? []) {
       (listener)(<any>data)
+    }
+
+    if (this.extender) {
+      this.extender.emit(event, data)
     }
   }
 

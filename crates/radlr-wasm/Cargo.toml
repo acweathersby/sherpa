@@ -38,7 +38,9 @@ path="../radlr-rust-runtime"
 path="../radlr-bytecode"
 
 [dependencies.radlr_lab]
-path="../radlr-lab" 
+path="../radlr-lab"
+features=["client"]
+
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.37"

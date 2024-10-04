@@ -325,6 +325,25 @@ pub fn get_debug_state_name(address: u32, pkg: &JSBytecodeParserDB, db: &JSParse
 }
 
 #[wasm_bindgen]
+pub fn is_instruction_transitory(address: u32, pkg: &JSBytecodeParserDB) -> bool {
+  let i = Instruction::from((pkg.0.bytecode.as_slice(), address as usize));
+  let opcode = i.get_opcode();
+  match opcode {
+    Opcode::ShiftToken
+    | Opcode::ShiftChar
+    | Opcode::ShiftTokenScanless
+    | Opcode::SkipToken
+    | Opcode::SkipTokenScanless
+    | Opcode::PeekReset
+    | Opcode::PeekSkipToken
+    | Opcode::PeekTokenScanless
+    | Opcode::PeekSkipTokenScanless
+    | Opcode::PeekToken => true,
+    _ => false,
+  }
+}
+
+#[wasm_bindgen]
 #[derive(Default)]
 pub struct TokenOffsets {
   pub start: u32,

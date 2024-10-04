@@ -1,6 +1,6 @@
 {{- $labScript := resources.Get "js/lab/index.ts" | js.Build (dict "target" "esnext" "format" "esm" "sourcemap"
 "inline") -}}
-{{- $labWorkerScript := resources.Get "js/lab/wasm_bytecode_compiler.worker.ts" | js.Build (dict "target" "esnext"
+{{- $labWorkerScript := resources.Get "js/lab/lab_host.worker.ts" | js.Build (dict "target" "esnext"
 "format" "esm" "sourcemap" "inline") -}}
 
 <!doctype html>
@@ -31,7 +31,7 @@
 
   <div id="controls" class="inactive">
     <div class="classification"></div>
-    <div class="debugger-button" id="restart" title="restart parser ( alt+r )">
+    <div class="debugger-button" id="reset" title="restart parser ( alt+r )">
       <i class="fa-solid fa-rotate-left active hover inactive"></i>
     </div>
     <div class="debugger-button" id="step" title="step to next instruction ( alt+n )">
@@ -53,18 +53,19 @@
       <div class="close-button">x</div>
       <h1>Parser Settings</h1>
       <label id="ALLOW_CALLS">
-        <div class=title>Allow Calls</div>
+        <div class=title>Allow calls</div>
         <div class="note">When enable, recursive descent style <i>"call"</i> states will be generated</div>
         <input type="checkbox" />
       </label>
       <label id="ALLOW_LR">
-        <div class=title>Allow lr</div>
+        <div class=title>Allow LR</div>
         <div class="note">When enable, LR style states may be produced. In general, this
           allows more advanced grammar constructs to be parsed, such
           as left recursive rules.
 
           When disabled, grammars with rules that require LR style parse states
-          will be rejected, and relevant errors will be reported.</div>
+          will be rejected, and relev
+          ant errors will be reported.</div>
         <input type="checkbox" />
       </label>
       <label id="ALLOW_PEEKING">
@@ -78,7 +79,7 @@
         <input type="checkbox" />
       </label>
       <label id="ALLOW_CONTEXT_SPLITTING">
-        <div class=title>Allow context splitting</div>
+        <div class=title>Allow context splitting (Fork)</div>
         <div class="note">Allow the parser to split its context to handle ambiguity. This
           may lead to a CSF (Concrete Syntax Forest) or a CSDAG (Concrete Syntax
           DAG) being returned by the parser instead of a CST</div>
@@ -91,19 +92,13 @@
         <input type="checkbox" />
       </label>
       <label id="AllOW_CST_MERGING">
-        <div class=title>Allow cst merging</div>
+        <div class=title>Allow CST merging</div>
         <div class="note">Creates states that directly handle transitions on terminals, allowing the
           creation of parsers that can patch existing CST data structures.</div>
         <input type="checkbox" />
       </label>
-      <label id="EXPORT_ALL_NONTERMS">
-        <div class=title>Export all nonterms</div>
-        <div class="note">Export all non-terminals as entry points in to the parser. This implies
-          an RD or RAD parser.</div>
-        <input type="checkbox" />
-      </label>
       <label id="ALLOW_CST_NONTERM_SHIFT">
-        <div class=title>Allow cst nonterm shift</div>
+        <div class=title>Allow CST nonterm shift</div>
         <div class="note">Allow the parser to shift on CST non-term nodes.</div>
         <input type="checkbox" />
       </label>
@@ -148,6 +143,15 @@
           <p>A value of zero represents unlimited lookahead</p>
         </div>
         <input type="number" min="0" max="`128" />
+      </label>
+      <label id="EXPORT_ALL_NONTERMS">
+        <div class=title>Export all nonterms</div>
+        <div class="note">Export all non-terminals as parser entry points. This implies
+          an RD or RAD parser.
+
+          <p style="color:red">Requires a lab-host server.</p>
+        </div>
+        <input type="checkbox" />
       </label>
     </div>
   </div>
