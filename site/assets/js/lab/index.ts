@@ -143,6 +143,7 @@ export async function init(compiler_worker_path: string) {
 
   grammar.addListener("grammar-classification", classification => {
     grammar_classification.innerHTML = classification;
+    controls.setActive(true);
   })
 
   parser.addListener("destroyed", data => {
