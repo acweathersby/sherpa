@@ -226,6 +226,9 @@ export async function init(compiler_worker_path: string) {
     grammar_input.update(text)
   }
 
+
+  parser_input_field.setText(DefaultParserInput)
+
   await rad_init;
 
   setupConfig(config => {
