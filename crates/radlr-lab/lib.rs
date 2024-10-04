@@ -20,9 +20,11 @@ enum WSResponseCodes {
   Undefined = 0,
 }
 
+const DEFAULT_PORT: u16 = 15421;
+
 #[cfg(feature = "host")]
-pub fn run_lab_server(port: u16) -> Result<(), RadlrError> {
-  let port = "15421";
+pub fn run_lab_server(port: Option<u16>) -> Result<(), RadlrError> {
+  let port = port.unwrap_or(DEFAULT_PORT);
   let ip4 = "0.0.0.0";
 
   use std::{net::TcpListener, thread::spawn};

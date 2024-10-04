@@ -31,7 +31,11 @@ pub fn command() -> ArgMatches {
         )
         .arg_required_else_help(true)
     )
-    .subcommand(Command::new("lab-mode").about("Starts the RADLR lab server, providing local resources to the RADLR lab browser app"))
+    .subcommand(Command::new("lab-mode").about("Starts the RADLR lab server, providing local resources to the RADLR lab browser app").arg(
+      arg!(-p --port <PORT> "The port the server will liston on. Defaults to 15421")
+      .value_parser(value_parser!(u16))
+      .required(false)
+    ))
     .subcommand(
       Command::new("build")
         .about("Constructs a parser from a Radlr grammar.")
@@ -109,7 +113,7 @@ fn main() -> RadlrResult<()> {
   } else if matches.subcommand_matches("disassemble").is_some() {
     RadlrResult::Ok(())
   } else if let Some(matches) = matches.subcommand_matches("lab-mode") {
-    run_lab_server(8080)
+    run_lab_server(matches.get_one::<u16>("port").cloned())
   } else {
     RadlrResult::Err(RadlrError::from("Command Not Recognized"))
   }
