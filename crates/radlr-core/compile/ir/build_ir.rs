@@ -1,7 +1,16 @@
 //! Functions for translating parse graphs into Radlr IR code.
 
 use crate::{
-  compile::states::build_graph::graph::{GraphNode, Graphs, IRPrecursorGroup, ScannerData, SharedGraphNode, StateId, StateType},
+  compile::states::build_graph::graph::{
+    create_scanner_name,
+    GraphNode,
+    Graphs,
+    IRPrecursorGroup,
+    ScannerData,
+    SharedGraphNode,
+    StateId,
+    StateType,
+  },
   types::{worker_pool::WorkerPool, *},
   utils::{hash_group_btree_iter, hash_group_btreemap},
   writer::code_writer::CodeWriter,
@@ -337,17 +346,17 @@ fn convert_state_to_ir<'graph: 'graph>(
     }
 
     let non_leaf_empty_state = out.is_empty()
-    && !matches!(
-      state.ty,
-      StateType::NonTerminalComplete
-        | StateType::NonTermCompleteOOS
-        | StateType::ScannerCompleteOOS
-        | StateType::CompleteToken
-        | StateType::AssignToken(..)
-    );
+      && !matches!(
+        state.ty,
+        StateType::NonTerminalComplete
+          | StateType::NonTermCompleteOOS
+          | StateType::ScannerCompleteOOS
+          | StateType::CompleteToken
+          | StateType::AssignToken(..)
+      );
 
     if non_leaf_empty_state {
-       Err(RadlrError::Text(format!("Created a state without children that is not a leaf\n State:\n{:?}", state)))
+      Err(RadlrError::Text(format!("Created a state without children that is not a leaf\n State:\n{:?}", state)))
     } else {
       Ok(out)
     }
@@ -423,7 +432,7 @@ fn add_match_expr<'graph: 'graph>(
       if input_type == MatchInputType::Token {
         w = w + ":" + {
           match scanner_data {
-            Some(scanner_data) => scanner_data.create_scanner_name(db).to_str(db.string_store()).as_str().to_string(),
+            Some(scanner_data) => create_scanner_name(db, scanner_data.hash).to_str(db.string_store()).as_str().to_string(),
             None => {
               panic!(
                 "Matches on {input_type:?} should have accompanying scanner {}{state:?} {}",
@@ -585,9 +594,9 @@ pub(super) fn create_ir_state_name(origin_state: Option<&GraphNode>, target_stat
   if origin_state.is_some_and(|s| s.id == target_state.id) {
     "%%%%".to_string()
   } else if target_state.is_goto() {
-    "g_".to_string() + &target_state.hash_id.to_string()
+    format!("g_{:016X}", &target_state.hash_id)
   } else {
-    target_state.is_scanner().then_some("s").unwrap_or("p").to_string() + "_" + &target_state.hash_id.to_string()
+    format!("{}_{:016X}", target_state.is_scanner().then_some("s").unwrap_or("p"), &target_state.hash_id)
   }
 }
 

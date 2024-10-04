@@ -12,7 +12,7 @@ pub(crate) enum StateConstructionError {
 }
 
 const NORMAL_GRAPH: i16 = 0;
-const LR_ONLY_GRAPH: i16 = 1;
+const LR_FALLBACK_GRAPH: i16 = 10;
 
 /// Add a root node to the graph queue. This type of node is also added to the
 /// global pending root nodes pool.
@@ -44,10 +44,24 @@ pub(crate) fn compile_parser_states<Pool: WorkerPool>(
 
   let mut gb = ConcurrentGraphBuilder::new(db.clone());
 
-  for result in db.nonterms().iter().enumerate().filter_map(|(index, sym)| {
+  let non_terms = if config.ALLOW_CALLS || config.EXPORT_ALL_NONTERMS {
+    // Create parsers for all non-terminals symbols, allowing entry from any
+    // point in the grammar.
+    db.nonterm_symbols().clone()
+  } else {
+    // Only create parsers for the explicitly exported non-terminals
+    println!("Producing minimal states");
+    db.entry_nterm_keys().iter().map(|key| db.nonterm_sym(*key)).collect()
+  };
+
+  for result in non_terms.iter().enumerate().filter_map(|(index, sym)| {
     let nt_id: DBNonTermKey = (index as u32).into();
 
     let kernel_items = ItemSet::start_items(nt_id, &db).to_origin(Origin::NonTermGoal(nt_id));
+
+    if sym.is_term() {
+      return None;
+    }
 
     if db.custom_state(nt_id).is_none() {
       Some(add_root(
@@ -118,7 +132,7 @@ fn build_states<Pool: WorkerPool>(
               // call transitions from being created. Rebuild the
               // states of the effected non-terminals. Repeat this process for
               // any non-terminal, marked as "LR only", that fails
-              // to generate states due to undeterministic peek.
+              // to generate states due to an undeterministic peek.
               //
               // If, during this iterative process, a non-terminal is
               // encountered that is "LR only", is non-deterministic during
@@ -174,7 +188,7 @@ fn build_states<Pool: WorkerPool>(
                         .kernel_items(kernel_items.to_vec().into_iter())
                         .ty(StateType::Start)
                         .graph_ty(node.graph_type())
-                        .make_root(db.nonterm_guid_name(*new_nt_key), *new_nt_key, LR_ONLY_GRAPH)
+                        .make_root(db.nonterm_guid_name(*new_nt_key), *new_nt_key, LR_FALLBACK_GRAPH)
                         .commit(&mut gb);
 
                       gb.commit(false, None, &new_config, true)?;

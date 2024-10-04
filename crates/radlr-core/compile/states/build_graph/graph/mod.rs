@@ -452,10 +452,10 @@ fn create_lookahead_hash<'a, H: std::hash::Hasher>(builder: &mut ConcurrentGraph
   }
 }
 
-fn create_state_hash<'a, H: std::hash::Hasher>(state: &GraphNode, lookahead: u64, mut hasher: H) -> u64 {
+fn create_state_hash<'a, H: std::hash::Hasher>(state: &GraphNode, lookahead: u64, mut hasher: H, enqueued_leaf: bool) -> u64 {
   let hasher = &mut hasher;
 
-  state.root_data.hash(hasher);
+  let is_continue_state = !state.is_leaf() || enqueued_leaf;
 
   match state.ty {
     StateType::Peek(_) => "peek".hash(hasher),
@@ -464,25 +464,31 @@ fn create_state_hash<'a, H: std::hash::Hasher>(state: &GraphNode, lookahead: u64
 
   state.sym.hash(hasher);
 
-  for item in state.kernel_items() {
-    item.index().hash(hasher);
-    item.from.hash(hasher);
+  if is_continue_state {
+    state.root_data.hash(hasher);
 
-    item.origin.hash(hasher);
+    for item in state.kernel_items() {
+      item.index().hash(hasher);
+      item.from.hash(hasher);
 
-    if !state.is_scanner() {
-      item.from_goto_origin.hash(hasher);
-      item.goto_distance.hash(hasher);
+      item.origin.hash(hasher);
+
+      if !state.is_scanner() {
+        item.from_goto_origin.hash(hasher);
+        item.goto_distance.hash(hasher);
+      }
+    }
+
+    state.follow_hash.hash(hasher);
+
+    lookahead.hash(hasher);
+  }
+
+  if state.is_leaf() {
+    if let Some(reduce_item) = &state.reduce_item {
+      reduce_item.hash(hasher)
     }
   }
-
-  state.follow_hash.hash(hasher);
-
-  if let Some(reduce_item) = &state.reduce_item {
-    reduce_item.hash(hasher)
-  }
-
-  lookahead.hash(hasher);
 
   hasher.finish()
 }
@@ -549,6 +555,7 @@ impl StagedNode {
           is_root:   false,
           root_name: Default::default(),
           version:   -1,
+          root_hash: 0,
         },
       },
       include_with_goto_state: false,
@@ -617,7 +624,13 @@ impl StagedNode {
   }
 
   pub fn make_root(mut self, root_name: IString, db_key: DBNonTermKey, version: i16) -> Self {
-    self.node.root_data = RootData { db_key, is_root: true, root_name, version: version.min(i16::MAX) };
+    self.node.root_data = RootData {
+      db_key,
+      is_root: true,
+      root_name,
+      version: version.min(i16::MAX),
+      root_hash: 0,
+    };
     self
   }
 
@@ -799,7 +812,7 @@ impl ConcurrentGraphBuilder {
   }
 
   fn enqueue_state_for_processing_kernel(&mut self, state: SharedGraphNode, parser_config: ParserConfig, allow_local: bool) {
-    if self.local_next.is_none() && allow_local && (state.graph_type() != GraphType::Scanner || !state.is_root()) {
+    if false && self.local_next.is_none() && allow_local && (state.graph_type() != GraphType::Scanner || !state.is_root()) {
       {
         self.local_next = Some((state, parser_config));
       }
@@ -1018,40 +1031,44 @@ impl ConcurrentGraphBuilder {
 
       let is_root = update_root_info(&mut state, pred);
 
-      state = self.commit_state(is_root, state);
+      state = self.commit_state(is_root, state, enqueued_leaf);
 
       if !state.is_scanner() {
-        if let Some(scanner_data) = get_state_symbols(self, &state) {
+        if let Some(mut scanner_data) = get_state_symbols(self, &state) {
+          //let sym_set_id = scanner_data.hash;
+
+          // Build a scanner entry
+          let db = self.db();
+
+          let start_items = scanner_data
+            .symbols
+            .iter()
+            .map(|s| {
+              ItemSet::start_items(db.token(s.0.tok()).nonterm_id, db)
+                .to_origin_state(StateId::default())
+                .to_origin(Origin::TerminalGoal(s.0.tok(), s.0.precedence()))
+            })
+            .chain(scanner_data.skipped.iter().map(|s| {
+              ItemSet::start_items(db.token(*s).nonterm_id, db)
+                .to_origin_state(StateId::default())
+                .to_origin(Origin::TerminalGoal(*s, 0))
+            }))
+            .flatten();
+
+          let mut scanner_root =
+            StagedNode::new(self).kernel_items(start_items).ty(StateType::Start).graph_ty(GraphType::Scanner);
+
+          let sym_set_id = create_state_hash(&scanner_root.node, 0, std::collections::hash_map::DefaultHasher::new(), false);
+
+          scanner_data.hash = sym_set_id;
           let scanner_data = Arc::new(scanner_data);
-          let sym_set_id = scanner_data.hash;
+
+          scanner_root = scanner_root
+            .add_scanner_root(scanner_data.clone())
+            .id(StateId(sym_set_id as usize, GraphIdSubType::Root))
+            .make_root(create_scanner_name(db, sym_set_id), DBNonTermKey::default(), 0);
 
           if !self.symbol_sets.contains_key(&sym_set_id) {
-            // Build a scanner entry
-            let db = self.db();
-
-            let start_items = scanner_data
-              .symbols
-              .iter()
-              .map(|s| {
-                ItemSet::start_items(db.token(s.0.tok()).nonterm_id, db)
-                  .to_origin_state(StateId::default())
-                  .to_origin(Origin::TerminalGoal(s.0.tok(), s.0.precedence()))
-              })
-              .chain(scanner_data.skipped.iter().map(|s| {
-                ItemSet::start_items(db.token(*s).nonterm_id, db)
-                  .to_origin_state(StateId::default())
-                  .to_origin(Origin::TerminalGoal(*s, 0))
-              }))
-              .flatten();
-
-            let scanner_root = StagedNode::new(self)
-              .kernel_items(start_items)
-              .ty(StateType::Start)
-              .graph_ty(GraphType::Scanner)
-              .add_scanner_root(scanner_data.clone())
-              .make_root(scanner_data.create_scanner_name(db), DBNonTermKey::default(), 0)
-              .id(StateId(sym_set_id as usize, GraphIdSubType::Root));
-
             nodes.push_back(scanner_root);
 
             self.symbol_sets.insert(sym_set_id, scanner_data);
@@ -1098,6 +1115,7 @@ impl ConcurrentGraphBuilder {
             Ok(mut produced_nodes) => {
               for (state, enqueued_leaf) in output_states {
                 graph.entry(state.clone()).or_default();
+
                 if produced_nodes.insert(state.hash_id) {
                   if (!state.is_leaf) || enqueued_leaf {
                     self.enqueue_state_for_processing_kernel(state, *parser_config, allow_local_queueing);
@@ -1119,11 +1137,11 @@ impl ConcurrentGraphBuilder {
   /// Create hash id's for the given state.
   ///
   /// WARNING: Ensure the state's root_data is set before calling this method.
-  fn commit_state(&mut self, is_root: bool, mut state: GraphNode) -> GraphNode {
+  fn commit_state(&mut self, is_root: bool, mut state: GraphNode, enqueued_leaf: bool) -> GraphNode {
     let lookahead =
       if is_root { 0 } else { create_lookahead_hash(self, &state, std::collections::hash_map::DefaultHasher::new()) };
 
-    state.hash_id = create_state_hash(&state, lookahead, std::collections::hash_map::DefaultHasher::new());
+    state.hash_id = create_state_hash(&state, lookahead, std::collections::hash_map::DefaultHasher::new(), enqueued_leaf);
 
     state.id = StateId::new(state.hash_id as usize, is_root.then_some(GraphIdSubType::Root).unwrap_or(GraphIdSubType::Regular));
 
@@ -1150,6 +1168,11 @@ fn update_root_info(state: &mut GraphNode, pred: Option<&Arc<GraphNode>>) -> boo
       Some(pred) => {
         state.root_data = pred.root_data;
         state.root_data.is_root = false;
+
+        if pred.root_data.is_root {
+          state.root_data.root_hash = pred.hash_id;
+        }
+
         state.scanner_root = pred.scanner_root.clone();
         false
       }

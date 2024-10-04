@@ -15,10 +15,6 @@ pub struct ScannerData {
 }
 
 impl ScannerData {
-  pub fn create_scanner_name(&self, db: &ParserDatabase) -> IString {
-    ("scan".to_string() + &self.hash.to_string()).intern(db.string_store())
-  }
-
   #[cfg(debug_assertions)]
   pub fn debug_print(&self, db: &ParserDatabase) {
     let Self { symbols, skipped, .. } = self;
@@ -29,4 +25,8 @@ impl ScannerData {
       skipped.iter().map(|s| db.sym(*s).debug_string(db)).collect::<Vec<_>>().join("\n")
     );
   }
+}
+
+pub fn create_scanner_name(db: &ParserDatabase, hash: u64) -> IString {
+  format!("scan_{:016X}", hash).intern(db.string_store())
 }

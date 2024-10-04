@@ -74,8 +74,7 @@ pub(crate) fn handle_regular_incomplete_items(
       create_out_of_scope_complete_state(gb, pred, out_of_scope, prec_sym);
     }
     (_, 1..) if ____is_scan____ => {
-      //Don't create any states
-      //create_out_of_scope_complete_state(gb, pred, out_of_scope, prec_sym);
+      // Don't create any states
     }
     (1.., 1..) => {
       if !____allow_peek____ {

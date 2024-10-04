@@ -16,12 +16,20 @@ use std::{
 
 use super::ScannerData;
 
-#[derive(Clone, Copy, Hash)]
+#[derive(Clone, Copy)]
 pub(crate) struct RootData {
   pub db_key:    DBNonTermKey,
   pub root_name: IString,
   pub version:   i16,
   pub is_root:   bool,
+  pub root_hash: u64,
+}
+
+impl Hash for RootData {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.version.hash(state);
+    self.root_hash.hash(state);
+  }
 }
 
 pub(crate) struct GraphNode {
@@ -74,7 +82,9 @@ impl Debug for GraphNode {
     if self.is_leaf() {
       f.write_fmt(format_args!(
         "
-== LEAF {:=<120}
+{:=<120}
+== LEAF {}
+HASH: {:016X}
 
 ty         : {:?}
 sym        : {}
@@ -83,47 +93,62 @@ prime pred : {:?}
 items:
 {}
 {scanner}
-{:=>128}",
+{:?}
+{:=>120}",
+        "",
         header,
+        self.hash_id,
         self.ty,
         self.sym.sym().debug_string(db),
         self.reduce_item.map(|f| Into::<Item>::into((f, db.as_ref()))._debug_string_w_db_(db)),
         self.predecessor.as_ref().map(|i| i.id()),
         self.kernel.iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join("\n"),
+        self.get_classification().to_string(),
         ""
       ))
     } else if self.is_root() {
       f.write_fmt(format_args!(
         "
-## {} [{}] {:#<120}
-
+{:#>120}
+## {} [{}] {}
+HASH: {:016X}
 items:
 {}
 {scanner}
-{:#>128}",
+{:?}
+{:#>120}",
+        "",
         if self.invalid.load(std::sync::atomic::Ordering::Relaxed) { "!!POISONED!! ROOT" } else { "ROOT" },
         db.nonterm_friendly_name_string(self.root_data.db_key),
         header,
+        self.hash_id,
         self.kernel.iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join("\n"),
+        self.get_classification().to_string(),
         ""
       ))
     } else {
       f.write_fmt(format_args!(
         "
--- {:-<125}
-
+{:-<120}
+-- {} {}
+HASH: {:016X}
 ty         : {:?}
 sym        : {}
 prime pred : {:?}
 items:
 {}
 {scanner}
-{:->128}",
+{:?}
+{:->120}",
+        "",
+        if self.get_root().invalid.load(std::sync::atomic::Ordering::Relaxed) { "!!POISONED!! INTR" } else { "INTR" },
         header,
+        self.hash_id,
         self.ty,
         self.sym.sym().debug_string(db),
         self.predecessor.as_ref().map(|i| i.id()),
         self.kernel.iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join("\n"),
+        self.get_classification().to_string(),
         ""
       ))
     }
