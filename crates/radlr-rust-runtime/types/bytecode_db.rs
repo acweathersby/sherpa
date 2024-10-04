@@ -10,6 +10,7 @@ use std::{
 /// non-terminal id maps,  used by parsers and other "runtime tools".
 #[derive(Clone, Default, Debug)]
 pub struct BytecodeParserDB {
+  pub default_entry:          EntryPoint,
   pub bytecode:               Vec<u8>,
   pub ir_token_lookup:        BTreeMap<u32, Token>,
   pub nonterm_name_to_id:     HashMap<String, u32>,
@@ -18,7 +19,11 @@ pub struct BytecodeParserDB {
   pub nonterm_id_to_address:  HashMap<u32, u32>,
   pub state_to_token_ids_map: HashMap<u32, Vec<u32>>,
   pub token_id_to_str:        HashMap<u32, String>,
-  pub default_entry:          EntryPoint,
+  /// Start and end bytes of the Nonterminal definition in the original grammar
+  pub rule_offsets:           HashMap<u32, (u32, u32)>,
+  pub rule_diagram:           HashMap<u32, String>,
+  /// Friendly names of all non-terminals
+  pub nonterm_name:           HashMap<u32, String>,
 }
 
 impl BytecodeParserDB {

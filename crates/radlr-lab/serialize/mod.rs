@@ -20,6 +20,11 @@ pub mod bytecode_db {
     db.nonterm_name_to_id = read_hash_of_str_id(&buffer, &mut offset);
     db.state_to_token_ids_map = read_hash_of_id_vecu32(&buffer, &mut offset);
     db.nonterm_id_to_address = read_primitive_hash(&buffer, &mut offset);
+
+    db.nonterm_name = read_hash_id_str(&buffer, &mut offset);
+    db.rule_offsets = read_primitive_hash(&buffer, &mut offset);
+    db.rule_diagram = read_hash_id_str(&buffer, &mut offset);
+
     db.default_entry = read_primitive_at_offset(&buffer, &mut offset);
 
     Ok(db)
@@ -35,25 +40,37 @@ pub mod bytecode_db {
     // token_id_to_str:           HashMap<u32, String>
     size += 4 + db.token_id_to_str.iter().fold(0, |size, d| size + 8 + d.1.as_bytes().len());
 
-    // nonterm_id_to_address:     HashMap<u32, u32>
-    size += 4 + db.nonterm_id_to_address.len() * 8;
+    // state_name_to_address:       HashMap<String, u32>
+    size += 4 + db.state_name_to_address.iter().fold(0, |size, d| size + 8 + d.0.as_bytes().len());
 
     // nonterm_name_to_id:        HashMap<String, u32>
     size += 4 + db.nonterm_name_to_id.iter().fold(0, |size, d| size + 8 + d.0.as_bytes().len());
 
-    // state_name_to_address:       HashMap<String, u32>
-    size += 4 + db.state_name_to_address.iter().fold(0, |size, d| size + 8 + d.0.as_bytes().len());
-
     // state_to_token_ids_map:    HashMap<u32, Vec<u32>>
-    size += 4 + db.state_to_token_ids_map.iter().fold(0, |size, d| size + 4 + d.1.len() * 4);
+    size += 4 + db.state_to_token_ids_map.iter().fold(0, |size, d| size + 8 + d.1.len() * 4);
 
-    // ir_token_lookup:           BTreeMap<u32, Token>
-    size += 4 + db.ir_token_lookup.iter().fold(0, |size, _| size + 4 + size_of::<Token>());
+    // rule_diagram:    HashMap<u32, String>
+    size += 4 + db.rule_diagram.iter().fold(0, |size, d| size + 8 + d.1.as_bytes().len());
+
+    // nonterm_name:    HashMap<u32, String>
+    size += 4 + db.nonterm_name.iter().fold(0, |size, d| size + 8 + d.1.as_bytes().len());
+
+    // nonterm_offsets:    HashMap<u32, (u32, u32)>
+    size += 4 + db.rule_offsets.iter().fold(0, |size, d| size + 4 + size_of::<(u32, u32)>());
+
+    //// ir_token_lookup:           BTreeMap<u32, Token>
+    //size += 4 + db.ir_token_lookup.iter().fold(0, |size, _| size + 4 +
+    // size_of::<Token>());
+
+    // nonterm_id_to_address:     HashMap<u32, u32>
+    size += 4 + db.nonterm_id_to_address.len() * 8;
 
     // default_entry
     size += size_of::<EntryPoint>();
 
     let mut buffer = Vec::<u8>::with_capacity(size);
+
+    dbg!(&db.nonterm_name);
 
     write_primitive_to_bytes(&mut buffer, db.bytecode.len() as u32);
     write_bytes(&mut buffer, &db.bytecode);
@@ -63,7 +80,13 @@ pub mod bytecode_db {
     write_hash_of_str_id(&mut buffer, &db.nonterm_name_to_id);
     write_hash_of_id_vecu32(&mut buffer, &db.state_to_token_ids_map);
     write_primitive_hash(&mut buffer, &db.nonterm_id_to_address);
+
+    write_hash_of_id_str(&mut buffer, &db.nonterm_name);
+    write_primitive_hash(&mut buffer, &db.rule_offsets);
+    write_hash_of_id_str(&mut buffer, &db.rule_diagram);
+
     write_primitive_to_bytes(&mut buffer, db.default_entry);
+    debug_assert_eq!(size, buffer.len(), "Error calculating buffer length");
 
     buffer
   }

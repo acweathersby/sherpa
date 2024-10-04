@@ -46,6 +46,9 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> R
     address_to_state_name:  Default::default(),
     nonterm_id_to_address:  Default::default(),
     state_to_token_ids_map: Default::default(),
+    nonterm_name:           Default::default(),
+    rule_offsets:           Default::default(),
+    rule_diagram:           Default::default(),
     token_id_to_str:        db
       .tokens()
       .iter()
@@ -59,6 +62,22 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> R
       .collect(),
     default_entry:          EntryPoint { nonterm_id: db.entry_nterm_keys().first().unwrap().to_val() },
   };
+
+  if (add_debug_symbols) {
+    for id in 0..db.nonterms_len() {
+      let name = db.nonterm_friendly_name(id.into());
+      pkg.nonterm_name.insert(id as u32, name.to_string(db.string_store()));
+    }
+
+    for id in 0..db.rules().len() {
+      let rule_key = DBRuleKey::from(id);
+      let tok = &db.rule(rule_key).tok;
+      pkg.rule_offsets.insert(id as u32, (tok.get_start() as u32, tok.get_end() as u32));
+
+      let item = Item::from((rule_key, db));
+      pkg.rule_diagram.insert(id as u32, rule_expression(item.to_canonical().to_complete(), db));
+    }
+  }
 
   for (name, state) in states {
     let state_address = pkg.bytecode.len() as u32;
@@ -132,6 +151,85 @@ fn remap_goto_addresses(bc: &mut Array<u8>, _goto_to_off: &Array<u32>) {
       op => op.len(),
     }
   }
+}
+
+pub fn rule_expression(item: Item, db: &ParserDatabase) -> String {
+  if item.is_null() {
+    "null".to_string()
+  } else {
+    let mut string = String::new();
+
+    let s_store = db.string_store();
+
+    string += &item.nonterm_name(db).to_string(s_store);
+
+    string += " >";
+
+    let mut init_item = Some(item.to_initial());
+
+    while let Some(i) = init_item.clone() {
+      if i.is_complete() {
+        break;
+      };
+
+      string += " ";
+
+      string += &debug_string(&i.sym_id(db), db);
+
+      if !item.is_canonical() {
+        string += &match (i.symbol_precedence(db), i.token_precedence(db)) {
+          (0, 0) => String::default(),
+          (sym, 0) => "{".to_string() + &sym.to_string() + "}",
+          (0, tok) => "{:".to_string() + &tok.to_string() + "}",
+          (sym, tok) => "{".to_string() + &sym.to_string() + ":" + &tok.to_string() + "}",
+        };
+      }
+
+      init_item = i.increment();
+    }
+
+    string.replace("\n", "\\n")
+  }
+}
+
+pub fn debug_string(sym: &SymbolId, db: &ParserDatabase) -> String {
+  use SymbolId::*;
+  let mut w = CodeWriter::new(vec![]);
+  match *sym {
+    Undefined => &mut w + "Undefine",
+    Default => &mut w + "Default",
+    EndOfFile { .. } => &mut w + "'$'",
+    ClassSpace => &mut w + "'\\s'",
+    ClassHorizontalTab => &mut w + "'\\t'",
+    ClassNewLine => &mut w + "'\\n'",
+    ClassIdentifier => &mut w + "c:id",
+    ClassNumber => &mut w + "'\\d'",
+    ClassSymbol => &mut w + "c:sym",
+    Any => &mut w + "'.'",
+    Token { val } => &mut w + "'" + val.to_str(db.string_store()).as_str() + "'",
+    NonTerminalState { .. } => &mut w + "nonterm_state",
+    NonTerminal { .. } => &mut w + "nonterm",
+    NonTerminalToken { .. } => &mut w + "tk:" + "nonterm",
+    Codepoint { val } => &mut w + "" + val.to_string(),
+    DBNonTerminal { key } => {
+      let guard_str = db.nonterm_friendly_name_string(key);
+      let name = guard_str.as_str();
+      &mut w + name
+    }
+    DBNonTerminalToken { nonterm_key: nterm_key, .. } => {
+      let guard_str = db.nonterm_friendly_name_string(nterm_key);
+      &mut w + "tk:" + guard_str
+    }
+    DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
+    Char { char } => {
+      if char < 128 {
+        &mut w + "'" + char::from(char).to_string() + "'"
+      } else {
+        &mut w + "[ byte:" + char.to_string() + "]"
+      }
+    }
+  };
+  w.to_string()
 }
 
 fn set_goto_address(bc: &mut Vec<u8>, _goto_to_off: &[u32], offset: usize) {

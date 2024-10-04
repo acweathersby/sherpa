@@ -272,7 +272,7 @@ impl ParserDatabase {
   }
 
   /// Returns an ordered array of all non-terminals within the DB
-  pub fn nonterms(&self) -> &Array<SymbolId> {
+  pub fn nonterm_symbols(&self) -> &Array<SymbolId> {
     &self.nonterm_symbols
   }
 
@@ -461,7 +461,7 @@ impl ParserDatabase {
   /// Returns all regular (non token) nonterminals.
   pub fn parser_nonterms(&self) -> Array<DBNonTermKey> {
     self
-      .nonterms()
+      .nonterm_symbols()
       .iter()
       .enumerate()
       .filter_map(|(i, p)| match p {

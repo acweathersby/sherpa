@@ -10,7 +10,7 @@ use radlr_rust_runtime::{
     TableHeaderData,
   },
 };
-use std::{path::PathBuf, rc::Rc};
+use std::{collections::HashMap, path::PathBuf, rc::Rc};
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -92,7 +92,7 @@ impl AsMut<RadlrGrammar> for JSRadlrGrammar {
 /// Bytecode produced from parse states
 #[wasm_bindgen]
 #[derive(Clone)]
-pub struct JSBytecodeParserDB(pub(crate) Rc<BytecodeParserDB>);
+pub struct JSBytecodeParserDB(pub(crate) Rc<BytecodeParserDB>, pub(crate) HashMap<u32, String>);
 
 impl AsRef<[u8]> for JSBytecodeParserDB {
   fn as_ref(&self) -> &[u8] {
@@ -201,7 +201,10 @@ pub fn create_rust_ast_output(js_db: &JSParserDB) -> Result<String, PositionedEr
 pub fn create_bytecode(states: &JSIRParser) -> Result<JSBytecodeParserDB, PositionedErrors> {
   match compile_bytecode(states.states.as_ref(), true) {
     Err(errors) => Result::Err(convert_journal_errors(errors)),
-    Ok(pkg) => Ok(JSBytecodeParserDB(Rc::new(pkg))),
+    Ok(pkg) => {
+      let nonterm_id_to_name = pkg.nonterm_name_to_id.iter().map(|(name, id)| (*id, name.clone())).collect();
+      Ok(JSBytecodeParserDB(Rc::new(pkg), nonterm_id_to_name))
+    }
   }
 }
 
@@ -211,7 +214,10 @@ pub fn import_bytecode_db(buffer: ArrayBuffer) -> Result<JSBytecodeParserDB, Pos
   let buffer: Vec<u8> = Uint8Array::new(&buffer).to_vec();
 
   match radlr_lab::serialize::bytecode_db::import_bytecode_db(&buffer) {
-    Ok(db) => Ok(JSBytecodeParserDB(Rc::new(db))),
+    Ok(db) => {
+      let nonterm_id_to_name = db.nonterm_name_to_id.iter().map(|(name, id)| (*id, name.clone())).collect();
+      Ok(JSBytecodeParserDB(Rc::new(db), nonterm_id_to_name))
+    }
     Err(err) => Err((RadlrError::from(err), ErrorOrigin::BytecodeImport).into()),
   }
 }
@@ -362,13 +368,29 @@ pub fn get_entry_names(db: &JSParserDB) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn get_nonterminal_name_from_id(id: u32, db: &JSParserDB) -> String {
-  let db = db.as_ref().get_internal();
-  if (id as usize) < db.nonterms_len() {
-    let id = DBNonTermKey::from(id);
-    db.nonterm_friendly_name_string(id)
-  } else {
-    Default::default()
+pub fn get_nonterminal_name_from_id(id: u32, db: &JSBytecodeParserDB) -> String {
+  db.0.nonterm_name.get(&id).cloned().unwrap_or_default()
+}
+
+/// Returns a diagram of a grammar rule  
+#[wasm_bindgen]
+pub fn get_rule_expression_string(rule_id: u32, db: &JSBytecodeParserDB) -> String {
+  db.0.rule_diagram.get(&rule_id).cloned().unwrap_or_default()
+}
+
+/// Returns the offset and length of a token rule.
+#[wasm_bindgen]
+pub fn get_rule_location(rule_id: u32, db: &JSBytecodeParserDB) -> JsValue {
+  match db.0.rule_offsets.get(&rule_id) {
+    Some((start, end)) => {
+      let array = Array::new();
+
+      array.push(&JsValue::from_f64(*start as f64));
+      array.push(&JsValue::from_f64(*end as f64));
+
+      array.into()
+    }
+    _ => Array::new().into(),
   }
 }
 
@@ -384,119 +406,6 @@ pub fn get_nonterminal_names_from_db(db: &JSParserDB) -> JsValue {
   }
 
   return array.into();
-}
-
-/// Returns the offset and length of a token rule.
-#[wasm_bindgen]
-pub fn get_rule_location(rule_id: u32, db: &JSParserDB) -> JsValue {
-  let db = db.as_ref().get_internal();
-
-  if (rule_id as usize) < db.rules().len() {
-    let rule: &Rule = db.rule(DBRuleKey::from(rule_id));
-
-    let tok = &rule.tok;
-
-    let array = Array::new();
-
-    array.push(&JsValue::from_f64(tok.get_start() as f64));
-    array.push(&JsValue::from_f64(tok.get_end() as f64));
-
-    array.into()
-  } else {
-    Default::default()
-  }
-}
-
-/// Returns a diagram of a grammar rule  
-#[wasm_bindgen]
-pub fn get_rule_expression_string(rule_id: u32, db: &JSParserDB) -> String {
-  let db = db.as_ref().get_internal();
-
-  if (rule_id as usize) < db.rules().len() {
-    let item = Item::from((DBRuleKey::from(rule_id), db));
-    rule_expression(item.to_canonical().to_complete(), db)
-  } else {
-    Default::default()
-  }
-}
-
-pub fn rule_expression(item: Item, db: &ParserDatabase) -> String {
-  if item.is_null() {
-    "null".to_string()
-  } else {
-    let mut string = String::new();
-
-    let s_store = db.string_store();
-
-    string += &item.nonterm_name(db).to_string(s_store);
-
-    string += " >";
-
-    let mut init_item = Some(item.to_initial());
-
-    while let Some(i) = init_item.clone() {
-      if i.is_complete() {
-        break;
-      };
-
-      string += " ";
-
-      string += &debug_string(&i.sym_id(db), db);
-
-      if !item.is_canonical() {
-        string += &match (i.symbol_precedence(db), i.token_precedence(db)) {
-          (0, 0) => String::default(),
-          (sym, 0) => "{".to_string() + &sym.to_string() + "}",
-          (0, tok) => "{:".to_string() + &tok.to_string() + "}",
-          (sym, tok) => "{".to_string() + &sym.to_string() + ":" + &tok.to_string() + "}",
-        };
-      }
-
-      init_item = i.increment();
-    }
-
-    string.replace("\n", "\\n")
-  }
-}
-
-pub fn debug_string(sym: &SymbolId, db: &ParserDatabase) -> String {
-  use SymbolId::*;
-  let mut w = CodeWriter::new(vec![]);
-  match *sym {
-    Undefined => &mut w + "Undefine",
-    Default => &mut w + "Default",
-    EndOfFile { .. } => &mut w + "'$'",
-    ClassSpace => &mut w + "'\\s'",
-    ClassHorizontalTab => &mut w + "'\\t'",
-    ClassNewLine => &mut w + "'\\n'",
-    ClassIdentifier => &mut w + "c:id",
-    ClassNumber => &mut w + "'\\d'",
-    ClassSymbol => &mut w + "c:sym",
-    Any => &mut w + "'.'",
-    Token { val } => &mut w + "'" + val.to_str(db.string_store()).as_str() + "'",
-    NonTerminalState { .. } => &mut w + "nonterm_state",
-    NonTerminal { .. } => &mut w + "nonterm",
-    NonTerminalToken { .. } => &mut w + "tk:" + "nonterm",
-    Codepoint { val } => &mut w + "" + val.to_string(),
-    DBNonTerminal { key } => {
-      let guard_str = db.nonterm_friendly_name_string(key);
-      let name = guard_str.as_str();
-      &mut w + name
-    }
-    DBNonTerminalToken { nonterm_key: nterm_key, .. } => {
-      let guard_str = db.nonterm_friendly_name_string(nterm_key);
-      &mut w + "tk:" + guard_str
-    }
-    DBToken { key: index } => &mut w + db.sym(index).debug_string(db),
-    Char { char } => {
-      if char < 128 {
-        &mut w + "'" + char::from(char).to_string() + "'"
-      } else {
-        &mut w + "[ byte:" + char.to_string() + "]"
-      }
-    }
-  };
-  w.to_string()
 }
 
 #[wasm_bindgen]
