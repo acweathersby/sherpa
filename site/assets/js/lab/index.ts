@@ -20,7 +20,6 @@ export async function init(compiler_worker_path: string) {
   grammar_input_field.set_content_visible(true);
   grammar_input_field.setText("");
   grammar_input_field.setIcon(`<i class="fa-solid fa-chart-gantt"></i>`);
-  grammar_input_field.set_fullscreen(true);
 
   let parser_info_field = nb.addField(new NBContentField("Parser Info"), 1);
   parser_info_field.set_content_visible(false);
