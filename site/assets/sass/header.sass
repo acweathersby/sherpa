@@ -11,6 +11,9 @@
   height: $header-height
   padding: 0 20px
 
+  @include mobile-screens
+    padding: 0 10px
+
 header
   @include flex-centered-row
 
@@ -29,7 +32,6 @@ header
   #header-logo
     display: inline-block
     height: 2em
-    margin-left: 10px
     margin-right: 4px
 
   #page-category
@@ -48,6 +50,7 @@ header
 footer
   @include flex-centered-row
   height: $footer-height
+  
 
 @mixin header-footer-themable($theme-map)
 
