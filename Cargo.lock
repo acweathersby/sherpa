@@ -414,6 +414,9 @@ dependencies = [
 [[package]]
 name = "radlr_rust_runtime"
 version = "1.0.1-beta1"
+dependencies = [
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "radlr_test_suite"

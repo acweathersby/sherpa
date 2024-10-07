@@ -63,7 +63,7 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> R
     default_entry:          EntryPoint { nonterm_id: db.entry_nterm_keys().first().unwrap().to_val() },
   };
 
-  if (add_debug_symbols) {
+  if add_debug_symbols {
     for id in 0..db.nonterms_len() {
       let name = db.nonterm_friendly_name(id.into());
       pkg.nonterm_name.insert(id as u32, name.to_string(db.string_store()));

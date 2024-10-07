@@ -21,6 +21,16 @@
   display: flex
   flex-direction: column
   transition: width 100ms
+  flex-grow: 1
+  flex-shrink: 1
+  padding: 0 5px
+
+  &.mini
+    width: 40px;
+    border-radius: 20px
+    flex-grow: 0
+    flex-shrink: 0
+    margin: 0 20px
 
 .nb-field
 
@@ -32,6 +42,9 @@
   display: flex
   flex-direction: column
   transition: height $bts
+
+  .nb-icon-container
+    display: none
 
   &.dragging
     position: fixed
@@ -79,6 +92,26 @@
     border-radius: 5px
     overflow: hidden
 
+    .nb-expand-button
+      height: 100
+      display: flex
+      font-size: 20px
+      padding: 0 20px
+      pointer-events: all
+      opacity: 0
+      cursor: pointer
+
+    .nb-expand-icon
+      display: block
+    .nb-minimize-icon
+      display: none
+
+    &.fullscreen 
+      .nb-expand-icon
+        display: none
+      .nb-minimize-icon
+        display: block
+
     .nb-header
       position: relative
       height: $header-height
@@ -90,6 +123,7 @@
       font-weight: 500
       border-radius: 2px
       transition: all $bts
+      cursor: move
 
       @include mobile-screens
         font-size: 1em
@@ -106,26 +140,26 @@
         .nb-label
           padding: 0 0px
 
-      .nb-loader
-        position: relative
-        width: 25%
-        height: 10px
-        border: 2px solid none
-        border-radius: 10px
-        box-sizing: content-box
-        padding: 0 10px
-        margin-right: 10px
-        opacity: 0
-        visibility: hidden
-        top: 5px
-        transition: opacity $bts * 2, visibility $bts * 2, top $bts * 2.5
+    .nb-loader
+      position: relative
+      width: 25%
+      height: 10px
+      border: 2px solid none
+      border-radius: 10px
+      box-sizing: content-box
+      padding: 0 10px
+      margin-right: 10px
+      opacity: 0
+      visibility: hidden
+      top: 5px
+      transition: opacity $bts * 2, visibility $bts * 2, top $bts * 2.5
 
-      .loader-div
-        width: 10px
-        height: 10px
-        position: relative
-        border-radius: 5px
-        animation: cylon_loader 550ms ease-in-out infinite alternate
+    .loader-div
+      width: 10px
+      height: 10px
+      position: relative
+      border-radius: 5px
+      animation: cylon_loader 550ms ease-in-out infinite alternate
 
       @keyframes cylon_loader
         0%
@@ -167,8 +201,8 @@
       &.debugger-cst-output
         overflow: scroll
 
-      .cm-editor.main
-        top: 0
+      .cm-editor
+        top: 20px !important
         left: 0
         right: 0
         bottom: 0
@@ -220,6 +254,62 @@
 
     .nb-body
       margin-bottom: 0px
+
+.nb-field.mini-candidate
+  height: 40px !important
+  .nb-body
+    display: none !important
+
+.nb-column.mini
+  flex-basis: content;
+  .nb-field
+    padding: 0
+    padding-bottom: 20px
+
+    
+    .nb-icon-container
+      display: flex
+      position: absolute
+      justify-content: center
+      align-items: center
+      inset: 0 0 0 0 
+      font-size: 20px
+
+    .nb-header
+      height: 40px !important
+      width: 40px !important
+      border-radius: 5px
+      .nb-header-left-side
+        display: none !important
+    .nb-body
+      display: none !important
+    .nb-resize-handle-area, .nb-collapsed-indicator
+      display: none !important
+    .nb-icon 
+      display: block
+
+
+.nb-field.fullscreen 
+  position: fixed
+  top: $header-height
+  bottom: $footer-height 
+  left: 0
+  right: 0
+  padding: 0 30px
+  z-index: 1000
+
+  .nb-header
+    cursor: default !important
+
+  .nb-resize-handle-area, .nb-collapsed-indicator
+    display: none !important
+
+  .nb-expand-button
+    opacity: 1 !important
+  
+  
+
+
 
 #controls
   position: absolute
@@ -306,6 +396,8 @@
   .nb-field
     background-color: none
 
+
+
     &.nb-blank-field div
       border-color: map-get($theme-map, bg-inc-1)
 
@@ -322,11 +414,21 @@
       background-color: map-get($theme-map, bg-basic)
 
     &.nb-content-field
+      &.fullscreen
+        background-color: map-get($theme-map, "bg-basic")
       .nb-header
         color: map-get($theme-map, fg-basic)
 
+        .nb-icon-container
+          color: map-get($theme-map, fg-inc-2)
+
         &:hover
-          color: map-get($theme-map, "field-header-fg")
+          .nb-expand-button
+            opacity: 1
+
+          &, .nb-icon-container
+            color: map-get($theme-map, "field-header-fg")
+
           background: map-get($theme-map, "field-header-bg")
 
         .nb-loader
@@ -339,6 +441,9 @@
       .nb-loading-screen
         background-color: map-get($theme-map, "bg-basic")
         color: map-get($theme-map, "fg-inc-2")
+
+  //.nb-column.mini .nb-field .nb-header
+  //  background: map-get($theme-map, "field-header-bg") !important
 
 
 // CST --------------------------------------------

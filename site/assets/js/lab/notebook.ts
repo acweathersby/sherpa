@@ -6,11 +6,14 @@ import { MoveFieldDragOperation, ResizeFieldOperation } from "./dragndrop_operat
 const TRANSITION_DURATION_MS = 100;
 export const MIN_EXPANDED_FIELD_HEIGHT = 160;
 const COLLAPSED_FIELD_HEIGHT = 40;
+const UNASSIGNED_COLUMN = -100;
+const MINI_COLUMN = -1;
 
 export class NB {
   ele: HTMLElement
   columns: NBColumn[];
   max_columns: number = 3;
+  mini_col: NBColumn
 
   constructor(num_of_columns: number) {
 
@@ -23,6 +26,10 @@ export class NB {
 
       this.columns = new Array(num_of_columns).fill(0).map((_, i) => new NBColumn(this, i, false))
 
+      this.mini_col = new MININBColumn(this);
+
+      this.ele.append(this.mini_col.ele);
+
       for (const row of this.columns) {
         this.ele.append(row.ele);
       }
@@ -32,7 +39,13 @@ export class NB {
   }
 
   addField<T extends NBField>(field: T, col: number = 0, row: number = Infinity): T {
-    col = Math.min(Math.max(0, col), this.columns.length - 1);
+    let column = this.mini_col;
+
+    if (col >= 0) {
+      col = Math.min(Math.max(0, col), this.columns.length - 1);
+      column = this.columns[col];
+    }
+
 
     field.nb_host = this;
 
@@ -42,7 +55,7 @@ export class NB {
       row.remove(field);
     }
 
-    this.columns[col].add(field, row);
+    column.add(field, row);
 
     return field
   }
@@ -50,11 +63,15 @@ export class NB {
   removeField<T extends NBField>(field: T): boolean {
     let { col, v_row: row, nb_host } = field;
 
-    if (col < 0 || nb_host != this) return false;
+    if (nb_host != this || col <= UNASSIGNED_COLUMN) return false;
 
-    this.columns[col].remove(field);
+    if (col == MINI_COLUMN) {
+      this.mini_col.remove(field)
+    } else {
+      this.columns[col].remove(field);
+    }
 
-    field.col = -1;
+    field.col = UNASSIGNED_COLUMN;
     field.v_row = -1;
     field.r_row = -1;
     field.nb_host = null;
@@ -63,7 +80,7 @@ export class NB {
   }
 
   removeCol(col_index: number) {
-    if (col_index >= 0 && col_index < this.columns.length) {
+    if (col_index >= 0 && col_index < this.columns.length && this.columns.length > 1) {
       let col = this.columns[col_index];
 
       if (col.cell_count > 0) {
@@ -88,7 +105,7 @@ export class NB {
     this.columns.forEach((col, i) => col.setIndex(i));
 
     if (col_index == 0) {
-      this.ele.prepend(new_col.ele)
+      this.ele.insertBefore(new_col.ele, this.mini_col.ele.nextElementSibling);
     } else {
       this.ele.insertBefore(new_col.ele, <any>this.columns[col_index - 1].ele.nextElementSibling);
     }
@@ -101,16 +118,28 @@ export class NB {
       col.latchHeights();
       col.distributeHeight();
     }
+
+    this.mini_col.latchHeights();
+  }
+  column_area_width(): number {
+    return this.ele.getBoundingClientRect().width - this.mini_col.ele.getBoundingClientRect().width
   }
 }
+
+
 
 export class NBColumn {
   ele: HTMLElement;
   cells: NBField[]
   nb_host: NB
   index: number
+  is_mini: boolean = false
+  IS_SIDEBAR: boolean = false
 
-  constructor(nb_host: NB, index: number, animate_in: boolean) {
+  constructor(nb_host: NB, index: number, animate_in: boolean, is_mini: boolean = false) {
+    this.is_mini = is_mini;
+
+
     this.ele = document.createElement("div");
     this.ele.classList.add("nb-column");
     this.cells = [];
@@ -170,6 +199,9 @@ export class NBColumn {
 
   delete() {
     this.ele.parentElement?.removeChild(this.ele);
+    for (const cell of this.cells) {
+      cell.col = UNASSIGNED_COLUMN;
+    }
   }
 
   remove(field: NBField) {
@@ -179,7 +211,7 @@ export class NBColumn {
       this.cells.splice(index, 1);
       this.ele.removeChild(field.ele);
       field.nb_host = null;
-      field.col = -1;
+      field.col = UNASSIGNED_COLUMN;
       field.v_row = -1;
 
       this.setIndex()
@@ -200,6 +232,7 @@ export class NBColumn {
 
     field.nb_host = this.nb_host;
     field.v_row = -1;
+    field.is_mini = false;
 
     this.setIndex()
   }
@@ -286,16 +319,7 @@ export class NBColumn {
         return { f: false, h: 0 }
       }
 
-      let v = fixed_heights_settings.find(f => f.index == i);
-      if (v) {
-        return { f: true, h: v.height }
-      } else if (c.collapsed) {
-        return { f: true, h: COLLAPSED_FIELD_HEIGHT }
-      } else if (c.latched_height <= MIN_EXPANDED_FIELD_HEIGHT) {
-        return { f: true, h: MIN_EXPANDED_FIELD_HEIGHT }
-      } else {
-        return { f: false, h: c.latched_height }
-      }
+      return this.getFieldHeight(fixed_heights_settings.find(f => f.index == i), c);
     });
 
     let cell_height_sum = cell_heights.reduce((r, l) => {
@@ -321,8 +345,34 @@ export class NBColumn {
       this.cells[i].setRelativeHeight(normalized_heights[i] * normalized_value);
     }
   }
+
+  protected getFieldHeight(fixed_height_data: { index: number; height: number; } | undefined, c: NBField): { f: boolean, h: number } {
+    if (fixed_height_data) {
+      return { f: true, h: fixed_height_data.height };
+    } else if (c.collapsed) {
+      return { f: true, h: COLLAPSED_FIELD_HEIGHT };
+    } else if (c.latched_height <= MIN_EXPANDED_FIELD_HEIGHT) {
+      return { f: true, h: MIN_EXPANDED_FIELD_HEIGHT };
+    } else {
+      return { f: false, h: c.latched_height };
+    }
+  }
 }
 
+
+export class MININBColumn extends NBColumn {
+  constructor(nb_host: NB) {
+    super(nb_host, -1, false, true);
+    this.ele.classList.add("mini");
+  }
+
+  add(field: NBField, row?: number, using_real_index?: boolean): void {
+    super.add(field, row, using_real_index);
+    field.is_mini = true;
+  }
+
+  distributeHeight() { }
+}
 
 export class NBField {
   ele: HTMLElement;
@@ -333,7 +383,8 @@ export class NBField {
   r_row: number = 0;
   col: number = 0;
   latched_height: number = 0
-  collapsed: boolean = false;
+  collapsed: boolean = false
+  is_mini = false;
 
   constructor(ele = document.createElement("div")) {
     this.ele = ele;
@@ -353,12 +404,22 @@ export class NBField {
    * @param height - a ratio of the parent containers height
    */
   setRelativeHeight(height: number) {
-    this.ele.style.height = `${height * 100}%`
+    this.ele.style.height = `${height * 100}%`;
   }
 
   unsetRelativeHeight() {
     this.ele.style.height = ""
   }
+
+  add_class(class_: string) {
+    this.ele.classList.add(class_);
+  }
+
+  remove_class(class_: string) {
+    this.ele.classList.remove(class_);
+  }
+
+
 }
 
 export class NBBlankField extends NBField {
@@ -401,9 +462,11 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
   body: HTMLElement;
   label: HTMLElement;
   resize_handle: HTMLElement;
+  expand_button: HTMLElement;
   collapsed: boolean = false;
   pre_collapse_size: number = 0
   listeners: Map<event_names, ((arg: EventObj) => void)[]> = new Map;
+  relative_height: string = ""
 
   constructor(name: string = "") {
     let ele = document.createElement("div");
@@ -414,25 +477,60 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
     this.header = <any>this.ele.querySelector(".nb-header");
     this.label = <any>this.ele.querySelector(".nb-label");
     this.body = <any>this.ele.querySelector(".nb-body");
+    this.expand_button = <any>this.ele.querySelector(".nb-expand-button");
     this.resize_handle = <any>this.ele.querySelector(".nb-resize-handle");
+    this.ele.querySelector(".nb-icon-container")!.setAttribute("title", name);
 
     this.label.innerHTML = name;
+
+    this.expand_button.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      e.stopPropagation();
+      return false
+    }, {
+      capture: true,
+      passive: true
+    });
+
+
+    this.expand_button.addEventListener("click", e => {
+      this.set_fullscreen(!this.is_fullscreen);
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      e.stopPropagation();
+      return false;
+    }, {
+      capture: true,
+      passive: true
+    })
 
     this.resize_handle.addEventListener("pointerdown", e => {
       new ResizeFieldOperation(e, this);
     }, { capture: true, passive: false })
 
     this.header.addEventListener("pointerdown", async e => {
-      if (this.nb_host) {
+      if (this.nb_host && !this.is_fullscreen) {
         let drag_op = new MoveFieldDragOperation(e, this);
-        if (!await drag_op.willDrag()) {
-          this.setExpanded(this.ele.classList.contains("collapsed"))
-        }
+        await drag_op.willDrag()
       }
-    }, { capture: true, passive: false });
+    }, { capture: false, passive: false });
   }
 
-  setContentVisible(is_content_visible: boolean) {
+  private get is_expanded(): boolean {
+    return !this.ele.classList.contains("collapsed");
+  }
+
+  setIcon(ele: HTMLElement | string) {
+    if (typeof ele == "string") {
+      this.ele.querySelector(".nb-icon-container")!.innerHTML = ele;
+    } else {
+      this.ele.querySelector(".nb-icon-container")!.innerHTML = "";
+      this.ele.querySelector(".nb-icon-container")!.appendChild(ele);
+    }
+  }
+
+  set_content_visible(is_content_visible: boolean) {
     if (is_content_visible) {
       this.ele.classList.add("content-visible");
     } else {
@@ -440,7 +538,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
     }
   }
 
-  setLoading(is_loading: boolean) {
+  set_loading(is_loading: boolean) {
     if (is_loading) {
       this.ele.classList.add("loading");
     } else {
@@ -448,7 +546,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
     }
   }
 
-  setExpanded(is_collapsed: boolean) {
+  set_expanded(is_collapsed: boolean) {
     if (!this.nb_host) return;
 
     if (!is_collapsed) {
@@ -465,6 +563,20 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
     }
   }
 
+  set_fullscreen(is_fullscreen: boolean) {
+    if (is_fullscreen) {
+      this.add_class("fullscreen");
+      this.ele.style.height = ""
+    } else {
+      this.remove_class("fullscreen");
+      this.ele.style.height = this.relative_height;
+    }
+  }
+
+  get is_fullscreen(): boolean {
+    return this.ele.classList.contains("fullscreen")
+  }
+
   protected emit(event: event_names) {
     for (const listener of this.listeners.get(event) ?? []) {
       listener(<EventObj><any>this);
@@ -477,6 +589,13 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
       this.listeners.set(event, [listener]);
     } else {
       this.listeners.get(event)?.push(listener);
+    }
+  }
+
+  setRelativeHeight(height: number) {
+    this.relative_height = `${height * 100}%`;
+    if (!this.is_fullscreen) {
+      this.ele.style.height = this.relative_height
     }
   }
 }
@@ -585,7 +704,7 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
     if (start_char == end_char) return;
     this.cm.dispatch({
       effects: [highlight_effect.of([
-        view.Decoration.mark({ attributes: { style: `color: ${color} !important`, } }).spec({ id: "highlight" }).range(start_char, end_char)
+        view.Decoration.mark({ attributes: { style: `color: ${color} !important` }, id: "highlight" }).range(start_char, end_char)
       ])]
     });
   }
@@ -629,8 +748,6 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
     });
 
     this.cm.dispatch(lint.setDiagnostics(this.cm.state, this.diagnostics));
-
-
   }
 
   removeMsgs() {

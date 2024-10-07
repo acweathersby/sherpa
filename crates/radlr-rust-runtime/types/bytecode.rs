@@ -4,17 +4,21 @@
 use std::fmt::Debug;
 use std::fmt::Display;
 
+#[cfg(feature = "wasm-lab")]
+use wasm_bindgen::prelude::*;
+
 /// The current set of instruction opcodes
+#[cfg_attr(feature = "wasm-lab", wasm_bindgen)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(u8)]
 pub enum Opcode {
   /// Default value for unrecognized opcode values.
-  NoOp = 0,
+  NoOp                 = 0,
   /// A sentinel instruction that ends the execution of a parse block, similar
   /// to a x86 `ret` instruction.
   ///
   /// This is a single byte instruction.
-  Pass,
+  Pass                 = 1,
   /// Ends the execution of the current parse block, and causes the parser to
   /// enter exception mode, popping parse blocks of the goto stack until it
   /// encounters an exception handling parse block that resets the execution
@@ -24,12 +28,12 @@ pub enum Opcode {
   /// then the parser emits an `Error` event and halts further parsing.
   ///
   /// This is a single byte instruction.
-  Fail,
+  Fail                 = 2,
   /// Increments the `scan_ptr` by the value of `sym_len` and then sets
   /// `sym_len` to 0.
   ///
   /// This is a single byte instruction.
-  ShiftChar,
+  ShiftChar            = 3,
   /// Shifts the current token value, moving  the `anchor_ptr`, `base_ptr`,
   /// `scan_ptr`, and `head_ptr` to the position of `head_ptr + tok_len`.
   /// Also set `tok_id` to 0.
@@ -38,7 +42,7 @@ pub enum Opcode {
   /// it is resumed through a call to `next`.
   ///
   /// This is a single byte instruction.
-  ShiftToken,
+  ShiftToken           = 4,
   /// Same as `ShiftToken`, but assigns `sym_len` to `tok_len` before
   /// executing the `ShiftToken` instructions.
   ///
@@ -46,50 +50,50 @@ pub enum Opcode {
   /// it is resumed through a call to `next`.
   ///
   /// This is a single byte instruction.
-  ShiftTokenScanless,
+  ShiftTokenScanless   = 5,
   /// Assigns the value `head_ptr + tok_len` to `head_ptr` and `scan_ptr`. Also
   /// sets the values of `tok_len` and `tok_id` to 0.
   ///
   /// This is a single byte instruction.
-  PeekToken,
+  PeekToken            = 6,
   /// Same as `PeekToken`, but assigns `sym_len` to `tok_len` before
   /// executing the `PeekToken` instructions.
   ///
   /// This is a single byte instruction.
-  PeekTokenScanless,
+  PeekTokenScanless    = 7,
   /// Assigns `head_ptr + tok_len` to `head_ptr`, `scan_ptr`, and `base_ptr`.
   /// Then jumps to the first instruction of the current parse block.
   ///
   /// This is a single byte instruction.
-  SkipToken,
+  SkipToken            = 8,
   /// Same as `SkipToken`, but assigns `sym_len` to `tok_len` before
   /// executing the `SkipToken` instruction.
   ///
   /// This is a single byte instruction.
-  SkipTokenScanless,
+  SkipTokenScanless    = 9,
   /// Assigns `head_ptr + tok_len` to `head_ptr` and `scan_ptr`. Then jumps to
   /// the first instruction of the current arse block.
   ///
   /// This is a single byte instruction.
-  PeekSkipToken,
+  PeekSkipToken        = 10,
   /// Same as `PeekSkipToken`, but assigns `sym_len` to `tok_len` before
   /// executing the `PeekSkipToken` instructions.
   ///
   /// This is a single byte instruction.
-  PeekSkipTokenScanless,
+  PeekSkipTokenScanless = 11,
   /// Assigns the value of `base_ptr` to `scan_ptr` and `head_ptr`. Also sets
   /// `tok_len`, `sym_len`, and `tok_id` to `0`.
   ///
   /// This is a single byte instruction.
-  PeekReset,
+  PeekReset            = 12,
   /// Accepts the parsed input as a valid string of the grammar.
   ///
   /// This is a single byte instruction
-  Accept,
+  Accept               = 13,
   /// Removes the top goto from the goto stack
   ///
   /// This is a single byte instruction.
-  PopGoto,
+  PopGoto              = 14,
   /// Pushes the address of a parse block onto the goto stack.
   ///
   /// # Operands
@@ -98,7 +102,7 @@ pub enum Opcode {
   /// - u32: Parse Block Address -The address of the parse block to jump to.
   ///
   /// This is a 6 byte instruction.
-  PushGoto,
+  PushGoto             = 15,
   /// Pushes the address of an exception handler block onto the goto stack.
   ///
   /// # Operands
@@ -107,7 +111,7 @@ pub enum Opcode {
   /// - u32: Parse Block Address -The address of the parse block to jump to.
   ///
   /// This is a 6 byte instruction.
-  PushExceptionHandler,
+  PushExceptionHandler = 16,
   /// Jumps to the location specified.
   ///
   /// # Operands
@@ -116,7 +120,7 @@ pub enum Opcode {
   /// - u32: Parse Block Address -The address of the parse block to jump to.
   ///
   /// This is a 6 byte instruction.
-  Goto,
+  Goto                 = 17,
   /// Assigns a token_id value to `tok_id` and assigns `scan_ptr - head_ptr` to
   /// `tok_len`.
   ///
@@ -124,7 +128,7 @@ pub enum Opcode {
   /// - u32: TokenID
   ///
   /// This is a 5 byte instruction.
-  AssignToken,
+  AssignToken          = 18,
 
   /// Assigns a nonterminal_id to `nterm`, a rule_id to `rule_id` and the
   /// number of values to pop of the stack to `sym_len`.
@@ -134,7 +138,7 @@ pub enum Opcode {
 
   ///
   /// This is an 11 byte instruction.
-  Reduce,
+  Reduce               = 19,
   /// This is a complex instruction that branches to sub parse blocks based on
   /// an input value, which may be:
 
@@ -170,7 +174,7 @@ pub enum Opcode {
   ///
   /// The table data starts at offset 18. Table data starts at byte offset (18
   /// + <Lookup Table Size> * 4)
-  VectorBranch,
+  VectorBranch         = 20,
   /// Same as `VectorBranch` but use a hash table to match input values to sub
   /// parse block jump locations.
   ///
@@ -198,7 +202,7 @@ pub enum Opcode {
   ///
   /// The table data starts at offset 18. Table data starts at byte offset (18
   /// + `Lookup Table Size` * 4)
-  HashBranch,
+  HashBranch           = 21,
   /// Matches a sequence of bytes with the input and sets the tok_len to the
   /// number of bytes matched.
   /// # Operands
@@ -208,7 +212,7 @@ pub enum Opcode {
   /// - 3 - var_len[[u8]]: Bytes to match against the input
   ///
   /// This is variable length instruction. Its base length is 7 bytes
-  ByteSequence,
+  ByteSequence         = 22,
   /// Directs the parse runner to split parsing into 2 or more paths.
   ///
   /// # Operands
@@ -216,11 +220,11 @@ pub enum Opcode {
   /// - 2 - var_len[[u32]]: A list of parsing states
   ///
   /// This is variable length instruction. Its base length is 3 bytes
-  Fork,
+  Fork                 = 23,
   /// Reads one codepoint from the input, priming line_counter and tok_len
   /// as needed. Fails if the value of the codepoint is 0
   /// This is a 1 byte instruction.
-  ReadCodepoint,
+  ReadCodepoint        = 24,
 }
 
 impl From<u8> for Opcode {
@@ -547,6 +551,7 @@ pub const END_OF_INPUT_TOKEN_ID: u32 = 0x1;
 /// Internal input types used in IR [parser::Matches] statements.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy, Hash)]
 #[repr(u32)]
+#[cfg_attr(feature = "wasm-lab", wasm_bindgen)]
 pub enum MatchInputType {
   /// Matches the last reduced nonterminal id
   NonTerminal       = 0,

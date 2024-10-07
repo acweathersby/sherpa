@@ -136,7 +136,8 @@ export class GrammarDB extends PipelineNode<{
   "loading": void
   "loaded": void
   "failed": RadlrError[],
-  "bytecode_ready": string
+  "bytecode_db": radlr.JSBytecodeParserDB,
+  "bytecode_ready": string,
   "grammar-classification": string
 }> {
   static worker_path: string = ""
@@ -176,6 +177,10 @@ export class GrammarDB extends PipelineNode<{
 
         if (this.haveListeners("bytecode_ready")) {
           this.emit("bytecode_ready", radlr.create_bytecode_disassembly(this.parser_db));
+        }
+
+        if (this.haveListeners("bytecode_db")) {
+          this.emit("bytecode_db", this.parser_db);
         }
 
         this.emit("loaded", void 0);

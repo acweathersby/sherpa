@@ -8,8 +8,7 @@ import { LocalStoreKeys, getLocalValue, dataStorageWorkflowsEnabled, setLocalVal
 import { setupConfig } from "./config-panel";
 import { Debounce } from "./debounce";
 import { CSTView } from "./cst";
-
-
+import { ParserView } from "./parser_info";
 
 
 export async function init(compiler_worker_path: string) {
@@ -17,22 +16,28 @@ export async function init(compiler_worker_path: string) {
 
   let nb = new NB(2);
 
-  let grammar_input_field = nb.addField(new NBEditorField("Grammar"))
-  grammar_input_field.setContentVisible(true);
+  let grammar_input_field = nb.addField(new NBEditorField("Grammar"), 0)
+  grammar_input_field.set_content_visible(true);
   grammar_input_field.setText("");
+  grammar_input_field.setIcon(`<i class="fa-solid fa-chart-gantt"></i>`);
+  grammar_input_field.set_fullscreen(true);
 
-  let bytecode_output = nb.addField(new NBEditorField("Bytecode Output"), 1);
-  bytecode_output.setContentVisible(false);
+  let parser_info_field = nb.addField(new NBContentField("Parser Info"), 1);
+  parser_info_field.set_content_visible(false);
+  parser_info_field.setIcon(`<i class="fa-solid fa-circle-info"></i>`);
+  let parser_info = new ParserView(parser_info_field);
 
   pipeline.GrammarDB.worker_path = compiler_worker_path;
 
-  let parser_input_field = nb.addField(new NBEditorField("Parser Input"), 1);
-  parser_input_field.setContentVisible(true)
+  let parser_input_field = nb.addField(new NBEditorField("Parser Input"), -1);
+  parser_input_field.set_content_visible(true)
+  parser_input_field.setIcon(`<i class="fa-solid fa-quote-left"></i>`);
 
 
-  let ast = nb.addField(new NBContentField("AST Nodes"), 1);
+  let ast_field = nb.addField(new NBContentField("AST Nodes"), -1);
+  ast_field.setIcon(`<i class="fa-solid fa-share-nodes"></i>`);
   {
-    let parent = ast.body;
+    let parent = ast_field.body;
 
     let canvas = document.createElement("canvas");
     canvas.classList.add("field-canvas");
@@ -41,12 +46,12 @@ export async function init(compiler_worker_path: string) {
     parent.appendChild(canvas);
   }
 
-  let cst = nb.addField(new NBContentField("CST Nodes"), 1);
-  let cst_view = new CSTView(cst)
+  let cst_field = nb.addField(new NBContentField("CST Nodes"), -1);
+  cst_field.setIcon(`<i class="fa-solid fa-sitemap"></i>`);
+  let cst_view = new CSTView(cst_field)
 
-  let formatting_rules = new NBEditorField("Formatting Rules");
-  let highlighting_rules = new NBEditorField("Highlighting Rules");
-
+  let formatting_rules_field = new NBEditorField("Formatting Rules");
+  let highlighting_rules_field = new NBEditorField("Highlighting Rules");
 
   const controls = new Controls();
 
@@ -97,10 +102,7 @@ export async function init(compiler_worker_path: string) {
   let grammar_classification = <HTMLDivElement>document.getElementById("controls")?.querySelector(".classification");
 
   grammar.addListener("loading", _ => {
-    bytecode_output.setText("");
-    bytecode_output.setContentVisible(false);
-    bytecode_output.setLoading(true);
-
+    parser_info.init();
     error_reporter.innerText = "";
     grammar_classification.innerHTML = "";
   })
@@ -108,27 +110,25 @@ export async function init(compiler_worker_path: string) {
   grammar.addListener("failed", errors => {
     for (const error of errors) {
       if (error.origin == radlr.ErrorOrigin.Grammar) {
-        alert(error.msg);
+        //alert(error.msg);
         error_reporter.innerText = (`Unhandled Error: \n${radlr.ErrorOrigin[error.origin]}\n${error.msg}\n${error.line}:${error.col}`);
         grammar_input_field.addHighlight(error.start_offset, error.end_offset, "red");
         grammar_input_field.addMsg(error.start_offset, error.end_offset, error.msg);
       } else {
-        alert(error.msg);
+        //alert(error.msg);
       }
 
     }
-    bytecode_output.setContentVisible(false);
-    bytecode_output.setLoading(false);
+    parser_info_field.set_content_visible(false);
+    parser_info_field.set_loading(false);
     controls.setActive(false);
   })
 
   grammar.addListener("bytecode_ready", async bytecode => {
-    await pipeline.sleep(100);
-    bytecode_output.setText(bytecode);
-    await pipeline.sleep(100);
-    bytecode_output.setLoading(false);
-    await pipeline.sleep(500);
-    bytecode_output.setContentVisible(true);
+  })
+
+  grammar.addListener("bytecode_db", async db => {
+    parser_info.handle_new_parser(db);
   })
 
   grammar.addListener("grammar-classification", classification => {
@@ -160,6 +160,10 @@ export async function init(compiler_worker_path: string) {
   parser.addListener("error", action => {
     console.log("error")
   });
+
+  parser.addListener("execute_state", debug_info => {
+    parser_info.set_active_state(debug_info.instruction);
+  })
 
   parser.addListener("execute_instruction", debug_info => {
     let ctx = debug_info.ctx;

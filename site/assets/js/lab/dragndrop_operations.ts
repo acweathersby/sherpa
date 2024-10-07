@@ -1,5 +1,5 @@
 import { sleep } from "./pipeline";
-import { NBField as NBCell, NBBlankField, NB, NBColumn, MIN_EXPANDED_FIELD_HEIGHT, NBField } from "./notebook";
+import { NBField as NBCell, NBBlankField, NB, NBColumn, MIN_EXPANDED_FIELD_HEIGHT, NBField, MININBColumn } from "./notebook";
 
 class DragOperation {
   pointer_timeout = 0;
@@ -170,15 +170,13 @@ export class MoveFieldDragOperation extends DragOperation {
   constructor(e: PointerEvent, drag_field: NBCell) {
     super(e);
     if (drag_field.nb_host) {
+
       this.nb = drag_field.nb_host;
       this.drag_field = drag_field;
       this.drag_start_col = this.drag_field.col;
       this.drag_start_row = this.drag_field.v_row;
       this.drag_target_col = this.drag_field.col;
       this.drag_target_row = this.drag_field.v_row;
-
-
-
 
       this.initialize(e);
     } else {
@@ -188,6 +186,14 @@ export class MoveFieldDragOperation extends DragOperation {
 
   protected criteriaMet(): boolean {
     let col_index = -1;
+
+    let row_index = this.nb.mini_col.find(this.drag_field);
+
+    if (row_index >= 0) {
+      return true;
+    }
+
+
     for (const col of this.nb.columns) {
       col_index++;
       let row_index = col.find(this.drag_field);
@@ -206,8 +212,14 @@ export class MoveFieldDragOperation extends DragOperation {
     this.offset_x = ele_x;
     this.offset_y = ele_y;
 
-    this.start_height = this.nb.columns[this.drag_field.col].cell_count == 1 ? height / 2 : height;
-    this.start_width = width;
+    if (this.drag_start_col < 0) {
+      this.start_height = 300;
+      this.start_width = 300;
+    } else {
+      this.start_height = this.nb.columns[this.drag_field.col].cell_count == 1 ? height / 2 : height;
+      this.start_width = width;
+    }
+
   }
 
   protected updateDragPos(field: NBCell) {
@@ -222,22 +234,51 @@ export class MoveFieldDragOperation extends DragOperation {
     return { x, y };
   }
 
+
+  protected getTargetColumn(): NBColumn {
+    return this.drag_target_col < 0 ? this.nb.mini_col : this.nb.columns[this.drag_target_col];
+  }
+
+
+  protected end() {
+    this.drag_field.remove_class("mini-candidate");
+    this.drag_field.remove_class("dragging");
+    this.drag_field.ele.style.top = ``;
+    this.drag_field.ele.style.left = ``;
+    this.drag_field.ele.style.width = ``;
+    this.drag_field.ele.style.height = ``;
+
+    this.nb.addField(this.drag_field, this.drag_target_col, this.drag_target_row);
+
+    if (this.placeholder) {
+      this.nb.removeField(this.placeholder);
+      this.placeholder = null;
+    }
+
+
+    this.getTargetColumn().distributeHeight([{ index: this.drag_field.v_row, height: this.start_height }]);
+  }
+
   protected commit() {
 
     this.nb.calculateHeights();
 
-    this.drag_field.ele.classList.add("dragging");
+    this.drag_field.add_class("dragging");
     this.updateDragPos(this.drag_field);
     this.drag_field.ele.style.width = this.start_width + "px";
     this.drag_field.ele.style.height = this.start_height + "px";
 
     // Remove the field from the host row and insert a placeholder of the correct dimensions.
     // the active field should now be attached the document body. 
-    const col = this.nb.columns[this.drag_start_col];
+    const col = this.getTargetColumn();
 
     col.remove(this.drag_field);
 
-    this.placeholder = new NBBlankField(this.start_width, this.start_height, true);
+    if (col instanceof MININBColumn) {
+      this.placeholder = new NBBlankField(40, 40, true);
+    } else {
+      this.placeholder = new NBBlankField(this.start_width, this.start_height, true);
+    }
     col.add(this.placeholder, this.drag_start_row);
 
     document.body.appendChild(this.drag_field.ele);
@@ -246,10 +287,42 @@ export class MoveFieldDragOperation extends DragOperation {
   protected update() {
     this.updateDragPos(this.drag_field);
 
-    for (const col of this.nb.columns) {
-      const insert_data = col.pointInside(this.curr_pos_x, this.curr_pos_y, 100);
+    // Check for position in mini column 
 
-      if (insert_data) {
+    let insert_data;
+
+    if (!this.swap_mode) {
+
+      if (insert_data = this.nb.mini_col.pointInside(this.curr_pos_x, this.curr_pos_y, 100)) {
+        const different_col = this.drag_target_col != -1;
+        const different_pos = (this.drag_target_row != insert_data.insert_row);
+
+        if (different_col || different_pos) {
+          if (this.placeholder) {
+            this.placeholder.delete();
+            this.placeholder = null;
+            let target_col = this.getTargetColumn();
+            target_col.distributeHeight();
+
+            if (target_col.cell_count == 0) {
+              this.nb.removeCol(this.drag_target_col);
+            }
+          }
+
+          this.drag_target_row = insert_data.insert_row;
+          this.drag_field.add_class("mini-candidate");
+          this.placeholder = new NBBlankField(40, 40);
+          this.nb.mini_col.add(this.placeholder, this.drag_target_row);
+          this.drag_target_col = -1
+        }
+      }
+    }
+
+    let edge_size = (this.nb.column_area_width() / this.nb.columns.length) * 0.25;
+
+    for (const col of this.nb.columns) {
+
+      if (insert_data = col.pointInside(this.curr_pos_x, this.curr_pos_y, edge_size)) {
         const swap_mode = this.swap_mode
         const different_pos = (this.drag_target_col != col.index || this.drag_target_row != insert_data.insert_row);
         const insert_column = (insert_data.alignment > 0 && col.cell_count > 0);
@@ -286,23 +359,26 @@ export class MoveFieldDragOperation extends DragOperation {
           }
         } else {
 
-
           if (different_pos || (insert_column && !max_columns)) {
 
             let exiting_empty = false;
             let new_col = false;
 
             if (this.placeholder) {
+              let target_col = this.drag_target_col >= 0 ? this.nb.columns[this.drag_target_col] : this.nb.mini_col;
+
               this.placeholder.delete();
               this.placeholder = null;
-              let target_col = this.nb.columns[this.drag_target_col];
               target_col.distributeHeight();
 
               if (target_col.cell_count == 0) {
                 this.nb.removeCol(this.drag_target_col);
                 exiting_empty = true;
               }
+
             }
+
+            this.drag_field.remove_class("mini-candidate");
 
             if (insert_data.alignment > 0 && !exiting_empty && !max_columns) {
               let insertion_index = insert_data.alignment == 1 ? col.index : col.index + 1;
@@ -318,8 +394,7 @@ export class MoveFieldDragOperation extends DragOperation {
             {
               let col = this.nb.columns[this.drag_target_col];
               this.placeholder = new NBBlankField(this.start_width, this.start_height);
-              const height = new_col  ? col.max_free() : Math.min(this.start_height, col.max_free());
-              console.log({height})
+              const height = new_col ? col.max_free() : Math.min(this.start_height, col.max_free());
               col.add(this.placeholder, this.drag_target_row);
               col.distributeHeight([{ index: this.placeholder.r_row, height }]);
             }
@@ -327,23 +402,6 @@ export class MoveFieldDragOperation extends DragOperation {
         }
       }
     }
-  }
-
-  protected end() {
-    this.drag_field.ele.classList.remove("dragging");
-    this.drag_field.ele.style.top = ``;
-    this.drag_field.ele.style.left = ``;
-    this.drag_field.ele.style.width = ``;
-    this.drag_field.ele.style.height = ``;
-
-    this.nb.addField(this.drag_field, this.drag_target_col, this.drag_target_row);
-
-    if (this.placeholder) {
-      this.nb.removeField(this.placeholder);
-      this.placeholder = null;
-    }
-
-    this.nb.columns[this.drag_target_col].distributeHeight([{ index: this.drag_field.v_row, height: this.start_height }]);
   }
 }
 
