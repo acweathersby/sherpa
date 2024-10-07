@@ -248,20 +248,20 @@ export class MoveFieldDragOperation extends DragOperation {
     this.drag_field.ele.style.width = ``;
     this.drag_field.ele.style.height = ``;
 
-    this.nb.addField(this.drag_field, this.drag_target_col, this.drag_target_row);
+    this.nb.add_field(this.drag_field, this.drag_target_col, this.drag_target_row);
 
     if (this.placeholder) {
-      this.nb.removeField(this.placeholder);
+      this.nb.remove_field(this.placeholder);
       this.placeholder = null;
     }
 
 
-    this.getTargetColumn().distributeHeight([{ index: this.drag_field.v_row, height: this.start_height }]);
+    this.getTargetColumn().distribute_height([{ index: this.drag_field.v_row, height: this.start_height }]);
   }
 
   protected commit() {
 
-    this.nb.calculateHeights();
+    this.nb.calculate_heights();
 
     this.drag_field.add_class("dragging");
     this.updateDragPos(this.drag_field);
@@ -293,7 +293,7 @@ export class MoveFieldDragOperation extends DragOperation {
 
     if (!this.swap_mode) {
 
-      if (insert_data = this.nb.mini_col.pointInside(this.curr_pos_x, this.curr_pos_y, 100)) {
+      if (insert_data = this.nb.mini_col.is_point_inside(this.curr_pos_x, this.curr_pos_y, 100)) {
         const different_col = this.drag_target_col != -1;
         const different_pos = (this.drag_target_row != insert_data.insert_row);
 
@@ -302,10 +302,10 @@ export class MoveFieldDragOperation extends DragOperation {
             this.placeholder.delete();
             this.placeholder = null;
             let target_col = this.getTargetColumn();
-            target_col.distributeHeight();
+            target_col.distribute_height();
 
             if (target_col.cell_count == 0) {
-              this.nb.removeCol(this.drag_target_col);
+              this.nb.remove_column(this.drag_target_col);
             }
           }
 
@@ -322,7 +322,7 @@ export class MoveFieldDragOperation extends DragOperation {
 
     for (const col of this.nb.columns) {
 
-      if (insert_data = col.pointInside(this.curr_pos_x, this.curr_pos_y, edge_size)) {
+      if (insert_data = col.is_point_inside(this.curr_pos_x, this.curr_pos_y, edge_size)) {
         const swap_mode = this.swap_mode
         const different_pos = (this.drag_target_col != col.index || this.drag_target_row != insert_data.insert_row);
         const insert_column = (insert_data.alignment > 0 && col.cell_count > 0);
@@ -369,10 +369,10 @@ export class MoveFieldDragOperation extends DragOperation {
 
               this.placeholder.delete();
               this.placeholder = null;
-              target_col.distributeHeight();
+              target_col.distribute_height();
 
               if (target_col.cell_count == 0) {
-                this.nb.removeCol(this.drag_target_col);
+                this.nb.remove_column(this.drag_target_col);
                 exiting_empty = true;
               }
 
@@ -382,7 +382,7 @@ export class MoveFieldDragOperation extends DragOperation {
 
             if (insert_data.alignment > 0 && !exiting_empty && !max_columns) {
               let insertion_index = insert_data.alignment == 1 ? col.index : col.index + 1;
-              this.nb.insertCol(insertion_index);
+              this.nb.insert_column(insertion_index);
               this.drag_target_col = insertion_index;
               this.drag_target_row = 0;
               new_col = true;
@@ -396,7 +396,7 @@ export class MoveFieldDragOperation extends DragOperation {
               this.placeholder = new NBBlankField(this.start_width, this.start_height);
               const height = new_col ? col.max_free() : Math.min(this.start_height, col.max_free());
               col.add(this.placeholder, this.drag_target_row);
-              col.distributeHeight([{ index: this.placeholder.r_row, height }]);
+              col.distribute_height([{ index: this.placeholder.r_row, height }]);
             }
           }
         }
@@ -529,7 +529,7 @@ export class ResizeFieldOperation extends DragOperation {
   protected end(): void {
     for (const set of this.sets) {
       set.col.latchHeights()
-      set.col.distributeHeight();
+      set.col.distribute_height();
       set.top.ele.style.transition = ""
       set.bottom.ele.style.transition = ""
     }

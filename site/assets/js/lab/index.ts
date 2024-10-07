@@ -16,25 +16,25 @@ export async function init(compiler_worker_path: string) {
 
   let nb = new NB(2);
 
-  let grammar_input_field = nb.addField(new NBEditorField("Grammar"), 0)
+  let grammar_input_field = nb.add_field(new NBEditorField("Grammar"), 0)
   grammar_input_field.set_content_visible(true);
-  grammar_input_field.setText("");
-  grammar_input_field.setIcon(`<i class="fa-solid fa-chart-gantt"></i>`);
+  grammar_input_field.set_text("");
+  grammar_input_field.set_icon(`<i class="fa-solid fa-chart-gantt"></i>`);
 
-  let parser_info_field = nb.addField(new NBContentField("Parser Info"), 1);
+  let parser_info_field = nb.add_field(new NBContentField("Parser Info"), 1);
   parser_info_field.set_content_visible(false);
-  parser_info_field.setIcon(`<i class="fa-solid fa-circle-info"></i>`);
+  parser_info_field.set_icon(`<i class="fa-solid fa-circle-info"></i>`);
   let parser_info = new ParserView(parser_info_field);
 
   pipeline.GrammarDB.worker_path = compiler_worker_path;
 
-  let parser_input_field = nb.addField(new NBEditorField("Parser Input"), -1);
+  let parser_input_field = nb.add_field(new NBEditorField("Parser Input"), -1);
   parser_input_field.set_content_visible(true)
-  parser_input_field.setIcon(`<i class="fa-solid fa-quote-left"></i>`);
+  parser_input_field.set_icon(`<i class="fa-solid fa-quote-left"></i>`);
 
 
-  let ast_field = nb.addField(new NBContentField("AST Nodes"), -1);
-  ast_field.setIcon(`<i class="fa-solid fa-share-nodes"></i>`);
+  let ast_field = nb.add_field(new NBContentField("AST Nodes"), -1);
+  ast_field.set_icon(`<i class="fa-solid fa-share-nodes"></i>`);
   {
     let parent = ast_field.body;
 
@@ -45,8 +45,8 @@ export async function init(compiler_worker_path: string) {
     parent.appendChild(canvas);
   }
 
-  let cst_field = nb.addField(new NBContentField("CST Nodes"), -1);
-  cst_field.setIcon(`<i class="fa-solid fa-sitemap"></i>`);
+  let cst_field = nb.add_field(new NBContentField("CST Nodes"), -1);
+  cst_field.set_icon(`<i class="fa-solid fa-sitemap"></i>`);
   let cst_view = new CSTView(cst_field)
 
   let formatting_rules_field = new NBEditorField("Formatting Rules");
@@ -62,22 +62,22 @@ export async function init(compiler_worker_path: string) {
 
 
   let grammar_input_debounce = new Debounce(() => {
-    let text = grammar_input_field.getText();
+    let text = grammar_input_field.get_text();
     if (text) {
       setLocalValue(LocalStoreKeys.GrammarInput, text);
       grammar_input.update(text)
-      grammar_input_field.removeHighlight();
-      grammar_input_field.removeMsgs();
+      grammar_input_field.remove_highlight();
+      grammar_input_field.remove_messages();
     }
   });
 
   let parser_input_debounce = new Debounce(() => {
-    let text = parser_input_field.getText();
+    let text = parser_input_field.get_text();
     if (text) {
       setLocalValue(LocalStoreKeys.ParserInput, text);
       parser_input.update(text)
-      parser_input_field.removeHighlight();
-      parser_input_field.removeMsgs();
+      parser_input_field.remove_highlight();
+      parser_input_field.remove_messages();
     }
   });
 
@@ -90,7 +90,7 @@ export async function init(compiler_worker_path: string) {
   })
 
   parser_input_field.addListener("text_changed", parser_input => {
-    let text = parser_input.getText();
+    let text = parser_input.get_text();
     if (text) {
       setLocalValue(LocalStoreKeys.ParserInput, text);
       //parser.restart(text);
@@ -111,8 +111,8 @@ export async function init(compiler_worker_path: string) {
       if (error.origin == radlr.ErrorOrigin.Grammar) {
         //alert(error.msg);
         error_reporter.innerText = (`Unhandled Error: \n${radlr.ErrorOrigin[error.origin]}\n${error.msg}\n${error.line}:${error.col}`);
-        grammar_input_field.addHighlight(error.start_offset, error.end_offset, "red");
-        grammar_input_field.addMsg(error.start_offset, error.end_offset, error.msg);
+        grammar_input_field.add_highlight(error.start_offset, error.end_offset, "red");
+        grammar_input_field.add_message(error.start_offset, error.end_offset, error.msg);
       } else {
         //alert(error.msg);
       }
@@ -167,17 +167,17 @@ export async function init(compiler_worker_path: string) {
   parser.addListener("execute_instruction", debug_info => {
     let ctx = debug_info.ctx;
 
-    parser_input_field.removeCharacterClasses();
-    parser_input_field.addCharacterClass(ctx.input_ptr, ctx.input_ptr + 1, "dbg-input-pos");
-    parser_input_field.addCharacterClass(ctx.anchor_ptr, ctx.anchor_ptr + 1, "dbg-anchor-pos");
-    parser_input_field.addCharacterClass(ctx.begin_ptr, ctx.begin_ptr + 1, "dbg-begin-pos");
-    parser_input_field.addCharacterClass(ctx.end_ptr, ctx.end_ptr + 1, "dbg-end-pos");
+    parser_input_field.remove_character_classes();
+    parser_input_field.add_character_class(ctx.input_ptr, ctx.input_ptr + 1, "dbg-input-pos");
+    parser_input_field.add_character_class(ctx.anchor_ptr, ctx.anchor_ptr + 1, "dbg-anchor-pos");
+    parser_input_field.add_character_class(ctx.begin_ptr, ctx.begin_ptr + 1, "dbg-begin-pos");
+    parser_input_field.add_character_class(ctx.end_ptr, ctx.end_ptr + 1, "dbg-end-pos");
 
     if (debug_info.is_scanner) {
-      parser_input_field.addCharacterClass(ctx.sym_ptr, ctx.sym_ptr + 1, "dbg-sym-pos");
-      parser_input_field.addCharacterClass(ctx.sym_ptr, ctx.input_ptr, "dbg-sym");
+      parser_input_field.add_character_class(ctx.sym_ptr, ctx.sym_ptr + 1, "dbg-sym-pos");
+      parser_input_field.add_character_class(ctx.sym_ptr, ctx.input_ptr, "dbg-sym");
     } else if (ctx.sym_len > 0) {
-      parser_input_field.addCharacterClass(ctx.sym_ptr, ctx.sym_ptr + ctx.sym_len, "dbg-sym");
+      parser_input_field.add_character_class(ctx.sym_ptr, ctx.sym_ptr + ctx.sym_len, "dbg-sym");
     }
   });
 
@@ -194,7 +194,7 @@ export async function init(compiler_worker_path: string) {
   });
 
   controls.addListener("reset", () => {
-    parser_input_field.removeCharacterClasses();
+    parser_input_field.remove_character_classes();
     parser.reset();
   });
 
@@ -204,7 +204,7 @@ export async function init(compiler_worker_path: string) {
 
   await pipeline.sleep(10);
 
-  nb.calculateHeights();
+  nb.calculate_heights();
 
 
   await rad_init;
@@ -212,11 +212,11 @@ export async function init(compiler_worker_path: string) {
   let { grammar: example_grammar, input: example_input } = grammar_examples[Math.round(Math.random() * (grammar_examples.length - 1))];
 
   var text = getLocalValue(LocalStoreKeys.ParserInput) || example_input;
-  parser_input_field.setText(text);
+  parser_input_field.set_text(text);
 
 
   var text = getLocalValue(LocalStoreKeys.GrammarInput) || example_grammar;
-  grammar_input_field.setText(text);
+  grammar_input_field.set_text(text);
   grammar_input.update(text)
 
   setupConfig(config => {
