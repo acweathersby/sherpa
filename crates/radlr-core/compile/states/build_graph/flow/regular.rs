@@ -21,12 +21,15 @@ use crate::{
     build::handle_completed_groups,
     errors::{lr_disabled_error, peek_not_allowed_error},
     graph::StateType,
+    items::{get_follow_internal, FollowType},
+    stack_vec::StackVec,
   },
   parser::Shift,
   types::*,
   utils::{hash_group_btree_iter, hash_group_btreemap},
 };
 
+use radlr_rust_runtime::kernel;
 use ParserClassification as PC;
 
 fn create_out_of_scope_complete_state<'a, T: TransitionPairRefIter<'a> + Clone>(
@@ -122,22 +125,30 @@ pub(crate) fn handle_regular_incomplete_items(
             } else {
               let p = pred.clone();
               let kernel_item = kernel_item.clone();
+
+              let firsts = ItemSet::start_items(
+                kernel_item.nonterm_index_at_sym(pred.graph_type(), &db).expect("should be a nonterminal"),
+                &db,
+              );
+
+              let kernel_items = firsts.iter().map(|a| a.as_from_index(kernel_item.index));
+
               StagedNode::new(gb)
                 .parent(pred.clone())
                 .sym(prec_sym)
-                .ty(StateType::Shift)
+                .ty(StateType::KernelLLCall)
                 .to_classification(classification)
                 .pnc(
                   Box::new(move |s: &std::sync::Arc<GraphNode>, builder, _| {
                     vec![StagedNode::new(builder)
                       .parent(p)
                       .sym((kernel_item.sym_id(builder.db()), 0).into())
-                      .ty(StateType::ShiftFrom(s.id()))
+                      .ty(StateType::LLShiftFrom(s.id()))
                       .kernel_items([kernel_item.try_increment()].into_iter())]
                   }),
                   PostNodeConstructorData::None,
                 )
-                .kernel_items(items.into_iter())
+                .kernel_items(kernel_items)
                 .commit(gb)
             }
           } else {

@@ -261,9 +261,11 @@ pub enum StateType {
   InternalCall(DBNonTermKey),
   /// Calls made on kernel items
   KernelCall(DBNonTermKey),
+  /// Calls made on kernel items
+  KernelLLCall,
   /// A shift that pushes pushes a non-terminal shift onto the stack before
   /// jumping to a terminal shift shifts into a terminal state
-  ShiftFrom(StateId),
+  LLShiftFrom(StateId),
   /// Creates a leaf state that has a single `pop` instruction. This represents
   /// the completion of a non-terminal that had a left recursive rule.
   NonTermCompleteOOS,

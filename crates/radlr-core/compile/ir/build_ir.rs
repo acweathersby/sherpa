@@ -255,7 +255,7 @@ fn convert_state_to_ir<'graph: 'graph>(
       .successors
       .values()
       .filter_map(|goto_state| match goto_state.ty {
-        StateType::ShiftFrom(s) => Some((s, create_ir_state_name(None, goto_state).intern(s_store))),
+        StateType::LLShiftFrom(s) => Some((s, create_ir_state_name(None, goto_state).intern(s_store))),
         _ => None,
       })
       .collect::<OrderedMap<_, _>>();
@@ -378,7 +378,7 @@ fn add_tok_expr(state: &GraphNode, successors: &Vec<SharedGraphNode>, w: &mut Co
 
 fn classify_successors(successors: &Vec<SharedGraphNode>) -> Queue<((u32, MatchInputType), Vec<SharedGraphNode>)> {
   Queue::from_iter(
-    hash_group_btree_iter(successors.iter().cloned().filter(|i| !matches!(i.ty, StateType::ShiftFrom(_))), |_, s| {
+    hash_group_btree_iter(successors.iter().cloned().filter(|i| !matches!(i.ty, StateType::LLShiftFrom(_))), |_, s| {
       if matches!(s.ty, StateType::CSTNodeAccept(_)) {
         (0u32, MatchInputType::CSTNode)
       } else {
