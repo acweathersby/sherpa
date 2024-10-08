@@ -1,167 +1,168 @@
-import * as pipeline from "./pipeline";
-import * as radlr from "js/radlr/radlr_wasm.js";
+import { JSBytecodeParserDB, get_nonterminal_name_from_id } from "js/radlr/radlr_wasm";
 import { NBContentField, NBEditorField } from "./notebook";
+import { Parser } from "./parser";
+import { GrammarDBNode, InputNode } from "./pipeline";
 
-export class CSTView {
-  field: NBContentField;
-  cst_nodes: CSTNode[] = [];
+import Graph from "graphology";
+import Sigma from "sigma";
+import { SigmaNodeEventPayload } from "sigma/dist/declarations/src/types";
 
-  constructor(field: NBContentField) {
-    if (field instanceof NBEditorField) {
-      throw "CSTView cannot bind to a NBEditorField";
+type Hooks = { on_node_enter: ((arg: SigmaNodeEventPayload) => void) | null };
+
+export function init(
+  cst_field: NBContentField,
+  parser_input_field: NBEditorField,
+  grammar_pipeline: GrammarDBNode,
+) {
+
+  const graph = new Graph();
+  const hooks: Hooks = { on_node_enter: null }
+
+  let ele = document.createElement("div");
+  ele.classList.add("ast-graph");
+  cst_field.body.appendChild(ele);
+
+  const renderer = new Sigma(
+    graph,
+    ele,
+    {
+      allowInvalidContainer: true,
+      autoRescale: true,
+      autoCenter: true,
+      minEdgeThickness: 1,
     }
-    this.field = field;
+  );
 
-    this.field.body.classList.add("debugger-cst-output");
-  }
-
-  reset() {
-    let ele = this.field.body;
-    if (ele) {
-      ele.innerHTML = "";
+  renderer.on("enterNode", node => {
+    if (hooks.on_node_enter) {
+      hooks.on_node_enter(node);
     }
+  })
 
-    this.cst_nodes.length = 0;
-  }
+  let input_string: string = "";
+  let db: null | JSBytecodeParserDB = null;
 
-  handle_reduce(reduce: pipeline.ReduceStruct) {
-    let { non_terminal_id, rule_id, symbols, db } = reduce;
-    var [_, ...expr] = radlr.get_rule_expression_string(rule_id, db).split(">");
+  parser_input_field.addListener("text_changed", field => {
+    input_string = field.get_text();
 
-    let o_expr = "> " + expr.join("");
+    if (!cst_field.is_mini)
+      run_ast_render(parser_input_field, input_string, db, renderer, hooks);
+  })
 
-    let [start, end] = radlr.get_rule_location(rule_id, db);
+  grammar_pipeline.addListener("loading", _ => {
+    db = null;
+    cst_field.set_loading(true)
+  });
 
+  grammar_pipeline.addListener("failed", _ => {
+    cst_field.set_loading(false);
+  })
 
-    let name = radlr.get_nonterminal_name_from_id(non_terminal_id, db);
+  grammar_pipeline.addListener("bytecode_db", new_db => {
+    db = new_db;
+    cst_field.set_loading(false);
 
-
-    let children = this.cst_nodes.slice(-symbols);
-
-    let off_start = children[0].offset;
-    let length = children[children.length - 1].offset + children[children.length - 1].length - off_start;
-
-    let node = new CSTNode(name, o_expr, false, off_start, length, start, end - start);
-
-    node.children = this.cst_nodes.slice(-symbols);
-
-
-    this.cst_nodes.length -= symbols;
-    this.cst_nodes.push(node);
-
-    this.render_cst();
-  }
-
-
-  handle_shift(shift: pipeline.ShiftStruct) {
-
-    let { token, db, byte_offset, byte_len } = shift;
-
-    this.cst_nodes.push(new CSTNode(token, "", true, byte_offset, byte_len));
-
-    this.render_cst();
-  }
-
-  render_cst() {
-    let ele = this.field.body;
-    if (ele) {
-      ele.innerHTML = "";
-      for (const node of this.cst_nodes) {
-        ele.appendChild(node.toDOM());
-      }
-    }
-  }
+    if (!cst_field.is_mini)
+      run_ast_render(parser_input_field, input_string, db, renderer, hooks);
+  });
 }
 
+function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecodeParserDB | null, renderer: Sigma, hooks: Hooks) {
+
+  if (!input || !db) return;
+  const graph = new Graph();
+
+  let parser = new Parser(db, input);
+
+  type Node = { id: number, nodes: Node[], width: number, from: number, to: number };
+
+  let symbols: Node[] = [];
+  let node_count = 0;
+
+  let id = 0;
+
+  parser.on_reduce = reduce_data => {
+    if (reduce_data.symbols == 1) return;
+
+    let offset = symbols.length - reduce_data.symbols;
+    let r_syms = symbols.splice(offset, reduce_data.symbols);
+
+    let name = get_nonterminal_name_from_id(reduce_data.non_terminal_id, db);
+
+    let from = r_syms[0].from;
+    let to = r_syms[r_syms.length - 1].to;
+
+    graph.addNode(id, { label: name, x: 0, y: 0, size: 8, color: "blue" });
+    let width = 0;
+    for (const sym of r_syms) {
+      graph.addEdge(id, sym.id, { size: 1, color: "purple" });
+      width += sym.width;
+    }
+
+    symbols.push({ id, nodes: r_syms, width, from, to });
+    id++;
+  };
+
+  parser.on_shift = shift_data => {
+    graph.addNode(id, { label: `"${shift_data.token}"`, x: 0, y: 0, size: 8, color: "green" });
+    symbols.push({ id, nodes: [], width: 1, from: shift_data.byte_offset, to: shift_data.byte_offset + shift_data.byte_len });
+    id++;
+  };
 
 
-export class CSTNode {
-  public children: CSTNode[];
-  public name: string;
-  public expression: string;
-  public terminal: boolean;
-  offset: number;
-  length: number;
-  g_offset: number;
-  g_length: number;
+  parser.init("default", input);
+  parser.play();
 
-  constructor(name: string, expression: string, terminal: boolean, offset: number, length: number, g_offset: number = 0, g_length: number = 0) {
-    this.children = [];
-    this.name = name;
-    this.terminal = terminal;
-    this.expression = expression;
-    this.offset = offset;
-    this.length = length;
+  parser.on_reduce = null;
+  parser.on_shift = null;
 
-    this.g_offset = g_offset;
-    this.g_length = g_length;
-  }
+  parser.destroy();
 
+  let positions = new Array(id);
 
-  toDOM(): HTMLElement {
-    const ele = document.createElement("div");
-    ele.classList.add("cst-node");
-    ele.classList.add("close");
+  function map_positions(symbols: Node[], lvl: number = 0, positions: [number, number, number, number][], x: number = 0) {
+    let total_width = symbols.reduce((v, n) => v + n.width, 0)
+    let pos_x = x - (total_width / 2);
 
-    const name_ele = document.createElement("div");
-    name_ele.classList.add("cst-name");
-    name_ele.innerText = this.name;
-    ele.appendChild(name_ele);
+    for (const node of symbols) {
 
-    name_ele.addEventListener("mouseenter", () => {
-      /*      this.input.clearHighlightClass("term-test", "nterm-test");
-           this.input.addHighlight(this.offset, this.length, this.terminal ? "term-test" : "nterm-test");
-     
-           if (!this.terminal) {
-             this.grammar.clearHighlightClass("term-test", "nterm-test");
-             this.grammar.addHighlight(this.g_offset, this.g_length, this.terminal ? "term-test" : "nterm-test")
-           } */
-    });
+      let half_width = node.width / 2;
 
-    name_ele.addEventListener("mouseleave", () => {
-      /*       this.input.clearHighlightClass("term-test", "nterm-test");
-            if (this.grammar) {
-      
-              this.grammar.clearHighlightClass("term-test", "nterm-test");
-            } */
-    });
+      let x = pos_x + half_width;
 
+      if (node.nodes.length > 0) {
 
-    name_ele.addEventListener("click", e => {
-      if (ele.classList.contains("open")) {
-        ele.classList.add("close");
-        ele.classList.remove("open");
+        map_positions(node.nodes, lvl + 1, positions, x);
+
+        positions[node.id] = [x, lvl * -1, node.from, node.to];
+
       } else {
-        ele.classList.add("open");
-        ele.classList.remove("close");
-      }
-      e.stopImmediatePropagation();
-      e.stopPropagation();
-      e.preventDefault();
-      return false;
-    });
+        positions[node.id] = [x, lvl * -1, node.from, node.to];
 
-    if (this.terminal) {
-      ele.classList.add("terminal");
-    } else {
-      ele.classList.add("nonterminal");
-      if (this.expression) {
-        let e_ele = document.createElement("span");
-        e_ele.innerText = this.expression;
-        e_ele.classList.add("cst-rule-item-expression");
-        name_ele.appendChild(e_ele);
       }
+
+      pos_x += node.width
     }
-
-    if (this.children.length > 0) {
-      let children = document.createElement("div");
-      children.classList.add("cst-children");
-      for (const child of this.children) {
-        children.appendChild(child.toDOM());
-      }
-      ele.appendChild(children);
-    }
-
-    return ele;
   }
+
+  map_positions(symbols, 0, positions);
+  hooks.on_node_enter = node => {
+
+    let id = parseInt(node.node);
+    let [, , from, to] = positions[id];
+
+    input_field.remove_specific_character_classes("ast-node-target");
+    input_field.add_character_class(from, to, "ast-node-target");
+  }
+
+
+  graph.updateEachNodeAttributes((node_id, node) => {
+    let [x, y] = positions[<any>node_id];
+    node.x = x;
+    node.y = y;
+    return node
+  });
+
+
+  renderer.setGraph(graph);
 }
