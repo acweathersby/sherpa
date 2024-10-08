@@ -132,7 +132,7 @@ export class ConfigNode extends PipelineNode {
 }
 
 
-export class GrammarDB extends PipelineNode<{
+export class GrammarDBNode extends PipelineNode<{
   "loading": void
   "loaded": void
   "failed": RadlrError[],
@@ -145,7 +145,7 @@ export class GrammarDB extends PipelineNode<{
   parser_db: radlr.JSBytecodeParserDB | null = null;
   config: radlr.JSParserConfig | null = null;
   compile_nonce = 0
-  compiler = new WasmBytecodeCompiler(GrammarDB.worker_path);
+  compiler = new WasmBytecodeCompiler(GrammarDBNode.worker_path);
 
   DEDUP_ACTIVE = false
 
@@ -223,7 +223,7 @@ export class GrammarDB extends PipelineNode<{
 export type ReduceStruct = { rule_id: number, symbols: number, non_terminal_id: number, db: radlr.JSBytecodeParserDB };
 export type ShiftStruct = { token: string, byte_offset: number, byte_len: number, col: number, line: number, token_id: number, db: radlr.JSBytecodeParserDB }
 
-export class Parser extends PipelineNode<{
+export class ParserPlayerNode extends PipelineNode<{
   "error": {
     msg: string
   }
@@ -266,8 +266,6 @@ export class Parser extends PipelineNode<{
   allow_play: boolean = false;
   play_interval: number = -1;
   active_search_symbols: Set<string> = new Set();
-  last_step: any = null;
-  active_scanner_state_source = '';
   step_to_next_action: boolean = false;
   parser_off: [number, number] = [0, 0];
   scanner_off: [number, number] = [0, 0];
@@ -314,7 +312,7 @@ export class Parser extends PipelineNode<{
 
       if (this.parser) {
         this.emit("parser-created", { type: "destroyed" });
-        this.parser.init(entry_point);
+        this.parser.init(entry_point, true);
       }
     }
   }
@@ -331,7 +329,6 @@ export class Parser extends PipelineNode<{
     let step: radlr.JSDebugPacket | undefined = undefined;
 
     outer: while (true) {
-      step_to_next_action = false;
 
       if (step) {
         step.free();
@@ -347,7 +344,7 @@ export class Parser extends PipelineNode<{
         key_frame = true;
       }
 
-      this.emit("step", { data: step, input });
+      //this.emit("step", { data: step, input });
 
       switch (step.event) {
 
@@ -358,19 +355,7 @@ export class Parser extends PipelineNode<{
 
         case JSDebugEvent.ExecuteInstruction: {
 
-          if (radlr.is_instruction_transitory(step.instruction, db)) {
-            this.emit("execute_instruction", step);
-          } else {
-            step_to_next_action = true;
-          }
-
-          this.last_step = step;
-
-          if (!step.is_scanner) {
-            this.active_scanner_state_source = "";
-          }
-
-          if (step_to_next_action) { break; }
+          this.emit("execute_instruction", step);
 
           break outer;
         };
@@ -409,7 +394,9 @@ export class Parser extends PipelineNode<{
         } break
         case JSDebugEvent.Skip: break
         case JSDebugEvent.Undefined:
-        default: break outer;
+        default: {
+          break outer
+        };
       }
     }
 

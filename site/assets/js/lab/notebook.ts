@@ -473,7 +473,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
 
   constructor(name: string = "") {
     let ele = document.createElement("div");
-    ele.append((<HTMLTemplateElement>document.querySelector("#panel")).content.cloneNode(true));
+    ele.append((<HTMLTemplateElement>document.querySelector("#nb-field-template")).content.cloneNode(true));
 
     super(<any>ele.firstElementChild)
 
@@ -663,7 +663,7 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
         },
         update(value, tr) {
 
-          value = value.map(tr.changes)
+          //value = value.map(tr.changes,)
 
           for (let effect of tr.effects) {
             if (effect.is(highlight_effect)) {
@@ -710,7 +710,20 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
     });
   }
 
-  remove_highlight() {
+  add_highlights(...highlights: [number, number, string][]) {
+    let len = this.cm.state.doc.length;
+    this.cm.dispatch({
+      effects: highlight_effect.of(highlights.filter(([from, to, color]) => {
+        to = Math.min(len, to);
+        return (to - from) > 0
+      }).map(([from, to, color]) => {
+        to = Math.min(len, to);
+        return view.Decoration.mark({ attributes: { style: `color: ${color} !important` }, id: "highlight" }).range(from, to)
+      }))
+    });
+  }
+
+  remove_highlights() {
     this.cm.dispatch({
       effects: [filter_effects.of((from, to, decoration) => {
         return !(decoration.spec.id == "highlight")
@@ -725,6 +738,27 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
       effects: [highlight_effect.of([
         view.Decoration.mark({ class: _class, id: "class" }).range(start_char, end_char)
       ])]
+    });
+  }
+
+  add_character_classes(...highlights: [number, number, string][]) {
+    let len = this.cm.state.doc.length;
+    this.cm.dispatch({
+      effects: highlight_effect.of(highlights.filter(([from, to,]) => {
+        to = Math.min(len, to);
+        return (to - from) > 0
+      }).map(([from, to, _class]) => {
+        to = Math.min(len, to);
+        return view.Decoration.mark({ class: _class, id: "class" }).range(from, to)
+      }))
+    });
+  }
+
+  remove_specific_character_classes(class_: string) {
+    this.cm.dispatch({
+      effects: [filter_effects.of((from, to, decoration) => {
+        return !(decoration.spec.id == "class" && decoration.spec.class == class_)
+      })]
     });
   }
 

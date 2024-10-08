@@ -230,7 +230,7 @@
     </div>
   </template>
 
-  <template id="panel">
+  <template id="nb-field-template">
     <div class="nb-content-field">
       <div class="nb-header">
         <div class="nb-header-left-side">
@@ -258,6 +258,38 @@
       <div class="nb-resize-handle-area">
         <div class="nb-resize-handle">...</div>
       </div>
+    </div>
+  </template>
+
+  <template id="context-view-template">
+    <div class="context-view">
+      <div class="context-view-field" data-ctx="sym_ptr">
+        <div class="context-view-field-label">lex ptr</div>
+        <div class="context-view-field-value">0</div>
+      </div>
+      <div class="context-view-field" data-ctx="sym_len">
+        <div class="context-view-field-label">sym len</div>
+        <div class="context-view-field-value">0</div>
+      </div>
+      <div class="context-view-field" data-ctx="anchor_ptr">
+        <div class="context-view-field-label">anchor ptr</div>
+        <div class="context-view-field-value">0</div>
+      </div>
+      <div class="context-view-field" data-ctx="tok_id">
+        <div class="context-view-field-label">tok id</div>
+        <div class="context-view-field-value">0</div>
+      </div>
+      <div class="context-view-field" data-other="tok">
+        <div class="context-view-field-label">token</div>
+        <div class="context-view-field-value">0</div>
+      </div>
+    </div>
+  </template>
+
+  <template id="bytecode-view-template">
+    <div class="bytecode-view">
+      <h2>bytecode</h2>
+      <div class="bytecode-instructions"></div>
     </div>
   </template>
 

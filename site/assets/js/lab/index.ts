@@ -7,8 +7,10 @@ import { Controls } from "./control";
 import { LocalStoreKeys, getLocalValue, dataStorageWorkflowsEnabled, setLocalValue } from "./settings-panel";
 import { setupConfig } from "./config-panel";
 import { Debounce } from "./debounce";
-import { CSTView } from "./cst";
-import { ParserView } from "./parser_info";
+import * as parse_info from "./parser_info";
+import * as syntax_highlight from "./syntax_highlight"
+import * as ast from "./ast"
+import * as cst from "./cst"
 
 
 export async function init(compiler_worker_path: string) {
@@ -24,49 +26,42 @@ export async function init(compiler_worker_path: string) {
   let parser_info_field = nb.add_field(new NBContentField("Parser Info"), 1);
   parser_info_field.set_content_visible(false);
   parser_info_field.set_icon(`<i class="fa-solid fa-circle-info"></i>`);
-  let parser_info = new ParserView(parser_info_field);
 
-  pipeline.GrammarDB.worker_path = compiler_worker_path;
+  pipeline.GrammarDBNode.worker_path = compiler_worker_path;
 
-  let parser_input_field = nb.add_field(new NBEditorField("Parser Input"), -1);
+  let parser_input_field = nb.add_field(new NBEditorField("Parser Input"), 0);
   parser_input_field.set_content_visible(true)
   parser_input_field.set_icon(`<i class="fa-solid fa-quote-left"></i>`);
 
-
   let ast_field = nb.add_field(new NBContentField("AST Nodes"), -1);
   ast_field.set_icon(`<i class="fa-solid fa-share-nodes"></i>`);
-  {
-    let parent = ast_field.body;
-
-    let canvas = document.createElement("canvas");
-    canvas.classList.add("field-canvas");
-    let ctx = canvas.getContext("2d");
-
-    parent.appendChild(canvas);
-  }
 
   let cst_field = nb.add_field(new NBContentField("CST Nodes"), -1);
   cst_field.set_icon(`<i class="fa-solid fa-sitemap"></i>`);
-  let cst_view = new CSTView(cst_field)
 
-  let formatting_rules_field = new NBEditorField("Formatting Rules");
-  let highlighting_rules_field = new NBEditorField("Highlighting Rules");
+  let syntax_highlighting_field = nb.add_field(new NBContentField("Syntax Highlighting"), -1);
+  syntax_highlighting_field.set_content_visible(true)
+  syntax_highlighting_field.set_icon(`<i class="fa-solid fa-palette"></i>`);
+
+
+  let formatting_rules_field = nb.add_field(new NBContentField("Syntax Formatting"), -1);
+  formatting_rules_field.set_content_visible(true)
+  formatting_rules_field.set_icon(`<i class="fa-solid fa-align-right"></i>`);
 
   const controls = new Controls();
 
   const grammar_input = new pipeline.InputNode();
   const parser_input = new pipeline.InputNode();
   const config_input = new pipeline.ConfigNode();
-  const grammar = new pipeline.GrammarDB([grammar_input, config_input],);
-  const parser = new pipeline.Parser([grammar, parser_input]);
-
+  const grammar_pipeline_node = new pipeline.GrammarDBNode([grammar_input, config_input],);
+  const parser_player_node = new pipeline.ParserPlayerNode([grammar_pipeline_node, parser_input]);
 
   let grammar_input_debounce = new Debounce(() => {
     let text = grammar_input_field.get_text();
     if (text) {
       setLocalValue(LocalStoreKeys.GrammarInput, text);
       grammar_input.update(text)
-      grammar_input_field.remove_highlight();
+      grammar_input_field.remove_highlights();
       grammar_input_field.remove_messages();
     }
   });
@@ -76,7 +71,6 @@ export async function init(compiler_worker_path: string) {
     if (text) {
       setLocalValue(LocalStoreKeys.ParserInput, text);
       parser_input.update(text)
-      parser_input_field.remove_highlight();
       parser_input_field.remove_messages();
     }
   });
@@ -100,13 +94,12 @@ export async function init(compiler_worker_path: string) {
   let error_reporter = <HTMLDivElement>document.getElementById("error-reporter");
   let grammar_classification = <HTMLDivElement>document.getElementById("controls")?.querySelector(".classification");
 
-  grammar.addListener("loading", _ => {
-    parser_info.init();
+  grammar_pipeline_node.addListener("loading", _ => {
     error_reporter.innerText = "";
     grammar_classification.innerHTML = "";
   })
 
-  grammar.addListener("failed", errors => {
+  grammar_pipeline_node.addListener("failed", errors => {
     for (const error of errors) {
       if (error.origin == radlr.ErrorOrigin.Grammar) {
         //alert(error.msg);
@@ -116,86 +109,43 @@ export async function init(compiler_worker_path: string) {
       } else {
         //alert(error.msg);
       }
-
     }
     parser_info_field.set_content_visible(false);
     parser_info_field.set_loading(false);
     controls.setActive(false);
   })
 
-  grammar.addListener("bytecode_ready", async bytecode => {
-  })
-
-  grammar.addListener("bytecode_db", async db => {
-    parser_info.handle_new_parser(db);
-  })
-
-  grammar.addListener("grammar-classification", classification => {
+  grammar_pipeline_node.addListener("grammar-classification", classification => {
     grammar_classification.innerHTML = classification;
     controls.setActive(true);
   })
 
-  parser.addListener("destroyed", data => {
+  parser_player_node.addListener("destroyed", data => {
     // Disable transport controls
     console.log("Parser Destroyed");
     controls.setActive(false);
   })
 
-  parser.addListener("reset", data => {
+  parser_player_node.addListener("reset", data => {
     // Enable transport controls
     console.log("Parser Reset");
-    cst_view.reset();
     controls.setActive(true);
   })
 
-  parser.addListener("complete", action => {
+  parser_player_node.addListener("complete", action => {
     console.log("complete")
   });
 
-  parser.addListener("eof", action => {
+  parser_player_node.addListener("eof", action => {
     console.log("eof")
   });
 
-  parser.addListener("error", action => {
+  parser_player_node.addListener("error", action => {
     console.log("error")
   });
 
-  parser.addListener("execute_state", debug_info => {
-    parser_info.set_active_state(debug_info.instruction);
-  })
-
-  parser.addListener("execute_instruction", debug_info => {
-    let ctx = debug_info.ctx;
-
-    parser_input_field.remove_character_classes();
-    parser_input_field.add_character_class(ctx.input_ptr, ctx.input_ptr + 1, "dbg-input-pos");
-    parser_input_field.add_character_class(ctx.anchor_ptr, ctx.anchor_ptr + 1, "dbg-anchor-pos");
-    parser_input_field.add_character_class(ctx.begin_ptr, ctx.begin_ptr + 1, "dbg-begin-pos");
-    parser_input_field.add_character_class(ctx.end_ptr, ctx.end_ptr + 1, "dbg-end-pos");
-
-    if (debug_info.is_scanner) {
-      parser_input_field.add_character_class(ctx.sym_ptr, ctx.sym_ptr + 1, "dbg-sym-pos");
-      parser_input_field.add_character_class(ctx.sym_ptr, ctx.input_ptr, "dbg-sym");
-    } else if (ctx.sym_len > 0) {
-      parser_input_field.add_character_class(ctx.sym_ptr, ctx.sym_ptr + ctx.sym_len, "dbg-sym");
-    }
-  });
-
-  parser.addListener("reduce", reduce => {
-    cst_view.handle_reduce(reduce);
-  })
-
-  parser.addListener("shift", shift => {
-    cst_view.handle_shift(shift);
-  })
-
   controls.addListener("step", () => {
-    parser.step();
-  });
-
-  controls.addListener("reset", () => {
-    parser_input_field.remove_character_classes();
-    parser.reset();
+    parser_player_node.step();
   });
 
   controls.addListener("play", () => {
@@ -206,8 +156,12 @@ export async function init(compiler_worker_path: string) {
 
   nb.calculate_heights();
 
-
   await rad_init;
+
+  parse_info.init(parser_info_field, parser_input_field, grammar_pipeline_node, parser_player_node, controls);
+  cst.init(cst_field, parser_input_field, grammar_pipeline_node);
+  ast.init(ast_field, parser_input_field, grammar_pipeline_node);
+  syntax_highlight.init(syntax_highlighting_field, parser_input_field, grammar_pipeline_node)
 
   let { grammar: example_grammar, input: example_input } = grammar_examples[Math.round(Math.random() * (grammar_examples.length - 1))];
 

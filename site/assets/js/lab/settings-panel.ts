@@ -66,7 +66,6 @@ function setupSetting() {
     for (const key in LocalStoreKeys) {
       //@ts-ignore
       let value = <any>LocalStoreKeys[key];
-      console.log(value)
       window.localStorage.removeItem(value);
     }
 
@@ -201,8 +200,7 @@ function setupThemes(setting_panel: Element) {
 
   let default_theme = <string>document.body.dataset.defaulttheme;
   let active_theme = getLocalValue(LocalStoreKeys.ActiveTheme) || default_theme;
-
-  console.log({ default_theme, active_theme })
+  
   //document.body.classList.add(active_theme);
   let node = <HTMLTemplateElement>document.querySelector("#theme-entry-template");
 
