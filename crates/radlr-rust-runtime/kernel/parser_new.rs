@@ -32,7 +32,15 @@ fn dispatch<'a, 'debug>(
   loop {
     use Opcode::*;
 
-    i = match match i.get_opcode() {
+    let opcode = i.get_opcode();
+    #[cfg(any(debug_assertions, feature = "wasm-lab"))]
+    {
+      if !matches!(opcode, VectorBranch | HashBranch) {
+        emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
+      }
+    }
+
+    i = match match opcode {
       ByteSequence => byte_sequence(i, ctx, input),
       ShiftToken => shift_token(i, ctx, base_state),
       ShiftTokenScanless => shift_token_scanless(i, ctx, base_state),
@@ -95,23 +103,10 @@ fn dispatch<'a, 'debug>(
         if is_goto {
           block_base = next_instruction;
         }
-        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-        {
-          if can_debug {
-            emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
-          }
-          if is_goto {
-            emit_state_debug(debug, bc, block_base.address() as usize, ParserStackTrackers::from(&*ctx), input, is_scanner);
-          }
-        }
 
         next_instruction
       }
       OpResult { action, next, can_debug, .. } => {
-        #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-        if can_debug {
-          emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
-        }
         break (action, next, block_base.address());
       }
     }
@@ -503,8 +498,6 @@ fn hash_branch<'a, 'debug>(
 ) -> OpResult<'a> {
   const __HINT__: Opcode = Opcode::HashBranch;
 
-  emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
-
   // Decode data
   let TableHeaderData {
     input_type,
@@ -518,6 +511,14 @@ fn hash_branch<'a, 'debug>(
   let hash_mask = (1 << modulo_base) - 1;
 
   let (input_value, is_nl) = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
+  #[cfg(any(debug_assertions, feature = "wasm-lab"))]
+  {
+    let tok_id = ctx.tok_id;
+    ctx.tok_id = input_value;
+    emit_instruction_debug(debug, i, input, ParserStackTrackers::from(&*ctx), is_scanner);
+    ctx.tok_id = tok_id;
+  }
+
   loop {
     let mut hash_index = (input_value & hash_mask) as usize;
     loop {
@@ -723,9 +724,7 @@ fn token_scan<'a, 'debug>(
         break Some(());
       } else {
         #[cfg(any(debug_assertions, feature = "wasm-lab"))]
-        if state & STATE_HEADER == STATE_HEADER {
-          emit_state_debug(debug, bc, address, ParserStackTrackers::from(&*ctx), input, true);
-        }
+        emit_state_debug(debug, bc, address, ParserStackTrackers::from(&*ctx), input, true);
 
         match dispatch(ParserState { address: address as usize, info: Default::default() }, ctx, input, bc, debug, true) {
           (ParseAction::CompleteState, ..) => {}

@@ -38,40 +38,43 @@ impl JSByteCodeParser {
     }
   }
 
-  pub fn init(&mut self, entry_name: String) {
+  pub fn init(&mut self, entry_name: String, enable_debugger: bool) {
     let entry = self.db.get_entry_data_from_name(&entry_name).expect("Could not find entry point");
 
     self.ctx = self.bytecode_parser.init(entry).expect("Could not create context");
 
     let v = self.values.clone();
-    let debugger: Option<Box<DebugFnNew>> = Some(Box::new(move |e, ctx, i| {
-      if let LockResult::Ok(mut values) = v.write() {
-        match e {
-          DebugEventNew::ExecuteInstruction { instruction, is_scanner } => {
-            values.push_back(JSDebugPacket {
-              event: JSDebugEvent::ExecuteInstruction,
-              ctx: JSCTXState::from(&ctx),
-              instruction: instruction.address(),
-              is_scanner: *is_scanner,
-              complete: (instruction.get_opcode() == Opcode::Accept) as u32,
-              ..Default::default()
-            });
-          }
-          DebugEventNew::ExecuteState { base_instruction, is_scanner } => {
-            values.push_back(JSDebugPacket {
-              event: JSDebugEvent::ExecuteState,
-              ctx: JSCTXState::from(&ctx),
-              instruction: base_instruction.address(),
-              is_scanner: *is_scanner,
-              ..Default::default()
-            });
-          }
-          _ => {}
-        }
-      }
-    }));
 
-    self.bytecode_parser.set_debugger(debugger);
+    if enable_debugger {
+      let debugger: Option<Box<DebugFnNew>> = Some(Box::new(move |e, ctx, i| {
+        if let LockResult::Ok(mut values) = v.write() {
+          match e {
+            DebugEventNew::ExecuteInstruction { instruction, is_scanner } => {
+              values.push_back(JSDebugPacket {
+                event: JSDebugEvent::ExecuteInstruction,
+                ctx: JSCTXState::from(&ctx),
+                instruction: instruction.address(),
+                is_scanner: *is_scanner,
+                complete: (instruction.get_opcode() == Opcode::Accept) as u32,
+                ..Default::default()
+              });
+            }
+            DebugEventNew::ExecuteState { base_instruction, is_scanner } => {
+              values.push_back(JSDebugPacket {
+                event: JSDebugEvent::ExecuteState,
+                ctx: JSCTXState::from(&ctx),
+                instruction: base_instruction.address(),
+                is_scanner: *is_scanner,
+                ..Default::default()
+              });
+            }
+            _ => {}
+          }
+        }
+      }));
+
+      self.bytecode_parser.set_debugger(debugger);
+    }
 
     self.running = true;
   }
