@@ -534,7 +534,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
   }
 
   set_content_visible(is_content_visible: boolean) {
-    if (is_content_visible) {
+    if (is_content_visible) { 
       this.ele.classList.add("content-visible");
     } else {
       this.ele.classList.remove("content-visible");

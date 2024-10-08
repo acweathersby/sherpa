@@ -3,83 +3,80 @@ import * as pipeline from "./pipeline";
 import { NBContentField, NBEditorField } from "./notebook";
 import { Controls } from "./control";
 
-type StatesLU = Map<number, { pseudo_code: string }>;
+export function init(
+  parser_info_field: NBContentField,
+  parser_input_field: NBEditorField,
+  grammar_pipeline_node: pipeline.GrammarDBNode,
+  parser_player_node: pipeline.ParserPlayerNode,
+  controls: Controls
+) {
+  parser_info_field.set_content_visible(false);
+  let db: radlr.JSBytecodeParserDB | null = null;
+  let bytecode: StatefullDV | null = null;
 
-class StatesView {
-  parse_states: number[] = [];
-  scan_states: number[] = [];
-  ele: HTMLDivElement
+  let instruction_view = new ContextView();
+  let bytecode_view = new BytecodeView();
+  let last_offset = 0;
 
-  constructor() {
-    this.ele = document.createElement("div");
-    this.ele.classList.add("stack-view");
-  }
 
-  handleInstruction(dv: StatefullDV, is_scanner: boolean) {
-    switch (dv.u8()) {
-      case radlr.Opcode.Pass: {
-        if (is_scanner) {
-          this.scan_states.pop();
-        } else {
-          this.parse_states.pop();
-        }
+  parser_info_field.body.appendChild(instruction_view.ele);
+  parser_info_field.body.appendChild(bytecode_view.ele);
+  parser_info_field.body.id = "parser-info"
 
-        this.write();
-      } break
-      case radlr.Opcode.Fail: {
-        if (is_scanner) {
-          this.scan_states.pop();
-        } else {
-          this.parse_states.pop();
-        }
+  grammar_pipeline_node.addListener("loading", _ => {
+    parser_info_field.set_loading(true);
+    instruction_view.reset();
+    bytecode_view.clear();
+    last_offset = 0;
+  })
 
-        this.write();
-      } break
-      case radlr.Opcode.Accept: {
-        if (is_scanner) {
-          this.scan_states.pop();
-        } else {
-          this.parse_states.pop();
-        }
+  grammar_pipeline_node.addListener("bytecode_db", async new_db => {
+    parser_info_field.set_loading(false);
+    db = new_db;
 
-        this.write();
-      } break
-      case radlr.Opcode.PushGoto: {
-        let parse_mode = dv.u8();
-        let address = dv.u32();
+    bytecode = new StatefullDV(new DataView(db.bytecode.buffer), 0);
+    bytecode_view.create_debug_info(bytecode.to());
+  })
 
-        if (is_scanner) {
-          this.scan_states.push(address);
-        } else {
-          this.parse_states.push(address);
-        }
+  parser_player_node.addListener("execute_state", debug_info => {
+    instruction_view.handle_debug_info(debug_info, parser_player_node.input);
+    bytecode_view.handle_state(debug_info);
+  })
 
-        this.write();
-
-      } break;
+  parser_player_node.addListener("execute_instruction", debug_info => {
+    if (bytecode) {
+      bytecode_view.handle_instruction(bytecode.to(debug_info.instruction), debug_info, parser_player_node.input);
     }
-  }
+    instruction_view.handle_debug_info(debug_info, parser_player_node.input);
+  })
 
-  reset() {
-    this.ele.innerHTML = ""
-    this.parse_states.length = 0;
-    this.scan_states.length = 0;
-  }
+  parser_player_node.addListener("execute_instruction", debug_info => {
+    let ctx = debug_info.ctx;
 
-  write() {
-    let data = "";
+    parser_input_field.remove_character_classes();
+    parser_input_field.add_character_class(ctx.input_ptr, ctx.input_ptr + 1, "dbg-input-pos");
+    parser_input_field.add_character_class(ctx.anchor_ptr, ctx.anchor_ptr + 1, "dbg-anchor-pos");
+    parser_input_field.add_character_class(ctx.begin_ptr, ctx.begin_ptr + 1, "dbg-begin-pos");
+    parser_input_field.add_character_class(ctx.end_ptr, ctx.end_ptr + 1, "dbg-end-pos");
 
-    for (const state of this.parse_states) {
-      data += "<div class='parse-state-goto'>" + state.toString(16) + "</div>"
+    if (debug_info.is_scanner) {
+      parser_input_field.add_character_class(ctx.sym_ptr, ctx.sym_ptr + 1, "dbg-sym-pos");
+      parser_input_field.add_character_class(ctx.sym_ptr, ctx.input_ptr, "dbg-sym");
+    } else if (ctx.sym_len > 0) {
+      parser_input_field.add_character_class(ctx.sym_ptr, ctx.sym_ptr + ctx.sym_len, "dbg-sym");
     }
+  });
 
-    for (const state of this.scan_states) {
-      data += "<div class='scan-state-goto'>" + state.toString(16) + "</div>"
-    }
 
-    this.ele.innerHTML = data;
-  }
+  controls.addListener("reset", () => {
+    parser_input_field.remove_character_classes();
+    parser_player_node.reset();
+    bytecode_view.reset();
+  });
 }
+
+
+type StatesLU = Map<number, { pseudo_code: string }>;
 
 class ContextView {
   ele: HTMLDivElement
@@ -155,9 +152,18 @@ class ContextView {
 class BytecodeView {
   ele: HTMLDivElement
   instruction_area: HTMLDivElement
+  parse_state_stack: HTMLDivElement
+  scan_state_stack: HTMLDivElement
+  active_parse_state: HTMLDivElement
+  active_scan_state: HTMLDivElement
+  active_parse_state_val: number = 0
+  active_scan_state_val: number = 0
   inst_map: Map<number, number> = new Map
-  instructions: HTMLDivElement[] = []
+  instructions: { state_head: boolean, address: number, ele: HTMLDivElement }[] = []
   active_instruction: number = -1;
+  state_headers: Map<number, boolean> = new Map
+  parse_states: number[] = [];
+  scan_states: number[] = [];
 
 
   constructor() {
@@ -165,31 +171,49 @@ class BytecodeView {
     ele.append((<HTMLTemplateElement>document.querySelector("#bytecode-view-template")).content.cloneNode(true));
     this.ele = <HTMLDivElement>ele.firstElementChild!;
     this.instruction_area = <HTMLDivElement>this.ele.querySelector(".bytecode-instructions")
+
+    this.parse_state_stack = <HTMLDivElement>this.ele.querySelector(".parser-states .state-stack")
+    this.scan_state_stack = <HTMLDivElement>this.ele.querySelector(".scanner-states .state-stack")
+    this.active_parse_state = <HTMLDivElement>this.ele.querySelector(".parser-states .active-state")
+    this.active_scan_state = <HTMLDivElement>this.ele.querySelector(".scanner-states .active-state")
   }
 
-  diss(address: number, mnemonic: string): HTMLDivElement {
+  instr_ele(address: number, mnemonic: string): HTMLDivElement {
     let ele = document.createElement("div");
     ele.classList.add("bytecode-view-instruction")
     ele.innerHTML = `
     <div class=address>${address.toString(16)}</div>
     <div class=mnemonic>${mnemonic}</div>
     `;
-    this.instruction_area.append(ele)
-    this.instructions.push(ele)
+    this.instructions.push({ address, ele, state_head: false })
     this.inst_map.set(address, this.instructions.length - 1);
     return ele
   }
 
 
-  reset() {
+  clear() {
     this.instruction_area.innerHTML = "";
     this.instructions.length = 0;
     this.inst_map.clear();
+    this.state_headers.set(8, false);
   }
+
+
+  reset() {
+    this.parse_states.length = 0;
+    this.scan_states.length = 0;
+
+    this.parse_state_stack.innerHTML = "";
+    this.scan_state_stack.innerHTML = "";
+
+    this.active_parse_state.innerHTML = "";
+    this.active_scan_state.innerHTML = "";
+  }
+
 
   extra(label: string, value: any): HTMLElement {
     let ele = document.createElement("div");
-    ele.classList.add("bytecode-view-info")
+    ele.classList.add("label-value")
     ele.innerHTML = `
     <div class=label>${label}</div>
     <div class=value>${value}</div>
@@ -204,10 +228,12 @@ class BytecodeView {
     return ele;
   }
 
-  address(address: number, label: string = ""): HTMLElement {
+  address(address: number, label: string = "", goto_state: boolean = false): HTMLElement {
     let ele = document.createElement("div");
-    ele.classList.add("address-label")
+    ele.classList.add("label-value")
 
+    if (goto_state)
+      this.state_headers.set(address, false);
 
     if (label) {
       ele.innerHTML = `
@@ -222,74 +248,10 @@ class BytecodeView {
     }
 
     ele.addEventListener("click", () => {
-      console.log(address)
       this.show_address(address);
     })
 
     return ele;
-  }
-
-  mark_scanners(dv: StatefullDV) {
-    let len = dv.dv.byteLength;
-    outer: while (dv.off < len) {
-      let instruction_address = dv.off;
-      let instruction_byte = dv.u8();
-      let string = "";
-      switch (instruction_byte) {
-        case radlr.Opcode.PushGoto: {
-          let parse_mode = dv.u8();
-          this.diss(instruction_address, "PUSH").append(
-            this.address(dv.u32())
-          )
-        } break;
-        case radlr.Opcode.Goto: {
-          let parse_mode = dv.u8()
-          this.diss(instruction_address, "GOTO").append(this.address(dv.u32()))
-        } break;
-        case radlr.Opcode.AssignToken: {
-          this.diss(instruction_address, "TK_ID").append(
-            this.extra("tok_id", dv.u32()),
-          )
-        } break;
-        case radlr.Opcode.Reduce: {
-          this.diss(instruction_address, "REDUCE").append(
-            this.extra("nonterm", dv.u32()),
-            this.extra("rule", dv.u32()),
-            this.extra("sym count", dv.u16()),
-          )
-        } break;
-        case radlr.Opcode.VectorBranch: {
-          this.generate_table_string(dv, this.diss(instruction_address, "V_BR"));
-        } break;
-        case radlr.Opcode.HashBranch: {
-          this.generate_table_string(dv, this.diss(instruction_address, "H_BR"));
-        } break;
-        case radlr.Opcode.ByteSequence: {
-          let off = dv.off - 1;
-          let len = dv.u16();
-          let offset = dv.u32();
-          let data = new Uint8Array(dv.dv.buffer, dv.off, len);
-          let data_str = String.fromCodePoint(...data);
-
-          let success_address = dv.off + len;
-
-          this.diss(instruction_address, "BYTES").append(
-            this.extra("match", data_str),
-            this.address(success_address, "pass"),
-            (offset > 0) ? this.address(off + offset, "fail") : this.extra("fail", 0),
-          )
-        } break;
-        case radlr.Opcode.Fork: {
-          this.diss(instruction_address, "FORK")
-        } break;
-        case radlr.Opcode.ReadCodepoint: {
-          this.diss(instruction_address, "CP")
-        } break;
-        default: {
-          break;
-        }
-      }
-    }
   }
 
   create_debug_info(dv: StatefullDV) {
@@ -297,74 +259,73 @@ class BytecodeView {
     outer: while (dv.off < len) {
       let instruction_address = dv.off;
       let instruction_byte = dv.u8();
-      let string = "";
       switch (instruction_byte) {
         case radlr.Opcode.NoOp: {
-          this.diss(instruction_address, "NOOP")
+          this.instr_ele(instruction_address, "NOOP")
         } break;
         case radlr.Opcode.Pass: {
-          this.diss(instruction_address, "PASS")
+          this.instr_ele(instruction_address, "PASS")
         } break;
         case radlr.Opcode.Fail: {
-          this.diss(instruction_address, "FAIL")
+          this.instr_ele(instruction_address, "FAIL")
         } break;
         case radlr.Opcode.ShiftChar: {
-          this.diss(instruction_address, "SH_CH")
+          this.instr_ele(instruction_address, "SCHAR")
         } break;
         case radlr.Opcode.ShiftToken: {
-          this.diss(instruction_address, "SH_TK")
+          this.instr_ele(instruction_address, "SHIFT")
         } break;
         case radlr.Opcode.PeekToken: {
-          this.diss(instruction_address, "PK_TK")
+          this.instr_ele(instruction_address, "PTOK")
         } break;
         case radlr.Opcode.PeekTokenScanless: {
-          this.diss(instruction_address, "PK_TK_P")
+          this.instr_ele(instruction_address, "PSTOKS")
         } break;
         case radlr.Opcode.SkipToken: {
-          this.diss(instruction_address, "SK_TK")
+          this.instr_ele(instruction_address, "SKIP")
         } break;
         case radlr.Opcode.SkipTokenScanless: {
-          this.diss(instruction_address, "SK_TK_P")
+          this.instr_ele(instruction_address, "SKIPS")
         } break;
         case radlr.Opcode.PeekSkipToken: {
-          this.diss(instruction_address, "PK_SK_TK")
+          this.instr_ele(instruction_address, "PSKIP")
         } break;
         case radlr.Opcode.PeekReset: {
-          this.diss(instruction_address, "RST")
+          this.instr_ele(instruction_address, "RESET")
         } break;
         case radlr.Opcode.Accept: {
-          this.diss(instruction_address, "ACPT")
+          this.instr_ele(instruction_address, "ACCEPT")
         } break;
         case radlr.Opcode.PopGoto: {
-          this.diss(instruction_address, "POP")
+          this.instr_ele(instruction_address, "POP")
         } break;
         case radlr.Opcode.PushGoto: {
           let parse_mode = dv.u8();
-          this.diss(instruction_address, "PUSH").append(
-            this.address(dv.u32())
+          this.instr_ele(instruction_address, "PUSH").append(
+            this.address(dv.u32(), "", true)
           )
         } break;
         case radlr.Opcode.Goto: {
           let parse_mode = dv.u8()
-          this.diss(instruction_address, "GOTO").append(this.address(dv.u32()))
+          this.instr_ele(instruction_address, "GOTO").append(this.address(dv.u32(), "", true))
         } break;
         case radlr.Opcode.AssignToken: {
-          this.diss(instruction_address, "TK_ID").append(
+          this.instr_ele(instruction_address, "TOKID").append(
             this.extra("tok_id", dv.u32()),
           )
         } break;
         case radlr.Opcode.Reduce: {
-          this.diss(instruction_address, "REDUCE").append(
+          this.instr_ele(instruction_address, "REDUCE").append(
             this.extra("nonterm", dv.u32()),
             this.extra("rule", dv.u32()),
-            this.extra("sym count", dv.u16()),
+            this.extra("sym #", dv.u16()),
           )
         } break;
         case radlr.Opcode.VectorBranch: {
-          this.generate_table_string(dv, this.diss(instruction_address, "V_BR"));
+          this.generate_table(dv, this.instr_ele(instruction_address, "BVEC"));
         } break;
         case radlr.Opcode.HashBranch: {
-          this.generate_table_string(dv, this.diss(instruction_address, "H_BR"));
+          this.generate_table(dv, this.instr_ele(instruction_address, "BHASH"));
         } break;
         case radlr.Opcode.ByteSequence: {
           let off = dv.off - 1;
@@ -375,29 +336,73 @@ class BytecodeView {
 
           let success_address = dv.off + len;
 
-          this.diss(instruction_address, "BYTES").append(
+          this.instr_ele(instruction_address, "BYTES").append(
             this.extra("match", data_str),
-            this.address(success_address, "pass"),
-            (offset > 0) ? this.address(off + offset, "fail") : this.extra("fail", 0),
+            this.address(success_address, "pass", true),
+            (offset > 0) ? this.address(off + offset, "fail", true) : this.extra("fail", 0),
           )
         } break;
         case radlr.Opcode.Fork: {
-          this.diss(instruction_address, "FORK")
+          this.instr_ele(instruction_address, "FORK")
         } break;
         case radlr.Opcode.ReadCodepoint: {
-          this.diss(instruction_address, "CP")
+          this.instr_ele(instruction_address, "CP")
         } break;
         default: {
           break;
         }
       }
     }
+
+    for (const [state_address, is_scanner] of this.state_headers) {
+      let lookup = this.inst_map.get(state_address);
+      if (lookup) {
+        let ele = this.instructions[lookup].ele;
+        this.instructions[lookup].state_head = true;
+
+      }
+    }
+
+    for (let i = 0; i < this.instructions.length;) {
+      let { ele, state_head, address } = this.instructions[i];
+
+      if (state_head) {
+        let start = i++;
+        while (i < this.instructions.length && !this.instructions[i].state_head) {
+          i++;
+        }
+
+        let elements = this.instructions.slice(start, i).map(d => d.ele);
+        let ele = document.createElement("div");
+
+        ele.classList.add("bytecode-state-group")
+
+
+        ele.innerHTML = `
+        <div class=bytecode-state-group-header> state ${address.toString(16).toUpperCase()} 
+        </div>
+        <div class=pseudo-code><code><pre>${create_pseudo_code(dv.to(address), false)}</pre></code></div>
+      
+        
+        `
+        ele.append(...elements);
+        this.instruction_area.append(ele);
+
+        (<HTMLDivElement>ele.firstElementChild!).addEventListener("click", e => {
+          ele.classList.toggle("show-pseudo")
+        });
+
+      } else {
+        this.instruction_area.append(ele)
+        i++
+      }
+    }
   }
 
-  generate_table_string(dv: StatefullDV, instruction_ele: HTMLDivElement) {
-    let out_string = "";
-
-    let { table_base_address, input_type, scan_address, table_length, table_start_iter, default_address } = getHashData(dv);
+  generate_table(dv: StatefullDV, instruction_ele: HTMLDivElement) {
+    let { parse_block_address,
+      table_type, table_base_address, input_type, table_meta, table_length, table_start_iter, default_address, scan_address
+    } = getLUTableData(dv);
 
     let val = "tok";
     let convert_val_to_string = (val: number): string => val.toString();
@@ -432,7 +437,7 @@ class BytecodeView {
         convert_val_to_string = convert_codepoint;
       } break;
       case radlr.MatchInputType.ClassScanless: {
-        val = "cp_class"
+        val = "CLASS"
       } break;
       case radlr.MatchInputType.ByteSequence: {
         throw "HUH?";
@@ -444,170 +449,189 @@ class BytecodeView {
 
     instruction_ele.append(this.mnemonic(val));
 
-    out_string += `\nmatch ${val}:`;
+    if (scan_address < 0xFFFF_FFFF) {
+      instruction_ele.append(this.address(scan_address, "scanner", true))
+    }
 
-
-    for (let i = 0; i < table_length; i++) {
-      let entry = table_start_iter.u32();
-
-      let val_id = (entry & 0x7FF);
-      let address_offset = ((entry >> 11) & 0x7FF);
-      //let meta = ((entry >> 22) & 0x3FF) - 512;
-      let address = table_base_address + address_offset;
-
-      instruction_ele.append(this.address(address, convert_val_to_string(val_id)))
+    if (table_type == "hash") {
+      for (let i = 0; i < table_length; i++) {
+        let entry = table_start_iter.u32();
+        let val_id = (entry & 0x7FF);
+        let address_offset = ((entry >> 11) & 0x7FF);
+        let address = table_base_address + address_offset;
+        instruction_ele.append(this.address(address, convert_val_to_string(val_id)))
+      }
+    } else {
+      for (let i = 0; i < table_length; i++) {
+        let entry = table_start_iter.u32();
+        let val_id = table_meta + i;
+        let address_offset = entry;
+        let address = table_base_address + address_offset;
+        instruction_ele.append(this.address(address, convert_val_to_string(val_id)))
+      }
     }
 
     if (default_address < dv.dv.byteLength) {
       instruction_ele.append(this.address(default_address, "default"))
     }
+
+    dv.off = parse_block_address;
   }
 
-  handle_debug_info(dv: StatefullDV, debug_info: radlr.JSDebugPacket, input: string) {
+  update_states() {
+    let data = "";
+
+    for (const state of this.parse_states.slice().reverse()) {
+      data += "<div class='state-address'>" + state.toString(16) + "</div>"
+    }
+
+    this.parse_state_stack.innerHTML = data;
+
+    data = ""
+    for (const state of this.scan_states.reverse()) {
+      data += "<div class='state-address'>" + state.toString(16) + "</div>"
+    }
+
+    this.scan_state_stack.innerHTML = data;
+
+    this.active_scan_state.innerHTML = "<div class='state-address'>" + this.active_scan_state_val.toString(16) + "</div>";
+    this.active_parse_state.innerHTML = "<div class='state-address'>" + this.active_parse_state_val.toString(16) + "</div>";
+  }
+
+  handle_state(debug_info: radlr.JSDebugPacket) {
+    let address = debug_info.instruction
+    let is_scanner = debug_info.is_scanner;
+    this.set_active_state(is_scanner, address);
+  }
+
+  private set_active_state(is_scanner: boolean, address: number) {
+
+    if (!address) return;
+
+    if (is_scanner) {
+      this.active_scan_state_val = address
+    } else {
+      this.active_parse_state_val = address
+    }
+
+
+  }
+
+  handle_instruction(dv: StatefullDV, debug_info: radlr.JSDebugPacket, input: string) {
+    this.update_states();
     let instruction = dv.off;
+    let is_scanner = debug_info.is_scanner;
 
     let index = this.inst_map.get(instruction);
     if (index) {
       if (this.active_instruction >= 0) {
-        this.instructions[this.active_instruction].classList.remove("active")
+        this.instructions[this.active_instruction].ele.classList.remove("active")
       }
 
       this.active_instruction = index
 
-      let ele = this.instructions[index];
+      let { ele } = this.instructions[index];
       ele.classList.add("active")
 
       this.show_address(instruction);
-
-
     }
+
+    switch (dv.u8()) {
+      case radlr.Opcode.PopGoto: {
+        if (is_scanner) {
+          this.scan_states.pop();
+        } else {
+          this.parse_states.pop();
+        }
+      } break
+      case radlr.Opcode.Pass: {
+        if (is_scanner) {
+          this.set_active_state(is_scanner, this.scan_states.pop()!);
+        } else {
+          this.set_active_state(is_scanner, this.parse_states.pop()!);
+        }
+      } break
+      case radlr.Opcode.Goto: {
+        let parse_mode = dv.u8();
+        let address = dv.u32();
+        this.set_active_state(is_scanner, address);
+      } break
+      case radlr.Opcode.PushGoto: {
+        let parse_mode = dv.u8();
+        let address = dv.u32();
+        if (is_scanner) {
+          this.scan_states.push(address);
+        } else {
+          this.parse_states.push(address);
+        }
+
+      } break;
+    }
+
+
   }
 
   private show_address(address: number) {
     let index = this.inst_map.get(address);
     if (index) {
 
-      let ele = this.instructions[index];
+      let { ele } = this.instructions[index];
 
       let height = this.instruction_area.getBoundingClientRect().height;
-      let top = this.instruction_area.scrollTop;
+      let top = this.instruction_area.getBoundingClientRect().top;
 
-      let ele_top = ele.offsetTop;
+      let ele_top = ele.getBoundingClientRect().top
 
-      if (ele_top - top > height || ele_top - top < 0) {
+      let diff = ele_top - top;
+
+      if (diff > (height - 40) || diff < 0) {
         ele.scrollIntoView();
+        this.instruction_area.scrollTop -= height / 8;
       }
     }
   }
 }
 
-export function init(
-  parser_info_field: NBContentField,
-  parser_input_field: NBEditorField,
-  grammar_pipeline_node: pipeline.GrammarDBNode,
-  parser_player_node: pipeline.ParserPlayerNode,
-  controls: Controls
-) {
-  let db: radlr.JSBytecodeParserDB | null = null;
-  let bytecode: StatefullDV | null = null;
-
-  let states_view = new StatesView();
-  let instruction_view = new ContextView();
-  let bytecode_view = new BytecodeView();
-
-
-  parser_info_field.body.appendChild(instruction_view.ele);
-  parser_info_field.body.appendChild(states_view.ele);
-  parser_info_field.body.appendChild(bytecode_view.ele);
-  parser_info_field.body.id = "parser-info"
-
-  grammar_pipeline_node.addListener("loading", _ => {
-    parser_info_field.set_loading(true);
-    states_view.reset();
-    instruction_view.reset();
-    bytecode_view.reset();
-  })
-
-  grammar_pipeline_node.addListener("bytecode_db", async new_db => {
-    parser_info_field.set_loading(false);
-    db = new_db;
-
-    bytecode = new StatefullDV(new DataView(db.bytecode.buffer), 0);
-    bytecode_view.create_debug_info(bytecode.to());
-    states_view.reset();
-  })
-
-  parser_player_node.addListener("execute_state", debug_info => {
-    instruction_view.handle_debug_info(debug_info, parser_player_node.input);
-    if (bytecode) {
-      bytecode_view.handle_debug_info(bytecode.to(debug_info.instruction), debug_info, parser_player_node.input);
-    }
-  })
-
-  parser_player_node.addListener("execute_instruction", debug_info => {
-    if (bytecode) {
-      states_view.handleInstruction(bytecode.to(debug_info.instruction), debug_info.is_scanner)
-      bytecode_view.handle_debug_info(bytecode.to(debug_info.instruction), debug_info, parser_player_node.input);
-    }
-    instruction_view.handle_debug_info(debug_info, parser_player_node.input);
-  })
-
-  parser_player_node.addListener("execute_instruction", debug_info => {
-    let ctx = debug_info.ctx;
-
-    parser_input_field.remove_character_classes();
-    parser_input_field.add_character_class(ctx.input_ptr, ctx.input_ptr + 1, "dbg-input-pos");
-    parser_input_field.add_character_class(ctx.anchor_ptr, ctx.anchor_ptr + 1, "dbg-anchor-pos");
-    parser_input_field.add_character_class(ctx.begin_ptr, ctx.begin_ptr + 1, "dbg-begin-pos");
-    parser_input_field.add_character_class(ctx.end_ptr, ctx.end_ptr + 1, "dbg-end-pos");
-
-    if (debug_info.is_scanner) {
-      parser_input_field.add_character_class(ctx.sym_ptr, ctx.sym_ptr + 1, "dbg-sym-pos");
-      parser_input_field.add_character_class(ctx.sym_ptr, ctx.input_ptr, "dbg-sym");
-    } else if (ctx.sym_len > 0) {
-      parser_input_field.add_character_class(ctx.sym_ptr, ctx.sym_ptr + ctx.sym_len, "dbg-sym");
-    }
-  });
-
-
-  controls.addListener("reset", () => {
-    parser_input_field.remove_character_classes();
-    parser_player_node.reset();
-    states_view.reset();
-  });
+type TableInfo = {
+  table_type: "hash" | "vec";
+  table_base_address: number;
+  input_type: number;
+  scan_address: number;
+  table_meta: number;
+  table_length: number;
+  table_start_iter: StatefullDV;
+  default_address: number;
+  parse_block_address: number;
 }
 
-export function disassemble_bytecode(parser_db: radlr.JSBytecodeParserDB): StatesLU {
-  let bytecode = parser_db.bytecode;
-
-  let dv = new DataView(bytecode.buffer);
-  let off = 8;
-
-  let states: StatesLU = new Map;
-
-  ProcessState(new StatefullDV(dv, off), states);
-
-  return states
+function getLUTableData(dv: StatefullDV): TableInfo {
+  let table_base_address = dv.off - 1;
+  let table_type = <"hash" | "vec">((dv.dv.getInt8(table_base_address) == radlr.Opcode.HashBranch) ? "hash" : "vec");
+  let input_type = dv.u8();
+  let default_delta = dv.u32();
+  let scan_address = dv.u32();
+  let table_length = dv.u32();
+  let table_meta = dv.u32();
+  let table_start = table_base_address + 18;
+  let table_start_iter = dv.to(table_start);
+  let default_address = table_base_address + default_delta;
+  let parse_block_address = table_start + table_length * 4
+  return { parse_block_address, table_type, table_meta, table_base_address, input_type, scan_address, table_length, table_start_iter, default_address };
 }
 
-function ProcessState(dv: StatefullDV, states: StatesLU, is_scanner: boolean = false) {
-  let state_address = dv.off;
-  if (states.has(state_address)) {
-    return;
-  }
 
-  let data = { pseudo_code: "" };
-  states.set(state_address, data);
+
+function create_pseudo_code(dv: StatefullDV, is_scanner: boolean = false): string {
 
   let gotos: string[] = [];
 
   let pseudo_code = "";
-  pseudo_code += `state@${dv.off.toString(16)}${is_scanner ? " SCANNER " : ""}(lex, ctx) {`;
-  pseudo_code += merge_lines(process_instructions(dv, gotos, states, data).split("\n",));
+  pseudo_code += `s_${dv.off.toString(16)}${is_scanner ? " SCANNER " : ""}(lex, ctx) {`;
+  pseudo_code += merge_lines(process_instructions(dv, gotos).split("\n",));
   pseudo_code += merge_lines(gotos);
   pseudo_code += "\n}";
 
-  data.pseudo_code = pseudo_code;
+  return pseudo_code;
 }
 
 function merge_lines(internal_data: string[], prefix: string = "\n  ") {
@@ -619,7 +643,7 @@ function merge_lines(internal_data: string[], prefix: string = "\n  ") {
   return pseudo_code;
 }
 
-function process_instructions(dv: StatefullDV, gotos: string[], states: StatesLU, current_state: object, root_name: string = ""): string {
+function process_instructions(dv: StatefullDV, gotos: string[], root_name: string = ""): string {
   let pseudo_code: string = ""
   let i = 0;
   let have_root = false
@@ -627,7 +651,6 @@ function process_instructions(dv: StatefullDV, gotos: string[], states: StatesLU
   outer: while (i++ < 10) {
     let instruction_address = dv.off;
     let instruction_byte = dv.u8();
-    let string = "";
     switch (instruction_byte) {
       case radlr.Opcode.NoOp: {
       } break;
@@ -635,71 +658,69 @@ function process_instructions(dv: StatefullDV, gotos: string[], states: StatesLU
         gotos.push("return")
       } break outer;
       case radlr.Opcode.Fail: {
-        string += `\nthrow "could not continue"`;
+        pseudo_code += `\nthrow "could not continue"`;
       } break outer;
       case radlr.Opcode.ShiftChar: {
-        string += "\nctx.emit(SHIFT_CHAR)";
-        string += "\nlex.shift_la(1)";
+        pseudo_code += "\nctx.emit(SHIFT_CHAR)";
+        pseudo_code += "\nlex.shift_la(1)";
       } break;
       case radlr.Opcode.ShiftToken: {
-        string += "\nlex.shift(ctx.sym_len)";
-        string += "\nctx.emit(SHIFT_TOKEN { id: ctx.tk_id, len: ctx.sym_len })";
-        string += "\nctx.sym_len = 0";
+        pseudo_code += "\nlex.shift(ctx.sym_len)";
+        pseudo_code += "\nctx.emit(SHIFT { id: ctx.tk_id, len: ctx.sym_len })";
+        pseudo_code += "\nctx.sym_len = 0";
       } break;
       case radlr.Opcode.PeekToken: {
-        string += "\nctx.peek(tok)";
+        pseudo_code += "\nctx.peek(tok)";
       } break;
       case radlr.Opcode.PeekTokenScanless: {
-        string += "\nctx.tok_len = ctx.sym_len\nctx.peek(tok)";
+        pseudo_code += "\nctx.tok_len = ctx.sym_len\nctx.peek(tok)";
       } break;
       case radlr.Opcode.SkipToken: {
-        string += "\nctx.skip()\ngoto " + root_name;
+        pseudo_code += "\nctx.skip()\ngoto " + root_name;
       } break outer;
       case radlr.Opcode.SkipTokenScanless: {
-        string += "\nctx.skip()\ngoto " + root_name;
+        pseudo_code += "\nctx.skip()\ngoto " + root_name;
       } break outer;
       case radlr.Opcode.PeekSkipToken: {
-        string += "\nctx.peek_skip()\ngoto " + root_name;
+        pseudo_code += "\nctx.peek_skip()\ngoto " + root_name;
       } break outer;
       case radlr.Opcode.PeekReset: {
-        string += "\nctx.peek_reset()";
+        pseudo_code += "\nctx.peek_reset()";
       } break;
       case radlr.Opcode.Accept: {
-        string += "\nctx.emit(ACCEPT)";
+        pseudo_code += "\nctx.emit(ACCEPT)";
       } break outer;
       case radlr.Opcode.PopGoto: {
-        string += "\nctx.pop(1)";
+        pseudo_code += "\nctx.pop(1)";
       } break;
       case radlr.Opcode.PushGoto: {
         let parse_mode = dv.u8();
         let address = dv.u32();
-        gotos.unshift(`state@${address.toString(16)}(lex, ctx)`);
-        ProcessState(dv.to(address), states);
+        gotos.unshift(`s_${address.toString(16)}(lex, ctx)`);
       } break;
       case radlr.Opcode.Goto: {
         let parse_mode = dv.u8();
         let addressw = dv.u32();
-        string += `\nstate@${addressw.toString(16)}(lex, ctx)`;
-        ProcessState(dv.to(addressw), states);
+        pseudo_code += `\ns_${addressw.toString(16)}(lex, ctx)`;
       } break;
       case radlr.Opcode.AssignToken: {
         let tok_id = dv.u32();
-        string += `\nctx.tok_id = ${tok_id}`;
+        pseudo_code += `\nctx.tok_id = ${tok_id}`;
       } break;
       case radlr.Opcode.Reduce: {
         let nterm = dv.u32();
         let rule_id = dv.u32();
         let symbol_count = dv.u16();
 
-        string += `\nctx.nt_id = ${nterm}`;
-        string += `\nctx.emit(REDUCE{ nt_id: ${nterm}, rule: ${rule_id}, sym_count: ${symbol_count} })`;
+        pseudo_code += `\nctx.nt_id = ${nterm}`;
+        pseudo_code += `\nctx.emit(REDUCE { nt_id: ${nterm}, rule: ${rule_id}, sym_count: ${symbol_count} })`;
       } break;
       case radlr.Opcode.VectorBranch: {
         throw "Vector branch not implemented"
-        string += generate_table_string(dv, states, current_state);
+        pseudo_code += generate_table_string(dv);
       } break;
       case radlr.Opcode.HashBranch: {
-        string += generate_table_string(dv, states, current_state);
+        pseudo_code += generate_table_string(dv);
       } break outer;
       case radlr.Opcode.ByteSequence: {
         let off = dv.off - 1;
@@ -710,21 +731,21 @@ function process_instructions(dv: StatefullDV, gotos: string[], states: StatesLU
 
         let success_address = dv.off + len;
 
-        string += `if lex.slice(${len}) == "${data_str}":`
-        string += `\n  lex.incr(${len})`
+        pseudo_code += `if lex.slice(${len}) == "${data_str}"`
+        pseudo_code += `\n  lex.incr(${len})`
 
         let gotos: string[] = [];
-        string += merge_lines(process_instructions(dv.to(success_address), gotos, states, current_state).split("\n"));
-        string += merge_lines(gotos);
-        string += "\nelse"
+        pseudo_code += merge_lines(process_instructions(dv.to(success_address), gotos).split("\n"));
+        pseudo_code += merge_lines(gotos);
+        pseudo_code += "\nelse"
 
         if (offset > 0) {
           let fail_address = off + offset;
           let gotos: string[] = [];
-          string += merge_lines(process_instructions(dv.to(fail_address), gotos, states, current_state).split("\n"));
-          string += merge_lines(gotos);
+          pseudo_code += merge_lines(process_instructions(dv.to(fail_address), gotos).split("\n"));
+          pseudo_code += merge_lines(gotos);
         } else {
-          string += `\n  throw \"Lexer does not have sequence '${data_str}' at current offset\"`;
+          pseudo_code += `\n  throw \"Lexer does not have sequence '${data_str}' at current offset\"`;
         }
       } break outer;
       case radlr.Opcode.Fork: {
@@ -736,19 +757,15 @@ function process_instructions(dv: StatefullDV, gotos: string[], states: StatesLU
         break outer;
       }
     }
-
-    states.set(instruction_address, { pseudo_code: string });
-
-    pseudo_code += string;
   }
+
   return pseudo_code;
 }
 
-function buildPseudoCode() { }
 
-function generate_table_string(dv: StatefullDV, states: StatesLU, current_state: object): string {
+function generate_table_string(dv: StatefullDV): string {
   let out_string = "";
-  let { table_base_address, input_type, scan_address, table_length, table_start_iter, default_address } = getHashData(dv);
+  let { table_base_address, input_type, scan_address, table_length, table_start_iter, default_address } = getLUTableData(dv);
 
   let val = "tok";
   let error = "unrecognized symbol";
@@ -764,8 +781,7 @@ function generate_table_string(dv: StatefullDV, states: StatesLU, current_state:
     } break;
     case radlr.MatchInputType.Token: {
       if (scan_address < 0xFFFF_FFFF) {
-        out_string += `\nstate@${scan_address.toString(16)}(lex, ctx)`;
-        ProcessState(dv.to(scan_address), states, true);
+        out_string += `\ns_${scan_address.toString(16)}(lex, ctx)`;
       }
       out_string += `\ntok = ctx.tok_id`
     } break;
@@ -812,7 +828,7 @@ function generate_table_string(dv: StatefullDV, states: StatesLU, current_state:
     } break;
   }
 
-  out_string += `\nmatch ${val}:`;
+  out_string += `\nmatch ${val}`;
 
   let inlined_default = false;
 
@@ -845,7 +861,7 @@ function generate_table_string(dv: StatefullDV, states: StatesLU, current_state:
     }
 
     let gotos: string[] = [];
-    out_string += merge_lines(process_instructions(dv.to(address), gotos, states, current_state, root_name).split("\n"), "\n    ");
+    out_string += merge_lines(process_instructions(dv.to(address), gotos).split("\n"), "\n    ");
     out_string += merge_lines(gotos, "\n    ");
   }
 
@@ -853,18 +869,12 @@ function generate_table_string(dv: StatefullDV, states: StatesLU, current_state:
     if (default_address < dv.dv.byteLength) {
       out_string += `\n  default:`;
       let gotos: string[] = [];
-      out_string += merge_lines(process_instructions(dv.to(default_address), gotos, states, current_state, root_name).split("\n"), "\n    ");
+      out_string += merge_lines(process_instructions(dv.to(default_address), gotos).split("\n"), "\n    ");
       out_string += merge_lines(gotos, "\n    ");
     } else {
-
       out_string += `\n  default:\n    throw "${error}"`;
     }
-
   }
-
-  states.set(table_base_address, {
-    pseudo_code: out_string
-  });
 
   return out_string
 }
@@ -901,75 +911,3 @@ class StatefullDV {
   }
 }
 
-
-export class ParserView {
-  field: NBContentField;
-  states: StatesLU | null = null;
-  debugger_data: HTMLDivElement;
-  parser_info: HTMLDivElement;
-
-  constructor(field: NBContentField) {
-    if (field instanceof NBEditorField) {
-      throw "ParserView cannot bind to a NBEditorField";
-    }
-
-    this.debugger_data = document.createElement("div");
-    this.parser_info = document.createElement("div");
-
-    this.field = field;
-    this.field.body.classList.add("debugger-cst-output");
-    this.field.body.append(this.parser_info);
-    this.field.body.append(this.debugger_data);
-  }
-
-  init() {
-    this.field.set_content_visible(false);
-    this.field.set_loading(true);
-  }
-
-  set_active_state(address: number) {
-    let val = this.states!.get(address);
-    if (val) {
-
-      this.debugger_data.innerHTML = `<pre>${val.pseudo_code}</pre>`
-    }
-  }
-
-  handle_new_parser(parser_db: radlr.JSBytecodeParserDB) {
-    this.field.set_content_visible(true);
-    this.field.set_loading(false);
-
-    this.states = disassemble_bytecode(parser_db);
-  }
-
-  setContextData(step: radlr.JSDebugPacket) {
-    this.parser_info.innerHTML = JSON.stringify({
-      instruction: step.instruction,
-      is_scanner: step.is_scanner,
-      ctx: {
-        anchor_ptr: step.ctx.anchor_ptr,
-        begin_ptr: step.ctx.begin_ptr,
-        end_ptr: step.ctx.end_ptr,
-        input_ptr: step.ctx.input_ptr,
-        is_scanner: step.ctx.is_scanner,
-        sym_len: step.ctx.sym_len,
-        sym_ptr: step.ctx.sym_ptr,
-        tok_id: step.ctx.tok_id,
-        tok_len: step.ctx.tok_len,
-      }
-    }, undefined, "\n")
-  }
-}
-
-function getHashData(dv: StatefullDV) {
-  let table_base_address = dv.off - 1;
-  let input_type = dv.u8();
-  let default_delta = dv.u32();
-  let scan_address = dv.u32();
-  let table_length = dv.u32();
-  let table_meta = dv.u32();
-  let table_start = table_base_address + 18;
-  let table_start_iter = dv.to(table_start);
-  let default_address = table_base_address + default_delta;
-  return { table_base_address, input_type, scan_address, table_length, table_start_iter, default_address };
-}

@@ -60,6 +60,9 @@ $theme-industrial-solace: (
   // codemirror
   active-color: #828282,
   inactive-color: #4a4a4a,
+  
+  bc-address-bg-active: #c53131,
+  bc-address-bg: #512626
 );
 
 $theme-desperados-unite: (
@@ -124,6 +127,9 @@ $theme-pencil: (
   button-bg: red,
   button-active-fg: rgb(255, 255, 255),
   button-active-bg: rgb(251, 94, 94),
+
+  bc-address-bg-active: rgb(255, 255, 255),
+  bc-address-bg: rgb(255, 255, 255)
 );
 
 

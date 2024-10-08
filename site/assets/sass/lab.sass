@@ -395,72 +395,7 @@
   border-radius: 5px
   box-shadow: 0px 0px 5px #00000020
 
-// Colors ------------------------------------------
 
-@mixin lab-themable($theme-map)
-
-  #error-reporter
-    color: map-get($theme-map, fg-dec-1)
-    background-color: map-get($theme-map, bg-inc-1)
-
-  #controls
-    background-color: map-get($theme-map, bg-dec-1)
-    color: map-get($theme-map, fg-basic)
-
-    .classification
-      color: map-get($theme-map, fg-inc-1)
-
-    .debugger-button:hover
-      color: map-get($theme-map, fg-dec-1)
-
-  .nb-field
-    background-color: none
-
-
-
-    &.nb-blank-field div
-      border-color: map-get($theme-map, bg-inc-1)
-
-    .nb-resize-handle-area
-      .nb-resize-handle
-        color: map-get($theme-map, fg-dec-1)
-        background-color: map-get($theme-map, bg-inc-1)
-
-        &:hover, &:active
-          color: map-get($theme-map, fg-inc-2)
-          background-color: map-get($theme-map, bg-inc-2)
-
-    &.dragging
-      background-color: map-get($theme-map, bg-basic)
-
-    &.nb-content-field
-      &.fullscreen
-        background-color: map-get($theme-map, "bg-basic")
-      .nb-header
-        color: map-get($theme-map, fg-basic)
-
-        .nb-icon-container
-          color: map-get($theme-map, fg-inc-2)
-
-        &:hover
-          .nb-expand-button
-            opacity: 1
-
-          &, .nb-icon-container
-            color: map-get($theme-map, "field-header-fg")
-
-          background: map-get($theme-map, "field-header-bg")
-
-        .nb-loader
-          background-color: map-get($theme-map, "loader-bg")
-          border-color: map-get($theme-map, "loader-bg")
-
-        .loader-div
-          background: map-get($theme-map, "loader-fg")
-
-      .nb-loading-screen
-        background-color: map-get($theme-map, "bg-basic")
-        color: map-get($theme-map, "fg-inc-2")
 
   //.nb-column.mini .nb-field .nb-header
   //  background: map-get($theme-map, "field-header-bg") !important
@@ -552,35 +487,12 @@
         text-align: right
         width: 100%
 
-  .stack-view
-    position: absolute
-    top: 90px
-    left: 10px
-    width: 60px
-    bottom: 20px
-    background-color: #111
-
-    .parse-state-goto, .scan-state-goto
-      position: relative
-      height: 18px;
-      font-size: 12px
-      text-transform: uppercase
-      text-align: right
-      padding: 5px
-
-    .parse-state-goto
-      color: red
-
-    .scan-state-goto
-      color: green
-
-
-
   .bytecode-view
+
     position: absolute
-    top: 90px
+    top: 50px
     bottom: 20px
-    left: 80px
+    left: 0px
     right: 20px
     font-family: monospace
     font-size: 12px
@@ -591,67 +503,299 @@
       height: 20px
       font-size: 14px
 
+    .state-address
+      width: 70px
+      margin: 0 2px
+      height: 15px
+      border-radius: 2px
+      padding: 1px
+      font-size: 12px
+      text-align: right;
+      box-sizing: border-box
+    
+    .active-states
+      position: relative
+      width: 100%
+
+      .state-info
+        display: flex
+        margin: 2px 0
+        height: 15px
+
+        .state
+
+        .state-label
+          width: 70px
+          text-align: right
+
+        .active-state
+          width: 80px
+
+        .state-stack
+          display: flex;
+          overflow: scroll;
+
     .bytecode-instructions
       position: absolute
-      top: 25px
-      bottom: 0px
-      left: 0
-      right: 0
       overflow: hidden
       overflow-y: scroll
-
+      margin: 0 2px
+      top: 80px
+      left: 0px
+      right: 0px
+      bottom: 0
+      
       .bytecode-view-instruction
-        width: 100%
-        margin: 5px
+        margin: 0.5px
+        min-height: 30px
         display: flex
         flex-direction: row
         flex-wrap: wrap
+        align-items: center
 
         &.active
-          background: #111
 
         > .address 
           width: 60px
           margin: 0 5px 0 0
           padding: 4px
           text-align: right
-          background-color: #222
           text-transform: uppercase
 
         .mnemonic
           padding: 4px
-          width: 80px
+          width: 60px
           text-transform: uppercase
 
-        .address-label
+        .label-value
           pointer-events: all
           font-size: 11px
-          margin: 0 2.5px
-          padding: 4px
+          margin: 0 5px
+          min-width: 70px
 
-
-          .address 
-            color: lightblue
+          .value
             display: block
-            width: 60px
             text-align: right
-            background-color: #222
             text-transform: uppercase
 
             &:first-child
               font-size: 14px
 
+          .address 
+            display: block
+            text-align: right
+            text-transform: uppercase
+            border-radius: 2px
+            padding: 0 5px
+            cursor: pointer
+            opacity: 0.8
+
+            &:hover
+              opacity: 1
+
+            &:first-child
+              font-size: 14px
+              width: 100%
+
           .label 
             display: block
-            width: 60px
-            text-align: right
+            text-align: left
 
-        .bytecode-view-info
-          width: 70px
-          margin: 0 2.5px
-          font-size: 11px
-          
-          .label
+      .bytecode-state-group
+        position: relative
+        margin: 5px 0
+        border-radius: 5px
 
-          .value
-            background: black
+        .bytecode-state-group-header
+          height: 20px
+        
+        .pseudo-code
+          position: relative
+          display: none
+          background-color: black
+          width: 100%
+          z-index: 100
+          padding: 20px
+          box-sizing: border-box
+          border-radius: 20px
+          line-height: 1.8em
+
+
+        &.show-pseudo .pseudo-code
+          display: block
+
+        &.show-pseudo .bytecode-view-instruction
+          display: none
+
+// Colors ------------------------------------------
+
+@mixin lab-themable($theme-map)
+
+  #error-reporter
+    color: map-get($theme-map, fg-dec-1)
+    background-color: map-get($theme-map, bg-inc-1)
+
+  #controls
+    background-color: map-get($theme-map, bg-dec-1)
+    color: map-get($theme-map, fg-basic)
+
+    .classification
+      color: map-get($theme-map, fg-inc-1)
+
+    .debugger-button:hover
+      color: map-get($theme-map, fg-dec-1)
+
+  .nb-field
+    background-color: none
+
+
+
+    &.nb-blank-field div
+      border-color: map-get($theme-map, bg-inc-1)
+
+    .nb-resize-handle-area
+      .nb-resize-handle
+        color: map-get($theme-map, fg-dec-1)
+        background-color: map-get($theme-map, bg-inc-1)
+
+        &:hover, &:active
+          color: map-get($theme-map, fg-inc-2)
+          background-color: map-get($theme-map, bg-inc-2)
+
+    &.dragging
+      background-color: map-get($theme-map, bg-basic)
+
+    &.nb-content-field
+      &.fullscreen
+        background-color: map-get($theme-map, "bg-basic")
+      .nb-header
+        color: map-get($theme-map, fg-basic)
+
+        .nb-icon-container
+          color: map-get($theme-map, fg-inc-2)
+
+        &:hover
+          .nb-expand-button
+            opacity: 1
+
+          &, .nb-icon-container
+            color: map-get($theme-map, "field-header-fg")
+
+          background: map-get($theme-map, "field-header-bg")
+
+        .nb-loader
+          background-color: map-get($theme-map, "loader-bg")
+          border-color: map-get($theme-map, "loader-bg")
+
+        .loader-div
+          background: map-get($theme-map, "loader-fg")
+
+      .nb-loading-screen
+        background-color: map-get($theme-map, "bg-basic")
+        color: map-get($theme-map, "fg-inc-2")
+
+  #error-reporter
+    color: map-get($theme-map, fg-dec-1)
+    background-color: map-get($theme-map, bg-inc-1)
+
+  #controls
+    background-color: map-get($theme-map, bg-dec-1)
+    color: map-get($theme-map, fg-basic)
+
+    .classification
+      color: map-get($theme-map, fg-inc-1)
+
+    .debugger-button:hover
+      color: map-get($theme-map, fg-dec-1)
+
+  .nb-field
+    background-color: none
+
+
+
+    &.nb-blank-field div
+      border-color: map-get($theme-map, bg-inc-1)
+
+    .nb-resize-handle-area
+      .nb-resize-handle
+        color: map-get($theme-map, fg-dec-1)
+        background-color: map-get($theme-map, bg-inc-1)
+
+        &:hover, &:active
+          color: map-get($theme-map, fg-inc-2)
+          background-color: map-get($theme-map, bg-inc-2)
+
+    &.dragging
+      background-color: map-get($theme-map, bg-basic)
+
+    &.nb-content-field
+      &.fullscreen
+        background-color: map-get($theme-map, "bg-basic")
+      .nb-header
+        color: map-get($theme-map, fg-basic)
+
+        .nb-icon-container
+          color: map-get($theme-map, fg-inc-2)
+
+        &:hover
+          .nb-expand-button
+            opacity: 1
+
+          &, .nb-icon-container
+            color: map-get($theme-map, "field-header-fg")
+
+          background: map-get($theme-map, "field-header-bg")
+
+        .nb-loader
+          background-color: map-get($theme-map, "loader-bg")
+          border-color: map-get($theme-map, "loader-bg")
+
+        .loader-div
+          background: map-get($theme-map, "loader-fg")
+
+      .nb-loading-screen
+        background-color: map-get($theme-map, "bg-basic")
+        color: map-get($theme-map, "fg-inc-2")
+
+  #parser-info 
+
+    .context-view-field-val
+      background-color: black
+
+    .parse-state-goto
+      color: red
+
+    .scan-state-goto
+      color: green
+
+    .active-state
+
+    .state-info
+      color: white
+
+    .state-address
+      background-color: map-get($theme-map, "bc-address-bg")
+
+    .active-state .state-address
+      background-color: map-get($theme-map, "bc-address-bg-active")
+      
+    .bytecode-view-instruction
+
+      &.active
+        color: map-get($theme-map, "fg-inc-1")
+        background: map-get($theme-map, "bg-inc-1")
+
+      > .address 
+        color: map-get($theme-map, "fg-basic")
+        background: map-get($theme-map, "bg-dec-2")
+
+      .label-value
+        color: map-get($theme-map, "fg-inc-1")
+        .label
+          color: map-get($theme-map, "fg-dec-1")
+
+        .address 
+          background: map-get($theme-map, "bc-address-bg")
+        
+        .value 
+          background: map-get($theme-map, "bg-dec-1")

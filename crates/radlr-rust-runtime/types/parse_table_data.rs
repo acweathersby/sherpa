@@ -35,7 +35,7 @@ impl<'a> From<Instruction<'a>> for TableHeaderData<'a> {
     let mut iter = i.iter();
     let input_type = iter.next_u8().unwrap() as u32;
     let default_delta = iter.next_u32_le().unwrap();
-    let scan_address = iter.next_u32_le().unwrap() as u32;
+    let scan_address = iter.next_u32_le().unwrap();
     let table_length = iter.next_u32_le().unwrap();
     let table_meta = iter.next_u32_le().unwrap();
     let table_start = i.address() + 18;

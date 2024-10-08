@@ -72,8 +72,7 @@ pub struct ParserContext {
   /// not change during parsing unless the end of the input window has been
   /// reached and a larger window is requested.
   pub end_ptr:      usize,
-  /// The number of characters that comprize the current
-  /// token. This should be 0 if the tok_id is also 0
+  /// The unique id of the token that is set to be produced by the scanner
   pub tok_id:       u32,
   /// The byte length of the current token
   pub tok_byte_len: u32,

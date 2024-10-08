@@ -288,6 +288,19 @@
 
   <template id="bytecode-view-template">
     <div class="bytecode-view">
+      <h2>state stacks</h2>
+      <div class="active-states">
+        <div class="parser-states state-info">
+          <div class="state-label">parser</div>
+          <div class="active-state"></div>
+          <div class="state-stack"></div>
+        </div>
+        <div class="scanner-states state-info">
+          <div class="state-label">lexer</div>
+          <div class="active-state"></div>
+          <div class="state-stack"></div>
+        </div>
+      </div>
       <h2>bytecode</h2>
       <div class="bytecode-instructions"></div>
     </div>
