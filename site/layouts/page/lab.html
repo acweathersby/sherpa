@@ -52,13 +52,14 @@
     <div id="settings-content">
       <div class="close-button">x</div>
       <h1>Parser Settings</h1>
+      <h2>Algorithm</h2>
       <label id="ALLOW_CALLS">
-        <div class=title>Allow calls</div>
+        <div class=title>Enable recursive descent parsing</div>
         <div class="note">When enable, recursive descent style <i>"call"</i> states will be generated</div>
         <input type="checkbox" />
       </label>
       <label id="ALLOW_LR">
-        <div class=title>Allow LR</div>
+        <div class=title>Enable bottom up parsing</div>
         <div class="note">When enable, LR style states may be produced. In general, this
           allows more advanced grammar constructs to be parsed, such
           as left recursive rules.
@@ -68,50 +69,35 @@
           ant errors will be reported.</div>
         <input type="checkbox" />
       </label>
-      <label id="ALLOW_PEEKING">
-        <div class=title>Allow peeking</div>
-        <div class="note">
-          <p>When enabled, unrestricted lookahead states states will be generated</p>
-
-          <p>When disabled, grammars with rules that require a lookahead that is
-            `k>1` will be rejected, and relevant errors will be reported.</p>
-        </div>
-        <input type="checkbox" />
-      </label>
       <label id="ALLOW_CONTEXT_SPLITTING">
-        <div class=title>Allow context splitting (Fork)</div>
+        <div class=title>Enable context forks</div>
         <div class="note">Allow the parser to split its context to handle ambiguity. This
           may lead to a CSF (Concrete Syntax Forest) or a CSDAG (Concrete Syntax
           DAG) being returned by the parser instead of a CST</div>
         <input type="checkbox" />
       </label>
-      <label id="CONTEXT_FREE">
-        <div class=title>Context free</div>
-        <div class="note">Creates a single scanner instead of multiple contextual scanners. More
-          likely to report terminal conflicts.</div>
+      <h3>Peeking</h3>
+      <label id="ALLOW_PEEKING">
+        <div class=title>Enable Peek</div>
+        <div class="note">
+          <p>When enabled, unrestricted lookahead states states will be generated</p>
+          <p>When disabled, grammars with rules that require a lookahead that is
+            `k>1` will be rejected, and relevant errors will be reported.</p>
+        </div>
         <input type="checkbox" />
       </label>
-      <label id="AllOW_CST_MERGING">
-        <div class=title>Allow CST merging</div>
-        <div class="note">Creates states that directly handle transitions on terminals, allowing the
-          creation of parsers that can patch existing CST data structures.</div>
-        <input type="checkbox" />
+      <label id="max_k">
+        <div class=title>Maximum lookahead</div>
+        <div class="note">
+          <p>The maximum number of lookead symbols allowed before parser construction
+            is aborted or a different disambiguating strategy is employed.</p>
+          <p>A value of zero represents unlimited lookahead</p>
+        </div>
+        <input type="number" min="0" max="`128" />
       </label>
-      <label id="ALLOW_CST_NONTERM_SHIFT">
-        <div class=title>Allow CST nonterm shift</div>
-        <div class="note">Allow the parser to shift on CST non-term nodes.</div>
-        <input type="checkbox" />
-      </label>
-      <label id="ALLOW_SCANNER_INLINING">
-        <div class=title>Allow scanner inlining</div>
-        <div class="note">Allow inlining of scanners that yield single codepoint tokens.
-
-          Parsers created with this type of optimization tend to perform poorly when
-          used for error correction.</div>
-        <input type="checkbox" />
-      </label>
+      <h2>Parser</h2>
       <label id="ALLOW_ANONYMOUS_NONTERM_INLINING">
-        <div class=title>Allow anonymous nonterm inlining</div>
+        <div class=title>Enable anonymous nonterm inlining</div>
         <div class="note">An anonymous non-terminal, aka grouped rules `e.g ( symA symB | symC | ..
           )`, may be inlined into the body of its host rule if none of the grouped
           rules contain semantic actions, such as `:ast` definitions.
@@ -120,30 +106,6 @@
           used for error correcting.</div>
         <input type="checkbox" />
       </label>
-      <label id="ALLOW_BYTE_SEQUENCES">
-        <div class=title>Allow byte sequences</div>
-        <div class="note"> Enables using wide data types ( u16 | u32 | u64 | u128 ) to recognize a
-          sequence of characters.</div>
-        <input type="checkbox" />
-      </label>
-      <label id="ALLOW_LOOKAHEAD_SCANNERS">
-        <div class=title>Allow lookahead scanners</div>
-        <div class="note">Enables FOLLOW context sensitive scanners, which will consider the tokens
-          that _follow_ the states which the scanner is constructing tokens
-          for.
-
-          May significantly increase the number scanner states.</div>
-        <input type="checkbox" />
-      </label>
-      <label id="max_k">
-        <div class=title>Max K</div>
-        <div class="note">
-          <p>The maximum number of lookead symbols allowed before parser construction
-            is aborted or a different disambiguating strategy is employed.</p>
-          <p>A value of zero represents unlimited lookahead</p>
-        </div>
-        <input type="number" min="0" max="`128" />
-      </label>
       <label id="EXPORT_ALL_NONTERMS">
         <div class=title>Export all nonterms</div>
         <div class="note">Export all non-terminals as parser entry points. This implies
@@ -151,6 +113,47 @@
 
           <p style="color:red">Requires a lab-host server.</p>
         </div>
+        <input type="checkbox" />
+      </label>
+      <label id="AllOW_CST_MERGING">
+        <div class=title>CST merging</div>
+        <div class="note">Creates states that directly handle transitions on terminals, allowing the
+          creation of parsers that can patch existing CST data structures.</div>
+        <input type="checkbox" />
+      </label>
+      <label id="ALLOW_CST_NONTERM_SHIFT">
+        <div class=title>CST nonterm shift</div>
+        <div class="note">Allow the parser to shift on CST non-term nodes.</div>
+        <input type="checkbox" />
+      </label>
+      <h2>Lexer</h2>
+      <label id="CONTEXT_FREE">
+        <div class=title>Context free</div>
+        <div class="note">Creates a single scanner instead of multiple contextual scanners. More
+          likely to report terminal conflicts.</div>
+        <input type="checkbox" />
+      </label>
+      <label id="ALLOW_SCANNER_INLINING">
+        <div class=title>Inline scanner states</div>
+        <div class="note">Allow inlining of scanners that yield single codepoint tokens.
+
+          Parsers created with this type of optimization tend to perform poorly when
+          used for error correction.</div>
+        <input type="checkbox" />
+      </label>
+      <label id="ALLOW_BYTE_SEQUENCES">
+        <div class=title>Scan byte sequences</div>
+        <div class="note"> Enables using wide data types ( u16 | u32 | u64 | u128 ) to recognize a
+          sequence of characters.</div>
+        <input type="checkbox" />
+      </label>
+      <label id="ALLOW_LOOKAHEAD_SCANNERS">
+        <div class=title>Enable scanner lookahead</div>
+        <div class="note">Enables FOLLOW context sensitive scanners, which will consider the tokens
+          that _follow_ the states which the scanner is constructing tokens
+          for.
+
+          May significantly increase the number scanner states.</div>
         <input type="checkbox" />
       </label>
     </div>

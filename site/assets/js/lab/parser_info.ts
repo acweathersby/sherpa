@@ -628,7 +628,7 @@ function create_pseudo_code(dv: StatefullDV, is_scanner: boolean = false): strin
   let pseudo_code = "";
   pseudo_code += `s_${dv.off.toString(16)}${is_scanner ? " SCANNER " : ""}(lex, ctx) {`;
   pseudo_code += merge_lines(process_instructions(dv, gotos).split("\n",));
-  pseudo_code += merge_lines(gotos);
+  pseudo_code += merge_goto_lines(gotos);
   pseudo_code += "\n}";
 
   return pseudo_code;
@@ -643,7 +643,24 @@ function merge_lines(internal_data: string[], prefix: string = "\n  ") {
   return pseudo_code;
 }
 
-function process_instructions(dv: StatefullDV, gotos: string[], root_name: string = ""): string {
+function merge_goto_lines(internal_data: string[], prefix: string = "\n  ") {
+  let pseudo_code: string = "";
+  let i = -1;
+  for (const goto of internal_data) {
+    i++
+    if (!goto) continue
+
+    if (i == internal_data.length - 1) {
+      pseudo_code += prefix + "tail return " + goto;
+    } else {
+      pseudo_code += prefix + goto;
+    }
+
+  }
+  return pseudo_code;
+}
+
+function process_instructions(dv: StatefullDV, gotos: string[], root_name: string = "", is_scanner: boolean = false): string {
   let pseudo_code: string = ""
   let i = 0;
   let have_root = false
@@ -655,13 +672,17 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
       case radlr.Opcode.NoOp: {
       } break;
       case radlr.Opcode.Pass: {
-        gotos.push("return")
+        if (gotos.length == 0) {
+          pseudo_code += `\nreturn`;
+        }
       } break outer;
       case radlr.Opcode.Fail: {
-        pseudo_code += `\nthrow "could not continue"`;
+        if (is_scanner)
+          pseudo_code += `\nreturn`;
+        else
+          pseudo_code += `\nthrow "could not continue"`;
       } break outer;
       case radlr.Opcode.ShiftChar: {
-        pseudo_code += "\nctx.emit(SHIFT_CHAR)";
         pseudo_code += "\nlex.shift_la(1)";
       } break;
       case radlr.Opcode.ShiftToken: {
@@ -676,13 +697,18 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
         pseudo_code += "\nctx.tok_len = ctx.sym_len\nctx.peek(tok)";
       } break;
       case radlr.Opcode.SkipToken: {
-        pseudo_code += "\nctx.skip()\ngoto " + root_name;
+        pseudo_code += "\nlex.shift(ctx.sym_len)";
+        pseudo_code += "\nctx.emit(SKIP { id: ctx.tk_id, len: ctx.sym_len })";
+        pseudo_code += "\ntail return " + root_name + "( lex, ctx )";
       } break outer;
       case radlr.Opcode.SkipTokenScanless: {
-        pseudo_code += "\nctx.skip()\ngoto " + root_name;
+        pseudo_code += "\nlex.shift(ctx.sym_len)";
+        pseudo_code += "\nctx.emit(SKIP { id: ctx.tk_id, len: ctx.sym_len })";
+        pseudo_code += "\ntail return " + root_name + "( lex, ctx )";
       } break outer;
       case radlr.Opcode.PeekSkipToken: {
-        pseudo_code += "\nctx.peek_skip()\ngoto " + root_name;
+        pseudo_code += "\nlex.shift(ctx.sym_len)";
+        pseudo_code += "\ntail return " + root_name + "( lex, ctx )";
       } break outer;
       case radlr.Opcode.PeekReset: {
         pseudo_code += "\nctx.peek_reset()";
@@ -700,9 +726,9 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
       } break;
       case radlr.Opcode.Goto: {
         let parse_mode = dv.u8();
-        let addressw = dv.u32();
-        pseudo_code += `\ns_${addressw.toString(16)}(lex, ctx)`;
-      } break;
+        let address = dv.u32();
+        gotos.unshift(`s_${address.toString(16)}(lex, ctx)`);
+      } break outer;
       case radlr.Opcode.AssignToken: {
         let tok_id = dv.u32();
         pseudo_code += `\nctx.tok_id = ${tok_id}`;
@@ -720,7 +746,7 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
         pseudo_code += generate_table_string(dv);
       } break;
       case radlr.Opcode.HashBranch: {
-        pseudo_code += generate_table_string(dv);
+        pseudo_code += generate_table_string(dv, is_scanner);
       } break outer;
       case radlr.Opcode.ByteSequence: {
         let off = dv.off - 1;
@@ -735,15 +761,15 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
         pseudo_code += `\n  lex.incr(${len})`
 
         let gotos: string[] = [];
-        pseudo_code += merge_lines(process_instructions(dv.to(success_address), gotos).split("\n"));
-        pseudo_code += merge_lines(gotos);
+        pseudo_code += merge_lines(process_instructions(dv.to(success_address), gotos, root_name, true).split("\n"));
+        pseudo_code += merge_goto_lines(gotos);
         pseudo_code += "\nelse"
 
         if (offset > 0) {
           let fail_address = off + offset;
           let gotos: string[] = [];
-          pseudo_code += merge_lines(process_instructions(dv.to(fail_address), gotos).split("\n"));
-          pseudo_code += merge_lines(gotos);
+          pseudo_code += merge_lines(process_instructions(dv.to(fail_address), gotos, root_name, true).split("\n"));
+          pseudo_code += merge_goto_lines(gotos);
         } else {
           pseudo_code += `\n  throw \"Lexer does not have sequence '${data_str}' at current offset\"`;
         }
@@ -763,16 +789,17 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
 }
 
 
-function generate_table_string(dv: StatefullDV): string {
+function generate_table_string(dv: StatefullDV, is_scanner: boolean = false): string {
   let out_string = "";
-  let { table_base_address, input_type, scan_address, table_length, table_start_iter, default_address } = getLUTableData(dv);
+  let { table_base_address, input_type, scan_address, table_length, table_start_iter, default_address, } = getLUTableData(dv);
 
   let val = "tok";
   let error = "unrecognized symbol";
   let convert_val_to_string = (val: number): string => val.toString();
+  let convert_val_to_bool = (val: number): string => (val > 0) + "";
   let convert_codepoint = (val: number): string => `\"${String.fromCodePoint(val)}\"`;
 
-  let root_name = `\`root_${table_base_address}`
+  let root_name = `s_${table_base_address.toString(16)}`
 
   switch (input_type) {
     case radlr.MatchInputType.NonTerminal: {
@@ -783,25 +810,26 @@ function generate_table_string(dv: StatefullDV): string {
       if (scan_address < 0xFFFF_FFFF) {
         out_string += `\ns_${scan_address.toString(16)}(lex, ctx)`;
       }
-      out_string += `\ntok = ctx.tok_id`
+      val = "ctx.tok_id"
     } break;
     case radlr.MatchInputType.Class: {
-      val = "cp_class"
-      out_string += `\ncp_class = lex.codepoint_class()`
+      val = "lex.codepoint_class()"
+      is_scanner = true;
     } break;
     case radlr.MatchInputType.Codepoint: {
-      val = "cp"
-      out_string += `\ncp = lex.codepoint()`
+      val = "lex.codepoint()"
       convert_val_to_string = convert_codepoint;
+      is_scanner = true;
     } break;
     case radlr.MatchInputType.Byte: {
-      val = "byte"
-      out_string += `\nbyte = lex.byte()`
+      val = "lex.byte()"
       convert_val_to_string = convert_codepoint;
+      is_scanner = true;
     } break;
     case radlr.MatchInputType.EndOfFile: {
-      val = "eof"
-      out_string += `\neof = lex.is_eof()`
+      val = "lex.is_eof()"
+      convert_val_to_string = convert_val_to_bool;
+      is_scanner = true;
     } break;
     case radlr.MatchInputType.ByteScanless: {
       val = "byte"
@@ -852,27 +880,29 @@ function generate_table_string(dv: StatefullDV): string {
 
   for (const [address, entries] of map.entries()) {
     if (address == default_address) {
-      out_string += `\n  default:`;
+      out_string += `\n  default`;
       inlined_default = true;
     } else {
       for (const entry of entries) {
-        out_string += `\n  case ${convert_val_to_string(entry)}:`;
+        out_string += `\n  case ${convert_val_to_string(entry)}`;
       }
     }
 
     let gotos: string[] = [];
-    out_string += merge_lines(process_instructions(dv.to(address), gotos).split("\n"), "\n    ");
-    out_string += merge_lines(gotos, "\n    ");
+    out_string += merge_lines(process_instructions(dv.to(address), gotos, root_name, is_scanner).split("\n"), "\n    ");
+    out_string += merge_goto_lines(gotos, "\n    ");
   }
 
   if (!inlined_default) {
     if (default_address < dv.dv.byteLength) {
-      out_string += `\n  default:`;
+      out_string += `\n  default`;
       let gotos: string[] = [];
-      out_string += merge_lines(process_instructions(dv.to(default_address), gotos).split("\n"), "\n    ");
-      out_string += merge_lines(gotos, "\n    ");
+      out_string += merge_lines(process_instructions(dv.to(default_address), gotos, root_name, is_scanner).split("\n"), "\n    ");
+      out_string += merge_goto_lines(gotos, "\n    ");
+    } else if (is_scanner) {
+      out_string += `\n  default\n    return"`;
     } else {
-      out_string += `\n  default:\n    throw "${error}"`;
+      out_string += `\n  default\n    throw "${error}"`;
     }
   }
 
