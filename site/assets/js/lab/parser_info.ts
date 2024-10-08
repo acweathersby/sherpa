@@ -75,6 +75,33 @@ export function init(
   });
 }
 
+type TableInfo = {
+  table_type: "hash" | "vec";
+  table_base_address: number;
+  input_type: number;
+  scan_address: number;
+  table_meta: number;
+  table_length: number;
+  table_start_iter: StatefullDV;
+  default_address: number;
+  parse_block_address: number;
+}
+
+function getLUTableData(dv: StatefullDV): TableInfo {
+  let table_base_address = dv.off - 1;
+  let table_type = <"hash" | "vec">((dv.dv.getInt8(table_base_address) == radlr.Opcode.HashBranch) ? "hash" : "vec");
+  let input_type = dv.u8();
+  let default_delta = dv.u32();
+  let scan_address = dv.u32();
+  let table_length = dv.u32();
+  let table_meta = dv.u32();
+  let table_start = table_base_address + 18;
+  let table_start_iter = dv.to(table_start);
+  let default_address = table_base_address + default_delta;
+  let parse_block_address = table_start + table_length * 4
+  return { parse_block_address, table_type, table_meta, table_base_address, input_type, scan_address, table_length, table_start_iter, default_address };
+}
+
 
 type StatesLU = Map<number, { pseudo_code: string }>;
 
@@ -158,9 +185,9 @@ class BytecodeView {
   active_scan_state: HTMLDivElement
   active_parse_state_val: number = 0
   active_scan_state_val: number = 0
+  active_instruction: number = -1;
   inst_map: Map<number, number> = new Map
   instructions: { state_head: boolean, address: number, ele: HTMLDivElement }[] = []
-  active_instruction: number = -1;
   state_headers: Map<number, boolean> = new Map
   parse_states: number[] = [];
   scan_states: number[] = [];
@@ -195,7 +222,9 @@ class BytecodeView {
     this.instruction_area.innerHTML = "";
     this.instructions.length = 0;
     this.inst_map.clear();
+    this.state_headers.clear();
     this.state_headers.set(8, false);
+    this.reset();
   }
 
 
@@ -316,9 +345,9 @@ class BytecodeView {
         } break;
         case radlr.Opcode.Reduce: {
           this.instr_ele(instruction_address, "REDUCE").append(
-            this.extra("nonterm", dv.u32()),
-            this.extra("rule", dv.u32()),
-            this.extra("sym #", dv.u16()),
+            this.extra("nonterm #", dv.u32()),
+            this.extra("rule #", dv.u32()),
+            this.extra("sym len", dv.u16()),
           )
         } break;
         case radlr.Opcode.VectorBranch: {
@@ -592,44 +621,22 @@ class BytecodeView {
   }
 }
 
-type TableInfo = {
-  table_type: "hash" | "vec";
-  table_base_address: number;
-  input_type: number;
-  scan_address: number;
-  table_meta: number;
-  table_length: number;
-  table_start_iter: StatefullDV;
-  default_address: number;
-  parse_block_address: number;
-}
-
-function getLUTableData(dv: StatefullDV): TableInfo {
-  let table_base_address = dv.off - 1;
-  let table_type = <"hash" | "vec">((dv.dv.getInt8(table_base_address) == radlr.Opcode.HashBranch) ? "hash" : "vec");
-  let input_type = dv.u8();
-  let default_delta = dv.u32();
-  let scan_address = dv.u32();
-  let table_length = dv.u32();
-  let table_meta = dv.u32();
-  let table_start = table_base_address + 18;
-  let table_start_iter = dv.to(table_start);
-  let default_address = table_base_address + default_delta;
-  let parse_block_address = table_start + table_length * 4
-  return { parse_block_address, table_type, table_meta, table_base_address, input_type, scan_address, table_length, table_start_iter, default_address };
-}
-
-
 
 function create_pseudo_code(dv: StatefullDV, is_scanner: boolean = false): string {
 
   let gotos: string[] = [];
 
   let pseudo_code = "";
-  pseudo_code += `s_${dv.off.toString(16)}${is_scanner ? " SCANNER " : ""}(lex, ctx) {`;
+  pseudo_code += `s_${dv.off.toString(16)}${is_scanner ? " SCANNER " : ""}(lex, ctx, in)`;
+
+  if (!is_scanner) {
+    pseudo_code += "\n  if ctx.pop > 0"
+    pseudo_code += "\n    ctx.pop--"
+    pseudo_code += "\n    return"
+  }
+
   pseudo_code += merge_lines(process_instructions(dv, gotos).split("\n",));
   pseudo_code += merge_goto_lines(gotos);
-  pseudo_code += "\n}";
 
   return pseudo_code;
 }
@@ -683,12 +690,13 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
           pseudo_code += `\nthrow "could not continue"`;
       } break outer;
       case radlr.Opcode.ShiftChar: {
-        pseudo_code += "\nlex.shift_la(1)";
+        pseudo_code += "\nlex.head += 1";
       } break;
       case radlr.Opcode.ShiftToken: {
-        pseudo_code += "\nlex.shift(ctx.sym_len)";
-        pseudo_code += "\nctx.emit(SHIFT { id: ctx.tk_id, len: ctx.sym_len })";
-        pseudo_code += "\nctx.sym_len = 0";
+        pseudo_code += "\nlen = lex.head - lex.tail";
+        pseudo_code += "\nctx.emit(SHIFT { id: lex.tok_id, len })";
+        pseudo_code += "\nlex.tail   = lex.head";
+        pseudo_code += "\nlex.anchor = lex.head";
       } break;
       case radlr.Opcode.PeekToken: {
         pseudo_code += "\nctx.peek(tok)";
@@ -697,41 +705,46 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
         pseudo_code += "\nctx.tok_len = ctx.sym_len\nctx.peek(tok)";
       } break;
       case radlr.Opcode.SkipToken: {
-        pseudo_code += "\nlex.shift(ctx.sym_len)";
-        pseudo_code += "\nctx.emit(SKIP { id: ctx.tk_id, len: ctx.sym_len })";
-        pseudo_code += "\ntail return " + root_name + "( lex, ctx )";
+        pseudo_code += "\nlen = lex.head - lex.tail";
+        pseudo_code += "\nctx.emit(SKIP { id: lex.tok_id, len })";
+        pseudo_code += "\nlex.tail   = lex.head";
+        pseudo_code += "\nlex.anchor = lex.head";
+        pseudo_code += "\ntail return " + root_name + "( lex, ctx, in )";
       } break outer;
       case radlr.Opcode.SkipTokenScanless: {
-        pseudo_code += "\nlex.shift(ctx.sym_len)";
-        pseudo_code += "\nctx.emit(SKIP { id: ctx.tk_id, len: ctx.sym_len })";
-        pseudo_code += "\ntail return " + root_name + "( lex, ctx )";
+        pseudo_code += "\nlen = lex.head - lex.tail";
+        pseudo_code += "\nctx.emit(SKIP { id: lex.tok_id, len })";
+        pseudo_code += "\nlex.tail   = lex.head";
+        pseudo_code += "\nlex.anchor = lex.head";
+        pseudo_code += "\ntail return " + root_name + "( lex, ctx, in )";
       } break outer;
       case radlr.Opcode.PeekSkipToken: {
-        pseudo_code += "\nlex.shift(ctx.sym_len)";
-        pseudo_code += "\ntail return " + root_name + "( lex, ctx )";
+        pseudo_code += "\nlex.tail = lex.head";
+        pseudo_code += "\ntail return " + root_name + "( lex, ctx, in )";
       } break outer;
       case radlr.Opcode.PeekReset: {
-        pseudo_code += "\nctx.peek_reset()";
+        pseudo_code += "\nlex.head = lex.anchor";
+        pseudo_code += "\nlex.tail = lex.anchor";
       } break;
       case radlr.Opcode.Accept: {
         pseudo_code += "\nctx.emit(ACCEPT)";
       } break outer;
       case radlr.Opcode.PopGoto: {
-        pseudo_code += "\nctx.pop(1)";
+        pseudo_code += "\nctx.pop+=1";
       } break;
       case radlr.Opcode.PushGoto: {
         let parse_mode = dv.u8();
         let address = dv.u32();
-        gotos.unshift(`s_${address.toString(16)}(lex, ctx)`);
+        gotos.unshift(`s_${address.toString(16)}(lex, ctx, in)`);
       } break;
       case radlr.Opcode.Goto: {
         let parse_mode = dv.u8();
         let address = dv.u32();
-        gotos.unshift(`s_${address.toString(16)}(lex, ctx)`);
+        gotos.unshift(`s_${address.toString(16)}(lex, ctx, in)`);
       } break outer;
       case radlr.Opcode.AssignToken: {
         let tok_id = dv.u32();
-        pseudo_code += `\nctx.tok_id = ${tok_id}`;
+        pseudo_code += `\nlex.tok_id = ${tok_id}`;
       } break;
       case radlr.Opcode.Reduce: {
         let nterm = dv.u32();
@@ -758,7 +771,7 @@ function process_instructions(dv: StatefullDV, gotos: string[], root_name: strin
         let success_address = dv.off + len;
 
         pseudo_code += `if lex.slice(${len}) == "${data_str}"`
-        pseudo_code += `\n  lex.incr(${len})`
+        pseudo_code += `\n lex.head += (${len})`
 
         let gotos: string[] = [];
         pseudo_code += merge_lines(process_instructions(dv.to(success_address), gotos, root_name, true).split("\n"));
@@ -808,45 +821,45 @@ function generate_table_string(dv: StatefullDV, is_scanner: boolean = false): st
     } break;
     case radlr.MatchInputType.Token: {
       if (scan_address < 0xFFFF_FFFF) {
-        out_string += `\ns_${scan_address.toString(16)}(lex, ctx)`;
+        out_string += `\ns_${scan_address.toString(16)}(lex, ctx, in)`;
       }
-      val = "ctx.tok_id"
+      val = "lex.tok_id"
     } break;
     case radlr.MatchInputType.Class: {
-      val = "lex.codepoint_class()"
+      val = "in.class_at(lex.head)"
       is_scanner = true;
     } break;
     case radlr.MatchInputType.Codepoint: {
-      val = "lex.codepoint()"
+      val = "in.cp_at(lex.head)"
       convert_val_to_string = convert_codepoint;
       is_scanner = true;
     } break;
     case radlr.MatchInputType.Byte: {
-      val = "lex.byte()"
+      val = "in.byte_at(lex.head)"
       convert_val_to_string = convert_codepoint;
       is_scanner = true;
     } break;
     case radlr.MatchInputType.EndOfFile: {
-      val = "lex.is_eof()"
+      val = "in.is_eof_at(lex.head)"
       convert_val_to_string = convert_val_to_bool;
       is_scanner = true;
     } break;
     case radlr.MatchInputType.ByteScanless: {
       val = "byte"
-      out_string += `\nbyte = lex.byte()`
-      out_string += `\nctx.sym_len = 1`
+      out_string += `\nbyte = in.byte_at(lex.tail)`
+      out_string += `\nlex.head = lex.tail + 1`
       convert_val_to_string = convert_codepoint;
     } break;
     case radlr.MatchInputType.CodepointScanless: {
       val = "cp"
-      out_string += `\ncp = lex.codepoint()`
-      out_string += `\nctx.sym_len = cp.length`
+      out_string += `\ncp = in.cp_at(lex.tail)`
+      out_string += `\nlex.head = lex.tail + in.cp_len_at(lex.tail)`
       convert_val_to_string = convert_codepoint;
     } break;
     case radlr.MatchInputType.ClassScanless: {
-      val = "cp_class"
-      out_string += `\ncp_class = lex.codepoint_class()`
-      out_string += `\nctx.sym_len = lex.codepoint().length`
+      val = "class"
+      out_string += `\nclass = lex.class_at(lex.tail)`
+      out_string += `\nlex.head = lex.tail + in.cp_len_at(lex.tail)`
     } break;
     case radlr.MatchInputType.ByteSequence: {
       throw "HUH?";
@@ -856,7 +869,7 @@ function generate_table_string(dv: StatefullDV, is_scanner: boolean = false): st
     } break;
   }
 
-  out_string += `\nmatch ${val}`;
+  out_string += `\n \nmatch ${val}`;
 
   let inlined_default = false;
 
@@ -880,11 +893,11 @@ function generate_table_string(dv: StatefullDV, is_scanner: boolean = false): st
 
   for (const [address, entries] of map.entries()) {
     if (address == default_address) {
-      out_string += `\n  default`;
+      out_string += `\n  else`;
       inlined_default = true;
     } else {
       for (const entry of entries) {
-        out_string += `\n  case ${convert_val_to_string(entry)}`;
+        out_string += `\n  ${convert_val_to_string(entry)}`;
       }
     }
 
@@ -895,14 +908,14 @@ function generate_table_string(dv: StatefullDV, is_scanner: boolean = false): st
 
   if (!inlined_default) {
     if (default_address < dv.dv.byteLength) {
-      out_string += `\n  default`;
+      out_string += `\n  else`;
       let gotos: string[] = [];
       out_string += merge_lines(process_instructions(dv.to(default_address), gotos, root_name, is_scanner).split("\n"), "\n    ");
       out_string += merge_goto_lines(gotos, "\n    ");
     } else if (is_scanner) {
-      out_string += `\n  default\n    return"`;
+      out_string += `\n  else\n    return"`;
     } else {
-      out_string += `\n  default\n    throw "${error}"`;
+      out_string += `\n  else\n    throw "${error}"`;
     }
   }
 
