@@ -14,11 +14,12 @@
 {{- $theme_data := $themes_kludge.Content | findRESubmatch `theme(.*)\|(.*)emeht` }}
 {{- $default_theme := index $theme_data 0 2 -}}
 {{- .Scratch.Set "headerSubtext" "lab" -}}
+{{ partial "header/header.html" . }}
 
 <body class="{{$default_theme}}" data-defaulttheme="{{$default_theme}}">
   <noscript>
     <!-- anchor linking to external file -->
-    <div class="noscript">
+    <div id="noscript">
       {{ partial "header/header.html" . }}
       <p>
         Try as we might, there's just no getting around JavaScript when it comes making this site work.
@@ -27,7 +28,11 @@
     </div>
   </noscript>
 
-  {{ partial "header/header.html" . }}
+  <div id="screen-too-small">
+    {{ partial "header/header.html" . }}
+    <p> RADLR lab will only work on screens larger than </p>
+    <div style="font-size: 40px">375x665</div>
+  </div>
 
   <div id="controls-container">
     <div id="controls" class="inactive">

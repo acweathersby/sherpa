@@ -1,5 +1,3 @@
-import { Eventable } from "./eventable";
-import { sleep } from "./pipeline";
 import radlr_init, * as radlr from "js/radlr/radlr_wasm.js";
 import { LocalStoreKeys, getLocalValue, setLocalValue, setupOpenCloseTriggers } from "./settings-panel";
 
@@ -28,9 +26,11 @@ export async function setupConfig(settings_changed: (cfg: radlr.JSParserConfig) 
 
     switch (input.type) {
       case "checkbox":
+        //@ts-ignore
         input.checked = config[id];
         break;
       case "number":
+        //@ts-ignore
         input.value = parseInt(config[id]).toString();
         break
     }
@@ -38,9 +38,11 @@ export async function setupConfig(settings_changed: (cfg: radlr.JSParserConfig) 
     input.addEventListener("change", e => {
       switch (input.type) {
         case "checkbox":
+          //@ts-ignore
           config[id] = input.checked;
           break;
         case "number":
+          //@ts-ignore
           config[id] = input.value;
           break
       }

@@ -23,7 +23,7 @@ export async function init(compiler_worker_path: string) {
   grammar_input_field.set_text("");
   grammar_input_field.set_icon(`<i class="fa-solid fa-chart-gantt"></i>`);
 
-  let parser_info_field = nb.add_field(new NBContentField("Parser Info"), -1);
+  let parser_info_field = nb.add_field(new NBContentField("Parser Info"), 1);
   parser_info_field.set_content_visible(false);
   parser_info_field.set_icon(`<i class="fa-solid fa-circle-info"></i>`);
 
@@ -96,10 +96,11 @@ export async function init(compiler_worker_path: string) {
 
   grammar_pipeline_node.addListener("loading", _ => {
     error_reporter.innerText = "";
-    grammar_classification.innerHTML = "";
+    grammar_classification.innerHTML = "...";
   })
 
   grammar_pipeline_node.addListener("failed", errors => {
+    grammar_classification.innerHTML = "error";
     for (const error of errors) {
       if (error.origin == radlr.ErrorOrigin.Grammar) {
         //alert(error.msg);

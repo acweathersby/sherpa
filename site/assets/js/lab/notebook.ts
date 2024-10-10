@@ -373,7 +373,18 @@ export class MININBColumn extends NBColumn {
     field.is_mini = true;
   }
 
-  distribute_height() { }
+  distribute_height() {
+    // Every field is set to be 40px high
+    let ratio = 50 / this.ele.getBoundingClientRect().height;
+    for (const field of this.cells) {
+
+      if (field instanceof NBBlankField && field.deleting)
+        continue;
+
+      field.set_relative_height(ratio);
+    }
+
+  }
 }
 
 export class NBField {

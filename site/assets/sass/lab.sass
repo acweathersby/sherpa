@@ -209,6 +209,9 @@
         right: 0
         bottom: 0
 
+        @include mobile-screens
+          top: 0px  !important
+
         *
           color: none
           background-color: none
@@ -264,24 +267,23 @@
 
 .nb-column.mini
   flex-basis: 60px;
+  .nb-loader, .nb-loading-screen
+    display: none
 
   @include mobile-screens
     padding: 0
-    flex-basis: 40px;
-    margin: 0 15px
+    flex-basis: 30px;
+    margin: 0 5px
 
   .nb-field
+    height: 50px
     padding: 0
-    padding-bottom: 20px
-
 
     &.nb-blank-field
       height: 0
       opacity: 0
       box-sizing: border-box
       padding: 0
-      margin-bottom: 20px
-
     
     .nb-icon-container
       display: flex
@@ -313,7 +315,7 @@
   z-index: 1000
 
   @include mobile-screens
-    top: $header-height * 2
+    top: $header-height 
     padding: 0 5px
 
   .nb-header
@@ -334,7 +336,7 @@
   display: flex
   left: 0 
   right: 0
-  height: 40px
+  height: 20px
   justify-content:  center
   pointer-events: none
 
@@ -342,7 +344,7 @@
     flex-direction: column
     justify-content: end
     position: absolute
-    left: 15px
+    left: 5px
     top: 0px
     bottom: 0px
     border-radius: 0
@@ -357,8 +359,8 @@
   background-color: red
   justify-content: space-around
   align-items: center
-  border-radius: 20px
-  height: 40px
+  border-radius: 5px
+  height: 30px
   width: 250px
   transition: color 200ms, background 200ms, opacity 100ms
   z-index: 100
@@ -475,6 +477,8 @@
   background-color: #EEE
   border-radius: 5px
   overflow: none
+  @include mobile-screens
+    top: 0px
 
 .ast-node-target
   background-color: red !important
@@ -525,46 +529,48 @@
       margin: 0
       padding: 0
       height: 20px
-      font-size: 14px
+      font-size: 14px  
 
-    .state-address
-      width: 70px
-      margin: 0 2px
-      height: 15px
-      border-radius: 2px
-      padding: 1px
-      font-size: 12px
-      text-align: right;
-      box-sizing: border-box
-    
-    .active-states
-      position: relative
-      width: 100%
+    .state-info
+      display: flex
+      margin: 2px 0
+      height: 20px
+      align-items: center
 
-      .state-info
-        display: flex
-        margin: 2px 0
+      .state-address
+        width: 60px
+        margin: 0 2px
         height: 15px
+        border-radius: 2px
+        padding: 1px
+        font-size: 12px
+        text-align: right;
+        box-sizing: border-box
+        line-height: 1em
 
-        .state
+      .active-states
+        position: relative
+        width: 100%
 
-        .state-label
-          width: 70px
-          text-align: right
+      .state
 
-        .active-state
-          width: 80px
+      .state-label
+        width: 70px
+        text-align: right
 
-        .state-stack
-          display: flex;
-          overflow: scroll;
+      .active-state
+        width: 80px
+
+      .state-stack
+        display: flex;
+        overflow: scroll;
 
     .bytecode-instructions
       position: absolute
       overflow: hidden
       overflow-y: scroll
       margin: 0 2px
-      top: 80px
+      top: 100px
       left: 0px
       right: 0px
       bottom: 0
@@ -612,6 +618,8 @@
             display: block
             text-align: right
             text-transform: uppercase
+            padding: 0 5px
+            border-radius: 2px
 
             &:first-child
               font-size: 14px

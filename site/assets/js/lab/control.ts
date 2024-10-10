@@ -44,12 +44,32 @@ export class Controls extends Eventable<{
     window.addEventListener("keydown", e => {
       if (this.active) {
         let key = e.key;
-
-        if (key == "n" && e.altKey) {
-          this.step_button.ele.click();
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          e.stopPropagation()
+        if (!e.altKey || e.ctrlKey || e.shiftKey) return;
+        switch (key) {
+          case "n": {
+            this.step_button.ele.click();
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            e.stopPropagation()
+          } return
+          case "r": {
+            this.reset_button.ele.click();
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            e.stopPropagation()
+          } return
+          case "a": {
+            this.jump_button.ele.click();
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            e.stopPropagation()
+          } return
+          case "space": {
+            this.play_button.ele.click();
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            e.stopPropagation()
+          } return
         }
       }
     }, {

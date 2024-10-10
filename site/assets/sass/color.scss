@@ -1,18 +1,59 @@
 $theme-the-radlr-special: (
-  /*
-  colors 
-  - header fg bg
-
-  - base-line fg bg
-  - focus fg bg
-  - background fg bg
-
-  - controls fg bg :hover fg bg
-  - links fg bg :hover fg bg
-  */
 
   class-name: "the-RADLR-special",
+
+  base-fg: rgb(31, 31, 31),
+  base-bg: rgb(241, 241, 241),
   
+  // Panel header sections
+  header-fg:   rgb(31, 31, 31),
+  header-bg:  rgb(241, 241, 241),
+  
+  header-hover-fg:rgb(241, 241, 241),
+  header-hover-bg:rgb(31, 31, 31),
+
+  // Should contrast `base-*` to catch the user's attention
+  focus-fg: rgb(227, 227, 227),
+  focus-bg: rgb(61, 61, 61),
+
+  // Should blend in with `base-*` to avoid catching the user's attention
+  backdrop-fg: rgb(92, 92, 92),
+  backdrop-bg: rgb(227, 227, 227),
+
+  // Should work well when paired with  `base-fg` and `backdrop-bg`
+  button-fg: rgb(165, 165, 165),
+  button-bg: transparent,
+  button-hover-fg: rgb(241, 241, 241),
+  button-hover-bg: rgb(31, 31, 31),
+
+  // Should contrast work will with `base-bg`, `focus-bg`, and `backdrop-bg`
+  bc-address-bg: rgb(86, 78, 153),
+  bc-address-fg: rgb(241, 241, 241),
+
+  // Gives a subtle contrast to `base-bg` to help delineate panel contents
+  section-bg: rgba(0, 0, 0, 0.019),
+
+  // These setting contrast well with `focus-bg`
+  settings-input-bg: rgb(227, 227, 227),
+  settings-input-fg: rgb(61, 61, 61),
+  settings-input-active-fg: rgb(255, 255, 255),
+  settings-input-active-bg: rgb(53, 129, 204),
+  settings-input-disabled-fg: rgb(245, 245, 245),
+  settings-input-disabled-bg: rgb(187, 82, 82),
+
+  // These setting contrast well with `focus-bg` and `base-bg`
+  link-fg: rgb(98, 178, 196),
+  link-bg: transparent,
+  link-hover-fg: rgb(94, 148, 214),
+  link-hover-bg: transparent,
+
+  // ------------------------------------------
+);
+
+$theme-pencil: (
+  //
+  class-name: "pencil",
+
   header-fg:   rgb(31, 31, 31),
   header-bg:  rgb(241, 241, 241),
   
@@ -39,13 +80,46 @@ $theme-the-radlr-special: (
 
   section-bg: rgba(0, 0, 0, 0.019),
 
+  settings-input-bg: rgb(191, 191, 191),
+  settings-input-fg: rgb(61, 61, 61),
+  settings-input-active-fg: rgb(191, 191, 191),
+  settings-input-active-bg: rgb(53, 129, 204),
+  settings-input-disabled-fg: rgb(191, 191, 191),
+  settings-input-disabled-bg: rgb(187, 82, 82),
+
   link-fg: purple,
   link-bg: transparent,
 
   link-hover-fg: purple,
   link-hover-bg: transparent,
 
-  // ------------------------------------------
+  ////
+
+  accent-color: #9f9f9f,
+  // Main Colors
+  bg-inc-2: #ffffff,
+  bg-inc-1: #eeeeee,
+  bg-basic: #e6e6e6,
+  bg-dec-1: #7c7c7c67,
+  bg-dec-2: #586464,
+
+  fg-inc-2: #bfbfbf,
+  fg-inc-1: #afafaf,
+  fg-basic: #848484,
+  fg-dec-1: #393939,
+  fg-dec-2: #000000,
+
+  // field header colors on hover
+  field-header-bg: #e7ba02,
+  field-header-fg: #ffffff,
+  loader-bg: #cfcfcf,
+  loader-fg: #3b9ee4,
+  //
+  border-color: #ff0000,
+  debugger-action-red: #f17559,
+  // codemirror
+  active-color: #828282,
+  inactive-color: #4a4a4a,
 );
 
 
@@ -145,43 +219,7 @@ $theme-desperados-unite: (
   inactive-color: #4a4a4a,
 );
 
-$theme-pencil: (
-  //
-  class-name: "pencil",
-  accent-color: #9f9f9f,
-  // Main Colors
-  bg-inc-2: #ffffff,
-  bg-inc-1: #eeeeee,
-  bg-basic: #e6e6e6,
-  bg-dec-1: #7c7c7c67,
-  bg-dec-2: #586464,
 
-  fg-inc-2: #bfbfbf,
-  fg-inc-1: #afafaf,
-  fg-basic: #848484,
-  fg-dec-1: #393939,
-  fg-dec-2: #000000,
-
-  // field header colors on hover
-  field-header-bg: #e7ba02,
-  field-header-fg: #ffffff,
-  loader-bg: #cfcfcf,
-  loader-fg: #3b9ee4,
-  //
-  border-color: #ff0000,
-  debugger-action-red: #f17559,
-  // codemirror
-  active-color: #828282,
-  inactive-color: #4a4a4a,
-
-  button-fg: rgb(187, 187, 187),
-  button-bg: red,
-  button-active-fg: rgb(255, 255, 255),
-  button-active-bg: rgb(251, 94, 94),
-
-  bc-address-bg-active: rgb(255, 255, 255),
-  bc-address-bg: rgb(255, 255, 255)
-);
 
 
 $themes : ( //

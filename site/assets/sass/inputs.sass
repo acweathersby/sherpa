@@ -2,77 +2,69 @@
 
 // Inputs -----------------------------------------
 
+input[type="text"], input[type="number"], input[type="button"]
+  appearance: none
+  border: 0
+  margin: 0
+  padding: 2px 4px
+  border-radius: 5px
+  outline: none
+  height: 1.5em
+  font-size: 1.5em
+  line-height: 1em
+
+
+input[type="number"]::after
+  display: none
+
 input[type="checkbox"]
+  margin: 0
+  padding: 0
   position: relative
   appearance: none
-  display: inline-block
-  margin: auto 4px auto 6px
   font: inherit
-  width: 1em
-  height: 1em
-  line-height: 1em
-  border-radius: 2px
-  transform: translateY(-0.075em)
-  place-content: center
-  display: flex
-  align-items: center
+  width: 80px
+  height: 30px
+  pointer-events: all
+  border-radius: 5px
+  box-shadow: inset 0 0 5px #00000037
 
-input[type="checkbox"]:active
-  background-color: unset
-
-input[type="checkbox"]::before
-  display: inline-block
-  content: ""
-  width: 70%
-  height: 70%
-  border-radius: 2px
-  transform: scale(0)
-  transition: 100ms transform ease-in-out
-  box-shadow: inset 1em 1em var(--form-control-color)
-
-input[type="checkbox"]:checked::before
-  transform: scale(1)
-
-  h1
-    position: relative
-    display: inline-block
-    line-height: 1em
-    font-size: 2em
-    margin: 0
-    padding: 10px 5px 10px 20px
-    line-height: 2em
-    height: 100%
-
-  & .buttons
+  &::before
+    display: block
     position: absolute
-    right: 20px
+    content: ""
+    width: 26px
+    height: 26px
+    left: 2px
+    top: 2px
+    border-radius: 4px
+    transition: 100ms left ease-in
+    box-shadow: inset 1em 1em var(--form-control-color)
+    cursor: pointer
 
-body
-  font-size: 12px
-
+  &:checked::before
+    left: 52px
+  
 @mixin inputs-themable($theme-map)
+  input[type="text"], input[type="number"], input[type="button"]
+    background-color: map-get($theme-map, "settings-input-bg") 
+    color: map-get($theme-map, "settings-input-fg") 
+
+    &[invalid]
+      background-color: map-get($theme-map, "settings-input-disabled-bg") 
+      color: map-get($theme-map, "settings-input-disabled-fg") 
+
+  input[type="button"]:hover
+    background-color: map-get($theme-map, "settings-input-active-bg") 
+    color: map-get($theme-map, "settings-input-active-fg")
+    &:active
+      opacity: 0.7
+
   input[type="checkbox"]
-    background-color: black !important
-    color: currentColor
+    background-color: map-get($theme-map, "settings-input-disabled-bg") 
+    &::before
+      background-color: map-get($theme-map, "settings-input-fg")
 
-  input[type="checkbox"]:active
-    background-color: unset
+  input[type="checkbox"]:checked
+    background-color: map-get($theme-map, "settings-input-active-bg") 
 
-  input[type="checkbox"]::before
-    background-color: #9f9f9f !important
-
-  input[type="checkbox"]
-    background-color: #fff
-
-  input[type="checkbox"]:active
-    background-color: unset
-
-  input[type="checkbox"]::before
-    background-color: map-get($theme-map, "debugger-action-red")
-
-  input[type="checkbox"]:checked::before
-    .lab
-      background-color: white
-
-    a
-      color: inherit

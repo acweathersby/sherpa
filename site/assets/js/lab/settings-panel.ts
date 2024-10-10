@@ -33,7 +33,10 @@ export function getLocalValue(key: LocalStoreKeys): string {
 function setupSetting() {
   let setting_panel = document.querySelector("#settings-panel");
 
-  if (!setting_panel) return;
+  if (!setting_panel) {
+    console.error("Could not locate settings element");
+    return;
+  }
 
   const data_enable = new SettingInput(<HTMLLabelElement>setting_panel.querySelector(".data-enable"));
   const data_controls = Array.from(setting_panel.querySelectorAll(".data-control")).map(e => new SettingInput(<HTMLLabelElement>e));
@@ -175,10 +178,13 @@ class SettingInput extends Eventable<SettingInputEvents> {
 
 
 export function setupOpenCloseTriggers(panel: Element, button_selector: string = "#open-settings-button") {
+
   let close_button = <HTMLDivElement>panel.querySelector(".close-button");
 
   let open_button = <HTMLDivElement>document.body.querySelector(button_selector);
   open_button.classList.add("inactive");
+
+  console.log(open_button);
 
   open_button.addEventListener("click", () => {
     if (panel.classList.contains("inactive")) {
@@ -200,7 +206,7 @@ function setupThemes(setting_panel: Element) {
 
   let default_theme = <string>document.body.dataset.defaulttheme;
   let active_theme = getLocalValue(LocalStoreKeys.ActiveTheme) || default_theme;
-  
+
   //document.body.classList.add(active_theme);
   let node = <HTMLTemplateElement>document.querySelector("#theme-entry-template");
 
