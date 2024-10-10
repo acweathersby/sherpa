@@ -329,7 +329,6 @@ export class MoveFieldDragOperation extends DragOperation {
         const insert_column = (insert_data.alignment > 0 && col.cell_count > 0);
         const max_columns = this.nb.columns.length >= this.nb.max_columns;
 
-
         if (swap_mode) {
           if (different_pos && this.placeholder) {
             // Take the old position and swap it with our new position

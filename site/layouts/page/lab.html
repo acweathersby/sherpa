@@ -12,11 +12,14 @@
 
 {{- $themes_kludge := resources.Get "sass/themes.sass" | resources.ExecuteAsTemplate "main.scss" . | resources.ToCSS -}}
 {{- $theme_data := $themes_kludge.Content | findRESubmatch `theme(.*)\|(.*)emeht` }}
-{{- $default_theme := index $theme_data 0 2 -}}
+{{- $default_light := index $theme_data 0 2 -}}
+{{- $default_dark := index $theme_data 1 2 -}}
 {{- .Scratch.Set "headerSubtext" "lab" -}}
 {{ partial "header/header.html" . }}
 
-<body class="{{$default_theme}}" data-defaulttheme="{{$default_theme}}">
+
+
+<body>
   <noscript>
     <!-- anchor linking to external file -->
     <div id="noscript">
@@ -32,6 +35,13 @@
     {{ partial "header/header.html" . }}
     <p> RADLR lab will only work on screens larger than </p>
     <div style="font-size: 40px">375x665</div>
+  </div>
+
+  <div id="loading-screen" class="active loading">
+    {{ partial "header/header.html" . }}
+    <div class="nb-loader">
+      <div class="loader-div"></div>
+    </div>
   </div>
 
   <div id="controls-container">
@@ -170,6 +180,9 @@
       <div class="close-button">x</div>
       <h1>Themes</h1>
       <div class="theme-section">
+        <div class="theme" data-target="system" data-text="System Default" data-focus="" data-fg="" data-mg=""
+          data-bg="">
+        </div>
         {{- $themes_kludge := resources.Get "sass/themes.sass" | resources.ExecuteAsTemplate "main.scss" . |
         resources.ToCSS -}}
         {{- range $theme_data }}

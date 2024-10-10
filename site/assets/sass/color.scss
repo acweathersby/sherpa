@@ -39,7 +39,59 @@ $theme-the-radlr-special: (
   settings-input-active-fg: rgb(255, 255, 255),
   settings-input-active-bg: rgb(53, 129, 204),
   settings-input-disabled-fg: rgb(245, 245, 245),
-  settings-input-disabled-bg: rgb(187, 82, 82),
+  settings-input-disabled-bg: rgb(207, 44, 44),
+
+  // These setting contrast well with `focus-bg` and `base-bg`
+  link-fg: rgb(98, 178, 196),
+  link-bg: transparent,
+  link-hover-fg: rgb(94, 148, 214),
+  link-hover-bg: transparent,
+
+  // ------------------------------------------
+);
+
+$theme-the-radlr-special-smoked: (
+
+  class-name: "the-RADLR-special-smoked",
+
+  base-bg: rgb(45, 45, 45),
+  base-fg: rgb(241, 241, 241),
+  
+  // Panel header sections
+  header-bg:   rgb(45, 45, 45),
+  header-fg:  rgb(241, 241, 241),
+  
+  header-hover-bg:rgb(241, 241, 241),
+  header-hover-fg:rgb(45, 45, 45),
+
+  // Should contrast `base-*` to catch the user's attention
+  focus-bg: rgb(65, 65, 65),
+  focus-fg: rgb(215, 215, 215),
+
+  // Should blend in with `base-*` to avoid catching the user's attention
+  backdrop-bg: rgb(36, 36, 36),
+  backdrop-fg: rgb(227, 227, 227),
+
+  // Should work well when paired with  `base-fg` and `backdrop-bg`
+  button-fg: rgb(200, 200, 200),
+  button-bg: transparent,
+  button-hover-bg: rgb(241, 241, 241),
+  button-hover-fg: rgb(45, 45, 45),
+
+  // Should contrast work will with `base-bg`, `focus-bg`, and `backdrop-bg`
+  bc-address-bg: rgb(130, 120, 219),
+  bc-address-fg: rgb(241, 241, 241),
+
+  // Gives a subtle contrast to `base-bg` to help delineate panel contents
+  section-bg: rgba(255, 255, 255, 0.049),
+
+  // These setting contrast well with `focus-bg`
+  settings-input-bg: rgb(227, 227, 227),
+  settings-input-fg: rgb(61, 61, 61),
+  settings-input-active-fg: rgb(255, 255, 255),
+  settings-input-active-bg: rgb(25, 157, 25),
+  settings-input-disabled-fg: rgb(245, 245, 245),
+  settings-input-disabled-bg: rgb(212, 35, 35),
 
   // These setting contrast well with `focus-bg` and `base-bg`
   link-fg: rgb(98, 178, 196),
@@ -54,178 +106,155 @@ $theme-pencil: (
   //
   class-name: "pencil",
 
-  header-fg:   rgb(31, 31, 31),
-  header-bg:  rgb(241, 241, 241),
+  base-fg: #848484,
+  base-bg: #e6e6e6,
   
-  header-hover-fg:rgb(241, 241, 241),
-  header-hover-bg:rgb(31, 31, 31),
+  // Panel header sections
+  header-fg:   #848484,
+  header-bg:  #e6e6e6,
+  
+  header-hover-fg:#e4e4e4,
+  header-hover-bg:#e1bf36,
 
-  base-fg: rgb(31, 31, 31),
-  base-bg: rgb(241, 241, 241),
+  // Should contrast `base-*` to catch the user's attention
+  focus-fg: rgb(71, 71, 71),
+  focus-bg: rgb(236, 236, 236),
 
-  focus-fg: rgb(227, 227, 227),
-  focus-bg: rgb(61, 61, 61),
-
+  // Should blend in with `base-*` to avoid catching the user's attention
   backdrop-fg: rgb(92, 92, 92),
-  backdrop-bg: rgb(227, 227, 227),
+  backdrop-bg: rgb(216, 216, 216),
 
+  // Should work well when paired with  `base-fg` and `backdrop-bg`
   button-fg: rgb(165, 165, 165),
   button-bg: transparent,
+  button-hover-fg: #e6e6e6,
+  button-hover-bg: #848484,
 
-  button-hover-fg: rgb(241, 241, 241),
-  button-hover-bg: rgb(31, 31, 31),
+  // Should contrast work will with `base-bg`, `focus-bg`, and `backdrop-bg`
+  bc-address-bg: hsl(191, 44%, 50%),
+  bc-address-fg: #e6e6e6,
 
-  bc-address-fg: rgb(241, 241, 241),
-  bc-address-bg: rgb(86, 78, 153),
+  // Gives a subtle contrast to `base-bg` to help delineate panel contents
+  section-bg: rgba(0, 0, 0, 0),
 
-  section-bg: rgba(0, 0, 0, 0.019),
-
-  settings-input-bg: rgb(191, 191, 191),
+  // These setting contrast well with `focus-bg`
+  settings-input-bg: rgb(227, 227, 227),
   settings-input-fg: rgb(61, 61, 61),
-  settings-input-active-fg: rgb(191, 191, 191),
-  settings-input-active-bg: rgb(53, 129, 204),
-  settings-input-disabled-fg: rgb(191, 191, 191),
-  settings-input-disabled-bg: rgb(187, 82, 82),
+  settings-input-active-fg: rgb(255, 255, 255),
+  settings-input-active-bg: hsl(191, 44%, 50%),
+  settings-input-disabled-fg: rgb(245, 245, 245),
+  settings-input-disabled-bg: rgb(201, 181, 66),
 
-  link-fg: purple,
+  // These setting contrast well with `focus-bg` and `base-bg`
+  link-fg: hsl(191, 44%, 50%),
   link-bg: transparent,
-
-  link-hover-fg: purple,
+  link-hover-fg: rgb(94, 148, 214),
   link-hover-bg: transparent,
-
-  ////
-
-  accent-color: #9f9f9f,
-  // Main Colors
-  bg-inc-2: #ffffff,
-  bg-inc-1: #eeeeee,
-  bg-basic: #e6e6e6,
-  bg-dec-1: #7c7c7c67,
-  bg-dec-2: #586464,
-
-  fg-inc-2: #bfbfbf,
-  fg-inc-1: #afafaf,
-  fg-basic: #848484,
-  fg-dec-1: #393939,
-  fg-dec-2: #000000,
-
-  // field header colors on hover
-  field-header-bg: #e7ba02,
-  field-header-fg: #ffffff,
-  loader-bg: #cfcfcf,
-  loader-fg: #3b9ee4,
-  //
-  border-color: #ff0000,
-  debugger-action-red: #f17559,
-  // codemirror
-  active-color: #828282,
-  inactive-color: #4a4a4a,
-);
-
-
-$theme-please-dont-debug: (
-  // 
-  class-name: "please-dont-debug",
-  accent-color: #9f9f9f,
-  // Main Colors
-  bg-inc-2: #eeeeee,
-  bg-inc-1: #e1e1e1,
-  bg-basic: #cdcdcd,
-  bg-dec-1: #878787,
-  bg-dec-2: #828282,
-
-  fg-inc-2: #e2e2e2,
-  fg-inc-1: #b5b5b5,
-  fg-basic: #676767,
-  fg-dec-1: #393939,
-  fg-dec-2: #000000,
-
-  // field header colors on hover
-  field-header-bg: red,
-  field-header-fg: #ffffff,
-  loader-bg: green,
-  loader-fg: red,
-  //
-  border-color: #ff0000,
-  debugger-action-red: #f17559,
-  // codemirror
-  active-color: #828282,
-  inactive-color: #4a4a4a,
-
-  button-fg: rgb(187, 187, 187),
-  button-bg: red,
-  button-active-fg: rgb(255, 255, 255),
-  button-active-bg: rgb(251, 94, 94),
 );
 
 $theme-industrial-solace: (
-  //
   class-name: "industrial-solace",
-  accent-color: #9f9f9f,
-  // Main Colors
-  bg-inc-2: #9b9b9b,
-  bg-inc-1: #434343,
-  bg-basic: #2c2c2c,
-  bg-dec-1: #1f1f1f,
-  bg-dec-2: #000000,
 
-  fg-inc-2: #ffffff,
-  fg-inc-1: #d5d5d5,
-  fg-basic: #b0b0b0,
-  fg-dec-1: #909090,
-  fg-dec-2: #5f5f5f,
-  // field header colors on hover
-  field-header-bg: #c53131,
-  field-header-fg: #ffffff,
-  loader-bg: #bdbdbd,
-  loader-fg: #c53131,
-  //
-  border-color: #e4e4e4,
-  debugger-action-red: #f17559,
-  // codemirror
-  active-color: #828282,
-  inactive-color: #4a4a4a,
+  base-bg: #2c2c2c,
+  base-fg: #cecece,
   
-  bc-address-bg-active: #c53131,
-  bc-address-bg: #512626
+  // Panel header sections
+  header-bg:   #242424,
+  header-fg:  rgb(241, 241, 241),
+  
+  header-hover-bg:#c53131,
+  header-hover-fg:#ffffff,
+
+  // Should contrast `base-*` to catch the user's attention
+  focus-bg: #181818,
+  focus-fg: rgb(215, 215, 215),
+
+  // Should blend in with `base-*` to avoid catching the user's attention
+  backdrop-bg: rgb(36, 36, 36),
+  backdrop-fg: rgb(227, 227, 227),
+
+  // Should work well when paired with  `base-fg` and `backdrop-bg`
+  button-fg: rgb(200, 200, 200),
+  button-bg: transparent,
+  button-hover-bg: rgb(241, 241, 241),
+  button-hover-fg: rgb(45, 45, 45),
+
+  // Should contrast work will with `base-bg`, `focus-bg`, and `backdrop-bg`
+  bc-address-bg: #d7a611,
+  bc-address-fg: #f9f9f9,
+
+  // Gives a subtle contrast to `base-bg` to help delineate panel contents
+  section-bg: rgba(0, 0, 0, 0.19),
+
+  // These setting contrast well with `focus-bg`
+  settings-input-bg: rgb(227, 227, 227),
+  settings-input-fg: #181818,
+  settings-input-active-fg: rgb(255, 255, 255),
+  settings-input-active-bg: #d7a611,
+  settings-input-disabled-fg: rgb(245, 245, 245),
+  settings-input-disabled-bg: #7d2525,
+
+  // These setting contrast well with `focus-bg` and `base-bg`
+  link-fg: #ff8800,
+  link-bg: transparent,
+  link-hover-fg: #d7a611,
+  link-hover-bg: transparent,
 );
 
-$theme-desperados-unite: (
+$theme-desperados-united: (
   //
-  class-name: "desperados-unite",
-  accent-color: #9f9f9f,
-  // Main Colors
-  bg-inc-2: #9b9b9b,
-  bg-inc-1: #63009d,
-  bg-basic: #4d007a,
-  bg-dec-1: #1f1f1f,
-  bg-dec-2: #000000,
+  class-name: "desperados-united",
 
-  fg-inc-2: #ffffff,
-  fg-inc-1: #ffd94e,
-  fg-basic: #dda43b,
-  fg-dec-1: rgb(227, 103, 55),
-  fg-dec-2: #5f5f5f,
-  // field header colors on hover
-  field-header-bg: #ed8e0a,
-  field-header-fg: #ffffff,
-  loader-bg: #ffd94e,
-  loader-fg: #ed8e0a,
-  //
-  border-color: #e4e4e4,
-  debugger-action-red: #f17559,
-  // codemirror
-  active-color: #828282,
-  inactive-color: #4a4a4a,
+  base-bg: #421865,
+  base-fg: #e3c794,
+  
+  // Panel header sections
+  header-bg:   transparent,
+  header-fg:  #cdb994,
+  
+  header-hover-bg:#c8ac65,
+  header-hover-fg:#421865,
+
+  // Should contrast `base-*` to catch the user's attention
+  focus-bg: rgb(37, 0, 67),
+  focus-fg: rgb(238, 238, 238),
+
+  // Should blend in with `base-*` to avoid catching the user's attention
+  backdrop-bg: #3b115e,
+  backdrop-fg: rgb(227, 227, 227),
+
+  // Should work well when paired with  `base-fg` and `backdrop-bg`
+  button-fg: #e3c794,
+  button-bg: transparent,
+  button-hover-bg: #e3c794,
+  button-hover-fg: #421865,
+
+  // Should contrast work will with `base-bg`, `focus-bg`, and `backdrop-bg`
+  bc-address-bg: #e3c794,
+  bc-address-fg: #421865,
+
+  // Gives a subtle contrast to `base-bg` to help delineate panel contents
+  section-bg: rgba(0, 0, 0, 0.044),
+
+  // These setting contrast well with `focus-bg`
+  settings-input-bg: #e3c794,
+  settings-input-fg: #5c3978,
+  settings-input-active-fg: #421865,
+  settings-input-active-bg: #cd9717,
+  settings-input-disabled-fg: #ff0000,
+  settings-input-disabled-bg: #3b115e,
+
+  // These setting contrast well with `focus-bg` and `base-bg`
+  link-fg: #ff8800,
+  link-bg: transparent,
+  link-hover-fg: #d7a611,
+  link-hover-bg: transparent,
 );
 
-
-
-
-$themes : ( //
+$themes : ( 
   $theme-the-radlr-special,
-  //$theme-pencil,
-  //$theme-industrial-solace,
-  //$theme-please-dont-debug,
-  //$theme-desperados-unite,
+  $theme-the-radlr-special-smoked,
+  $theme-pencil,
+  $theme-desperados-united,
+  $theme-industrial-solace,
 );

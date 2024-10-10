@@ -204,8 +204,7 @@ export function setupOpenCloseTriggers(panel: Element, button_selector: string =
 
 function setupThemes(setting_panel: Element) {
 
-  let default_theme = <string>document.body.dataset.defaulttheme;
-  let active_theme = getLocalValue(LocalStoreKeys.ActiveTheme) || default_theme;
+  let active_theme = getLocalValue(LocalStoreKeys.ActiveTheme);
 
   //document.body.classList.add(active_theme);
   let node = <HTMLTemplateElement>document.querySelector("#theme-entry-template");
@@ -219,13 +218,15 @@ function setupThemes(setting_panel: Element) {
     let title = <HTMLElement>theme_entry.querySelector(".theme-entry-title");
     let theme_entry_theme = <HTMLElement>theme_entry.querySelector(".theme");
 
-    let { bg, mg, fg, target: target_class } = theme.dataset;
+    let { text, bg, inner_border, inner_bg, border, target: target_class } = theme.dataset;
 
-    theme_entry.style.color = <string>fg;
+    theme_entry.style.color = <string>text;
     theme_entry.style.backgroundColor = <string>bg;
+    theme_entry.style.borderColor = <string>border;
 
-    theme_entry_theme.style.borderColor = <string>mg;
-    theme_entry_theme.style.backgroundColor = <string>fg;
+    theme_entry_theme.style.borderColor = <string>inner_border;
+    theme_entry_theme.style.backgroundColor = <string>inner_bg;
+    title.style.color = <string>text
 
     title.innerHTML = (<string>target_class).replace(/^(\w)|-(\w)/g, " <span style='text-transform:uppercase'>$1$2</span>");
 
@@ -234,22 +235,22 @@ function setupThemes(setting_panel: Element) {
         let old_theme = active_theme;
         active_theme = <string>target_class;
         setLocalValue(LocalStoreKeys.ActiveTheme, active_theme);
-        document.body.classList.replace(old_theme, active_theme);
-        //document.body.classList.remove(old_theme);
+        if (active_theme)
+          document.body.classList.add(active_theme);
+        if (old_theme)
+          document.body.classList.remove(old_theme);
         await sleep(400);
       }
     });
 
     theme.parentElement?.replaceChild(theme_entry, theme);
 
-
-    if (default_theme != active_theme) {
-      document.body.classList.replace(default_theme, active_theme);
+    if (active_theme) {
+      document.body.classList.add(active_theme);
     }
 
-
     return {
-      theme_entry, bg, fg, target_class
+      theme_entry, bg, fg: inner_bg, target_class
     };
   });
 }

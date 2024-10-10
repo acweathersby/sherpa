@@ -1,5 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&display=swap');
+@use 'sass:list'
 
+@import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&display=swap');
 *
   transition: color 200ms, background-color 200ms, fill 200ms
   
@@ -68,7 +69,7 @@ button:hover
   cursor: pointer
 
 
-#noscript, #screen-too-small
+#noscript, #screen-too-small, #loading-screen
   font-size: 1.2em
   position: absolute
   display: flex
@@ -84,6 +85,7 @@ button:hover
   background: white
   z-index: 100000
   pointer-events: none
+  opacity: 1
   transition: opacity 200ms
 
   .settings-button
@@ -103,19 +105,31 @@ button:hover
     font-size: 16px
     box-sizing: border-box
 
-#screen-too-small
+#screen-too-small, #loading-screen
   opacity: 0
+
+#loading-screen
+  &.active
+    opacity: 1
+    pointer-events: all
+  *
+    pointer-events: none
+
+  header
+    margin-bottom: 40px
+    align-items: center
+
+    .header-right
+      display: none
+
 
 @media (max-width: 374px), (max-height: 665px)
   #screen-too-small
     z-index: 100001
     opacity: 1
 
-  
-  
-
 @mixin main-themable($theme-map)
-  &, #noscript, #screen-too-small
+  #noscript, #screen-too-small
     color: map-get($theme-map, "button-fg")
     background-color: map-get($theme-map, "base-bg")
 
@@ -145,18 +159,45 @@ button:hover
 @import "./lab"
 @import "./settings-panel"
 
-@mixin themables($theme-name, $theme-map)
+@mixin default-themables($theme-map)
+  @include main-themable($theme-map)
+  @include lab-themable($theme-map)
+  @include cm-themable($theme-map)
+  @include inputs-themable($theme-map)
+  @include settings-panel-themable($theme-map)
+  @include header-footer-themable($theme-map)
+
+@mixin themables($theme-name, $theme)
   body.#{$theme-name}
 
-    @include main-themable($theme-map)
-    @include lab-themable($theme-map)
-    @include cm-themable($theme-map)
-    @include inputs-themable($theme-map)
-    @include settings-panel-themable($theme-map)
-    @include header-footer-themable($theme-map)
+    #loading-screen
+      color: map-get($theme, "button-fg")
+      background-color: map-get($theme, "base-bg")
 
-@each $theme in $themes
-  @include themables(map-get($theme, class-name), $theme)
+    color: map-get($theme, "base-fg")
+    background-color: map-get($theme, "base-bg")
+    @include default-themables($theme)
+
+@mixin default-thema($theme)
+  body
+    #loading-screen
+      color: map-get($theme, "button-fg")
+      background-color: map-get($theme, "base-bg")
+
+    color: map-get($theme, "base-fg")
+    background-color: map-get($theme, "base-bg")
+    @include default-themables($theme)
+    @include settings-panel-themable-default($theme)
+
+@media  ( prefers-color-scheme: light  )
+  @include default-thema($theme: nth($themes, 1))
+
+@media  ( prefers-color-scheme: dark  )
+  @include default-thema($theme: nth($themes, 2))
+
+@media  ( prefers-color-scheme: dark  ), ( prefers-color-scheme: light  )
+  @each $theme in $themes
+    @include themables(map-get($theme, class-name), $theme)
 
 @mixin dubugger-flag($name, $index, $color)
   position: relative

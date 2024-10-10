@@ -18,6 +18,8 @@ export async function init(compiler_worker_path: string) {
 
   let nb = new NB(2);
 
+    
+
   let grammar_input_field = nb.add_field(new NBEditorField("Grammar"), 0)
   grammar_input_field.set_content_visible(true);
   grammar_input_field.set_text("");
@@ -177,6 +179,10 @@ export async function init(compiler_worker_path: string) {
   setupConfig(config => {
     config_input.update(config);
   });
+
+  setTimeout(() => {
+    document.getElementById("loading-screen")!.classList.remove("active");
+  }, 500);
 }
 
 const grammar_examples = [

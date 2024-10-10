@@ -111,39 +111,42 @@
       cursor: pointer
 
   .theme-section
-
     display: flex
     flex-wrap: wrap
     justify-content: space-between
     width: 100%
 
-    .theme-entry
-      display: flex
-      flex-direction: row
-      justify-content: left
-      align-items: center
-      margin: 2.5% 20px
-      width: 200px
-      height: 40px
-      border-radius: 20px
-      padding: 8px
-      font-weight: 800
-      opacity: 0.8
+  .theme-entry
+    display: flex
+    flex-direction: row
+    justify-content: left
+    align-items: center
+    margin: 2.5% 20px
+    width: 200px
+    height: 50px
+    border-radius: 25px
+    padding: 8px
+    font-weight: 800
+    opacity: 0.8
+    text-align: center
+    line-height: 1em
+    border: 5px solid red
 
-      &:hover, &.active
-        opacity: 1
-        cursor: pointer
 
-      .theme
-        box-sizing: border-box
-        position: relative
-        background-color: red
-        border-color: green
-        border: 8px solid
-        height: 30px
-        width: 30px
-        border-radius: 15px
-        margin-right: 10px
+    &:hover, &.active
+      opacity: 1
+      cursor: pointer
+
+    .theme
+      box-sizing: border-box
+      position: relative
+      border: 8px solid red
+      height: 30px
+      width: 30px
+      border-radius: 15px
+      margin-right: 10px
+      flex-grow: 0;
+      flex-shrink: 0;
 
 // Colors ------------------------------------------
 
@@ -161,14 +164,17 @@
         background-color: map-get($theme-map, button-hover-bg)
         color: map-get($theme-map, button-hover-fg)
 
+
+@mixin settings-panel-themable-default($theme-map)
+
+  #settings-panel, #config-panel
     .theme-entry
-      background-color: map-get($theme-map, focus-bg)
-      color: map-get($theme-map, focus-fg)
+      border-color: map-get($theme-map, focus-bg)
+      background-color: map-get($theme-map, base-bg)
 
-      &:hover
-        background-color: map-get($theme-map, base-bg)
+      .theme
+        background-color: map-get($theme-map, base-fg)
+        border-color: map-get($theme-map, bc-address-bg)
+    
+      .theme-entry-title
         color: map-get($theme-map, base-fg)
-
-      &.active
-        background-color: map-get($theme-map, backdrop-bg)
-        color: map-get($theme-map, backdrop-fg)
