@@ -18,12 +18,12 @@ export async function init(compiler_worker_path: string) {
 
   let nb = new NB(2);
 
-    
+
 
   let grammar_input_field = nb.add_field(new NBEditorField("Grammar"), 0)
   grammar_input_field.set_content_visible(true);
   grammar_input_field.set_text("");
-  grammar_input_field.set_icon(`<i class="fa-solid fa-chart-gantt"></i>`);
+  grammar_input_field.set_icon(`<pre><></pre>`);
 
   let parser_info_field = nb.add_field(new NBContentField("Parser Info"), 1);
   parser_info_field.set_content_visible(false);
