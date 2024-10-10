@@ -82,7 +82,7 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
   let id = 0;
 
   parser.on_reduce = reduce_data => {
-    if (reduce_data.symbols == 1) return;
+    //if (reduce_data.symbols == 1) return;
 
     let offset = symbols.length - reduce_data.symbols;
     let r_syms = symbols.splice(offset, reduce_data.symbols);

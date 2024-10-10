@@ -6,7 +6,7 @@
 		"esModuleInterop": true,
 		"moduleResolution": "node",
 		"skipLibCheck": false,
-		"sourceMap": true,
+		"sourceMap": false,
 		"strict": true,
 		"target": "ESNext",
 		"outDir": "./static/",

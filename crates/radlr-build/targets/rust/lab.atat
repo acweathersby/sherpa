@@ -1,0 +1,820 @@
+@{#header()
+
+/// ### `radlr` Rust Parser
+///
+/// - **GENERATOR**: radlr 1.0.0-beta2
+/// - **SOURCE**: UNDEFINED
+///
+/// #### WARNING:
+///
+/// This is a generated file. Any changes to this file may be **overwritten
+/// without notice**.
+///
+/// #### License:
+/// Copyright (c) 2020-2024 Anthony Weathersby
+///
+/// Permission is hereby granted, free of charge, to any person obtaining a copy
+/// of this software and associated documentation files (the 'Software'), to
+/// deal in the Software without restriction, including without limitation the
+/// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+/// sell copies of the Software, and to permit persons to whom the Software is
+/// furnished to do so, subject to the following conditions:
+///
+/// The above copyright notice and this permission notice shall be included in
+/// all copies or substantial portions of the Software.
+///
+/// THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+/// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERcHANTABILITY,
+/// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+/// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+/// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+/// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+/// IN THE SOFTWARE
+
+use radlr_rust_runtime::parsers::ast::{Tk, Reducer, Node};
+use std::collections::HashMap;
+
+#ast_nodes(TYPES, STRUCTS, MULTI_ENUMS)
+  
+@RULES.iter#rule_function()}
+
+#_ {@"This is a comment function. Since we never call it, it has the same effect as a comment in other languages."}
+
+#s_temple_arg n:str {
+  @struct={ STRUCTS.[n] }
+  match (@struct.requires_template, @struct.#len) {
+    (false, _) | (_, 0) {}
+    { <Token> }
+  }
+}
+
+#s_temple_param n:str {
+  @struct={ STRUCTS.[n] }
+  match (@struct.requires_template, @struct.#len) {
+    (false, _) | (_, 0) {}
+    { <Token:Tk> }
+  }
+}
+
+#s_type n:str {
+  @struct={ STRUCTS.[n] }
+    match struct.is_empty {
+    true { @ty.name  }
+    { @RUST_NODE_WRAPPER<@ty.name #s_temple_arg(ty.name)> }
+  }
+}
+
+#multi_rust_type multi:obj{ 
+  @multi.name match @multi.requires_template { true { <Token> } }
+}
+
+#multi_rust_type_impl multi:obj{ 
+  @multi.name match @multi.requires_template { true { <Token: Tk> } }
+}
+
+#ty_to_rust ty:obj {
+  match ty.#type {
+    "Token"       { Token }
+    "TokenRange"  { TokenRange }
+    "String"      { String } 
+    "Bool"        { bool }
+    "I8"          { i8 }
+    "I16"         { i16 }
+    "I32"         { i32 }
+    "I64"         { i64 }
+    "U8"          { u8 }
+    "U16"         { u16 }
+    "U32"         { u32 }
+    "U64"         { u64 }
+    "F32"         { f32 }
+    "F64"         { f64 }
+    "AscriptStruct" | "Struct"      
+                  { #s_type(ty.name) }
+    "Multi"       { #multi_rust_type(@MULTI_ENUMS.[@ty.index]) /*@ty.index*/ }
+                    { @{ [TODO: ScalarType @type_name ] } }
+                  }
+}
+
+#ty_to_cap_name ty:obj {
+  match ty.#type {
+    "Struct"  { @ty.name }
+    "Multi"     { @MULTI_ENUMS.[@ty.index].name /*@ty.index*/ }
+    { @ty.#type }
+  }
+}
+
+#ty_to_ast_name ty:obj {
+  @agg_type={ @ty.agg_type }
+  match @agg_type {
+    "Map" {  #ty_to_cap_name(ty.key)#ty_to_cap_name(ty.val) }
+    "Vec" { 
+      match ty.val.#type {
+        "Multi"  { vec_ @MULTI_ENUMS.[@ty.val.index].name /*@ty.val.index*/ }
+        { vec_ #ty_to_cap_name(ty.val) }
+      }  
+    }
+    {  
+      match ty.val.#type {
+        None {  #ty_to_rust(ty) }
+        { #ty_to_cap_name(ty.val) }
+      }
+    }
+  }
+}
+
+#ast_node_rust_type ty:obj {
+  @agg_type={ @ty.agg_type }
+  match @agg_type {
+    "Map" { 
+      HashMap<#ty_to_rust(ty.key),#ty_to_rust(ty.val)>
+    }
+    "Vec" {
+      match ty.val.#type {
+        "Multi"  { 
+          /* @ty.val.index */ Vec<#multi_rust_type(@MULTI_ENUMS.[@ty.val.index])> 
+        }
+        { Vec<#ty_to_rust(ty.val)> }
+      }
+    }
+    {
+      match ty.val.#type {
+        None {  #ty_to_rust(ty) }
+        { #ty_to_rust(ty.val) }
+      } 
+    }
+  }
+}
+
+#_{ Escaping of names that full under Rust's reserved identifier set. }
+#esc_ ts:str {
+  match ts {
+    "type" | "enum" | "struct" | "ref" { r# @[ts] }
+    { @[ts] }
+  }
+}
+
+#ast_nodes types:obj structs:obj multi_enums:obj {
+  
+  #_{ AST DECLARATION -------------------------------------------------------------------------- }
+
+  #multi_enum_ast_declaration { @self.name(#multi_rust_type(self)),\ @; }
+
+  #struct_ast_declaration { 
+    match @self.is_empty {
+      true { @self.name(@self.name),\ @; }
+      { @self.name(@RUST_NODE_WRAPPER<@self.name #s_temple_arg(self.name)>),\ @;  }
+    } 
+  }
+
+  #type_entry { 
+    match (@self.agg_type, @self.val.#type) { 
+      (None, "Token") | (None, "Multi") { }
+      (_ , "Multi") {
+        /* @self.val.index */\ @;
+        match @MULTI_ENUMS.[self.val.index].is_root {
+          true { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @; }
+        }
+      }
+      { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @;}
+    }
+  }
+
+  #[derive(Clone,\ Debug,\ Default)]\n
+  #[repr(C, u32)]\n
+  pub\ enum\ @AST_NAME<Token:Tk>\ {
+    #[default]@;
+    None,\ @;
+    Token(Token),\ @;
+    @types.iter#type_entry()
+    @multi_enums.iter#multi_enum_ast_declaration()
+    @structs.iter#struct_ast_declaration()
+  }\n\n
+
+  #_{ ------------------------------------------------------------------------------------------ }
+
+  #_{ TYPE DECLARATIONS ------------------------------------------------------------------------ }
+
+  impl<Token:Tk>\ @AST_NAME<Token> { 
+    pub\ fn\ to_token(self)\ ->\ Option<Token>\ { @;
+      mat ch\ self\ {
+        @AST_NAME::Token(val)\ =>\ Some(val),@;
+        _\ =>\ None,@;
+      }
+    }
+  } \n\n
+
+  #type_types {
+
+    #impls {
+      match (self.agg_type, self.val.#type) {
+        (None, "Multi") { }
+        
+        ("Vec", "Token") { 
+          impl<Token:Tk>\ @AST_NAME<Token> { 
+            pub\ fn\ into_#ty_to_ast_name(self) (self)\ ->\ Option<#ast_node_rust_type(self)>\ { @;
+              mat ch\ self\ {
+                @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(val),@;
+                _\ =>\ None,@;
+              }
+            }
+          } \n\n
+        }
+        (_ , "Multi") {
+          match @MULTI_ENUMS.[self.val.index].is_root {           
+            true {
+              impl<Token:Tk>\ @AST_NAME<Token> { 
+                pub\ fn\ into_#ty_to_ast_name(self) (self)\ ->\ Option<#ast_node_rust_type(self)>\ { @;
+                  mat ch\ self\ {
+                    @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(val),@;
+                    _\ =>\ None,@;
+                  }
+                }
+              } \n\n
+
+              impl<Token:Tk>\ From<#ast_node_rust_type(self)>\ for\ @AST_NAME<Token> { 
+                fn\ from(value: #ast_node_rust_type(self))\ ->\ Self\ {
+                  Self::#ty_to_ast_name(self)(value) @;
+                }@;
+              }
+
+              \n\n
+            }
+          }
+        }
+        {
+          impl<Token:Tk>\ @AST_NAME<Token> { 
+            pub\ fn\ into_#ty_to_ast_name(self) (self)\ ->\ Option<#ast_node_rust_type(self)>\ { @;
+              mat ch\ self\ {
+                @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(val),@;
+                _\ =>\ None,@;
+              }
+            }
+          } \n\n
+
+          impl<Token:Tk>\ From<#ast_node_rust_type(self)>\ for\ @AST_NAME<Token> { 
+            fn\ from(value: #ast_node_rust_type(self))\ ->\ Self\ {
+              Self::#ty_to_ast_name(self)(value) @;
+            }@;
+          }
+
+          \n\n
+        }
+      }
+    }
+
+    @self.iter#impls()
+  }
+
+  @types.()
+
+  #_{ ------------------------------------------------------------------------------------------ }
+
+  #_{ MULTI DECLARATIONS ------------------------------------------------------------------------- }
+
+  #multi_enum {
+    @enum_type={ #multi_rust_type(self) }
+    #iter_types { 
+      match (self.agg_type, self.val.#type , self.val.is_empty, self.is_root) {
+          (None, "Struct", true, _) { 
+             #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @;
+          }
+          { #ty_to_ast_name(self)(#ast_node_rust_type(self)),\ @; }
+      }
+    }
+
+    #[derive(Clone,\ Debug,\ Default)]\n
+    pub\ enum\ #multi_rust_type_impl(self) {
+      #[default] @;
+      None, @;
+      @self.types.iter#iter_types()
+    }
+    \n\n
+  }
+
+  @multi_enums.iter#multi_enum()
+
+  #type_multi_enums {
+    #impls {
+      @enum_type={ #multi_rust_type(self) }
+
+      #ast_type_to_multi MULTI_NAME:str {
+        @AST_NAME::#ty_to_ast_name(self)(val)\ =>\ Some(@MULTI_NAME::#ty_to_ast_name(self)(val)),@;
+      }
+
+      #token_trait to:obj from:obj {
+        match (@from.requires_template, @to.requires_template) {
+          (true, _) | (_, true)  { <Token:Tk> }
+        } 
+      }
+
+
+      #raw_type_to_multi to:obj MULTI_NAME:str {
+        @to_type    ={ #multi_rust_type(to)    }
+        @to_name    ={ @to.name }
+        @from_type  ={ #ty_to_rust(self.val) }
+
+        \n impl #token_trait(self, to)\ From<@from_type>\ for\ @to_type {
+          \n 
+          fn\ from\ (val: @from_type)\ ->\ Self\ { @;
+            @to_name::#ty_to_ast_name(self)(val) @;
+          } @;
+        } @; \n
+      }
+
+      #handle_convert_from_ast_node TO_NAME: str {
+        @from={ @MULTI_ENUMS.[self.val] }
+        @AST_NAME::@from.name(val)\ =>\ Some(val.into()),@;
+      }
+
+      #multi_convert_from FROM_NAME:str TO_NAME:str {
+        @FROM_NAME::#ty_to_ast_name(self)(val)\ =>\ @TO_NAME::#ty_to_ast_name(self)(val),@;
+      }
+
+      #handle_convert_from to:obj {
+        @from       ={ @MULTI_ENUMS.[self.val] }
+        @from_type  ={ #multi_rust_type(from)  }
+        @to_type    ={ #multi_rust_type(to)    }
+        @to_name    ={ @to.name }
+        @from_name  ={ @from.name }
+
+        impl #token_trait(@from, @to)\ From<@from_type>\ for\ @to_type\ { 
+          fn\ from\ (val: @from_type)\ ->\ @to_type\ { @;
+            mat ch\ val\ {
+              @from.types.iter#multi_convert_from(@from_name, @to_name)
+              _\ =>\ @to_name::None,@;
+            }
+          }
+        } \n\n
+      }
+
+      @self.converts_from.iter#handle_convert_from(self)
+
+      @self.types.iter#raw_type_to_multi(self, @enum_type)
+
+      impl<Token:Tk>\ @AST_NAME<Token> { 
+        pub\ fn\ into_@self.name (self)\ ->\ Option<@enum_type>\ { @;
+          mat ch\ self\ {
+            @AST_NAME::@self.name (val)\ =>\ Some(val),@;
+            @self.types.iter#ast_type_to_multi(self.name)
+            @self.converts_from.iter#handle_convert_from_ast_node(self.name)
+            _\ =>\ None,@;
+          }
+        }
+      } \n\n
+
+      impl<Token:Tk>\ From<@enum_type>\ for\ @AST_NAME<Token> { 
+        fn\ from(value:\ @enum_type )\ ->\ Self\ {
+          Self::@self.name(value) @;
+        }@;
+      } \n\n
+
+
+      #token_trait_single to:obj {
+        match (@to.requires_template) {
+          true  { <Token:Tk> }
+        } 
+      }
+
+      #token_trait_single_invert to:obj {
+        match (@to.requires_template) {
+          false  { <Token:Tk> }
+        } 
+      }
+
+      impl#token_trait_single(self)\ @enum_type { 
+        pub\ fn\ to_ast#token_trait_single_invert(self)(self)\ ->\ @AST_NAME<Token>\ { @;
+          mat ch\ self\ {
+            @self.types.iter#multi_convert_from("Self", @AST_NAME)
+            _\ =>\ @AST_NAME::None,@;
+          }
+        }
+      } \n\n
+    }
+
+    @self.iter#impls()
+  }
+
+  @multi_enums.()
+
+  #_{ ------------------------------------------------------------------------------------------ }
+
+  #_{ STRUCT DECLARATIONS----------------------------------------------------------------------- }
+
+  #type_structs {
+
+    #token_entry { 
+      match self.has_token {
+        true { @AST_NAME::@self.name(n)\ =>\ { n.tok.clone()@; } @; } 
+      }
+    }
+
+    #hash_entry { @AST_NAME::@self.name(n)\ =>\ n.hash(hasher), @; }
+
+    impl<Token:Tk>\ @AST_NAME<Token>\ {
+      pub\ fn\ token\ (&self)\ ->\ Token\ {@;
+        ma tch\ self\ { 
+          @self.iter#token_entry()
+          @AST_NAME::Token(tok)\ =>\ tok.clone(),
+          _\ =>\ Default::default()
+        }
+      }
+    }
+
+    \n\n
+    /*
+    impl<Token:Tk>\ std::hash::Hash\ for\ @AST_NAME<Token>\ {
+      fn\ hash<H:\ std::hash::Hasher>(&self,\ hasher:\ &mut\ H) {
+        ma tch\ self { 
+          @self.iter#hash_entry()
+          _ => {}
+        }
+      }
+    }
+    */
+
+    #struct_define {
+      #prop_define {
+        pub\ #esc_(@self.name):\ #ast_node_rust_type(self.type), @;
+      }
+
+       @rust_struct_type={ #ty_to_rust(self) }
+
+      \n\n
+      #[derive(\ Clone,\ Debug,\ Default\ )] \n
+      pub\ struct\ @self.name#s_temple_param(self.name){ 
+        @self.props.iter#prop_define()
+      }
+
+      \n\n
+      impl<Token:Tk>\ @AST_NAME<Token> { 
+        pub\ fn\ into_@self.name (self)\ ->\ Option<@rust_struct_type>\ { @;
+          mat ch\ self\ {
+            @AST_NAME::@self.name(val)\ =>\ Some(val),@;
+            _\ =>\ None,@;
+          }
+        }
+      } \n\n
+
+      impl<Token:Tk>\ From<@rust_struct_type>\ for\ @AST_NAME<Token> { 
+        fn\ from(value:\ @rust_struct_type )\ ->\ Self\ {
+          Self::@self.name(value) @;
+        }@;
+      }
+    }
+
+    @self.iter#struct_define()
+  }
+
+  @structs.()
+
+  #_{ ------------------------------------------------------------------------------------------ }
+}
+
+#rule_function {
+
+  #_{ GRAPH NODE RENDERERS --------------------------------------------------------------------- }
+
+  #type_MultiConvertNode ref:str {    
+    /* 
+      to\ index\ id:\ @self.index\ @; 
+      to\ val\ type:\ @self.to \ @; 
+      to\ val\ type:\ @self.to.val\ @; 
+      to\ agg\ agg:\ @self.to.agg_type\ @; 
+      @;
+      from\ index:\ @self.from.val.#type \ @;
+      from\ index:\ @self.from.val.index \ @;
+      from\ val:\ @self.from\ @;
+      from\ agg:\ @self.from.agg_type\ @;
+
+      @self.from.type 
+    */@;
+
+    @self.from.(ref)
+
+    match (self.from.agg_type, self.from.val.#type, self.to.agg_type) {
+      ("Vec", "Multi", "Vec") {
+        let\ @ref :\ Vec<#ty_to_rust(self.to.val)> =
+          @ref
+          . into_iter()@;
+          . map(|v| v.into() )@;
+          . collect(); @;
+      }
+      ("Vec", _, "Vec") {
+        let\ @ref :\ Vec<#ty_to_rust(self.to.val)> =
+          @ref
+          . into_iter()@;
+          . map(|v| v.into() )@;
+          . collect(); @;
+      }
+      (None, _, "Vec") {
+        let\ @ref :\ #ty_to_ast_name(self.to.val) =\ @ref . into(); @;
+        let\ @ref\ =\ vec![@ref]; @;
+      }
+      (None, _, None) {
+        let\ @ref :\ #ty_to_ast_name(self.to.val) =\ @ref . into(); @;
+      }
+    }
+    \n\n\n @;
+  }
+
+  #type_StrNode ref:str {    
+    @self.init.(ref)
+
+    match (self.init.agg_type, self.init.val.#type) {
+      ("Vec", "Token") {  let\ @ref\ =\ Token::from_slice (&@ref) .to_string(); }
+      (_, "Token")     {  let\ @ref\ =\ @ref. to_string(); }
+      { let\ @ref:String\ =\ String::default();  }
+    }@;
+  }
+
+  #type_NumNode ref:str {
+    match self.init {
+      & { 
+        @self.init.(ref)
+
+        match (self.init.agg_type, self.init.val.#type) {
+          ("Vec", _) | ("Map", _)  { let\ @ref\ =\ @ref. len()\ as\ #ty_to_rust(@self.val); }
+          (_, "Token")  {  let\ @ref:\ #ty_to_rust(@self.val)\ = \ @ref . to_string().parse().unwrap_or_default(); }
+          (_, "String")  {  let\ @ref:\ #ty_to_rust(@self.val)\ = \ @ref . parse().unwrap_or_default(); }
+          (_, _)  {  let\ @ref\ = @ref\ as\ #ty_to_rust(@self.val); }
+          { @{ [TODO: num convert (@self.init.agg_type, @self.init.val) ] }  }
+        }
+        @;
+      }
+      { let\ @ref\ =\ @self.literal;@; }
+    }
+  }
+
+  #type_TokNode ref:str {
+    let\ @ref\ =\ tokens[@self.index].clone();@;
+  }
+
+  #type_TokRuleNode ref:str {
+    let\ @ref\ =\ nterm_tok.clone();@;
+  }
+
+  #type_TrimNode ref:str {
+    @self.init.(ref)
+
+    let\ @ref\ =\ @ref . trim(@self.start, @self.end);@;
+  }
+
+  #type_SymNode r:str {
+    match (self.agg_type, self.val.#type) {
+      (None, "Token") { 
+        let\ @r\ =\ nodes[@self.index].clone();@;
+        let\ @r\ =\ @r. to_token().unwrap();@; 
+      }
+      (_, Some) { 
+        let\ @r\ =\ std::mem::take(&mut\ nodes[@self.index]@;);@;
+        let\ @r\ =\ unsafe{\ @r. into_#ty_to_ast_name(self)().unwrap_unchecked()\ };@; 
+      }
+    }
+  }
+
+  #type_AddNode ref:str {
+    
+    @ref_l={ @ref + "_l" }
+    @ref_r={ @ref + "_r" }
+
+    @self.right.(@ref_r)
+    @self.left.(@ref_l)
+
+    match (self.left.agg_type, self.right.agg_type) {
+      ("Vec",  "Vec") | ("Map",  "Map") {
+        let\ mut\ @ref\ =\ @ref_l; @;
+        @ref . extend ( @ref_r ) ; @;
+      }
+
+      ("Vec",  "Map") { vec_map }
+
+      ("Map",  "Vec") { map_vec }
+
+      ("Vec",  _) {
+        let\ mut\ @ref\ =\ @ref_l; @;
+        @ref . push ( @ref_r ) ; @;
+      }
+      (_,  "Vec") { 
+        let\ mut\ @ref\ =\ @ref_r; @;
+        @ref . insert ( 0, @ref_l ) ; @;
+      }
+      ("Map",  _) { map_add }
+
+      (_,  "Map") { add_map }
+
+      (_, _) { let\ mut\ @ref\ =\ @ref_l\ +\ @ref_r; @; }
+    }
+  }
+
+  #type_MulNode ref:str {
+    
+    @ref_l={ @ref + "_l" }
+    @ref_r={ @ref + "_r" }
+
+    @self.right.(@ref_r)
+    @self.left.(@ref_l)
+
+    match (self.left.agg_type, self.right.agg_type) {
+      (None, None) { let\ mut\ @ref\ =\ @ref_l\ *\ @ref_r; @; }
+    }
+  }
+
+  #type_SubNode ref:str {
+    
+    @ref_l={ @ref + "_l" }
+    @ref_r={ @ref + "_r" }
+
+    @self.right.(@ref_r)
+    @self.left.(@ref_l)
+
+    match (self.left.agg_type, self.right.agg_type) {
+      (None, None) { let\ mut\ @ref\ =\ @ref_l\ -\ @ref_r; @; }
+    }
+  }
+
+  #type_DivNode ref:str {
+    
+    @ref_l={ @ref + "_l" }
+    @ref_r={ @ref + "_r" }
+
+    @self.right.(@ref_r)
+    @self.left.(@ref_l)
+
+    match (self.left.agg_type, self.right.agg_type) {
+      (None, None) { let\ mut\ @ref\ =\ @ref_l\ /\ @ref_r; @; }
+    }
+  }
+
+  #type_VecNode ref:str {
+
+    #vec_elements_initializers ref:str {
+      @ref={ ref + "_" + _index_ }
+      @self.(ref)@;
+    }
+
+    #vec_elements_names ref:str {
+      @ref={ ref + "_" + _index_ }
+      @ref match _iter_last_ { & { } { , } }@;
+    }
+
+    /* @self.init.#len */
+
+    match self.init.#len {
+      0 {
+        let\ @ref:\ #ast_node_rust_type(@self)\  =\ vec![];@;
+      }
+      {
+        @self.init.iter#vec_elements_initializers(ref) 
+        let\ @ref\ =\ vec![\ @self.init.iter#vec_elements_names(ref)\ ];@;
+      }
+    }
+
+    
+  }
+
+ 
+  #type_MapNode ref:str {
+
+    @ref_key={ @ref + "_key" }
+    @ref_val={ @ref + "_val" }
+
+    @self.left.(@ref_key)
+    @self.right.(@ref_val)
+
+    let\ mut\ @ref\ =\ HashMap::new();@;
+    @ref . insert(@ref_key, @ref_val); @;
+  }
+
+  #type_BoolNode ref:str {
+    match self.init {
+      { 
+        match self.ast_type.literal {
+          Some { let\ @ref\ =\ @self.ast_type.literal ; @; } 
+          { let\ @ref\ =\ false ; @; }
+        } 
+      }
+      Some { 
+        @self.init.(ref)
+        match (@self.init.agg_type, @self.init.val.#type) {
+          (Some, _) | (None, "Token") | (None, "String") {
+            let\ @ref\ =\ @ref . len() > 0;@;
+          }
+          (None, "U64") | (None, "U32") | (None, "U16") | (None, "U8") |
+          (None, "I64") | (None, "I32") | (None, "I16") | (None, "I8") {
+            let\ @ref\ =\ @ref != 0;@;
+          }
+          (None, "F64") | (None, "F32") {
+            let\ @ref\ =\ @ref != 0.0;@;
+          }
+          { let\ @ref\ =\ false ; @; }
+        }
+      }
+    }
+  }
+
+  #_{ ------------------------------------------------------------------------------------------ }
+
+  #_{ Initializers ----------------------------------------------------------------------------- }
+
+  #type_StructInitializer {
+
+    #print_struct_initializer {
+      match self.node {
+        Some { @self.node.(#esc_(@self.name)) @;}
+        None { let\ @self.name\ =\ Default::default(); @;@; }
+      }
+    }
+    
+    #print_struct_assign { #esc_(@self.name), @; }
+
+    match self.props.#len {
+      0 { 
+        @AST_NAME::@self.name(@self.name{})
+      }
+      {
+        let\ nodes = unsafe { &mut *nodes }; @;@;
+        
+        @self.props.iter#print_struct_initializer()
+      
+        @AST_NAME::@self.name(@RUST_NODE_WRAPPER::new(@self.name{
+          @self.props.iter#print_struct_assign()
+        }))
+      }
+    }
+  }
+
+  #type_Initializer {
+    @out={ "out" }
+    @agg_type={ @self.node.agg_type }
+    @key_type={ @self.node.key.#type }
+    @val_type={ @self.node.val.#type }
+
+    let\ nodes = unsafe { &mut *nodes };@;
+    
+    @self.node.(@out)
+
+    match (@agg_type, @val_type) {
+      ("Vec", "Token") { @AST_NAME::vec_Token(@out) @; }
+      ( None, "Token") { @AST_NAME::Token(@out) @; }
+      { @out . into() @; }
+    }
+  }
+
+  #_{ 
+      Here we iterate through each rule and print out a 
+      function that is used to build an AST node from 
+      a rule's symbols 
+    }
+
+  @r={ self }
+
+  \n
+  fn\ rule_@self.id /* @r.init.comment */  <Token:Tk>(
+    \ nodes:\ *mut\ [@AST_NAME<Token>],@;\ tokens: &[Token],@;\ nterm_tok:\ Token 
+  )\ ->\ @AST_NAME<Token>\ { 
+    @r.init.()
+  }
+  \n
+
+  #_{ ------------------------------------------------------------------------------------------ }
+}
+
+#_{ Rule LUT ----------------------------------------------------------------------------------- }
+ 
+#print_rule_lookup { rule_@self.id,\ @; }
+
+\n
+
+pub\ struct\ ReduceRules<Token:Tk>( 
+  pub\ [Reducer<Token, @AST_NAME<Token>>;@RULES.#len] @;
+);
+
+\n\n
+
+impl<Token:Tk>\ ReduceRules<Token>{
+  pub\ const\ fn\ new ()\ ->\ Self\ { @;
+    Self([@RULES.iter#print_rule_lookup()]) @;
+  } @;
+}
+
+\n\n
+
+impl<Token:Tk>\ AsRef<[Reducer<Token,\ @AST_NAME<Token>>]>\ for\ ReduceRules<Token> { @;
+  fn\ as_ref(&self)\ ->\ &[Reducer<Token,\ @AST_NAME<Token>>] { @;
+    &self.0 @;
+  } @;
+}
+
+#_{ -------------------------------------------------------------------------------------------- }
+
+#header {
+  match ALLOW_UPPER_ATTRIBUTES {
+    true {
+@{#![allow(unused)]
+#![cfg_attr(rustfmt, rustfmt_skip)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+}
+    }
+  }
+}

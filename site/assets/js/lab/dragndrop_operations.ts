@@ -313,6 +313,7 @@ export class MoveFieldDragOperation extends DragOperation {
           this.drag_field.add_class("mini-candidate");
           this.placeholder = new NBBlankField(40, 40);
           this.nb.mini_col.add(this.placeholder, this.drag_target_row);
+          this.nb.mini_col.distribute_height();
           this.drag_target_col = -1
         }
       }
@@ -534,4 +535,4 @@ export class ResizeFieldOperation extends DragOperation {
       set.bottom.ele.style.transition = ""
     }
   }
-}
+};

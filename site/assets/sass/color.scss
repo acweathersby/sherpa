@@ -1,3 +1,54 @@
+$theme-the-radlr-special: (
+  /*
+  colors 
+  - header fg bg
+
+  - base-line fg bg
+  - focus fg bg
+  - background fg bg
+
+  - controls fg bg :hover fg bg
+  - links fg bg :hover fg bg
+  */
+
+  class-name: "the-RADLR-special",
+  
+  header-fg:   rgb(31, 31, 31),
+  header-bg:  rgb(241, 241, 241),
+  
+  header-hover-fg:rgb(241, 241, 241),
+  header-hover-bg:rgb(31, 31, 31),
+
+  base-fg: rgb(31, 31, 31),
+  base-bg: rgb(241, 241, 241),
+
+  focus-fg: rgb(227, 227, 227),
+  focus-bg: rgb(61, 61, 61),
+
+  backdrop-fg: rgb(92, 92, 92),
+  backdrop-bg: rgb(227, 227, 227),
+
+  button-fg: rgb(165, 165, 165),
+  button-bg: transparent,
+
+  button-hover-fg: rgb(241, 241, 241),
+  button-hover-bg: rgb(31, 31, 31),
+
+  bc-address-fg: rgb(241, 241, 241),
+  bc-address-bg: rgb(86, 78, 153),
+
+  section-bg: rgba(0, 0, 0, 0.019),
+
+  link-fg: purple,
+  link-bg: transparent,
+
+  link-hover-fg: purple,
+  link-hover-bg: transparent,
+
+  // ------------------------------------------
+);
+
+
 $theme-please-dont-debug: (
   // 
   class-name: "please-dont-debug",
@@ -134,8 +185,9 @@ $theme-pencil: (
 
 
 $themes : ( //
-  $theme-pencil,
-  $theme-industrial-solace,
-  $theme-please-dont-debug,
-  $theme-desperados-unite,
+  $theme-the-radlr-special,
+  //$theme-pencil,
+  //$theme-industrial-solace,
+  //$theme-please-dont-debug,
+  //$theme-desperados-unite,
 );

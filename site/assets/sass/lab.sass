@@ -50,7 +50,7 @@
   &.dragging
     position: fixed
     z-index: 1000
-    box-shadow: 2px 2px 10px black
+    box-shadow: 2px 2px 10px #0000006b
 
   .nb-resize-handle-area
     position: absolute
@@ -121,7 +121,7 @@
       justify-content: space-between
       align-items: center
       font-size: 1.2em
-      font-weight: 500
+      font-weight: 800
       border-radius: 2px
       transition: all $bts
       cursor: move
@@ -153,8 +153,8 @@
       margin-right: 10px
       opacity: 0
       visibility: hidden
-      top: 5px
-      transition: opacity $bts * 2, visibility $bts * 2, top $bts * 2.5
+      top: 2px
+      transition: opacity $bts * 2, visibility $bts * 2, top $bts * 4
 
     .loader-div
       width: 10px
@@ -268,7 +268,7 @@
   @include mobile-screens
     padding: 0
     flex-basis: 40px;
-    margin: 0 5px
+    margin: 0 15px
 
   .nb-field
     padding: 0
@@ -313,7 +313,7 @@
   z-index: 1000
 
   @include mobile-screens
-    top: $header-height * 2 + 10
+    top: $header-height * 2
     padding: 0 5px
 
   .nb-header
@@ -328,31 +328,46 @@
   
   
 
+#controls-container
+  position: absolute
+  top: 10px
+  display: flex
+  left: 0 
+  right: 0
+  height: 40px
+  justify-content:  center
+  pointer-events: none
 
+  @include mobile-screens
+    flex-direction: column
+    position: absolute
+    left: 15px
+    top: 400px
+    border-radius: 0
+    height: 500px
+  
 
 #controls
-  position: absolute
-  top: 20px
-  left: 40vw
-  right: 40vw
+  position: relative
   display: flex
   flex-direction: row
   background-color: red
   justify-content: space-around
   align-items: center
   border-radius: 20px
+  height: 40px
+  width: 250px
   transition: color 200ms, background 200ms, opacity 100ms
+  z-index: 100
+  
+  @include mobile-screens
+    flex-direction: column
+    width: 50px
+    height: 300px
+    border-radius: 5px
 
   &.inactive
     opacity: 0
-
-  @include mobile-screens
-    position: relative
-    left: 0
-    right: 0
-    top: 0
-    border-radius: 0
-    height: 60px
 
   .classification
     font-size: 1.2em
@@ -361,6 +376,9 @@
     pointer-events: none
     user-select: none
     font-weight: 600
+
+    @include mobile-screens
+      font-size: 0.9em
 
   .debugger-button
     font-size: 16px
@@ -398,7 +416,7 @@
 
 
   //.nb-column.mini .nb-field .nb-header
-  //  background: map-get($theme-map, "field-header-bg") !important
+  //  background: map-get($theme-map, "header-bg") !important
 
 
 // CST --------------------------------------------
@@ -445,9 +463,11 @@
       display: block
 
 .ast-graph
-  position: relative
+  position: absolute
+  top: 20px
+  bottom: 0
+  left:  0
   width: 100%
-  height: 100%
   background-color: #EEE
   border-radius: 5px
   overflow: none
@@ -459,7 +479,7 @@
 
 #parser-info 
   position: relative
-  margin: 0 20px
+  margin-top: 20px
 
   .context-view
     position: absolute
@@ -491,9 +511,9 @@
 
     position: absolute
     top: 50px
-    bottom: 20px
+    bottom: 0px
     left: 0px
-    right: 20px
+    right: 0px
     font-family: monospace
     font-size: 12px
 
@@ -546,26 +566,37 @@
       bottom: 0
       
       .bytecode-view-instruction
-        margin: 0.5px
+        $address-width: 60px
+
         min-height: 30px
         display: flex
         flex-direction: row
         flex-wrap: wrap
         align-items: center
+        position: relative
+        padding-left: $address-width
+        font-weight: 800;
 
         &.active
 
-        > .address 
-          width: 60px
-          margin: 0 5px 0 0
-          padding: 4px
+        > .address
+          position: absolute
+          top: 0
+          left:  0
+          height: 100%
+          width: $address-width
           text-align: right
-          text-transform: uppercase
+          display: flex
+          align-items: center
+          justify-content: right
+          padding: 5px
+          box-sizing: border-box
 
         .mnemonic
           padding: 4px
           width: 60px
           text-transform: uppercase
+          text-align: center
 
         .label-value
           pointer-events: all
@@ -599,7 +630,8 @@
 
           .label 
             display: block
-            text-align: left
+            font-weight: 800;
+            text-align: center;
 
       .bytecode-state-group
         position: relative
@@ -612,7 +644,6 @@
         .pseudo-code
           position: relative
           display: none
-          background-color: black
           width: 100%
           z-index: 100
           padding: 20px
@@ -636,131 +667,85 @@
     background-color: map-get($theme-map, bg-inc-1)
 
   #controls
-    background-color: map-get($theme-map, bg-dec-1)
-    color: map-get($theme-map, fg-basic)
+    background-color: map-get($theme-map, backdrop-bg)
+    color: map-get($theme-map, backdrop-fg)
 
     .classification
-      color: map-get($theme-map, fg-inc-1)
+      color: map-get($theme-map, bc-address-bg)
 
     .debugger-button:hover
-      color: map-get($theme-map, fg-dec-1)
+      color: map-get($theme-map,  bc-address-bg)
 
   .nb-field
     background-color: none
 
-
-
     &.nb-blank-field div
-      border-color: map-get($theme-map, bg-inc-1)
+      border-color: map-get($theme-map, backdrop-bg)
 
     .nb-resize-handle-area
       .nb-resize-handle
-        color: map-get($theme-map, fg-dec-1)
-        background-color: map-get($theme-map, bg-inc-1)
+        color: map-get($theme-map, base-bg)
+        background-color: map-get($theme-map, backdrop-bg)
 
         &:hover, &:active
-          color: map-get($theme-map, fg-inc-2)
-          background-color: map-get($theme-map, bg-inc-2)
+          background-color: map-get($theme-map, focus-bg)
 
     &.dragging
-      background-color: map-get($theme-map, bg-basic)
+      background-color: map-get($theme-map, base-bg)
 
     &.nb-content-field
       &.fullscreen
-        background-color: map-get($theme-map, "bg-basic")
-      .nb-header
-        color: map-get($theme-map, fg-basic)
+        background-color: map-get($theme-map, base-bg)
 
-        .nb-icon-container
-          color: map-get($theme-map, fg-inc-2)
+      .nb-header
+        
+        background-color: map-get($theme-map, header-bg)
+        
+        &, .nb-icon-container
+          color: map-get($theme-map, header-fg)
 
         &:hover
-          .nb-expand-button
-            opacity: 1
-
-          &, .nb-icon-container
-            color: map-get($theme-map, "field-header-fg")
-
-          background: map-get($theme-map, "field-header-bg")
+          &, .nb-icon-container, .nb-expand-button
+            color: map-get($theme-map, header-hover-fg)
+            opacity:  1
+          background: map-get($theme-map, header-hover-bg)
 
         .nb-loader
-          background-color: map-get($theme-map, "loader-bg")
-          border-color: map-get($theme-map, "loader-bg")
+          background-color: map-get($theme-map, header-hover-bg)
+          border-color: map-get($theme-map, header-hover-bg)
 
         .loader-div
-          background: map-get($theme-map, "loader-fg")
+          background: map-get($theme-map, header-hover-fg)
 
       .nb-loading-screen
-        background-color: map-get($theme-map, "bg-basic")
-        color: map-get($theme-map, "fg-inc-2")
+        background-color: map-get($theme-map, base-bg)
+        color: map-get($theme-map, base-fg)
 
-  #error-reporter
-    color: map-get($theme-map, fg-dec-1)
-    background-color: map-get($theme-map, bg-inc-1)
+  .nb-column.mini .nb-field.nb-content-field .nb-header,
+    &, .nb-icon-container
+      color: map-get($theme-map, button-fg)
+    background-color: map-get($theme-map, button-bg)
 
-  #controls
-    background-color: map-get($theme-map, bg-dec-1)
-    color: map-get($theme-map, fg-basic)
+    &:hover
+      &, .nb-icon-container
+        color: map-get($theme-map, header-hover-fg)
+      background-color: map-get($theme-map, header-hover-bg)
 
-    .classification
-      color: map-get($theme-map, fg-inc-1)
-
-    .debugger-button:hover
-      color: map-get($theme-map, fg-dec-1)
-
-  .nb-field
-    background-color: none
-
-
-
-    &.nb-blank-field div
-      border-color: map-get($theme-map, bg-inc-1)
-
-    .nb-resize-handle-area
-      .nb-resize-handle
-        color: map-get($theme-map, fg-dec-1)
-        background-color: map-get($theme-map, bg-inc-1)
-
-        &:hover, &:active
-          color: map-get($theme-map, fg-inc-2)
-          background-color: map-get($theme-map, bg-inc-2)
-
-    &.dragging
-      background-color: map-get($theme-map, bg-basic)
-
-    &.nb-content-field
-      &.fullscreen
-        background-color: map-get($theme-map, "bg-basic")
-      .nb-header
-        color: map-get($theme-map, fg-basic)
-
-        .nb-icon-container
-          color: map-get($theme-map, fg-inc-2)
-
-        &:hover
-          .nb-expand-button
-            opacity: 1
-
-          &, .nb-icon-container
-            color: map-get($theme-map, "field-header-fg")
-
-          background: map-get($theme-map, "field-header-bg")
-
-        .nb-loader
-          background-color: map-get($theme-map, "loader-bg")
-          border-color: map-get($theme-map, "loader-bg")
-
-        .loader-div
-          background: map-get($theme-map, "loader-fg")
-
-      .nb-loading-screen
-        background-color: map-get($theme-map, "bg-basic")
-        color: map-get($theme-map, "fg-inc-2")
+  .nb-field.nb-content-field.dragging .nb-header,
+  .nb-content-field.fullscreen .nb-header
+    &, .nb-icon-container
+      color: map-get($theme-map, header-hover-fg)
+    background-color: map-get($theme-map, header-hover-bg)
+    transition: none
+    cursor: move
 
   #parser-info 
+    .pseudo-code
+      color: map-get($theme-map, focus-fg)
+      background-color: map-get($theme-map, focus-bg)
 
     .context-view-field-val
-      background-color: black
+      background-color: map-get($theme-map, base-bg)
 
     .parse-state-goto
       color: red
@@ -771,31 +756,57 @@
     .active-state
 
     .state-info
-      color: white
+      color: map-get($theme-map, base-fg)
+      background-color: map-get($theme-map, section-bg)
 
     .state-address
-      background-color: map-get($theme-map, "bc-address-bg")
+      color: map-get($theme-map, focus-fg)
+      background-color: map-get($theme-map, focus-bg)
 
     .active-state .state-address
-      background-color: map-get($theme-map, "bc-address-bg-active")
+      color: map-get($theme-map, bc-address-fg)
+      background-color: map-get($theme-map, bc-address-bg)
       
     .bytecode-view-instruction
 
-      &.active
-        color: map-get($theme-map, "fg-inc-1")
-        background: map-get($theme-map, "bg-inc-1")
-
-      > .address 
-        color: map-get($theme-map, "fg-basic")
-        background: map-get($theme-map, "bg-dec-2")
+      background-color: map-get($theme-map, section-bg)
 
       .label-value
-        color: map-get($theme-map, "fg-inc-1")
+        color: map-get($theme-map, focus-fg)
         .label
-          color: map-get($theme-map, "fg-dec-1")
+          color: map-get($theme-map, backdrop-fg)
 
         .address 
-          background: map-get($theme-map, "bc-address-bg")
+          color: map-get($theme-map, bc-address-fg)
+          background-color: map-get($theme-map, bc-address-bg)
         
         .value 
-          background: map-get($theme-map, "bg-dec-1")
+          color: map-get($theme-map, focus-fg)
+          background-color: map-get($theme-map, focus-bg)
+
+      
+      > .address 
+        color: map-get($theme-map, backdrop-fg)
+        background: map-get($theme-map, backdrop-bg)
+
+      &.active
+        color: map-get($theme-map, focus-fg) !important
+        background: map-get($theme-map, focus-bg)
+
+        & > .address 
+          color: map-get($theme-map, focus-fg)
+          background: map-get($theme-map, focus-bg)
+
+        .label-value
+          .label
+            color: map-get($theme-map, focus-fg)
+
+          .address 
+            color: map-get($theme-map, bc-address-fg)
+            background-color: map-get($theme-map, bc-address-bg)
+          
+          .value 
+            color: map-get($theme-map, focus-fg)
+            background-color: map-get($theme-map, focus-bg)
+
+

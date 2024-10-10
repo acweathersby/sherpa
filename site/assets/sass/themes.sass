@@ -1,7 +1,7 @@
 @import "color"
 
 @mixin kludge($theme-name, $theme-map)
-  /*!theme<div class="theme" data-target="#{$theme-name}" data-fg="#{map-get($theme-map, fg-basic)}" data-mg="#{map-get($theme-map, field-header-bg)}" data-bg="#{map-get($theme-map, bg-inc-1)}" ></div>|#{$theme-name}emeht*/
+  /*!theme<div class="theme" data-target="#{$theme-name}" data-fg="#{map-get($theme-map, focus-fg)}" data-mg="#{map-get($theme-map, header-hover-bg)}" data-bg="#{map-get($theme-map, focuse-bg)}" ></div>|#{$theme-name}emeht*/
 
 @each $theme in $themes
   @include kludge(map-get($theme, class-name), $theme)

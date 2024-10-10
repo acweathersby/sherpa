@@ -23,7 +23,7 @@ export async function init(compiler_worker_path: string) {
   grammar_input_field.set_text("");
   grammar_input_field.set_icon(`<i class="fa-solid fa-chart-gantt"></i>`);
 
-  let parser_info_field = nb.add_field(new NBContentField("Parser Info"), 1);
+  let parser_info_field = nb.add_field(new NBContentField("Parser Info"), -1);
   parser_info_field.set_content_visible(false);
   parser_info_field.set_icon(`<i class="fa-solid fa-circle-info"></i>`);
 
@@ -36,7 +36,7 @@ export async function init(compiler_worker_path: string) {
   let ast_field = nb.add_field(new NBContentField("AST Nodes"), -1);
   ast_field.set_icon(`<i class="fa-solid fa-share-nodes"></i>`);
 
-  let cst_field = nb.add_field(new NBContentField("CST Nodes"), -1);
+  let cst_field = nb.add_field(new NBContentField("CST Nodes"), 1);
   cst_field.set_icon(`<i class="fa-solid fa-sitemap"></i>`);
 
   let syntax_highlighting_field = nb.add_field(new NBContentField("Syntax Highlighting"), -1);

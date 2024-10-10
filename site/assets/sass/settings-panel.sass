@@ -108,7 +108,7 @@
     $size: 30px
     position: sticky
     font-weight: 600
-    font-size: $size * 1.2
+    font-size: $size * 0.75
     line-height: $size * 0.9
     text-align: center
     width: $size
@@ -162,24 +162,25 @@
 @mixin settings-panel-themable($theme-map)
 
   #settings-panel, #config-panel
-    background-color: map-get($theme-map, bg-inc-1)
+    background-color: map-get($theme-map, focus-bg)
+    color: map-get($theme-map, focus-fg)
 
     .close-button
       background-color: map-get($theme-map, button-bg)
-      color: map-get($theme-map, button-fg)
+      color: map-get($theme-map, focus-fg)
 
       &:hover
-        background-color: map-get($theme-map, button-active-bg)
-        color: map-get($theme-map, button-active-fg)
+        background-color: map-get($theme-map, button-hover-bg)
+        color: map-get($theme-map, button-hover-fg)
 
     .theme-entry
-      background-color: map-get($theme-map, bg-inc-2)
-      color: map-get($theme-map, fg-inc-2)
+      background-color: map-get($theme-map, focus-bg)
+      color: map-get($theme-map, focus-fg)
 
       &:hover
-        background-color: map-get($theme-map, bg-dec-1)
-        color: map-get($theme-map, fg-inc-1)
+        background-color: map-get($theme-map, base-bg)
+        color: map-get($theme-map, base-fg)
 
       &.active
-        background-color: map-get($theme-map, bg-dec-1)
-        color: map-get($theme-map, fg-inc-1)
+        background-color: map-get($theme-map, backdrop-bg)
+        color: map-get($theme-map, backdrop-fg)

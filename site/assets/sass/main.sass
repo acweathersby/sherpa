@@ -1,6 +1,5 @@
 // Base Style Bootstrap
 
-
 *
   transition: color 200ms, background-color 200ms, fill 200ms
   
@@ -94,20 +93,20 @@ button:hover
 
 @mixin main-themable($theme-map)
   &, .noscript
-    color: map-get($theme-map, "fg-basic")
-    background-color: map-get($theme-map, "bg-basic")
+    color: map-get($theme-map, "base-fg")
+    background-color: map-get($theme-map, "base-bg")
 
   button
-    background: map-get($theme-map, "bg-basic")
-    color: map-get($theme-map, "fg-basic")
+    background: map-get($theme-map, "button-bg")
+    color: map-get($theme-map, "button-fg")
     path
-      fill: map-get($theme-map, "fg-basic")
+      fill: map-get($theme-map, "button-fg")
 
     &:hover
-      background-color: map-get($theme-map, "bg-inc-1")
-      color: map-get($theme-map, "fg-inc-1")
+      background-color: map-get($theme-map, "button-hover-bg")
+      color: map-get($theme-map, "button-hover-fg")
       path
-        fill: map-get($theme-map, "fg-inc-1")
+        fill: map-get($theme-map, "button-hover-fg")
 
 @import "./codemirror"
 @import "./header"

@@ -329,10 +329,10 @@ export class NBColumn {
 
     let remainder_percentage = 1 / (cell_height_sum.l / (real_height - cell_height_sum.f));
     let inv_real_height = 1 / real_height;
-
-
     let normalized_heights = [];
-    for (let i = 0; i < this.cells.length; i++) {
+    let cells_length = this.cells.length;
+
+    for (let i = 0; i < cells_length; i++) {
       let height = cell_heights[i];
       if (height.f) {
         normalized_heights.push(height.h * inv_real_height);
@@ -340,9 +340,11 @@ export class NBColumn {
         normalized_heights.push(height.h * remainder_percentage * inv_real_height);
       }
     }
-    let normalized_value = 1 / normalized_heights.reduce((v, a) => v + a, 0);
-    for (let i = 0; i < this.cells.length; i++) {
-      this.cells[i].set_relative_height(normalized_heights[i] * normalized_value);
+
+    let normalized_ratio = 1 / normalized_heights.reduce((v, a) => v + a, 0);
+
+    for (let i = 0; i < cells_length; i++) {
+      this.cells[i].set_relative_height(normalized_heights[i] * normalized_ratio);
     }
   }
 
@@ -428,16 +430,15 @@ export class NBBlankField extends NBField {
     this.ele.classList.add("nb-blank-field");
     this.latched_height = height;
     this.ele.appendChild(document.createElement("div"))
-
-    if (!force_height) {
-      setTimeout(() => {
-        this.ele.style.opacity = "1"
-        this.ele.style.height = `${height}px`
-      }, 10)
-    } else {
+    setTimeout(() => {
       this.ele.style.opacity = "1"
-      this.ele.style.height = `${height}px`
-    }
+    }, 10)
+  }
+
+  set_relative_height(height: number): void {
+    setTimeout(() => {
+      this.ele.style.height = `${height * 100}%`
+    }, 10)
   }
 
   delete() {
@@ -534,7 +535,7 @@ export class NBContentField<EventObj = null, event_names = ""> extends NBField {
   }
 
   set_content_visible(is_content_visible: boolean) {
-    if (is_content_visible) { 
+    if (is_content_visible) {
       this.ele.classList.add("content-visible");
     } else {
       this.ele.classList.remove("content-visible");
@@ -705,7 +706,7 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
     if (start_char == end_char) return;
     this.cm.dispatch({
       effects: [highlight_effect.of([
-        view.Decoration.mark({ attributes: { style: `color: ${color} !important` }, id: "highlight" }).range(start_char, end_char)
+        view.Decoration.mark({ attributes: { style: `color: ${color}` }, id: "highlight" }).range(start_char, end_char)
       ])]
     });
   }
@@ -718,7 +719,7 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
         return (to - from) > 0
       }).map(([from, to, color]) => {
         to = Math.min(len, to);
-        return view.Decoration.mark({ attributes: { style: `color: ${color} !important` }, id: "highlight" }).range(from, to)
+        return view.Decoration.mark({ attributes: { style: `color: ${color}` }, id: "highlight" }).range(from, to)
       }))
     });
   }
@@ -791,3 +792,4 @@ export class NBEditorField extends NBContentField<NBEditorField, "text_changed">
   };
 }
 
+;

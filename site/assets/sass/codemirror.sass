@@ -12,7 +12,7 @@
   bottom: 0
   outline: none
   position: absolute !important
-  font-size: 12px
+  font-size: 13px
 
   *
     color: none !important
@@ -79,29 +79,34 @@
 
 @mixin cm-themable($theme-map)
   .cm-editor
-    color: white
+    color: map-get($theme-map, base-fg)
+    background-color: map-get($theme-map, section-bg)
 
     .cm-line
       background-color: none
-      color: map-get($theme-map, fg-basic) !important
+      color: map-get($theme-map,  base-fg) !important
 
       &.cm-activeLine
         background-color: none
-        color: map-get($theme-map, fg-dec-2) !important
+        color: map-get($theme-map, base-fg) !important
 
     .cm-cursor
       border-color: #ac3e3e
 
     .cm-selectionBackground
-      background-color: map-get($theme-map, bg-dec-1) !important
+      background-color: map-get($theme-map, base-bg) !important
+      color: map-get($theme-map, focus-fg) !important
 
     .cm-gutters
-      color: map-get($theme-map, fg-inc-1) !important
-      background-color: map-get($theme-map, bg-basic) !important
+      * 
+        transition: none
+
+      color: map-get($theme-map, backdrop-fg) !important
+      background-color: map-get($theme-map, backdrop-bg) !important
 
       .cm-activeLineGutter
-        color: map-get($theme-map, fg-dec-1) !important
-        background-color: map-get($theme-map, bg-basic)
+        color: map-get($theme-map, header-fg) !important
+        background-color:  map-get($theme-map, header-bg) !important
 
       .syn-prod
         color: #9f9f9f

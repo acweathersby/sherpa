@@ -29,20 +29,22 @@
 
   {{ partial "header/header.html" . }}
 
-  <div id="controls" class="inactive">
-    <div class="classification"></div>
-    <div class="debugger-button" id="reset" title="restart parser ( alt+r )">
-      <i class="fa-solid fa-rotate-left active hover inactive"></i>
-    </div>
-    <div class="debugger-button" id="step" title="step to next instruction ( alt+n )">
-      <i class="fa-solid fa-forward-step active hover inactive"></i>
-    </div>
-    <div class="debugger-button" id="jump" title="step to next parser action ( alt+a )">
-      <i class="fa-solid fa-forward-fast hover inactive active"></i>
-    </div>
-    <div class="debugger-button" id="play" title="continue parsing ( alt+space )">
-      <i class="fa-solid fa-forward hover inactive "></i>
-      <i class="fa-solid fa-pause active"></i>
+  <div id="controls-container">
+    <div id="controls" class="inactive">
+      <div class="classification"></div>
+      <div class="debugger-button" id="reset" title="restart parser ( alt+r )">
+        <i class="fa-solid fa-rotate-left active hover inactive"></i>
+      </div>
+      <div class="debugger-button" id="step" title="step to next instruction ( alt+n )">
+        <i class="fa-solid fa-forward-step active hover inactive"></i>
+      </div>
+      <div class="debugger-button" id="jump" title="step to next parser action ( alt+a )">
+        <i class="fa-solid fa-forward-fast hover inactive active"></i>
+      </div>
+      <div class="debugger-button" id="play" title="continue parsing ( alt+space )">
+        <i class="fa-solid fa-forward hover inactive "></i>
+        <i class="fa-solid fa-pause active"></i>
+      </div>
     </div>
   </div>
 
@@ -211,12 +213,6 @@
   </div>
 
   <footer>
-    <button id="open-settings-button" alt="open setting panel">
-      <i class="fa fa-cog" aria-hidden="true"></i>
-    </button>
-    <button id="open-config-button" alt="open config panel">
-      <i class="fa fa-clipboard-check" aria-hidden="true"></i>
-    </button>
   </footer>
 
   <script type="module">

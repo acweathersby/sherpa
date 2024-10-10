@@ -27,7 +27,7 @@ header
     justify-content: space-between
 
   .header-right
-    width: 100px
+    min-width: 200px
 
   #header-logo
     display: inline-block
@@ -58,15 +58,15 @@ footer
 
     #header-logo
       #radlr-logo
-        fill: map-get($theme-map, fg-basic) !important
+        fill: map-get($theme-map, button-fg) !important
 
       &:hover #radlr-logo
-        fill: map-get($theme-map, fg-inc-1) !important
+        fill: map-get($theme-map, button-hover-bg) !important
 
     #page-category-name
-      color: map-get($theme-map, fg-basic) !important
+      color: map-get($theme-map, button-fg) !important
 
     #page-category
-      border-color: map-get($theme-map, fg-inc-1)
+      border-color: map-get($theme-map, button-fg)
 
   footer
