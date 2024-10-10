@@ -340,11 +340,14 @@
 
   @include mobile-screens
     flex-direction: column
+    justify-content: end
     position: absolute
     left: 15px
-    top: 400px
+    top: 0px
+    bottom: 0px
     border-radius: 0
-    height: 500px
+    height: unset
+    padding-bottom: $footer-height
   
 
 #controls
@@ -359,11 +362,12 @@
   width: 250px
   transition: color 200ms, background 200ms, opacity 100ms
   z-index: 100
+  pointer-events: all
   
   @include mobile-screens
     flex-direction: column
     width: 50px
-    height: 300px
+    height: 250px
     border-radius: 5px
 
   &.inactive
