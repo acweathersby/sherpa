@@ -15,5 +15,5 @@ export function init(
   grammar_pipeline: GrammarDBNode,
 ) {
 
-  let engine = new SyntaxGraphEngine(<HTMLDivElement>ast_field.body);
+  //let engine = new SyntaxGraphEngine(<HTMLDivElement>ast_field.body);
 }

@@ -2,6 +2,11 @@ class TextureAtlasGenerator {
   ctx: OffscreenCanvasRenderingContext2D
   canvas: OffscreenCanvas
 
+  glyph_lu: Map<string, { u: number, v: number, w: number, h: number, r: number }> = new Map
+
+  glyph_offset: number = 0
+  size: number = 30
+
 
   constructor() {
     this.canvas = document.createElement("canvas").transferControlToOffscreen();
@@ -12,31 +17,84 @@ class TextureAtlasGenerator {
     }
 
     this.ctx = ctx;
+    this.canvas.width = 1024;
+    this.canvas.height = 1024;
+
+    this.ctx.fillStyle = 'black';
+    //    this.ctx.fillRect(0, 0, 512, 512);
+
+    this.ctx.fillStyle = 'red';
+
+
+    this.ctx.font = `${this.size}px Helvetica`
+  }
+
+  getGlyph(char: string) {
+    let val = this.glyph_lu.get(char);
+
+    if (val) {
+      return val;
+    }
+
+    let text = this.ctx.measureText(char)
+
+    let data = {
+      u: this.glyph_offset / 1024,
+      v: 0 / 1024,
+      w: text.width / 1024,
+      h: this.size / 1024,
+      r: text.width / this.size
+    };
+
+    this.glyph_lu.set(char, data);
+
+    this.ctx.fillText(char, this.glyph_offset, this.size)
+
+    this.glyph_offset += text.width
+
+    return data;
   }
 }
+
 
 export class SyntaxGraphEngine {
   gl: WebGL2RenderingContext
   canvas: HTMLCanvasElement
 
-  nodes: { pos: { x: number, y: number } }[]
+  nodes: { pos: { x: number, y: number }, name: string, color: number }[]
   connections: number[]
 
   line_buffer: WebGLBuffer
-  node_buffer: WebGLBuffer
+  glyph_buffer: WebGLBuffer
+
+  text_atlas: WebGLTexture
+
+  node_array: Float32Array = new Float32Array(512 * 512 * 3)
+  node_texture: WebGLTexture
 
   line_program: WebGLProgram
   node_program: WebGLProgram
+  text_program: WebGLProgram
 
   node_count: number = 0
   line_count: number = 0
+  glyph_count: number = 0
+
+  offset_x: number = 0
+  offset_y: number = 0;
+  scale: number = 1;
 
   line_vao: WebGLVertexArrayObject
   node_vao: WebGLVertexArrayObject
+  text_vao: WebGLVertexArrayObject
 
   camera_uniform: WebGLUniformLocation
 
   transfer_buffer: ArrayBuffer = new ArrayBuffer(1024 * 4);
+
+  need_ui_buffer_update: boolean = true
+
+  atlas: TextureAtlasGenerator = new TextureAtlasGenerator()
 
   /// Establishes a node graph engine within the provided HTMLElement. The
   /// context will always take up the entire space available within the ele argument.
@@ -56,224 +114,398 @@ export class SyntaxGraphEngine {
     this.nodes = []
     this.connections = []
 
-    this.node_program = createProgram(gl, circle_draw_vert, circle_draw_frag);
+    this.node_program = createProgram(gl, node_draw_vert, node_draw_frag);
     this.line_program = createProgram(gl, line_draw_vert, line_draw_frag);
+    this.text_program = createProgram(gl, text_draw_vert, text_draw_frag);
 
     this.line_buffer = createBuffer(gl);
-    this.node_buffer = createBuffer(gl);
-    
+    this.glyph_buffer = createBuffer(gl);
+
     this.line_vao = createVAO(gl);
     this.node_vao = createVAO(gl);
+    this.text_vao = createVAO(gl);
+
+    this.camera_uniform = createBuffer(gl)
+
+    this.text_atlas = createTexture(gl);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.text_atlas);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 1024, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.atlas.ctx.getImageData(0, 0, 1024, 1024, { colorSpace: "srgb" }));
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+    this.node_texture = createTexture(gl);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.node_texture);
+
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, 512, 512, 0, gl.RGB, gl.FLOAT, this.node_array);
+
     
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    // Create base line shader for drawing circles
+    if (gl.getError()) {
+      throw "Have gl errors"
+    }
+
+    gl.useProgram(this.text_program);
+
+    let texture_location = gl.getUniformLocation(this.text_program, "uSampler");
+    gl.uniform1i(texture_location, 0);
+    
+    let texture_location2 = gl.getUniformLocation(this.text_program, "uNodes");
+    gl.uniform1i(texture_location2, 1);
+
+    gl.useProgram(this.line_program);
+
+    texture_location2 = gl.getUniformLocation(this.line_program, "uNodes");
+    gl.uniform1i(texture_location2, 1);
+
+    gl.useProgram(this.node_program);
+    
+    texture_location2 = gl.getUniformLocation(this.node_program, "uNodes");
+    gl.uniform1i(texture_location2, 1);
 
 
-    this.camera_uniform = createBuffer(gl);
 
 
-    //gl.bindBuffer(gl.UNIFORM_BUFFER, this.camera_uniform);
-    gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, this.camera_uniform); 
-    //gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+    gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, this.camera_uniform);
 
-    let block_index = gl.getUniformBlockIndex(this.node_program, "UIData"); 
+    let block_index = gl.getUniformBlockIndex(this.node_program, "UIData");
     gl.uniformBlockBinding(this.node_program, block_index, 1);
 
-    block_index = gl.getUniformBlockIndex(this.line_program, "UIData"); 
+    block_index = gl.getUniformBlockIndex(this.line_program, "UIData");
     gl.uniformBlockBinding(this.line_program, block_index, 1);
 
+    block_index = gl.getUniformBlockIndex(this.text_program, "UIData");
+    gl.uniformBlockBinding(this.text_program, block_index, 1);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
     this.setupGL();
+    this.setUiBuffer();
 
-    gl.bindBuffer(gl.UNIFORM_BUFFER, this.camera_uniform);
-    gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array([0, 0, 0, 0, 0.2, 0, 0, 0]), gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
-    let i = 0;
-
-    let draw_fn = () => {
-      this.clearNodes();
-
-      let a = this.addNode(0, 0.0);
-      let b = this.addNode(Math.sin(i) * 500, 600);
-      let c = this.addNode(Math.cos(i) * Math.sin(-i) * 500, 200);
-      let d = this.addNode(Math.cos(i) * 500, 300);
-
-      for(let i = 0; i < 1000; i++){
-        this.addNode(Math.random() * 4000 - 2000, Math.random() * 4000 - 2000)
-      }
-  
-      this.addConnection(a,b);
-      this.addConnection(b,c);
-      this.addConnection(c,d);
-      this.addConnection(a,d);
-      
-      this.uploadLines();
-      this.uploadNodes();
-
-      i+= Math.PI * .005
-      this.draw();
-      //return
-      requestAnimationFrame(draw_fn)
-    };
-    requestAnimationFrame(draw_fn);
+    this.setupInputs()
   }
 
+  private setupInputs() {
+    new ResizeObserver(() => {
+      this.need_ui_buffer_update = true
+      this.draw()
+    }).observe(this.canvas)
 
-  addNode(x: number, y: number) : number {
+    let pointer_event_id = 0
+    let origin_x = 0
+    let origin_y = 0
+    let start_x = 0
+    let start_y = 0
+    let pointer_capture = false
+
+    this.canvas.addEventListener("wheel", e => {
+      let diff = -Math.max(Math.min(e.deltaY, 1), -1)
+      let old_scale = this.scale
+      let new_scale = Math.max(old_scale + (old_scale * 0.01) * diff, 0.1)
+
+      this.scale = new_scale
+      this.need_ui_buffer_update = true
+      this.draw()
+    })
+
+    this.canvas.addEventListener("pointerdown", e => {
+      start_x = this.offset_x
+      start_y = this.offset_y
+      origin_x = e.x
+      origin_y = e.y
+      pointer_capture = true
+      pointer_event_id = e.pointerId
+      this.canvas.setPointerCapture(e.pointerId)
+    })
+
+    this.canvas.addEventListener("pointermove", e => {
+
+      if (!pointer_capture /* || pointer_event_id != e.pointerId */) return
+
+      this.offset_x = start_x + (e.x - origin_x) / this.scale
+      this.offset_y = start_y + (e.y - origin_y) / this.scale
+      this.need_ui_buffer_update = true
+      this.draw()
+    })
+
+    this.canvas.addEventListener("pointerup", e => {
+      if (!pointer_capture || pointer_event_id != e.pointerId) return
+      document.body.releasePointerCapture(e.pointerId)
+      pointer_capture = false
+
+    })
+  }
+
+  private setUiBuffer() {
+    if (!this.need_ui_buffer_update) return;
+
+    this.need_ui_buffer_update = false;
+
+    let { gl } = this;
+    let { width, height } = this.canvas.getBoundingClientRect();
+
+    gl.bindBuffer(gl.UNIFORM_BUFFER, this.camera_uniform);
+    gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array([width, height, 0, 0, this.offset_x, -this.offset_y, this.scale, 0]), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+  }
+
+  addNode(x: number, y: number, name: string, [r,g,b]: [number, number, number] = [255, 0, 0]): number {
     let index = this.nodes.length;
-    this.nodes.push({pos: { x, y }})
+    this.nodes.push({ pos: { x, y }, name, color: (r  & 255) << 16 | (g & 255) << 8 | (b & 255) << 0 })
+    this.glyph_count += name.length;
     return index
+  }
+
+  addText() { }
+
+  updateNode(index: number, x: number, y: number) {
+    if (index < this.nodes.length) {
+      this.nodes[index].pos.x = x
+      this.nodes[index].pos.y = y
+    }
   }
 
   clearNodes() {
     this.nodes.length = 0;
     this.connections.length = 0;
+    this.glyph_count = 0;
+    this.line_count = 0;
   }
 
-  addConnection(node_a: number, node_b: number){
-    
+  addConnection(node_a: number, node_b: number) {
     this.connections.push(node_a, node_b);
   }
 
-  private draw() {
-    let { gl, node_program, line_program, node_buffer, line_buffer } = this;
-  
+  update() {
+    this.uploadLines();
+    this.uploadNodes();
+  }
+
+  draw() {
+    let { gl, node_program, line_program, text_program } = this;
+
     let { width, height } = this.canvas.getBoundingClientRect();
+
+    if (width == 0 || height == 0) return;
+
+    this.setUiBuffer();
+
     this.canvas.width = width;
     this.canvas.height = height;
+
     gl.viewport(0, 0, width, height);
-
-    gl.bindBuffer(gl.UNIFORM_BUFFER, this.camera_uniform);
-    gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array([width, height, 0, 0, 0.2, 0, 0, 0]), gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-
 
     gl.clearColor(0.0, 0.0, 0.0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     gl.bindVertexArray(this.line_vao);
     gl.useProgram(line_program);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.line_count);
 
-    
+
     gl.bindVertexArray(this.node_vao);
     gl.useProgram(node_program);
-
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.node_count);
-      // Create base line shader for drawing circles
-      let error = 0;
-      if (error = gl.getError()) {
-        gl.INVALID_ENUM
-        gl.INVALID_OPERATION
-        console.log({error});
-        throw "Have gl errors"
-      }
+
+    gl.bindVertexArray(this.text_vao);
+    gl.useProgram(text_program);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.glyph_count);
+
+    // Create base line shader for drawing circles
+    let error = 0;
+    if (error = gl.getError()) {
+      gl.INVALID_ENUM
+      gl.INVALID_OPERATION
+      console.log({ error });
+      throw "Have gl errors"
+    }
     error = gl.getError()
   }
 
+
   private uploadNodes() {
 
-    let required_buffer_size = this.nodes.length * 3 * 4;
+    let node_data_length = 0;
+    let glyph_data_length = this.glyph_count * 10;
+    let required_buffer_size = (node_data_length + glyph_data_length) << 2;
 
-    if(required_buffer_size > this.transfer_buffer.byteLength) {
+    let uint = new Uint32Array(this.node_array.buffer);
+
+    if (required_buffer_size > this.transfer_buffer.byteLength) {
       this.transfer_buffer = new ArrayBuffer(required_buffer_size);
-      console.log("aa")
-    } else if(required_buffer_size == 0) { 
+    } else if (required_buffer_size == 0) {
       return
     }
 
-    let nodes_f32 = new Float32Array(this.transfer_buffer, 0, this.nodes.length * 3);
+    let glyphs_f32 = new Float32Array(this.transfer_buffer, node_data_length << 2, glyph_data_length);
 
     this.node_count = this.nodes.length;
 
-    for(let i = 0, l = this.nodes.length; i < l; i++) {
+    let glyph_count = 0;
+
+    for (let i = 0, l = this.nodes.length; i < l; i++) {
       let node = this.nodes[i];
-      nodes_f32[i * 3 + 0] = node.pos.x
-      nodes_f32[i * 3 + 1] = node.pos.y 
-      nodes_f32[i * 3 + 2] = 0
+
+      this.node_array[i * 3] = node.pos.x
+      this.node_array[i * 3 + 1] = node.pos.y
+      uint[i * 3 + 2] = node.color;
+
+      let input = node.name;
+      let stride = 10
+      let offset = 0;
+      let node_id = i;
+      {
+        for (let j = 0; j < input.length; j++) {
+          let char = input[j];
+
+          let c = j * stride + glyph_count;
+
+          let data = this.atlas.getGlyph(char);
+
+          glyphs_f32[c + 0] = offset
+          glyphs_f32[c + 1] = 0
+
+          let height = this.atlas.size;
+
+          glyphs_f32[c + 2] = height * data.r
+          glyphs_f32[c + 3] = height
+
+          glyphs_f32[c + 4] = data.u
+          glyphs_f32[c + 5] = data.v
+
+          glyphs_f32[c + 6] = data.w
+          glyphs_f32[c + 7] = data.h
+
+          glyphs_f32[c + 8] = node_id;
+
+          offset += glyphs_f32[c + 2];
+        }
+
+        for (let j = 0; j < input.length; j++) {
+          let c = j * stride + glyph_count;
+          glyphs_f32[c + 0] -= offset / 2
+        }
+
+        glyph_count += input.length * stride;
+      }
     }
 
-    let { gl, node_buffer } = this;
-    gl.bindBuffer(gl.ARRAY_BUFFER, node_buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, nodes_f32, gl.DYNAMIC_DRAW);
+    let { gl,  glyph_buffer  } = this;
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.node_texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, 512, 512, 0, gl.RGB, gl.FLOAT, this.node_array);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, glyph_buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, glyphs_f32, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.text_atlas);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 1024, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.atlas.ctx.getImageData(0, 0, 1024, 1024, { colorSpace: "srgb" }));
+
   }
 
   private uploadLines() {
 
-    let required_buffer_size = this.connections.length * 3 * 4;
+    let required_buffer_size = this.connections.length * 2 * 4;
 
-    if(required_buffer_size > this.transfer_buffer.byteLength) {
+    if (required_buffer_size > this.transfer_buffer.byteLength) {
       this.transfer_buffer = new ArrayBuffer(required_buffer_size);
-      console.log("aa")
-    } else if(required_buffer_size == 0) {
+    } else if (required_buffer_size == 0) {
       return
     }
 
-    let line_data = new Float32Array(this.transfer_buffer, 0, this.connections.length * 3);
-    
+    let line_data = new Float32Array(this.transfer_buffer, 0, required_buffer_size >> 2);
+
     this.line_count = this.connections.length / 2;
 
-    for(let i = 0, l = this.connections.length; i < l; i+=2) {
-      let node_a = this.nodes[this.connections[i]];
-      let node_b = this.nodes[this.connections[i + 1]];
-
-      line_data[i * 3 + 0] = node_a.pos.x;
-      line_data[i * 3 + 1] = node_a.pos.y;
-      line_data[i * 3 + 2] = node_b.pos.x;
-      line_data[i * 3 + 3] = node_b.pos.y;
-      line_data[i * 3 + 4] = 5;
-      line_data[i * 3 + 5] = 5;
+    for (let i = 0, l = this.connections.length; i < l; i += 2) {
+      line_data[i * 2 + 0] = this.connections[i];
+      line_data[i * 2 + 1] = this.connections[i + 1];
+      line_data[i * 2 + 2] = 5;
+      line_data[i * 2 + 3] = 5;
     }
 
     let { gl, line_buffer } = this;
     gl.bindBuffer(gl.ARRAY_BUFFER, line_buffer);
     gl.bufferData(gl.ARRAY_BUFFER, line_data, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+
   }
 
   private setupGL() {
-    let { gl, node_program, line_program, node_buffer, line_buffer, line_vao, node_vao } = this;
+    let { gl, node_program, line_program,  line_buffer, glyph_buffer, line_vao, text_vao, text_program, node_vao } = this;
+    // Create base line shader for drawing circles
 
     {
-      // Setup 
 
-      // gl.useProgram(line_program);
+      // Glyph data
+      gl.bindVertexArray(text_vao);
 
-      
+      gl.bindBuffer(gl.ARRAY_BUFFER, glyph_buffer);
+
+      let stride = 10 * 4;
+
+      var dim_attr = gl.getAttribLocation(text_program, "pos");
+      gl.enableVertexAttribArray(dim_attr);
+      gl.vertexAttribPointer(dim_attr, 2, gl.FLOAT, false, stride, 0);
+      gl.vertexAttribDivisor(dim_attr, 1);
+
+      var pos_attr = gl.getAttribLocation(text_program, "dim");
+      gl.enableVertexAttribArray(pos_attr);
+      gl.vertexAttribPointer(pos_attr, 2, gl.FLOAT, false, stride, 2 * 4);
+      gl.vertexAttribDivisor(pos_attr, 1);
+
+      var uv_attr = gl.getAttribLocation(text_program, "uv");
+      gl.enableVertexAttribArray(uv_attr);
+      gl.vertexAttribPointer(uv_attr, 2, gl.FLOAT, false, stride, 4 * 4);
+      gl.vertexAttribDivisor(uv_attr, 1);
+
+      var uv_size = gl.getAttribLocation(text_program, "uv_size");
+      gl.enableVertexAttribArray(uv_size);
+      gl.vertexAttribPointer(uv_size, 2, gl.FLOAT, false, stride, 6 * 4);
+      gl.vertexAttribDivisor(uv_size, 1);
+
+      var node_index = gl.getAttribLocation(text_program, "pos_index");
+      gl.enableVertexAttribArray(node_index);
+      gl.vertexAttribPointer(node_index, 1, gl.FLOAT, false, stride, 8 * 4);
+      gl.vertexAttribDivisor(node_index, 1);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+      // Line data
       gl.bindVertexArray(line_vao);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, line_buffer);
 
-      var p1_attr = gl.getAttribLocation(line_program, "point1");
+      var p1_attr = gl.getAttribLocation(line_program, "points");
       gl.enableVertexAttribArray(p1_attr);
-      gl.vertexAttribPointer(p1_attr, 2, gl.FLOAT, false, 6 * 4, 0);
+      gl.vertexAttribPointer(p1_attr, 2, gl.FLOAT, false, 4 * 4, 0);
       gl.vertexAttribDivisor(p1_attr, 1);
-
-      var p2_attr = gl.getAttribLocation(line_program, "point2");
-      gl.enableVertexAttribArray(p2_attr);
-      gl.vertexAttribPointer(p2_attr, 2, gl.FLOAT, false, 6 * 4, 2 * 4);
-      gl.vertexAttribDivisor(p2_attr, 1);
 
       var width_attr = gl.getAttribLocation(line_program, "width");
       gl.enableVertexAttribArray(width_attr);
-      gl.vertexAttribPointer(width_attr, 2, gl.FLOAT, false, 6 * 4, 4 * 4);
+      gl.vertexAttribPointer(width_attr, 2, gl.FLOAT, false, 4 * 4, 2 * 4);
       gl.vertexAttribDivisor(width_attr, 1);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-      
+      // Node data
       gl.bindVertexArray(node_vao);
-
-      // Create a node buffer to store node positions
-      gl.bindBuffer(gl.ARRAY_BUFFER, node_buffer);
-      var pos_attrib = gl.getAttribLocation(node_program, "pos");
-      gl.enableVertexAttribArray(pos_attrib);
-      gl.vertexAttribPointer(pos_attrib, 3, gl.FLOAT, false, 0, 0);
-      gl.vertexAttribDivisor(pos_attrib, 1);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-      console.log({pos_attrib, p1_attr})
 
     }
 
@@ -284,13 +516,19 @@ export class SyntaxGraphEngine {
   }
 }
 
-function createVAO(gl: WebGL2RenderingContext) {
+function createTexture(gl: WebGL2RenderingContext): WebGLTexture {
+  let texture = gl.createTexture();
+  if (!texture) throw "Could not create Texture";
+  return texture;
+}
+
+function createVAO(gl: WebGL2RenderingContext): WebGLVertexArrayObject {
   let line_vao = gl.createVertexArray();
   if (!line_vao) throw "Could not create VAO";
   return line_vao;
 }
 
-function createBuffer(gl: WebGL2RenderingContext) {
+function createBuffer(gl: WebGL2RenderingContext): WebGLBuffer {
   let buffer = gl.createBuffer();
   if (!buffer) { throw "Could not create GL buffer"; }
   return buffer;
@@ -339,16 +577,41 @@ function createProgram(gl: WebGL2RenderingContext, vert_shader_source: string, f
   return program;
 }
 
-
-
 let ui_block = `
 
 uniform UIData {
   vec2 screen_size;
   vec2 mouse_pos;
   vec2 screen_offset;
+  float scale;
+};
+`
+
+
+let node_block = `
+
+uniform sampler2D uNodes;
+
+struct Node {
+  vec2 pos;
+  vec3 col;
 };
 
+Node get_node_data(float index) {
+  ivec2 i = ivec2(int(index) % 512, int(index) / 512);
+  vec4 node_data = texelFetch(uNodes, i, 0);
+  Node node;
+  node.pos = node_data.xy;
+
+  uint data = floatBitsToUint(node_data.z);
+
+  node.col = vec3(ivec3(
+    data >> 16,
+    data >> 8,
+    data
+  ) & 255 ) / 255.0;
+  return node;
+}
 
 `
 
@@ -374,19 +637,41 @@ vec2[6] positions = vec2[6](
   bottom_right,
   bottom_left
 );
+
+
+bool[6] color_select = bool[6]( 
+  // 0 - 2
+  true, // top_left,
+  false, // top_right,
+  true, // bottom_left,
+  // 3 - 5
+  false, // top_right,
+  false, // bottom_right,
+  true // bottom_left
+);
 `
 
 let line_draw_vert = `#version 300 es
 
-in vec2 point1;
-in vec2 point2;
+in vec2 points;
 in vec2 width;
 
 ${static_square2}
-
 ${ui_block}
+${node_block}
+
+
+smooth out vec3 node_col;
+
 
 void main(){
+
+  Node node_a = get_node_data(points.x);
+  Node node_b = get_node_data(points.y);
+
+  vec2 point1 = node_a.pos;
+  vec2 point2 = node_b.pos;
+
   vec2 static_pos = positions[gl_VertexID] ;
 
   vec2 diff = point2 - point1 ;
@@ -398,32 +683,37 @@ void main(){
 
   mat2 rot =  mat2( _cos, -_sin, _sin, _cos);
 
-  vec2 scaled =  static_pos * vec2(length(diff) * 0.5, width.x * 0.5) ;
+  vec2 scaled =  static_pos * vec2(1.0,1.0/ scale) * vec2(length(diff) * 0.5, width.x * 0.5) ;
 
-  vec2 rot_pos = rot * scaled ;
+  vec2 rot_pos = rot * scaled;
 
   vec2 offset = (point1 + diff * 0.5);
 
-  gl_Position = vec4((rot_pos  + offset) / screen_size + screen_offset, 0.0, 1);
+  gl_Position = vec4((rot_pos + offset + screen_offset * 2.0) / screen_size * scale, 0.0, 1);
+
+  if( color_select[gl_VertexID] ) {
+    node_col = node_a.col;
+  } else {
+    node_col = node_b.col;
+  }
 }
 `;
 
 let line_draw_frag = `#version 300 es
 
 precision highp float;
+smooth in vec3 node_col;
 out vec4 color;
 void main(){
-  color = vec4(1, 0, 0, 1);
+  color = vec4(mix(node_col, vec3(0), 0.2), 1);
 }
 `
 
-let circle_draw_vert = `#version 300 es
+let node_draw_vert = `#version 300 es
 
 ${static_square2}
-
-in vec3 pos;
-
 ${ui_block}
+${node_block}
 
 out vec3 base_color; 
 flat out vec2 center_point;
@@ -432,24 +722,23 @@ smooth out vec2 actual_point;
 float diameter = 40.0;
 
 void main(){
+
+  Node node_a = get_node_data(float(gl_InstanceID));
+
   vec2 static_pos = positions[gl_VertexID];
  
   actual_point = static_pos;
   center_point = vec2(0, 0);
 
-  vec2 adjusted_pos = (static_pos * diameter + pos.xy) / screen_size + screen_offset;
+  vec2 adjusted_pos = ((static_pos) * diameter + node_a.pos + screen_offset * 2.0) / screen_size * scale;
 
   gl_Position = vec4(adjusted_pos, 0.0, 1);
   
-  if(gl_VertexID > 2) {
-    base_color = vec3(0,1,1);
-  } else {
-    base_color = vec3(0,1,1);
-  }
+  base_color = node_a.col;
 }
 `
 
-let circle_draw_frag = `#version 300 es
+let node_draw_frag = `#version 300 es
 
 precision highp float;
 
@@ -461,11 +750,11 @@ smooth in vec2 actual_point;
 out vec4 color;
 
 void main(){
+  float diff = dFdx(actual_point.x);
 
+  float val = length(actual_point - center_point);
 
-  float val = length(actual_point - center_point) * 1.0;
-
-  val = smoothstep(0.90, 1.0, val);
+  val = smoothstep(0.97 - (0.01 * (diff)), 1.0, val);
 
   if(val > 1.0)
     discard;
@@ -473,3 +762,47 @@ void main(){
   color = vec4(base_color, 1.0 -val);
 }
 `;
+
+
+
+let text_draw_vert = `#version 300 es
+
+precision highp float;
+
+${static_square2}
+${ui_block}
+${node_block}
+
+smooth out vec2 UV; 
+
+in float pos_index;
+in vec2 pos;
+in vec2 dim;
+in vec2 uv;
+in vec2 uv_size;
+
+void main(){
+  Node node = get_node_data(pos_index);
+
+  vec2 static_pos = positions[gl_VertexID];
+  gl_Position = vec4(((static_pos + vec2(1)) * 0.5 * vec2(1, -1) * dim + pos ) / screen_size + (screen_offset * 2.0 + node.pos) / screen_size * scale , 0.0, 1.0);
+  UV = ((static_pos / 2.0) + vec2(0.5)) * uv_size + uv ;
+}`;
+
+let text_draw_frag = `#version 300 es
+
+precision highp float;
+
+smooth in vec2 UV; 
+
+uniform sampler2D uSampler;
+
+out vec4 color;
+
+void main(){
+
+  vec4 texture = texture(uSampler, UV);
+
+  color = vec4(texture.r, 1.0, 1.0, texture.a);
+}
+`

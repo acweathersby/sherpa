@@ -143,7 +143,6 @@ export class Parser {
     if (step) {
       step.free();
     }
-    console.log(i)
 
     return true;
   }

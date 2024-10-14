@@ -6,6 +6,7 @@ import { GrammarDBNode, InputNode } from "./pipeline";
 import Graph from "graphology";
 import Sigma from "sigma";
 import { SigmaNodeEventPayload } from "sigma/dist/declarations/src/types";
+import { SyntaxGraphEngine } from "js/graph_sys";
 
 type Hooks = { on_node_enter: ((arg: SigmaNodeEventPayload) => void) | null };
 
@@ -18,26 +19,8 @@ export function init(
   const graph = new Graph();
   const hooks: Hooks = { on_node_enter: null }
 
-  let ele = document.createElement("div");
-  ele.classList.add("ast-graph");
-  cst_field.body.appendChild(ele);
 
-  const renderer = new Sigma(
-    graph,
-    ele,
-    {
-      allowInvalidContainer: true,
-      autoRescale: true,
-      autoCenter: true,
-      minEdgeThickness: 1,
-    }
-  );
-
-  renderer.on("enterNode", node => {
-    if (hooks.on_node_enter) {
-      hooks.on_node_enter(node);
-    }
-  })
+  let engine = new SyntaxGraphEngine(<HTMLDivElement>cst_field.body);
 
   let input_string: string = "";
   let db: null | JSBytecodeParserDB = null;
@@ -46,7 +29,7 @@ export function init(
     input_string = field.get_text();
 
     if (!cst_field.is_mini)
-      run_ast_render(parser_input_field, input_string, db, renderer, hooks);
+      run_ast_render(parser_input_field, input_string, db, engine, hooks);
   })
 
   grammar_pipeline.addListener("loading", _ => {
@@ -63,26 +46,27 @@ export function init(
     cst_field.set_loading(false);
 
     if (!cst_field.is_mini)
-      run_ast_render(parser_input_field, input_string, db, renderer, hooks);
+      run_ast_render(parser_input_field, input_string, db, engine, hooks);
   });
 }
 
-function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecodeParserDB | null, renderer: Sigma, hooks: Hooks) {
+function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecodeParserDB | null, renderer: SyntaxGraphEngine, hooks: Hooks) {
+  renderer.clearNodes();
 
   if (!input || !db) return;
-  const graph = new Graph();
 
   let parser = new Parser(db, input);
 
   type Node = { id: number, nodes: Node[], width: number, from: number, to: number };
 
   let symbols: Node[] = [];
-  let node_count = 0;
 
   let id = 0;
 
+  let node_width = 1
+
   parser.on_reduce = reduce_data => {
-    //if (reduce_data.symbols == 1) return;
+    if (reduce_data.symbols == 1) return;
 
     let offset = symbols.length - reduce_data.symbols;
     let r_syms = symbols.splice(offset, reduce_data.symbols);
@@ -91,11 +75,10 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
 
     let from = r_syms[0].from;
     let to = r_syms[r_syms.length - 1].to;
-
-    graph.addNode(id, { label: name, x: 0, y: 0, size: 8, color: "blue" });
+    let id = renderer.addNode(0, 0, name);
     let width = 0;
     for (const sym of r_syms) {
-      graph.addEdge(id, sym.id, { size: 1, color: "purple" });
+      renderer.addConnection(id, sym.id);
       width += sym.width;
     }
 
@@ -104,7 +87,7 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
   };
 
   parser.on_shift = shift_data => {
-    graph.addNode(id, { label: `"${shift_data.token}"`, x: 0, y: 0, size: 8, color: "green" });
+    let id = renderer.addNode(0, 0, shift_data.token, [123, 120, 255]);
     symbols.push({ id, nodes: [], width: 1, from: shift_data.byte_offset, to: shift_data.byte_offset + shift_data.byte_len });
     id++;
   };
@@ -120,32 +103,63 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
 
   let positions = new Array(id);
 
-  function map_positions(symbols: Node[], lvl: number = 0, positions: [number, number, number, number][], x: number = 0) {
-    let total_width = symbols.reduce((v, n) => v + n.width, 0)
-    let pos_x = x - (total_width / 2);
-
-    for (const node of symbols) {
-
-      let half_width = node.width / 2;
-
-      let x = pos_x + half_width;
-
-      if (node.nodes.length > 0) {
-
-        map_positions(node.nodes, lvl + 1, positions, x);
-
-        positions[node.id] = [x, lvl * -1, node.from, node.to];
-
-      } else {
-        positions[node.id] = [x, lvl * -1, node.from, node.to];
-
-      }
-
-      pos_x += node.width
+  function shiftDownStream(symbols: Node[], positions: [number, number, number, number][], delta = 0) {
+    for(const p_node of symbols) {
+      positions[p_node.id][0] += delta;
+      shiftDownStream(p_node.nodes, positions, delta);
     }
   }
+  
+  function map_positions(symbols: Node[], lvl: number = 0, positions: [number, number, number, number][], x: number = 0, offsets: number[][] = []): [number, number] {
+    
+    let desired_center = x - (symbols.length - 1) / 2;
+    if(offsets.length < lvl + 1) {
+      offsets.push([]);
+    }
+    let last = offsets[lvl];
+    let start = last.length > 0 ? Math.max(desired_center, positions[last[last.length - 1]][0] + 1) : desired_center;
+    let end = start;
+    for(const p_node of symbols) {
+      
+      last.push(p_node.id);
+    
+      let [s,e] =  map_positions(p_node.nodes, lvl+1, positions, end, offsets);
 
-  map_positions(symbols, 0, positions);
+      let center = s + (e - s) / 2;
+
+      let error = (end - center);
+
+      if(error > 0) {
+          for(let i = lvl +1;  i < offsets.length; i++) {
+            let last = -1;
+              for(const id of offsets[i].slice()) {
+                if(last > 0) {
+                  if(positions[id][0] <= last) {
+                    positions[id][0] += error
+                    last = positions[id][0];
+                  } else {
+                    continue;
+                  }
+                } else {
+                  positions[id][0] += error
+                  last = positions[id][0];
+                }
+              }
+          }
+      } else {}
+          
+      positions[p_node.id] = [end , lvl * -1, p_node.from, p_node.to];
+      
+      // this nodes position is a function of its children positions
+
+      end += node_width;
+    }
+
+    return [start, end - 1]
+  }
+
+  map_positions(symbols, 0, positions, 0, []);
+
   hooks.on_node_enter = node => {
 
     let id = parseInt(node.node);
@@ -156,13 +170,14 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
   }
 
 
-  graph.updateEachNodeAttributes((node_id, node) => {
-    let [x, y] = positions[<any>node_id];
-    node.x = x;
-    node.y = y;
-    return node
-  });
+  for(let i = 0; i < positions.length; i++) {
+    let [x, y] = positions[i];
+    let lvl = -y;
+    //x -=  offsets[lvl]/ 2
+    //x = (x / offsets[lvl] * 5) - (offsets[lvl] ) / 2
 
-
-  renderer.setGraph(graph);
+    renderer.updateNode(i, x * 800, y * 800);
+  }
+  renderer.update();
+  renderer.draw();
 }
