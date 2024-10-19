@@ -46,7 +46,7 @@ pub use types::{
   ParseStatesVec,
   ParserClassification,
   ParserConfig,
-  ParserDatabase,
+  GrammarDatabase,
   ParserMetrics,
   RadlrError,
   RadlrErrorSeverity,

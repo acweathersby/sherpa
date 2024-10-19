@@ -14,7 +14,7 @@ pub struct RustConfig {
   pub flat_namespace: bool,
 }
 
-pub fn build(db: &RadlrDatabase, build_config: BuildConfig, parser_config: ParserConfig) -> RadlrResult<()> {
+pub fn build(db: &RadlrGrammarDatabase, build_config: BuildConfig, parser_config: ParserConfig) -> RadlrResult<()> {
   let (out_dir, lib_dir) = (build_config.source_out, build_config.lib_out);
 
   let (binary_path, parser_path, ast_path) = if let Some(name_prefix) = build_config.name_prefix {

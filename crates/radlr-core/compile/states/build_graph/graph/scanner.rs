@@ -4,7 +4,7 @@ use crate::{
   CachedString,
   DBTermKey,
   IString,
-  ParserDatabase,
+  GrammarDatabase,
 };
 
 #[derive(Clone, Default, Hash, PartialEq, Eq, Debug)]
@@ -16,7 +16,7 @@ pub struct ScannerData {
 
 impl ScannerData {
   #[cfg(debug_assertions)]
-  pub fn debug_print(&self, db: &ParserDatabase) {
+  pub fn debug_print(&self, db: &GrammarDatabase) {
     let Self { symbols, skipped, .. } = self;
 
     println!(
@@ -27,6 +27,6 @@ impl ScannerData {
   }
 }
 
-pub fn create_scanner_name(db: &ParserDatabase, hash: u64) -> IString {
+pub fn create_scanner_name(db: &GrammarDatabase, hash: u64) -> IString {
   format!("scan_{:016X}", hash).intern(db.string_store())
 }

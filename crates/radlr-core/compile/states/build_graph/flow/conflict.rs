@@ -422,7 +422,7 @@ pub(crate) fn resolve_conflicting_tokens<'a, T: TransitionPairRefIter<'a> + Clon
   }
 }
 
-pub fn resolve_token_assign_id<I: Iterator<Item = DBTermKey>>(set_token: I, db: &ParserDatabase) -> Option<DBTermKey> {
+pub fn resolve_token_assign_id<I: Iterator<Item = DBTermKey>>(set_token: I, db: &GrammarDatabase) -> Option<DBTermKey> {
   let token_set: std::collections::BTreeSet<DBTermKey> = set_token.collect::<OrderedSet<_>>();
   if token_set.len() == 1 {
     Some(token_set.into_iter().next().unwrap())

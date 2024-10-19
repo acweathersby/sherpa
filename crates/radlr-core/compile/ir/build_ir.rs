@@ -27,7 +27,7 @@ pub(crate) fn build_ir_concurrent<T: WorkerPool>(
   pool: &T,
   graphs: Arc<Graphs>,
   config: ParserConfig,
-  db: &Arc<ParserDatabase>,
+  db: &Arc<GrammarDatabase>,
 ) -> RadlrResult<(ParserClassification, ParseStatesMap)> {
   let states = Arc::new(RwLock::new(OrderedMap::new()));
   let classification = Arc::new(RwLock::new(ParserClassification::default()));
@@ -150,7 +150,7 @@ pub(crate) fn build_entry_ir(
     nonterm_exit_name: nterm_exit_name,
     ..
   }: &DBEntryPoint,
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
 ) -> RadlrResult<Array<Box<ParseState>>> {
   let mut w = CodeWriter::new(Vec::<u8>::with_capacity(512));
 
@@ -576,7 +576,7 @@ fn build_body<'graph: 'graph>(
   body_string
 }
 
-fn create_rule_reduction(rule_id: DBRuleKey, db: &ParserDatabase) -> String {
+fn create_rule_reduction(rule_id: DBRuleKey, db: &GrammarDatabase) -> String {
   let rule = db.rule(rule_id);
   let nterm = db.rule_nonterm(rule_id);
   let nterm: usize = nterm.into();

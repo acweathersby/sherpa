@@ -3,8 +3,8 @@ use crate::{
   DBPackage,
   GrammarSoup,
   ParseStatesMap,
-  ParserDatabase,
-  RadlrDatabase,
+  GrammarDatabase,
+  RadlrGrammarDatabase,
   RadlrGrammar,
   RadlrIRParser,
   RadlrResult,
@@ -114,7 +114,7 @@ pub fn build_parse_db_from_source_str<'a, T>(
 /// Writes to a debug file for testing
 #[cfg(debug_assertions)]
 pub fn write_debug_file<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   file_name: FileName,
   data: Data,
   append: bool,
@@ -135,7 +135,7 @@ pub fn write_debug_file<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
 }
 
 #[cfg(debug_assertions)]
-impl ParserDatabase {
+impl GrammarDatabase {
   /// Creates a test database that can be used to statically
   /// test components that rely on the database without actually
   /// having to define a grammar. The objects stored in this database are
@@ -150,7 +150,7 @@ impl ParserDatabase {
   ///
   /// <> C > c:num c:num(+)
   /// ```
-  pub fn test_lr() -> RadlrResult<RadlrDatabase> {
+  pub fn test_lr() -> RadlrResult<RadlrGrammarDatabase> {
     let mut grammar = RadlrGrammar::new();
 
     let path = PathBuf::from("/test/grammar.sg");

@@ -37,7 +37,7 @@ pub const fn ascript_error_class() -> ErrorClass {
 /// ```
 pub(crate) fn add_prop_redefinition_error(
   errors: &mut Vec<RadlrError>,
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   struct_type: String,
   prop_name: String,
   existing_prop: &AscriptProp,
@@ -89,7 +89,7 @@ pub(crate) fn add_prop_redefinition_error(
 /// ```
 pub(crate) fn add_incompatible_nonterm_types_error(
   errors: &mut Vec<RadlrError>,
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   nterm: DBNonTermKey,
   (type_a, rules_a): (AscriptType, &DBRule),
   (type_b, rules_b): (AscriptType, &DBRule),

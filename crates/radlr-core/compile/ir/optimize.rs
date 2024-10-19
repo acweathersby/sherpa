@@ -28,7 +28,7 @@ type Set<A> = BTreeSet<A>;
 /// Uses a garbage collection sweep to remove states that have no path to entry
 /// states. No optimizations are performed.
 pub(crate) fn sweep<'db, R: FromIterator<(IString, Box<ParseState>)>>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   parse_states: ParseStatesMap,
   optimize_for_debugging: bool,
@@ -41,7 +41,7 @@ pub(crate) fn sweep<'db, R: FromIterator<(IString, Box<ParseState>)>>(
 /// to reduce the number of steps between transient actions, and to
 /// reduce the number of parse states overall.
 pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>, Pool: WorkerPool>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   parse_states: ParseStatesMap,
   optimize_for_debugging: bool,
@@ -133,7 +133,7 @@ pub(crate) fn optimize<'db, R: FromIterator<(IString, Box<ParseState>)>, Pool: W
 fn finish<'db, R: FromIterator<(IString, Box<ParseState>)>>(
   optimize_for_debugging: bool,
   parse_states: BTreeMap<IString, Box<ParseState>>,
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   config: &ParserConfig,
   report: OptimizationReport,
 ) -> RadlrResult<(R, OptimizationReport)> {
@@ -174,7 +174,7 @@ fn get_match_statement(node: &ASTNode) -> Option<&parser::Statement> {
 
 /// Inline trivial scanners.
 fn _inline_matches<'db>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   parse_states: ParseStatesMap,
 ) -> RadlrResult<ParseStatesMap> {
@@ -184,7 +184,7 @@ fn _inline_matches<'db>(
 /// Remove default branches that transition to match states that are identical
 /// to the root branches.
 fn remove_redundant_defaults<'db>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
 ) -> RadlrResult<ParseStatesMap> {
@@ -224,7 +224,7 @@ fn remove_redundant_defaults<'db>(
   }
 
   fn remove_redundant_defaults<'db>(
-    db: &'db ParserDatabase,
+    db: &'db GrammarDatabase,
     state: IString,
     root_statement: &mut parser::Statement,
     state_branch_lookup: &Map<IString, Set<(u64, String, u64)>>,
@@ -287,7 +287,7 @@ fn remove_redundant_defaults<'db>(
 /// Create chained matching scanners that can scan sequences of
 /// characters simultaneously.
 fn create_byte_sequences<'db>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
 ) -> RadlrResult<ParseStatesMap> {
@@ -377,11 +377,11 @@ fn create_byte_sequences<'db>(
 ///
 /// Trivial scanners are those that only produce single CODEPOINT tokens.
 fn inline_scanners<'db>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
 ) -> RadlrResult<ParseStatesMap> {
-  fn inline_scanners(db: &ParserDatabase, statement: &mut parser::Statement) -> RadlrResult<()> {
+  fn inline_scanners(db: &GrammarDatabase, statement: &mut parser::Statement) -> RadlrResult<()> {
     let parser::Statement { branch, .. } = statement;
 
     if let Some(parser::Matches { mode, scanner, matches, .. }) = branch.as_mut().and_then(|b| b.as_Matches_mut()) {
@@ -414,7 +414,7 @@ fn inline_scanners<'db>(
       let default = id_groups.remove(&MatchInputType::Default).and_then(|d| d.into_iter().next());
 
       fn setup_match<'db>(
-        db: &'db ParserDatabase,
+        db: &'db GrammarDatabase,
         queue: &mut VecDeque<(MatchInputType, Vec<(SymbolId, &Box<Statement>)>)>,
         match_stmt: &mut Matches,
         default: Option<(SymbolId, &Box<parser::Statement>)>,
@@ -477,7 +477,7 @@ fn inline_scanners<'db>(
 
 /// Inline statements of states that don't have transitive actions or matches.
 fn inline_states<'db>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
 ) -> RadlrResult<ParseStatesMap> {
@@ -496,7 +496,7 @@ fn inline_states<'db>(
   }
 
   fn inline_statement(
-    db: &ParserDatabase,
+    db: &GrammarDatabase,
     statement: &mut parser::Statement,
     stmt_lu: &Map<IString, Statement>,
   ) -> RadlrResult<()> {
@@ -618,7 +618,7 @@ fn inline_states<'db>(
 
 /// Merges matching branches of states wherein the branches are only comprised
 /// of goto/push transitions.
-fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> RadlrResult<ParseStatesMap> {
+fn merge_branches<'db>(_db: &'db GrammarDatabase, mut parse_states: ParseStatesMap) -> RadlrResult<ParseStatesMap> {
   // Get a reference to all root level branches.
 
   let mut state_branch_lookup: Map<(IString, IString, u64), Statement> = Map::new();
@@ -650,7 +650,7 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
   }
 
   fn merge_branches<'db>(
-    db: &'db ParserDatabase,
+    db: &'db GrammarDatabase,
     statement: &mut parser::Statement,
     state_branch_lookup: &Map<(IString, IString, u64), Statement>,
   ) {
@@ -712,7 +712,7 @@ fn merge_branches<'db>(_db: &'db ParserDatabase, mut parse_states: ParseStatesMa
 /// joined branches include the default branch, all other item info is
 /// scrubbed. Match blocks that only have a default match without a transitive
 /// instruciton are lowered into their respective contexts.
-fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseStatesMap) -> RadlrResult<ParseStatesMap> {
+fn combine_state_branches<'db>(db: &'db GrammarDatabase, mut parse_states: ParseStatesMap) -> RadlrResult<ParseStatesMap> {
   fn merge_statements(from: parser::Statement, to: &mut parser::Statement) {
     let parser::Statement { branch, mut non_branch, transitive, pop } = from;
 
@@ -725,7 +725,7 @@ fn combine_state_branches<'db>(db: &'db ParserDatabase, mut parse_states: ParseS
     to.non_branch.append(&mut non_branch);
     to.pop = pop;
   }
-  fn combine_branches(db: &ParserDatabase, statement: &mut parser::Statement) -> RadlrResult<Option<Statement>> {
+  fn combine_branches(db: &GrammarDatabase, statement: &mut parser::Statement) -> RadlrResult<Option<Statement>> {
     let parser::Statement { branch, .. } = statement;
     if let Some(branch) = branch {
       match branch {
@@ -809,7 +809,7 @@ fn canonicalize_states<
   'db,
   R: FromIterator<(IString, Box<ParseState>)> + Clone + IntoIterator<Item = (IString, Box<ParseState>)>,
 >(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
   merge_self_recursive: bool,
@@ -841,14 +841,14 @@ fn canonicalize_states<
     }
   }
 
-  fn canonicalize_goto_name(db: &ParserDatabase, name: &str, name_lu: &Map<IString, IString>) -> Option<String> {
+  fn canonicalize_goto_name(db: &GrammarDatabase, name: &str, name_lu: &Map<IString, IString>) -> Option<String> {
     let iname = name.to_token();
     let canonical_name = *name_lu.get(&iname).expect(&("State name should exist: ".to_string() + &name));
     (iname != canonical_name).then(|| canonical_name.to_string(db.string_store()))
   }
 
   fn canonicalize_statement(
-    db: &ParserDatabase,
+    db: &GrammarDatabase,
     statement: &mut parser::Statement,
     name_lu: &Map<IString, IString>,
   ) -> RadlrResult<bool> {
@@ -919,7 +919,7 @@ fn canonicalize_states<
 /// Removes any states that are not referenced, directly or indirectly, by
 /// at least one of the entry states.
 pub fn garbage_collect<'db, R: FromIterator<(IString, Box<ParseState>)>>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   config: &ParserConfig,
   mut parse_states: ParseStatesMap,
   report: Option<OptimizationReport>,

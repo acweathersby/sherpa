@@ -2,13 +2,13 @@ use super::*;
 use crate::{compile::states::build_graph::graph::GraphType, parser, CachedString, RadlrResult};
 use std::collections::VecDeque;
 
-pub type SharedParserDatabase = std::sync::Arc<ParserDatabase>;
+pub type SharedGrammarDatabase = std::sync::Arc<GrammarDatabase>;
 
 /// The internal data type used for the compilation and analysis of grammars and
 /// parsers. contains additional metadata for compilation of LLVM and Bytecode
 /// parsers.
 #[derive(Clone, Default, Debug)]
-pub struct ParserDatabase {
+pub struct GrammarDatabase {
   pub root_grammar_id:  GrammarIdentities,
   /// Table of symbols.
   nonterm_symbols:      Array<SymbolId>,
@@ -58,7 +58,7 @@ pub struct ParserDatabase {
   reduction_types: Array<ReductionType>,
 }
 
-impl ParserDatabase {
+impl GrammarDatabase {
   pub fn new(
     root_grammar_id: GrammarIdentities,
     nonterm_symbols: Array<SymbolId>,
@@ -150,7 +150,7 @@ impl ParserDatabase {
 
       //-------------------------------------------------------------------------------------------
       // Calculate closures for uncompleted items.
-      fn create_closure(value: Item, db: &ParserDatabase, mode: GraphType) -> Items {
+      fn create_closure(value: Item, db: &GrammarDatabase, mode: GraphType) -> Items {
         if let Some(nterm) = value.nonterm_index_at_sym(mode, db) {
           if let Ok(rules) = db.nonterm_rules(nterm) {
             rules.iter().map(|r| Item::from((*r, db))).collect()

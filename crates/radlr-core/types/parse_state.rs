@@ -71,7 +71,7 @@ impl<'db> ParseState {
   /// - ignore_self_recursion - If true, self recursive gotos do not contribute
   ///   to
   /// the hash.
-  pub fn get_canonical_hash(&self, db: &ParserDatabase, ignore_self_recursion: bool) -> RadlrResult<u64> {
+  pub fn get_canonical_hash(&self, db: &GrammarDatabase, ignore_self_recursion: bool) -> RadlrResult<u64> {
     let ast = self.get_ast()?;
 
     let mut s = StandardHasher::new();
@@ -89,7 +89,7 @@ impl<'db> ParseState {
   /// Builds and returns a reference to the AST.
   ///
   /// May be an `Err` if there was a problem building the ast.
-  pub fn build_ast(&mut self, db: &ParserDatabase) -> RadlrResult<&Box<State>> {
+  pub fn build_ast(&mut self, db: &GrammarDatabase) -> RadlrResult<&Box<State>> {
     if self.ast.is_none() {
       let code = String::from_utf8(self.source(db))?;
 
@@ -102,7 +102,7 @@ impl<'db> ParseState {
     self.get_ast()
   }
 
-  pub fn source(&self, db: &ParserDatabase) -> Vec<u8> {
+  pub fn source(&self, db: &GrammarDatabase) -> Vec<u8> {
     let mut w = CodeWriter::new(vec![]);
     let name = self.guid_name.to_string(db.string_store());
 
@@ -113,11 +113,11 @@ impl<'db> ParseState {
     string
   }
 
-  pub fn source_string(&self, db: &ParserDatabase) -> String {
+  pub fn source_string(&self, db: &GrammarDatabase) -> String {
     unsafe { String::from_utf8_unchecked(self.source(db)) }
   }
 
-  pub fn print(&self, db: &ParserDatabase, print_header: bool) -> RadlrResult<String> {
+  pub fn print(&self, db: &GrammarDatabase, print_header: bool) -> RadlrResult<String> {
     let ast = self.get_ast()?;
 
     let mut cw = CodeWriter::new(vec![]);
@@ -129,7 +129,7 @@ impl<'db> ParseState {
 
   /// Creates a new version of this State with a source that matches the
   /// original state's AST.
-  pub fn remap_source(&self, db: &'db ParserDatabase) -> RadlrResult<Self> {
+  pub fn remap_source(&self, db: &'db GrammarDatabase) -> RadlrResult<Self> {
     RadlrResult::Ok(Self {
       scanner: self.scanner.clone(),
       code: self.print(db, false)?,
@@ -141,7 +141,7 @@ impl<'db> ParseState {
 
 #[cfg(debug_assertions)]
 impl ParseState {
-  pub fn debug_string(&self, db: &ParserDatabase) -> String {
+  pub fn debug_string(&self, db: &GrammarDatabase) -> String {
     format!(
       "ParseState{{
   name: {}
@@ -158,7 +158,7 @@ impl ParseState {
 }
 
 #[cfg(debug_assertions)]
-pub fn _printIRNode_(db: &ParserDatabase, node: &ASTNode) -> RadlrResult<()> {
+pub fn _printIRNode_(db: &GrammarDatabase, node: &ASTNode) -> RadlrResult<()> {
   let mut cw = CodeWriter::new(vec![]);
   render_IR(db, &mut cw, node, false, MatchInputType::Default)?;
 
@@ -171,7 +171,7 @@ pub fn _printIRNode_(db: &ParserDatabase, node: &ASTNode) -> RadlrResult<()> {
 
 /// Renders a string from an IR AST
 fn render_IR<T: Write>(
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   mut w: &mut CodeWriter<T>,
   node: &ASTNode,
   add_header: bool,
@@ -367,7 +367,7 @@ fn render_IR<T: Write>(
   RadlrResult::Ok(())
 }
 
-pub fn print_IR(node: &ASTNode, db: &ParserDatabase) -> RadlrResult<String> {
+pub fn print_IR(node: &ASTNode, db: &GrammarDatabase) -> RadlrResult<String> {
   let mut cw = CodeWriter::new(vec![]);
 
   render_IR(db, &mut cw, node, false, MatchInputType::Default)?;
@@ -466,12 +466,12 @@ fn canonical_hash<T: Hasher>(state_name: &str, hasher: &mut T, node: &ASTNode) -
 
 #[cfg(test)]
 mod test {
-  use crate::{CachedString, ParserDatabase, RadlrResult};
+  use crate::{CachedString, GrammarDatabase, RadlrResult};
 
   use super::ParseState;
   #[test]
   fn test() -> RadlrResult<()> {
-    let db = ParserDatabase::default();
+    let db = GrammarDatabase::default();
 
     let mut state_1 = ParseState {
       guid_name: "p_7025763753808982402".intern(db.string_store()),

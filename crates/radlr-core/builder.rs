@@ -10,13 +10,13 @@ use crate::{
   o_to_r,
   proxy::{Array, DeduplicateIterator, Queue, Set},
   types::{worker_pool::WorkerPool, *},
+  GrammarDatabase,
   GrammarIdentities,
   GrammarSoup,
   IString,
   ParseState,
   ParseStatesVec,
   ParserClassification,
-  ParserDatabase,
   ParserMetrics,
   RadlrError,
   RadlrResult,
@@ -198,7 +198,7 @@ impl RadlrGrammar {
     Ok(Self { soup: std::sync::Arc::new(soup) })
   }
 
-  pub fn build_db<T: Into<PathBuf>>(&self, root_grammar: T, config: ParserConfig) -> RadlrResult<RadlrDatabase> {
+  pub fn build_db<T: Into<PathBuf>>(&self, root_grammar: T, config: ParserConfig) -> RadlrResult<RadlrGrammarDatabase> {
     let RadlrGrammar { soup } = self;
     let path: PathBuf = root_grammar.into();
 
@@ -206,7 +206,7 @@ impl RadlrGrammar {
 
     match build_compile_db(id, soup, &config) {
       Err(errors) => Err(errors),
-      Ok(db) => Ok(RadlrDatabase { db: std::sync::Arc::new(db) }),
+      Ok(db) => Ok(RadlrGrammarDatabase { db: std::sync::Arc::new(db) }),
     }
   }
 }
@@ -217,25 +217,25 @@ impl RadlrGrammar {
 
 /// A wrapper around a ParserDatabase, providing methods to convert a database
 /// into parsers
-#[derive(Clone)]
-pub struct RadlrDatabase {
-  db: SharedParserDatabase,
+#[derive(Clone, Debug)]
+pub struct RadlrGrammarDatabase {
+  db: SharedGrammarDatabase,
 }
 
-impl RadlrDatabase {
+impl RadlrGrammarDatabase {
   /// Returns a reference to the underlying [ParserDatabase].
-  pub fn get_internal(&self) -> &ParserDatabase {
+  pub fn get_internal(&self) -> &GrammarDatabase {
     &self.db
   }
 
   /// Returns the internal ParserDatabase, consuming the wrapper in the process.
-  pub fn into_internal(self) -> SharedParserDatabase {
+  pub fn into_internal(self) -> SharedGrammarDatabase {
     self.db
   }
 
   /// Constructs parser and scanner graphs for this variant of the grammar.
   pub fn build_states<Pool: WorkerPool>(&self, config: ParserConfig, pool: &Pool) -> RadlrResult<RadlrParseGraph> {
-    let RadlrDatabase { db } = self;
+    let RadlrGrammarDatabase { db } = self;
 
     match crate::compile::states::build_states::compile_parser_states(db.clone(), config, pool) {
       Ok(graph) => Ok(RadlrParseGraph { graph, db: db.clone(), config }),
@@ -251,7 +251,7 @@ impl RadlrDatabase {
   }
 
   pub fn print_terminals(&self) {
-    let RadlrDatabase { db, .. } = self;
+    let RadlrGrammarDatabase { db, .. } = self;
 
     for tok in db.tokens() {
       eprintln!("{: >5}  {: <10}", tok.tok_id.to_val(), tok.name.to_string(db.string_store()))
@@ -265,7 +265,7 @@ impl RadlrDatabase {
 
 /// Comprised of the parser and scanner graphs for the given grammar
 pub struct RadlrParseGraph {
-  pub(crate) db:     SharedParserDatabase,
+  pub(crate) db:     SharedGrammarDatabase,
   pub(crate) config: ParserConfig,
   pub(crate) graph:  std::sync::Arc<Graphs>,
 }
@@ -328,7 +328,7 @@ impl RadlrParseGraph {
 // ----------------------------------------------------------------------------------------
 
 pub struct RadlrIRParser {
-  db:             SharedParserDatabase,
+  db:             SharedGrammarDatabase,
   config:         ParserConfig,
   states:         ParseStatesVec,
   classification: ParserClassification,
@@ -345,7 +345,7 @@ impl ParserStore for RadlrIRParser {
     &self.config
   }
 
-  fn get_db(&self) -> &ParserDatabase {
+  fn get_db(&self) -> &GrammarDatabase {
     &self.db
   }
 
@@ -363,7 +363,7 @@ impl ParserStore for RadlrIRParser {
 }
 
 impl RadlrIRParser {
-  pub fn get_db(&self) -> &ParserDatabase {
+  pub fn get_db(&self) -> &GrammarDatabase {
     &self.db
   }
 
@@ -386,7 +386,7 @@ pub fn empty_source_path() -> RadlrResult<()> {
 
 pub struct TestPackage {
   pub states:         ParseStatesVec,
-  pub db:             SharedParserDatabase,
+  pub db:             SharedGrammarDatabase,
   pub config:         ParserConfig,
   pub report:         OptimizationReport,
   pub classification: ParserClassification,
@@ -401,7 +401,7 @@ impl ParserStore for TestPackage {
     &self.config
   }
 
-  fn get_db(&self) -> &ParserDatabase {
+  fn get_db(&self) -> &GrammarDatabase {
     &self.db
   }
 
@@ -435,11 +435,11 @@ impl From<RadlrIRParser> for TestPackage {
 // ----------------------------------------------------------------------------------------
 
 pub struct DBPackage {
-  pub db: SharedParserDatabase,
+  pub db: SharedGrammarDatabase,
 }
 
-impl From<RadlrDatabase> for DBPackage {
-  fn from(value: RadlrDatabase) -> Self {
+impl From<RadlrGrammarDatabase> for DBPackage {
+  fn from(value: RadlrGrammarDatabase) -> Self {
     DBPackage { db: value.db.clone() }
   }
 }
@@ -492,7 +492,7 @@ pub fn build_with_optimized_states() -> RadlrResult<()> {
 
 pub trait ParserStore {
   fn get_states(&self) -> impl Iterator<Item = (IString, &ParseState)>;
-  fn get_db(&self) -> &ParserDatabase;
+  fn get_db(&self) -> &GrammarDatabase;
   fn get_classification(&self) -> ParserClassification;
   fn get_is_optimized(&self) -> bool;
   fn get_config(&self) -> &ParserConfig;

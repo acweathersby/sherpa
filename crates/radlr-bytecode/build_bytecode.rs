@@ -153,7 +153,7 @@ fn remap_goto_addresses(bc: &mut Array<u8>, _goto_to_off: &Array<u32>) {
   }
 }
 
-pub fn rule_expression(item: Item, db: &ParserDatabase) -> String {
+pub fn rule_expression(item: Item, db: &GrammarDatabase) -> String {
   if item.is_null() {
     "null".to_string()
   } else {
@@ -192,7 +192,7 @@ pub fn rule_expression(item: Item, db: &ParserDatabase) -> String {
   }
 }
 
-pub fn debug_string(sym: &SymbolId, db: &ParserDatabase) -> String {
+pub fn debug_string(sym: &SymbolId, db: &GrammarDatabase) -> String {
   use SymbolId::*;
   let mut w = CodeWriter::new(vec![]);
   match *sym {
@@ -239,7 +239,7 @@ fn set_goto_address(bc: &mut Vec<u8>, _goto_to_off: &[u32], offset: usize) {
 }
 
 fn build_state<'db>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   state: &ParseState,
   pkg: &mut BytecodeParserDB,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
@@ -252,7 +252,7 @@ fn build_state<'db>(
 }
 
 fn build_statement<'db>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   stmt: &parser::Statement,
   pkg: &mut BytecodeParserDB,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,
@@ -402,7 +402,7 @@ fn get_proxy_address(name: IString, state_name_to_proxy: &mut OrderedMap<IString
 }
 
 fn build_match<'db>(
-  db: &'db ParserDatabase,
+  db: &'db GrammarDatabase,
   matches: &parser::ASTNode,
   pkg: &mut BytecodeParserDB,
   state_name_to_proxy: &mut OrderedMap<IString, usize>,

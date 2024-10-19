@@ -1,6 +1,6 @@
 use js_sys::{Array, ArrayBuffer, JsString, Number, Uint8Array};
 use radlr_bytecode::compile_bytecode;
-use radlr_core::{worker_pool::SingleThreadPool, RadlrDatabase, RadlrGrammar, *};
+use radlr_core::{worker_pool::SingleThreadPool, RadlrGrammar, RadlrGrammarDatabase, *};
 use radlr_rust_runtime::{
   kernel::{disassemble_bytecode, disassemble_parse_block},
   types::{
@@ -25,10 +25,10 @@ pub struct JSGrammarIdentities(pub(crate) Box<GrammarIdentities>);
 
 /// A Parser database derived from grammar defined in a JSSoup
 #[wasm_bindgen]
-pub struct JSParserDB(pub(crate) Box<RadlrDatabase>);
+pub struct JSParserDB(pub(crate) Box<RadlrGrammarDatabase>);
 
-impl AsRef<RadlrDatabase> for JSParserDB {
-  fn as_ref(&self) -> &RadlrDatabase {
+impl AsRef<RadlrGrammarDatabase> for JSParserDB {
+  fn as_ref(&self) -> &RadlrGrammarDatabase {
     &self.0
   }
 }

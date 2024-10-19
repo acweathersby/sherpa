@@ -127,7 +127,7 @@ pub(crate) fn get_follow_internal<const STACK_BUFFER_SIZE_FOLLOW: usize, const S
 }
 
 fn process_closure<const STACK_BUFFER_SIZE: usize>(
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   closure: impl Iterator<Item = Item>,
   queue: &mut VecDeque<Item>,
   follow: &mut StackVec<STACK_BUFFER_SIZE, Item>,
@@ -162,7 +162,7 @@ pub(crate) fn get_completed_item_artifacts<'a, 'follow, T: ItemRefContainerIter<
   let mut follow_pairs = OrderedSet::new();
   let mut default_only_items = ItemSet::new();
 
-  fn create_pair(k_i: Item, i: Item, db: &ParserDatabase) -> TransitionPair {
+  fn create_pair(k_i: Item, i: Item, db: &GrammarDatabase) -> TransitionPair {
     TransitionPair {
       kernel:       k_i,
       next:         i,
@@ -206,7 +206,7 @@ pub(super) fn get_goal_items_from_completed<'db, 'follow>(items: &[Item], node: 
   items.iter().filter(|i| node.item_is_goal(**i)).cloned().collect()
 }
 
-pub(super) fn merge_occluding_token_items(from_groups: GroupedFirsts, into_groups: &mut GroupedFirsts, db: &ParserDatabase) {
+pub(super) fn merge_occluding_token_items(from_groups: GroupedFirsts, into_groups: &mut GroupedFirsts, db: &GrammarDatabase) {
   for (sym, group) in into_groups.iter_mut() {
     let occluding_items = get_set_of_occluding_token_items(sym, group, &from_groups, db);
     group.1.extend(occluding_items);
@@ -217,7 +217,7 @@ pub(super) fn get_set_of_occluding_token_items(
   into_sym: &SymbolId,
   into_group: &TransitionGroup,
   groups: &GroupedFirsts,
-  _db: &ParserDatabase,
+  _db: &GrammarDatabase,
 ) -> Lookaheads {
   let mut occluding = Lookaheads::new();
   let into_prec = into_group.0;

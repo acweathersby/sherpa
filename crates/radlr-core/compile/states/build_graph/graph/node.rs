@@ -1,7 +1,7 @@
 use crate::{
   compile::states::build_graph::graph::{GraphType, StateId, StateType},
   proxy::OrderedSet,
-  types::{ItemIndex, ItemSet, PrecedentSymbol, SharedParserDatabase},
+  types::{ItemIndex, ItemSet, PrecedentSymbol, SharedGrammarDatabase},
   DBNonTermKey,
   IString,
   Item,
@@ -46,7 +46,7 @@ pub(crate) struct GraphNode {
   pub symbol_set:   Option<Arc<ScannerData>>,
   /// Only present on scanner states.
   pub scanner_root: Option<Arc<ScannerData>>,
-  pub db:           SharedParserDatabase,
+  pub db:           SharedGrammarDatabase,
   pub is_leaf:      bool,
   pub is_goto:      bool,
   pub root_data:    RootData,

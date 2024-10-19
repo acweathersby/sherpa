@@ -174,7 +174,7 @@ impl SymbolId {
   }
 
   /// Retrieves the binary / bytecode form of the symbol.
-  pub fn to_state_val(&self, db: &ParserDatabase) -> u32 {
+  pub fn to_state_val(&self, db: &GrammarDatabase) -> u32 {
     use SymbolId::*;
     match *self {
       Default => DEFAULT_SYM_ID,
@@ -207,7 +207,7 @@ impl SymbolId {
     matches!(self, SymbolId::EndOfFile { .. })
   }
 
-  pub fn debug_string(&self, db: &ParserDatabase) -> String {
+  pub fn debug_string(&self, db: &GrammarDatabase) -> String {
     use SymbolId::*;
     let mut w = CodeWriter::new(vec![]);
     match *self {
@@ -285,7 +285,7 @@ impl PrecedentDBTerm {
     self.2
   }
 
-  pub fn from(sym: PrecedentSymbol, db: &ParserDatabase, skipped: bool) -> Self {
+  pub fn from(sym: PrecedentSymbol, db: &GrammarDatabase, skipped: bool) -> Self {
     Self(sym.sym().to_state_val(db).into(), sym.precedence(), skipped)
   }
 }

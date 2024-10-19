@@ -377,7 +377,7 @@ impl GrammarIdentities {
   }
 }
 
-use super::ParserDatabase;
+use super::GrammarDatabase;
 
 use ::std::sync;
 /// This contains all grammars, nonterminals, and parser states that have

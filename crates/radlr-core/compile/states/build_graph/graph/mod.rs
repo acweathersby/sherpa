@@ -210,7 +210,7 @@ impl Origin {
     matches!(self, Origin::__OOS_SCANNER_ROOT__(..))
   }
 
-  pub fn get_symbol(&self, db: &ParserDatabase) -> SymbolId {
+  pub fn get_symbol(&self, db: &GrammarDatabase) -> SymbolId {
     match self {
       Origin::TerminalGoal(sym_id, ..) => db.sym(*sym_id),
       _ => SymbolId::Undefined,
@@ -312,7 +312,7 @@ fn get_follow_symbol_data<'a>(
   builder: &mut ConcurrentGraphBuilder,
   node: &'a GraphNode,
   item: Item,
-  db: &'a ParserDatabase,
+  db: &'a GrammarDatabase,
 ) -> Vec<(Item, PrecedentDBTerm)> {
   let mode = GraphType::Parser;
   let mut out = Vec::with_capacity(512);
@@ -688,7 +688,7 @@ pub struct ConcurrentGraphBuilder {
   oos_roots: Map<DBNonTermKey, SharedGraphNode>,
   oos_closures: Map<Item, SharedGraphNode>,
   state_lookups: Map<u64, SharedGraphNode>,
-  db: SharedParserDatabase,
+  db: SharedGrammarDatabase,
   pre_stage: Vec<StagedNode>,
   /// A Peek node has entered a recursive loop
   recursive_peek_error: bool,
@@ -719,7 +719,7 @@ impl Clone for ConcurrentGraphBuilder {
 }
 
 impl ConcurrentGraphBuilder {
-  pub fn new(db: SharedParserDatabase) -> Self {
+  pub fn new(db: SharedGrammarDatabase) -> Self {
     ConcurrentGraphBuilder {
       db,
       graph: Default::default(),
@@ -852,11 +852,11 @@ impl ConcurrentGraphBuilder {
     }
   }
 
-  pub fn db(&self) -> &ParserDatabase {
+  pub fn db(&self) -> &GrammarDatabase {
     &self.db
   }
 
-  pub fn db_rc(&self) -> SharedParserDatabase {
+  pub fn db_rc(&self) -> SharedGrammarDatabase {
     self.db.clone()
   }
 

@@ -1,5 +1,5 @@
 use super::super::types::*;
-use crate::{compile::states::build_graph::graph::*, RadlrDatabase};
+use crate::{compile::states::build_graph::graph::*, RadlrGrammarDatabase};
 use std::hash::Hash;
 
 pub enum ItemType {
@@ -153,9 +153,10 @@ impl Ord for Item {
   }
 }
 
-impl From<(ItemIndex, &ParserDatabase)> for Item {
-  /// Creates an item from an [ItemIndex] and its corresponding [ParserDatabase]
-  fn from((index, db): (ItemIndex, &ParserDatabase)) -> Self {
+impl From<(ItemIndex, &GrammarDatabase)> for Item {
+  /// Creates an item from an [ItemIndex] and its corresponding
+  /// [GrammarDatabase]
+  fn from((index, db): (ItemIndex, &GrammarDatabase)) -> Self {
     let mut item = Self {
       origin: Default::default(),
       origin_state: StateId::default(),
@@ -170,17 +171,17 @@ impl From<(ItemIndex, &ParserDatabase)> for Item {
   }
 }
 
-impl From<(DBRuleKey, &ParserDatabase)> for Item {
-  /// Creates an initial item from a [DBRuleKey] and its [ParserDatabase]
-  fn from((rule_id, db): (DBRuleKey, &ParserDatabase)) -> Self {
+impl From<(DBRuleKey, &GrammarDatabase)> for Item {
+  /// Creates an initial item from a [DBRuleKey] and its [GrammarDatabase]
+  fn from((rule_id, db): (DBRuleKey, &GrammarDatabase)) -> Self {
     let index: ItemIndex = (rule_id, 0).into();
     (index, db).into()
   }
 }
 
-impl From<(DBRuleKey, &RadlrDatabase)> for Item {
-  /// Creates an initial item from a [DBRuleKey] and its [ParserDatabase]
-  fn from((rule_id, db): (DBRuleKey, &RadlrDatabase)) -> Self {
+impl From<(DBRuleKey, &RadlrGrammarDatabase)> for Item {
+  /// Creates an initial item from a [DBRuleKey] and its [GrammarDatabase]
+  fn from((rule_id, db): (DBRuleKey, &RadlrGrammarDatabase)) -> Self {
     let index: ItemIndex = (rule_id, 0).into();
     (index, db.get_internal()).into()
   }
@@ -241,7 +242,7 @@ impl Item {
   }
 
   /// Return `true` if the item is from a left recursive rule.
-  pub fn rule_is_left_recursive(&self, mode: GraphType, db: &ParserDatabase) -> bool {
+  pub fn rule_is_left_recursive(&self, mode: GraphType, db: &GrammarDatabase) -> bool {
     let p = self.nonterm_index(db);
     p == self.to_initial().nonterm_index_at_sym(mode, db).unwrap_or_default()
   }
@@ -254,18 +255,18 @@ impl Item {
 
   #[inline]
   /// Returns the reduce type of the item.
-  pub fn reduction_type(&self, db: &ParserDatabase) -> ReductionType {
+  pub fn reduction_type(&self, db: &GrammarDatabase) -> ReductionType {
     db.get_reduce_type(self.rule_id())
   }
 
   #[inline]
   /// Returns the [Rule] this item was derived from.
-  pub fn db_rule<'db>(&self, db: &'db ParserDatabase) -> &'db DBRule {
+  pub fn db_rule<'db>(&self, db: &'db GrammarDatabase) -> &'db DBRule {
     &db.db_rule(self.index.get_parts().0)
   }
 
   #[inline]
-  pub fn rule<'db>(&self, db: &'db ParserDatabase) -> &'db Rule {
+  pub fn rule<'db>(&self, db: &'db GrammarDatabase) -> &'db Rule {
     &self.db_rule(db).rule
   }
 
@@ -288,7 +289,7 @@ impl Item {
   /// Returns true if the rule of this item has some form of direct
   /// or indirect recursion.
   #[inline]
-  pub fn rule_is_recursive(&self, db: &ParserDatabase) -> bool {
+  pub fn rule_is_recursive(&self, db: &GrammarDatabase) -> bool {
     match db.nonterm_recursion_type(self.nonterm_index(db)) {
       RecursionType::None => false,
       _ => true,
@@ -296,7 +297,7 @@ impl Item {
   }
 
   /// Returns the type of item based on the active symbol.
-  pub fn get_type(&self, db: &ParserDatabase) -> ItemType {
+  pub fn get_type(&self, db: &GrammarDatabase) -> ItemType {
     use ItemType::*;
     if self.is_complete() {
       Completed(self.nonterm_index(db))
@@ -312,7 +313,7 @@ impl Item {
   #[inline]
   /// Returns a list of terminal symbols that are skipped at this item's
   /// position.
-  pub fn get_skipped<'db>(&self, db: &'db ParserDatabase) -> Option<&'db Vec<SymbolId>> {
+  pub fn get_skipped<'db>(&self, db: &'db GrammarDatabase) -> Option<&'db Vec<SymbolId>> {
     if self.is_complete() {
       None
     } else {
@@ -331,7 +332,7 @@ impl Item {
   #[inline]
   /// Returns the symbols at the current position of the item, or None if the
   /// item is in the final position
-  pub fn sym_id(&self, db: &ParserDatabase) -> SymbolId {
+  pub fn sym_id(&self, db: &GrammarDatabase) -> SymbolId {
     if self.is_complete() {
       SymbolId::Default
     } else {
@@ -340,7 +341,7 @@ impl Item {
   }
 
   #[inline]
-  pub fn sym<'db>(&self, db: &'db ParserDatabase) -> Option<&'db SymbolRef> {
+  pub fn sym<'db>(&self, db: &'db GrammarDatabase) -> Option<&'db SymbolRef> {
     if self.is_complete() {
       None
     } else {
@@ -349,7 +350,7 @@ impl Item {
   }
 
   /// Get the precedence appropriate for the graph mode
-  pub fn precedence(&self, mode: GraphType, db: &ParserDatabase) -> u16 {
+  pub fn precedence(&self, mode: GraphType, db: &GrammarDatabase) -> u16 {
     match mode {
       GraphType::Parser => self.symbol_precedence(db),
       GraphType::Scanner => self.token_precedence(db),
@@ -365,7 +366,7 @@ impl Item {
     }
   }
 
-  pub fn token_precedence(&self, db: &ParserDatabase) -> u16 {
+  pub fn token_precedence(&self, db: &GrammarDatabase) -> u16 {
     if self.is_null() {
       0
     } else {
@@ -376,7 +377,7 @@ impl Item {
     }
   }
 
-  pub fn symbol_precedence(&self, db: &ParserDatabase) -> u16 {
+  pub fn symbol_precedence(&self, db: &GrammarDatabase) -> u16 {
     if self.is_null() {
       0
     } else {
@@ -389,7 +390,7 @@ impl Item {
 
   /// Returns `true` if the symbol at the items position is a non-terminal,
   /// otherwise returns `false`
-  pub fn is_nonterm(&self, mode: GraphType, db: &ParserDatabase) -> bool {
+  pub fn is_nonterm(&self, mode: GraphType, db: &GrammarDatabase) -> bool {
     match self.sym_id(db) {
       SymbolId::DBNonTerminalToken { .. } if mode == GraphType::Scanner => true,
       SymbolId::DBNonTerminal { .. } => true,
@@ -399,7 +400,7 @@ impl Item {
 
   /// Returns `true` if the symbol at the items position is a terminal,
   /// otherwise returns `false`
-  pub fn is_term(&self, mode: GraphType, db: &ParserDatabase) -> bool {
+  pub fn is_term(&self, mode: GraphType, db: &GrammarDatabase) -> bool {
     if self.is_complete() {
       false
     } else {
@@ -407,13 +408,13 @@ impl Item {
     }
   }
 
-  pub fn nonterm_index_at_sym_parser(&self, db: &ParserDatabase) -> Option<DBNonTermKey> {
+  pub fn nonterm_index_at_sym_parser(&self, db: &GrammarDatabase) -> Option<DBNonTermKey> {
     self.nonterm_index_at_sym(GraphType::Parser, db)
   }
 
   /// Returns the [IndexedProdId] of the active symbol if the symbol
   /// is a NonTerm, or return `None`
-  pub fn nonterm_index_at_sym(&self, mode: GraphType, db: &ParserDatabase) -> Option<DBNonTermKey> {
+  pub fn nonterm_index_at_sym(&self, mode: GraphType, db: &GrammarDatabase) -> Option<DBNonTermKey> {
     match self.sym_id(db) {
       SymbolId::DBNonTerminalToken { nonterm_key: index, .. } if mode == GraphType::Scanner => Some(index),
       SymbolId::DBNonTerminal { key: index } => Some(index),
@@ -421,7 +422,7 @@ impl Item {
     }
   }
 
-  pub fn term_index_at_sym(&self, mode: GraphType, db: &ParserDatabase) -> Option<DBTermKey> {
+  pub fn term_index_at_sym(&self, mode: GraphType, db: &GrammarDatabase) -> Option<DBTermKey> {
     match self.sym_id(db) {
       SymbolId::DBNonTerminalToken { sym_key, .. } if mode == GraphType::Parser => sym_key,
       SymbolId::DBToken { key: index } => Some(index),
@@ -429,7 +430,7 @@ impl Item {
     }
   }
 
-  pub fn precedent_db_key_at_sym(&self, mode: GraphType, db: &ParserDatabase) -> Option<PrecedentDBTerm> {
+  pub fn precedent_db_key_at_sym(&self, mode: GraphType, db: &GrammarDatabase) -> Option<PrecedentDBTerm> {
     match self.sym_id(db) {
       SymbolId::DBNonTerminalToken { sym_key, .. } if mode == GraphType::Parser => {
         sym_key.map(|sym_key| (sym_key, self.token_precedence(db), false).into())
@@ -441,7 +442,7 @@ impl Item {
 
   #[inline]
   /// The non-terminal the rule reduces to
-  pub fn nonterm_index(&self, db: &ParserDatabase) -> DBNonTermKey {
+  pub fn nonterm_index(&self, db: &GrammarDatabase) -> DBNonTermKey {
     self.db_rule(db).nonterm
   }
 
@@ -569,18 +570,18 @@ impl Item {
   /// Returns an iterator over this item's closure.
   /// > note: The closure will be over canonical items, except fo the kernel
   /// > item `self`
-  pub fn closure_iter<'db>(&self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
+  pub fn closure_iter<'db>(&self, db: &'db GrammarDatabase) -> impl ItemContainerIter + 'db {
     [*self].into_iter().chain(db.get_closure(self))
   }
 
   /// Same as `Item::closure_iter`, except takes an extra `Item` as an
   /// argument, from which the meta attributes will be assigned to the closure
   /// items (note: the kernel item `self` is left untouched.)
-  pub fn closure_iter_align<'db>(&self, other: Self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
+  pub fn closure_iter_align<'db>(&self, other: Self, db: &'db GrammarDatabase) -> impl ItemContainerIter + 'db {
     [*self].into_iter().chain(db.get_closure(self).map(move |i| i.align(&other)))
   }
 
-  pub fn closure_iter_align_with_lane_split<'db>(&self, other: Self, db: &'db ParserDatabase) -> impl ItemContainerIter + 'db {
+  pub fn closure_iter_align_with_lane_split<'db>(&self, other: Self, db: &'db GrammarDatabase) -> impl ItemContainerIter + 'db {
     let from = self.index;
     [*self].into_iter().chain(db.get_closure(self).map(move |i| i.align(&other).as_from_index(from)))
   }
@@ -589,18 +590,18 @@ impl Item {
   // --------------------------------------------------
 
   #[inline]
-  pub fn nonterm_name(&self, db: &ParserDatabase) -> IString {
+  pub fn nonterm_name(&self, db: &GrammarDatabase) -> IString {
     db.nonterm_friendly_name(self.nonterm_index(db))
   }
 
   #[inline]
-  pub fn nonterm_name_str<'db>(&self, db: &'db ParserDatabase) -> GuardedStr<'db> {
+  pub fn nonterm_name_str<'db>(&self, db: &'db GrammarDatabase) -> GuardedStr<'db> {
     let name = db.nonterm_friendly_name(self.nonterm_index(db));
     name.to_str(db.string_store())
   }
 
   #[cfg(debug_assertions)]
-  pub fn _debug_print_(&self, db: &ParserDatabase) {
+  pub fn _debug_print_(&self, db: &GrammarDatabase) {
     eprintln!("{}", self._debug_string_w_db_(db))
   }
 
@@ -637,7 +638,7 @@ impl Item {
     }
   }
 
-  pub fn _debug_string_w_db_(&self, db: &ParserDatabase) -> String {
+  pub fn _debug_string_w_db_(&self, db: &GrammarDatabase) -> String {
     if self.is_null() {
       "null".to_string()
     } else {
@@ -687,14 +688,14 @@ impl Item {
 
 #[cfg(test)]
 mod test {
-  use crate::{ParserDatabase, RadlrResult};
+  use crate::{GrammarDatabase, RadlrResult};
 
   #[cfg(debug_assertions)]
   #[test]
   fn item_transition_functions() -> RadlrResult<()> {
     use crate::{compile::states::build_graph::graph::Origin, DBRuleKey, Item};
 
-    let db = ParserDatabase::test_lr()?;
+    let db = GrammarDatabase::test_lr()?;
 
     let item: Item = (DBRuleKey::from(0 as u32), &db).into();
 
@@ -740,7 +741,7 @@ mod test {
       Item,
     };
 
-    let db = ParserDatabase::test_lr()?;
+    let db = GrammarDatabase::test_lr()?;
 
     let item: Item = (DBRuleKey::from(0 as u32), &db).into();
 
@@ -793,7 +794,7 @@ impl TransitionPair {
   }
 
   #[cfg(debug_assertions)]
-  pub fn _debug_string_(&self, db: &ParserDatabase) -> String {
+  pub fn _debug_string_(&self, db: &GrammarDatabase) -> String {
     format!(
       "\nsym {}{{{}}} oos:{}\n  base: {}\n  next: {}",
       self.sym.debug_string(db),
@@ -805,8 +806,8 @@ impl TransitionPair {
   }
 }
 
-impl From<(Item, Item, GraphType, &ParserDatabase)> for TransitionPair {
-  fn from((root, next, mode, db): (Item, Item, GraphType, &ParserDatabase)) -> Self {
+impl From<(Item, Item, GraphType, &GrammarDatabase)> for TransitionPair {
+  fn from((root, next, mode, db): (Item, Item, GraphType, &GrammarDatabase)) -> Self {
     Self {
       kernel: root,
       next,
@@ -817,8 +818,8 @@ impl From<(Item, Item, GraphType, &ParserDatabase)> for TransitionPair {
   }
 }
 
-impl From<(&Item, &Item, GraphType, &ParserDatabase)> for TransitionPair {
-  fn from((root, next, mode, db): (&Item, &Item, GraphType, &ParserDatabase)) -> Self {
+impl From<(&Item, &Item, GraphType, &GrammarDatabase)> for TransitionPair {
+  fn from((root, next, mode, db): (&Item, &Item, GraphType, &GrammarDatabase)) -> Self {
     (*root, *next, mode, db).into()
   }
 }
@@ -856,17 +857,17 @@ pub trait TransitionPairRefIter<'a>: Iterator<Item = &'a TransitionPair> + Sized
     self.filter(|i| i.is_out_of_scope())
   }
 
-  fn kernel_nonterm_sym(self, mode: GraphType, db: &ParserDatabase) -> OrderedSet<Option<DBNonTermKey>> {
+  fn kernel_nonterm_sym(self, mode: GraphType, db: &GrammarDatabase) -> OrderedSet<Option<DBNonTermKey>> {
     self.map(|p| p.kernel.nonterm_index_at_sym(mode, db)).collect()
   }
 
   #[cfg(debug_assertions)]
-  fn _debug_print_(self, db: &ParserDatabase, message: &str) {
+  fn _debug_print_(self, db: &GrammarDatabase, message: &str) {
     eprintln!("=====> {}\n{}\n=====<\n", message, self._debug_string_(db))
   }
 
   #[cfg(debug_assertions)]
-  fn _debug_string_(self, db: &ParserDatabase) -> String {
+  fn _debug_string_(self, db: &GrammarDatabase) -> String {
     format!("{}", self.map(|i| i._debug_string_(db)).collect::<Vec<_>>().join("\n"))
   }
 }
@@ -884,7 +885,7 @@ impl<'db, T: Clone + Iterator<Item = Item>> ItemContainerIter for T {}
 
 macro_rules! common_iter_functions {
   () => {
-    fn get_max_precedence(self, mode: GraphType, db: &ParserDatabase) -> u16 {
+    fn get_max_precedence(self, mode: GraphType, db: &GrammarDatabase) -> u16 {
       match mode {
         GraphType::Parser => self.get_max_symbol_precedence(db),
         GraphType::Scanner => self.get_max_token_precedence(db),
@@ -895,11 +896,11 @@ macro_rules! common_iter_functions {
       self.map(|i| i.origin_precedence()).max().unwrap_or_default()
     }
 
-    fn get_max_token_precedence(self, db: &ParserDatabase) -> u16 {
+    fn get_max_token_precedence(self, db: &GrammarDatabase) -> u16 {
       self.map(|i| i.token_precedence(db)).max().unwrap_or_default()
     }
 
-    fn get_max_symbol_precedence(self, db: &ParserDatabase) -> u16 {
+    fn get_max_symbol_precedence(self, db: &GrammarDatabase) -> u16 {
       self.map(|i| i.symbol_precedence(db)).max().unwrap_or_default()
     }
 
@@ -918,12 +919,12 @@ macro_rules! common_iter_functions {
 
     /// Returns the [DBNonTermKey] of the symbol in non-terminal items. Items that
     /// do not have a nonterm as the active symbol are skipped.
-    fn nonterm_ids_at_index(self, mode: GraphType, db: &ParserDatabase) -> OrderedSet<DBNonTermKey> {
+    fn nonterm_ids_at_index(self, mode: GraphType, db: &GrammarDatabase) -> OrderedSet<DBNonTermKey> {
       self.filter_map(move |i| i.nonterm_index_at_sym(mode, db)).collect()
     }
 
     /// Returns a set of all non-terminal ids the items reduce to.
-    fn rule_nonterm_ids(&mut self, db: &ParserDatabase) -> OrderedSet<DBNonTermKey> {
+    fn rule_nonterm_ids(&mut self, db: &GrammarDatabase) -> OrderedSet<DBNonTermKey> {
       self.map(|i| i.nonterm_index(db)).collect()
     }
 
@@ -961,11 +962,11 @@ macro_rules! common_iter_functions {
       return true;
     }
 
-    fn nonterm_items<T: ItemContainer>(self, mode: GraphType, db: &ParserDatabase) -> T {
+    fn nonterm_items<T: ItemContainer>(self, mode: GraphType, db: &GrammarDatabase) -> T {
       self.filter_map(|i| i.is_nonterm(mode, db).then(|| i.clone())).collect()
     }
 
-    fn term_items<T: ItemContainer>(self, mode: GraphType, db: &ParserDatabase) -> T {
+    fn term_items<T: ItemContainer>(self, mode: GraphType, db: &GrammarDatabase) -> T {
       self.filter_map(|i| i.is_term(mode, db).then(|| i.clone())).collect()
     }
 
@@ -1015,7 +1016,7 @@ macro_rules! common_iter_functions {
       self.map(|i| if i.sym_index() > 0 { i.decrement().unwrap() } else { i.clone() }).collect()
     }
 
-    fn terminals(self, mode: GraphType, db: &ParserDatabase) -> OrderedSet<SymbolId> {
+    fn terminals(self, mode: GraphType, db: &GrammarDatabase) -> OrderedSet<SymbolId> {
       self.filter_map(|i| (!i.is_nonterm(mode, db)).then_some(i.sym_id(db))).collect()
     }
   };
@@ -1038,7 +1039,7 @@ pub trait ItemContainerIter: Iterator<Item = Item> + Sized + Clone {
     self.map(|i| i.align(a))
   }
 
-  fn term_items_iter(self, is_scanner: bool, db: &ParserDatabase) -> impl ItemContainerIter {
+  fn term_items_iter(self, is_scanner: bool, db: &GrammarDatabase) -> impl ItemContainerIter {
     self.filter(move |i| match i.get_type(db) {
       ItemType::Completed(_) | ItemType::Terminal(_) => true,
       ItemType::TokenNonTerminal(..) if !is_scanner => true,
@@ -1064,16 +1065,16 @@ pub trait ItemRefContainerIter<'a: 'a>: Iterator<Item = &'a Item> + Sized + Clon
 pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> {
   /// Given a [CompileDatabase] and [DBProdId] returns the initial
   /// items of the non-terminal.
-  fn start_items(nterm: DBNonTermKey, db: &ParserDatabase) -> Self {
+  fn start_items(nterm: DBNonTermKey, db: &GrammarDatabase) -> Self {
     let Ok(rules) = db.nonterm_rules(nterm) else { panic!("Could not get rules") };
     rules.iter().map(|r| Item::from((*r, db))).collect()
   }
 
-  fn nonterm_items(self, mode: GraphType, db: &ParserDatabase) -> Self {
+  fn nonterm_items(self, mode: GraphType, db: &GrammarDatabase) -> Self {
     self.into_iter().filter(|i| i.is_nonterm(mode, db)).collect()
   }
 
-  fn term_items(self, mode: GraphType, db: &ParserDatabase) -> Self {
+  fn term_items(self, mode: GraphType, db: &GrammarDatabase) -> Self {
     self.into_iter().filter(|i| i.is_term(mode, db)).collect()
   }
 
@@ -1119,11 +1120,11 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> 
     self.clone().to_vec().into_iter().map(|i| if i.sym_index() > 0 { i.decrement().unwrap() } else { i }).collect()
   }
 
-  fn _debug_print_(&self, db: &ParserDatabase, _comment: &str) {
+  fn _debug_print_(&self, db: &GrammarDatabase, _comment: &str) {
     debug_items(_comment, self.clone(), db);
   }
 
-  fn to_debug_string(&self, db: &ParserDatabase, sep: &str) -> String {
+  fn to_debug_string(&self, db: &GrammarDatabase, sep: &str) -> String {
     self.clone().to_vec().iter().map(|i| i._debug_string_w_db_(db)).collect::<Vec<_>>().join(sep)
   }
 
@@ -1137,7 +1138,7 @@ pub trait ItemContainer: Clone + IntoIterator<Item = Item> + FromIterator<Item> 
 }
 
 #[allow(unused)]
-fn debug_items<'db, T: IntoIterator<Item = Item>>(comment: &str, items: T, db: &ParserDatabase) {
+fn debug_items<'db, T: IntoIterator<Item = Item>>(comment: &str, items: T, db: &GrammarDatabase) {
   eprintln!("\n {} --> ", comment);
 
   for item in items {

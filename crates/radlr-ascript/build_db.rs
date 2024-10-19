@@ -12,16 +12,16 @@ use radlr_core::{
   DBRuleKey,
   GrammarIdentities,
   Item,
-  ParserDatabase,
-  RadlrDatabase,
+  GrammarDatabase,
   RadlrError,
+  RadlrGrammarDatabase,
   RadlrResult,
   SymbolRef,
 };
 
 use crate::types::*;
 
-pub fn build_database(db: RadlrDatabase) -> AscriptDatabase {
+pub fn build_database(db: RadlrGrammarDatabase) -> AscriptDatabase {
   let mut adb = AscriptDatabase {
     errors:        Default::default(),
     structs:       Default::default(),
@@ -326,7 +326,7 @@ fn add_to_type_list(ty: AscriptType, types: &mut AscriptTypes, multi_i: &mut Vec
   ty
 }
 
-pub fn extract_structs(db: &ParserDatabase, adb: &mut AscriptDatabase) {
+pub fn extract_structs(db: &GrammarDatabase, adb: &mut AscriptDatabase) {
   for (id, db_rule) in db.rules().iter().enumerate().filter(|(_, r)| !r.is_scanner) {
     let rule = &db_rule.rule;
     let g_id = db_rule.rule.g_id;
@@ -525,7 +525,7 @@ pub fn process_struct_node(
 }
 
 /// Derives the AST types of all parser NonTerminals.
-pub fn resolve_nonterm_types(db: &ParserDatabase, adb: &mut AscriptDatabase) -> OrderedMap<DBNonTermKey, AscriptType> {
+pub fn resolve_nonterm_types(db: &GrammarDatabase, adb: &mut AscriptDatabase) -> OrderedMap<DBNonTermKey, AscriptType> {
   let AscriptDatabase { errors, multi_type_lu, multi_types, .. } = adb;
 
   let mut resolved_nonterms = OrderedMap::new();
@@ -960,7 +960,7 @@ fn resolve_nonterm_values(
   Ok(())
 }
 
-fn get_item_at_sym_ref<'db, F: Fn(Item, &SymbolRef) -> bool>(item: Item, db: &'db ParserDatabase, funct: F) -> Option<Item> {
+fn get_item_at_sym_ref<'db, F: Fn(Item, &SymbolRef) -> bool>(item: Item, db: &'db GrammarDatabase, funct: F) -> Option<Item> {
   let mut i = item;
   while let Some(sym) = i.sym(db) {
     if funct(i, sym) {
@@ -973,7 +973,7 @@ fn get_item_at_sym_ref<'db, F: Fn(Item, &SymbolRef) -> bool>(item: Item, db: &'d
 
 fn graph_type_from_item(
   item: Item,
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   nonterm_types: &std::collections::BTreeMap<DBNonTermKey, AscriptType>,
   default_type: Option<(DBNonTermKey, &AscriptType)>,
 ) -> (AscriptType, Option<DBNonTermKey>) {
@@ -998,7 +998,7 @@ fn graph_type_from_item(
 
 fn graph_node_from_item(
   item: Item,
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   nonterm_types: &std::collections::BTreeMap<DBNonTermKey, AscriptType>,
   selected_indices: &mut HashSet<usize>,
   default_type: Option<(DBNonTermKey, &AscriptType)>,
@@ -1032,7 +1032,7 @@ struct GraphMutData<'a> {
 #[derive(Clone, Copy)]
 struct GraphResolveData<'a> {
   item:                 Item,
-  db:                   &'a ParserDatabase,
+  db:                   &'a GrammarDatabase,
   node:                 &'a ASTNode,
   nonterm_types:        &'a OrderedMap<DBNonTermKey, AscriptType>,
   default_nonterm_type: Option<(DBNonTermKey, &'a AscriptType)>,

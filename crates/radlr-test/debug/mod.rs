@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use radlr_core::ParserDatabase;
+use radlr_core::GrammarDatabase;
 use radlr_rust_runtime::types::{bytecode::Opcode, DebugEventNew, ParserInput, ParserStackTrackers};
 
 use crate::utils::_write_debug_file_;
@@ -58,7 +58,7 @@ impl Node {
 
 #[allow(unused)]
 pub fn file_debugger(
-  db: ParserDatabase,
+  db: GrammarDatabase,
   print_config: PrintConfig,
   state_lu: HashMap<u32, String>,
 ) -> Option<Box<radlr_rust_runtime::types::DebugFnNew>> {
@@ -75,7 +75,7 @@ pub fn file_debugger(
 
 #[allow(unused)]
 pub fn console_debugger(
-  db: ParserDatabase,
+  db: GrammarDatabase,
   print_config: PrintConfig,
   state_lu: HashMap<u32, String>,
 ) -> Option<Box<radlr_rust_runtime::types::DebugFnNew>> {
@@ -95,7 +95,7 @@ fn diagram_constructor(
   input: &dyn ParserInput,
   trk: ParserStackTrackers,
   stack: &mut Vec<Node>,
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   pc: &PrintConfig,
   state_lu: &HashMap<u32, String>,
 ) -> String {

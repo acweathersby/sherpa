@@ -125,7 +125,7 @@ fn climb_nonterms<'a, T: TransitionPairRefIter<'a> + Clone>(
 
 pub(super) fn all_items_come_from_same_nonterminal_call<'a, T: TransitionPairRefIter<'a> + Clone>(
   group: T,
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
 ) -> bool {
   group.clone().all(|i| i.next.is_initial()) && group.map(|i| i.next.nonterm_index(db)).collect::<Set<_>>().len() == 1
 }

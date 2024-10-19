@@ -10,7 +10,7 @@ use std::{
 };
 
 pub fn build_ast_source(
-  db: &RadlrDatabase,
+  db: &RadlrGrammarDatabase,
   script: &str,
   ast_path: std::path::PathBuf,
   build_config: BuildConfig<'_>,
@@ -28,7 +28,7 @@ pub fn build_ast_source(
   })
 }
 
-pub fn build_parser_states(db: &RadlrDatabase, parser_config: ParserConfig) -> Result<RadlrIRParser, RadlrError> {
+pub fn build_parser_states(db: &RadlrGrammarDatabase, parser_config: ParserConfig) -> Result<RadlrIRParser, RadlrError> {
   let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
   let states = db.build_states(parser_config, &pool)?;
   let parser = states.build_ir_parser(true, false, &pool)?;
@@ -36,7 +36,7 @@ pub fn build_parser_states(db: &RadlrDatabase, parser_config: ParserConfig) -> R
 }
 
 pub fn build_parser_source(
-  db: &RadlrDatabase,
+  db: &RadlrGrammarDatabase,
   parser_script: &str,
   bytecode: radlr_rust_runtime::types::BytecodeParserDB,
   binary_out_path: std::path::PathBuf,

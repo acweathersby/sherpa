@@ -36,7 +36,7 @@ pub fn add_root(
 }
 
 pub(crate) fn compile_parser_states<Pool: WorkerPool>(
-  db: Arc<ParserDatabase>,
+  db: Arc<GrammarDatabase>,
   config: ParserConfig,
   pool: &Pool,
 ) -> RadlrResult<Arc<Graphs>> {

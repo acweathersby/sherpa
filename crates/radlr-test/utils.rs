@@ -15,7 +15,7 @@ pub type TestParser = ByteCodeParserNew;
 
 /// Writes to a debug file for testing
 pub fn _write_debug_file_<FileName: AsRef<std::path::Path>, Data: AsRef<[u8]>>(
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   file_name: FileName,
   data: Data,
   append: bool,
@@ -70,7 +70,7 @@ pub fn _write_states_to_temp_file_(builder: &impl ParserStore) -> RadlrResult<()
 }
 
 /// Writes the parser IR states to a file in the temp directory
-pub fn _write_disassembly_to_temp_file_(pkg: &BytecodeParserDB, db: &ParserDatabase, config: ParserConfig) -> RadlrResult<()> {
+pub fn _write_disassembly_to_temp_file_(pkg: &BytecodeParserDB, db: &GrammarDatabase, config: ParserConfig) -> RadlrResult<()> {
   #[cfg(all(debug_assertions))]
   {
     _write_debug_file_(db, "bc_disassembly.tmp", disassemble_bytecode(&pkg.bytecode), false)?;
@@ -193,7 +193,7 @@ pub fn compile_and_run_grammars(source: &[&str], inputs: &[(&str, &str, bool)], 
 // rules. This assumes the number of rules in the array
 // matches the number of rules in the parser.
 pub fn map_reduce_function<I: ParserInput, ASTNode>(
-  db: &ParserDatabase,
+  db: &GrammarDatabase,
   fns: Vec<(&str, usize, ReducerNew<I, ASTNode>)>,
 ) -> Vec<ReducerNew<I, ASTNode>>
 where

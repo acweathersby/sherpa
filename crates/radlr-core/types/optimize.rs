@@ -35,7 +35,7 @@ pub struct ComplexityMarker {
 }
 
 impl ComplexityMarker {
-  pub fn from_map_iter<'i, I: Iterator<Item = (&'i IString, &'i Box<ParseState>)>>(db: &ParserDatabase, states: I) -> Self {
+  pub fn from_map_iter<'i, I: Iterator<Item = (&'i IString, &'i Box<ParseState>)>>(db: &GrammarDatabase, states: I) -> Self {
     let (num_of_states, code_complexity) = states
       .enumerate()
       .map(|(i, (_, s))| (i, s.print(db, false).unwrap_or_default().len()))
@@ -43,7 +43,7 @@ impl ComplexityMarker {
     Self { num_of_states, code_complexity: code_complexity as f64 }
   }
 
-  pub fn from_vec_iter<'i, I: Iterator<Item = &'i (IString, Box<ParseState>)>>(db: &ParserDatabase, states: I) -> Self {
+  pub fn from_vec_iter<'i, I: Iterator<Item = &'i (IString, Box<ParseState>)>>(db: &GrammarDatabase, states: I) -> Self {
     let (num_of_states, code_complexity) = states
       .enumerate()
       .map(|(i, (_, s))| (i, s.print(db, false).unwrap_or_default().len()))

@@ -5,7 +5,7 @@ use std::{
   ops::Add,
 };
 
-use crate::{types::GuardedStr, IString, ParserDatabase};
+use crate::{types::GuardedStr, IString, GrammarDatabase};
 
 /// Chainable writer for formatted source code
 pub struct CodeWriter<W: Write> {
@@ -55,10 +55,10 @@ impl<'w, 'istore: 'w, W: Write> Add<GuardedStr<'istore>> for &'w mut CodeWriter<
   }
 }
 
-impl<'w, 'db: 'w, W: Write> Add<(IString, &'db ParserDatabase)> for &'w mut CodeWriter<W> {
+impl<'w, 'db: 'w, W: Write> Add<(IString, &'db GrammarDatabase)> for &'w mut CodeWriter<W> {
   type Output = Self;
 
-  fn add(self, (istring, db): (IString, &'db ParserDatabase)) -> Self::Output {
+  fn add(self, (istring, db): (IString, &'db GrammarDatabase)) -> Self::Output {
     self.w(istring.to_str(db.string_store()).as_str()).unwrap()
   }
 }

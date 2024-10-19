@@ -4,8 +4,8 @@ use radlr_core::{
   CachedString,
   DBNonTermKey,
   IString,
-  ParserDatabase,
-  RadlrDatabase,
+  GrammarDatabase,
+  RadlrGrammarDatabase,
   RadlrError,
   RadlrResult,
 };
@@ -35,7 +35,7 @@ pub struct AscriptDatabase {
   pub(crate) multi_types:   Vec<MultiTypeRef>,
   ///  The underlying grammar database from which Ascript types are
   /// derived.
-  pub(crate) db:            Arc<ParserDatabase>,
+  pub(crate) db:            Arc<GrammarDatabase>,
 }
 
 impl Debug for AscriptDatabase {
@@ -124,14 +124,14 @@ impl ValueObj for AscriptDatabase {
   }
 }
 
-impl From<&RadlrDatabase> for AscriptDatabase {
-  fn from(value: &RadlrDatabase) -> Self {
+impl From<&RadlrGrammarDatabase> for AscriptDatabase {
+  fn from(value: &RadlrGrammarDatabase) -> Self {
     build_db::build_database((*value).clone())
   }
 }
 
-impl From<RadlrDatabase> for AscriptDatabase {
-  fn from(value: RadlrDatabase) -> Self {
+impl From<RadlrGrammarDatabase> for AscriptDatabase {
+  fn from(value: RadlrGrammarDatabase) -> Self {
     build_db::build_database(value)
   }
 }

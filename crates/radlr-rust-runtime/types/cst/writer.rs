@@ -18,7 +18,7 @@ impl<'node, 'db> Printer<'node, 'db> {
 
   pub fn to_string(&self) -> String {
     let mut vec = vec![];
-    self.write(&mut vec);
+    self.write(&mut vec).unwrap();
     unsafe { String::from_utf8_unchecked(vec) }
   }
 
@@ -54,7 +54,7 @@ impl<'node, 'db> Printer<'node, 'db> {
   }
 
   pub fn print(&self) {
-    let mut stdout = std::io::stdout();
+    let mut stdout = std::io::stderr();
     self.write(&mut stdout).unwrap();
     stdout.flush().unwrap();
   }

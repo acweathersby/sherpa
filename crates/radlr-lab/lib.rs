@@ -7,7 +7,7 @@ use radlr_core::{
   ParserClassification,
   ParserConfig,
   ParserStore,
-  RadlrDatabase,
+  RadlrGrammarDatabase,
   RadlrError,
   RadlrGrammar,
   RadlrIRParser,
@@ -151,7 +151,7 @@ pub fn run_lab_server(port: Option<u16>) -> Result<(), RadlrError> {
                             {
                               Ok(db) => {
                                 fn build_states(
-                                  db: &RadlrDatabase,
+                                  db: &RadlrGrammarDatabase,
                                   parser_config: ParserConfig,
                                   optimize: bool,
                                 ) -> RadlrResult<RadlrIRParser> {
