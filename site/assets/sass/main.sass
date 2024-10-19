@@ -68,6 +68,20 @@ button
 button:hover
   cursor: pointer
 
+#palette 
+  
+  display: flex
+  opacity: 0.01
+
+  &:hover
+    opacity: 1
+  
+  .swatch
+    width: 10px
+    height: 10px
+    border-radius: 5px
+    margin: 5px
+
 
 #noscript, #screen-too-small, #loading-screen
   font-size: 1.2em
@@ -152,6 +166,62 @@ button:hover
       color: map-get($theme-map, "button-hover-fg")
       path
         fill: map-get($theme-map, "button-hover-fg")
+
+  #palette 
+    #base-fg 
+      background-color: map-get($theme-map, base-fg)
+    #base-bg 
+      background-color: map-get($theme-map, base-bg)
+    #header-fg 
+      background-color: map-get($theme-map, header-fg)
+    #header-bg 
+      background-color: map-get($theme-map, header-bg)
+    #header-hover-fg 
+      background-color: map-get($theme-map, header-hover-fg)
+    #header-hover-bg 
+      background-color: map-get($theme-map, header-hover-bg)
+    #focus-fg 
+      background-color: map-get($theme-map, focus-fg)
+    #focus-bg 
+      background-color: map-get($theme-map, focus-bg)
+    #backdrop-fg 
+      background-color: map-get($theme-map, backdrop-fg)
+    #backdrop-bg 
+      background-color: map-get($theme-map, backdrop-bg)
+    #button-fg 
+      background-color: map-get($theme-map, button-fg)
+    #button-bg 
+      background-color: map-get($theme-map, button-bg)
+    #button-hover-fg 
+      background-color: map-get($theme-map, button-hover-fg)
+    #button-hover-bg 
+      background-color: map-get($theme-map, button-hover-bg)
+    #bc-address-bg 
+      background-color: map-get($theme-map, bc-address-bg)
+    #bc-address-fg 
+      background-color: map-get($theme-map, bc-address-fg)
+    #section-bg 
+      background-color: map-get($theme-map, section-bg)
+    #settings-input-bg 
+      background-color: map-get($theme-map, settings-input-bg)
+    #settings-input-fg 
+      background-color: map-get($theme-map, settings-input-fg)
+    #settings-input-active-fg 
+      background-color: map-get($theme-map, settings-input-active-fg)
+    #settings-input-active-bg 
+      background-color: map-get($theme-map, settings-input-active-bg)
+    #settings-input-disabled-fg 
+      background-color: map-get($theme-map, settings-input-disabled-fg)
+    #settings-input-disabled-bg 
+      background-color: map-get($theme-map, settings-input-disabled-bg)
+    #link-fg 
+      background-color: map-get($theme-map, link-fg)
+    #link-bg 
+      background-color: map-get($theme-map, link-bg)
+    #link-hover-fg 
+      background-color: map-get($theme-map, link-hover-fg)
+    #link-hover-bg  
+      background-color: map-get($theme-map, link-hover-bg )
 
 @import "./codemirror"
 @import "./header"
