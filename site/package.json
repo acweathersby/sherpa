@@ -1,19 +1,16 @@
 {
-    "name": "radlr-lab",
-    "private": true,
-    "version": "0.0.0",
-    "dependencies": {
-        "@codemirror/language": "^6.10.3",
-        "@codemirror/lint": "^6.8.2",
-        "@lezer/common": "1.2.1",
-        "@lezer/highlight": "1.2.1",
-        "codemirror": "^6.0.1",
-        "graphology": "^0.25.4",
-        "graphology-layout": "^0.6.1",
-        "sigma": "^3.0.0-beta.32"
-    },
-    "devDependencies": {
-        "esbuild": "0.24.0",
-        "typescript": "^5.6.2"
-    }
+  "name": "radlr-lab",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@codemirror/language": "^6.10.3",
+    "@codemirror/lint": "^6.8.2",
+    "@lezer/common": "1.2.1",
+    "@lezer/highlight": "1.2.1",
+    "codemirror": "^6.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0",
+    "typescript": "^5.6.2"
+  }
 }

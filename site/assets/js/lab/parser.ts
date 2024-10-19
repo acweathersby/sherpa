@@ -28,7 +28,7 @@ export class Parser {
     symbols: number, db: radlr.JSBytecodeParserDB
   }) => void) | null = null;
 
-  on_error: (() => void) | null = null;
+  on_error: ((arg: radlr.JSDebugPacket) => void) | null = null;
 
   on_complete: (() => void) | null = null;
 
@@ -101,14 +101,14 @@ export class Parser {
 
         case JSDebugEvent.Error: {
           if (this.on_error) {
-            this.on_error();
+            this.on_error(step);
           }
           this.PARSING = false;
         } break outer;
 
         case JSDebugEvent.EndOfFile: {
           if (this.on_error) {
-            this.on_error();
+            this.on_error(step);
           }
           this.PARSING = false;
         } break outer;

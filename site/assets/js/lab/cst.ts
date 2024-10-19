@@ -1,10 +1,8 @@
 import { JSBytecodeParserDB, get_nonterminal_name_from_id } from "js/radlr/radlr_wasm";
 import { NBContentField, NBEditorField } from "./notebook";
 import { Parser } from "./parser";
-import { GrammarDBNode, InputNode } from "./pipeline";
+import { GrammarDBNode } from "./pipeline";
 
-import Graph from "graphology";
-import Sigma from "sigma";
 import { SigmaNodeEventPayload } from "sigma/dist/declarations/src/types";
 import { SyntaxGraphEngine } from "js/graph_sys";
 
@@ -16,8 +14,8 @@ export function init(
   grammar_pipeline: GrammarDBNode,
 ) {
 
-  const graph = new Graph();
   const hooks: Hooks = { on_node_enter: null }
+  let pending = false;
 
 
   let engine = new SyntaxGraphEngine(<HTMLDivElement>cst_field.body);
@@ -25,11 +23,21 @@ export function init(
   let input_string: string = "";
   let db: null | JSBytecodeParserDB = null;
 
+  function build_cst() {
+    if (!pending) {
+      pending = true;
+      setTimeout(() => {
+        pending = false;
+        run_ast_render(parser_input_field, input_string, db, engine, hooks)
+      }, 100)
+    }
+  }
+
   parser_input_field.addListener("text_changed", field => {
     input_string = field.get_text();
 
     if (!cst_field.is_mini)
-      run_ast_render(parser_input_field, input_string, db, engine, hooks);
+      build_cst();
   })
 
   grammar_pipeline.addListener("loading", _ => {
@@ -46,12 +54,16 @@ export function init(
     cst_field.set_loading(false);
 
     if (!cst_field.is_mini)
-      run_ast_render(parser_input_field, input_string, db, engine, hooks);
+      build_cst()
   });
 }
 
 function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecodeParserDB | null, renderer: SyntaxGraphEngine, hooks: Hooks) {
   renderer.clearNodes();
+  renderer.flip_nodes();
+
+  if (!input)
+    renderer.draw();
 
   if (!input || !db) return;
 
@@ -66,7 +78,7 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
   let node_width = 1
 
   parser.on_reduce = reduce_data => {
-    if (reduce_data.symbols == 1) return;
+    //if (reduce_data.symbols == 1) return;
 
     let offset = symbols.length - reduce_data.symbols;
     let r_syms = symbols.splice(offset, reduce_data.symbols);
@@ -92,9 +104,17 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
     id++;
   };
 
+  parser.on_error = error_data => {
+    let end_token = input.slice(error_data.ctx.sym_ptr, error_data.ctx.sym_ptr + 5);
+
+    let id = renderer.addNode(0, 0, `${end_token} +[${input.length - error_data.ctx.sym_ptr - end_token.length}]`);
+    symbols.push({ id, nodes: [], width: 1, from: 0, to: 0 });
+  }
+
 
   parser.init("default", input);
   parser.play();
+
 
   parser.on_reduce = null;
   parser.on_shift = null;
@@ -103,53 +123,46 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
 
   let positions = new Array(id);
 
-  function shiftDownStream(symbols: Node[], positions: [number, number, number, number][], delta = 0) {
-    for(const p_node of symbols) {
-      positions[p_node.id][0] += delta;
-      shiftDownStream(p_node.nodes, positions, delta);
-    }
-  }
-  
   function map_positions(symbols: Node[], lvl: number = 0, positions: [number, number, number, number][], x: number = 0, offsets: number[][] = []): [number, number] {
-    
+
     let desired_center = x - (symbols.length - 1) / 2;
-    if(offsets.length < lvl + 1) {
+    if (offsets.length < lvl + 1) {
       offsets.push([]);
     }
     let last = offsets[lvl];
     let start = last.length > 0 ? Math.max(desired_center, positions[last[last.length - 1]][0] + 1) : desired_center;
     let end = start;
-    for(const p_node of symbols) {
-      
+    for (const p_node of symbols) {
+
       last.push(p_node.id);
-    
-      let [s,e] =  map_positions(p_node.nodes, lvl+1, positions, end, offsets);
+
+      let [s, e] = map_positions(p_node.nodes, lvl + 1, positions, end, offsets);
 
       let center = s + (e - s) / 2;
 
       let error = (end - center);
 
-      if(error > 0) {
-          for(let i = lvl +1;  i < offsets.length; i++) {
-            let last = -1;
-              for(const id of offsets[i].slice()) {
-                if(last > 0) {
-                  if(positions[id][0] <= last) {
-                    positions[id][0] += error
-                    last = positions[id][0];
-                  } else {
-                    continue;
-                  }
-                } else {
-                  positions[id][0] += error
-                  last = positions[id][0];
-                }
+      if (error > 0) {
+        for (let i = lvl + 1; i < offsets.length; i++) {
+          let last = -1;
+          for (const id of offsets[i].slice()) {
+            if (last > 0) {
+              if (positions[id][0] <= last) {
+                positions[id][0] += error
+                last = positions[id][0];
+              } else {
+                continue;
               }
+            } else {
+              positions[id][0] += error
+              last = positions[id][0];
+            }
           }
-      } else {}
-          
-      positions[p_node.id] = [end , lvl * -1, p_node.from, p_node.to];
-      
+        }
+      } else { }
+
+      positions[p_node.id] = [end, lvl * -1, p_node.from, p_node.to];
+
       // this nodes position is a function of its children positions
 
       end += node_width;
@@ -170,7 +183,7 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
   }
 
 
-  for(let i = 0; i < positions.length; i++) {
+  for (let i = 0; i < positions.length; i++) {
     let [x, y] = positions[i];
     let lvl = -y;
     //x -=  offsets[lvl]/ 2

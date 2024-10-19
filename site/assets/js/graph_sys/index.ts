@@ -2,10 +2,10 @@ class TextureAtlasGenerator {
   ctx: OffscreenCanvasRenderingContext2D
   canvas: OffscreenCanvas
 
-  glyph_lu: Map<string, { u: number, v: number, w: number, h: number, r: number }> = new Map
+  glyph_lu: Map<string, { u: number, v: number, w: number, h: number, r: number, y: number }> = new Map
 
   glyph_offset: number = 0
-  size: number = 30
+  size: number = 34
 
 
   constructor() {
@@ -21,12 +21,9 @@ class TextureAtlasGenerator {
     this.canvas.height = 1024;
 
     this.ctx.fillStyle = 'black';
-    //    this.ctx.fillRect(0, 0, 512, 512);
-
     this.ctx.fillStyle = 'red';
 
-
-    this.ctx.font = `${this.size}px Helvetica`
+    this.ctx.font = `${this.size}px Arial`
   }
 
   getGlyph(char: string) {
@@ -43,12 +40,13 @@ class TextureAtlasGenerator {
       v: 0 / 1024,
       w: text.width / 1024,
       h: this.size / 1024,
-      r: text.width / this.size
+      r: text.width / this.size,
+      y: text.actualBoundingBoxDescent
     };
 
     this.glyph_lu.set(char, data);
 
-    this.ctx.fillText(char, this.glyph_offset, this.size)
+    this.ctx.fillText(char, this.glyph_offset, this.size - text.actualBoundingBoxDescent)
 
     this.glyph_offset += text.width
 
@@ -69,8 +67,10 @@ export class SyntaxGraphEngine {
 
   text_atlas: WebGLTexture
 
-  node_array: Float32Array = new Float32Array(512 * 512 * 3)
-  node_texture: WebGLTexture
+  node_array_a: Float32Array = new Float32Array(512 * 512 * 3)
+  node_array_b: Float32Array = new Float32Array(512 * 512 * 3)
+  node_texture_a: WebGLTexture
+  node_texture_b: WebGLTexture
 
   line_program: WebGLProgram
   node_program: WebGLProgram
@@ -81,8 +81,10 @@ export class SyntaxGraphEngine {
   glyph_count: number = 0
 
   offset_x: number = 0
-  offset_y: number = 0;
-  scale: number = 1;
+  offset_y: number = -500;
+  scale: number = 0.25;
+  t: number = 0;
+  frame_requested: boolean = false;
 
   line_vao: WebGLVertexArrayObject
   node_vao: WebGLVertexArrayObject
@@ -130,6 +132,7 @@ export class SyntaxGraphEngine {
     this.text_atlas = createTexture(gl);
 
     gl.activeTexture(gl.TEXTURE0);
+
     gl.bindTexture(gl.TEXTURE_2D, this.text_atlas);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 1024, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.atlas.ctx.getImageData(0, 0, 1024, 1024, { colorSpace: "srgb" }));
 
@@ -137,14 +140,25 @@ export class SyntaxGraphEngine {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 
-    this.node_texture = createTexture(gl);
+    this.node_texture_a = createTexture(gl);
+    this.node_texture_b = createTexture(gl);
 
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.node_texture);
+    gl.bindTexture(gl.TEXTURE_2D, this.node_texture_a);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, 512, 512, 0, gl.RGB, gl.FLOAT, this.node_array_a);
 
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, 512, 512, 0, gl.RGB, gl.FLOAT, this.node_array);
 
-    
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.node_texture_b);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, 512, 512, 0, gl.RGB, gl.FLOAT, this.node_array_b);
+
+
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -159,22 +173,25 @@ export class SyntaxGraphEngine {
 
     let texture_location = gl.getUniformLocation(this.text_program, "uSampler");
     gl.uniform1i(texture_location, 0);
-    
+
     let texture_location2 = gl.getUniformLocation(this.text_program, "uNodes");
     gl.uniform1i(texture_location2, 1);
+    texture_location2 = gl.getUniformLocation(this.text_program, "uNodesB");
+    gl.uniform1i(texture_location2, 2);
 
     gl.useProgram(this.line_program);
 
     texture_location2 = gl.getUniformLocation(this.line_program, "uNodes");
     gl.uniform1i(texture_location2, 1);
+    texture_location2 = gl.getUniformLocation(this.line_program, "uNodesB");
+    gl.uniform1i(texture_location2, 2);
 
     gl.useProgram(this.node_program);
-    
+
     texture_location2 = gl.getUniformLocation(this.node_program, "uNodes");
     gl.uniform1i(texture_location2, 1);
-
-
-
+    texture_location2 = gl.getUniformLocation(this.node_program, "uNodesB");
+    gl.uniform1i(texture_location2, 2);
 
     gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, this.camera_uniform);
 
@@ -211,9 +228,21 @@ export class SyntaxGraphEngine {
     let pointer_capture = false
 
     this.canvas.addEventListener("wheel", e => {
+      let { x, y, width, height } = this.canvas.getBoundingClientRect();
+      let c_x = x;
+      let c_y = y;
+      let c_w = width;
+      let c_h = height;
+
+      let o_x = e.x - c_x - (c_w / 2);
+      let o_y = e.y - c_y - (c_h / 2);
+
       let diff = -Math.max(Math.min(e.deltaY, 1), -1)
       let old_scale = this.scale
-      let new_scale = Math.max(old_scale + (old_scale * 0.01) * diff, 0.1)
+      let new_scale = Math.max(old_scale + (old_scale * 0.02) * diff, 0.1)
+
+      this.offset_x += o_x / new_scale - o_x / old_scale;
+      this.offset_y += o_y / new_scale - o_y / old_scale;
 
       this.scale = new_scale
       this.need_ui_buffer_update = true
@@ -257,18 +286,29 @@ export class SyntaxGraphEngine {
     let { width, height } = this.canvas.getBoundingClientRect();
 
     gl.bindBuffer(gl.UNIFORM_BUFFER, this.camera_uniform);
-    gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array([width, height, 0, 0, this.offset_x, -this.offset_y, this.scale, 0]), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.UNIFORM_BUFFER, new Float32Array([width, height, 0, 0, this.offset_x, -this.offset_y, this.scale, this.t]), gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
   }
 
-  addNode(x: number, y: number, name: string, [r,g,b]: [number, number, number] = [255, 0, 0]): number {
+  addNode(x: number, y: number, name: string, [r, g, b]: [number, number, number] = [255, 0, 0]): number {
     let index = this.nodes.length;
-    this.nodes.push({ pos: { x, y }, name, color: (r  & 255) << 16 | (g & 255) << 8 | (b & 255) << 0 })
+    this.nodes.push({ pos: { x, y }, name, color: (r & 255) << 16 | (g & 255) << 8 | (b & 255) << 0 })
     this.glyph_count += name.length;
     return index
   }
 
   addText() { }
+
+
+  flip_nodes() {
+    let { gl, node_program, line_program, text_program } = this;
+    // Copy the nodes to texture 2 and reset the time value
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.node_texture_b);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, 512, 512, 0, gl.RGB, gl.FLOAT, this.node_array_a);
+    this.t = 0;
+    this.need_ui_buffer_update = true;
+  }
 
   updateNode(index: number, x: number, y: number) {
     if (index < this.nodes.length) {
@@ -293,7 +333,11 @@ export class SyntaxGraphEngine {
     this.uploadNodes();
   }
 
-  draw() {
+  draw_internal() {
+    this.frame_requested = false;
+
+    if (this.t >= 0.9995) this.t = 1;
+
     let { gl, node_program, line_program, text_program } = this;
 
     let { width, height } = this.canvas.getBoundingClientRect();
@@ -332,6 +376,21 @@ export class SyntaxGraphEngine {
       throw "Have gl errors"
     }
     error = gl.getError()
+
+    if (this.t < 1) {
+
+      this.t = Math.min(1, this.t + (1 - this.t) / 3);
+
+      this.need_ui_buffer_update = true;
+
+      this.draw()
+    }
+  }
+
+  draw() {
+    if (this.frame_requested) return;
+    this.frame_requested = true;
+    requestAnimationFrame(() => this.draw_internal())
   }
 
 
@@ -341,7 +400,7 @@ export class SyntaxGraphEngine {
     let glyph_data_length = this.glyph_count * 10;
     let required_buffer_size = (node_data_length + glyph_data_length) << 2;
 
-    let uint = new Uint32Array(this.node_array.buffer);
+    let uint = new Uint32Array(this.node_array_a.buffer);
 
     if (required_buffer_size > this.transfer_buffer.byteLength) {
       this.transfer_buffer = new ArrayBuffer(required_buffer_size);
@@ -358,8 +417,8 @@ export class SyntaxGraphEngine {
     for (let i = 0, l = this.nodes.length; i < l; i++) {
       let node = this.nodes[i];
 
-      this.node_array[i * 3] = node.pos.x
-      this.node_array[i * 3 + 1] = node.pos.y
+      this.node_array_a[i * 3] = node.pos.x
+      this.node_array_a[i * 3 + 1] = node.pos.y
       uint[i * 3 + 2] = node.color;
 
       let input = node.name;
@@ -375,7 +434,7 @@ export class SyntaxGraphEngine {
           let data = this.atlas.getGlyph(char);
 
           glyphs_f32[c + 0] = offset
-          glyphs_f32[c + 1] = 0
+          glyphs_f32[c + 1] = -data.y + 20
 
           let height = this.atlas.size;
 
@@ -402,11 +461,11 @@ export class SyntaxGraphEngine {
       }
     }
 
-    let { gl,  glyph_buffer  } = this;
+    let { gl, glyph_buffer } = this;
 
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.node_texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, 512, 512, 0, gl.RGB, gl.FLOAT, this.node_array);
+    gl.bindTexture(gl.TEXTURE_2D, this.node_texture_a);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, 512, 512, 0, gl.RGB, gl.FLOAT, this.node_array_a);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, glyph_buffer);
     gl.bufferData(gl.ARRAY_BUFFER, glyphs_f32, gl.DYNAMIC_DRAW);
@@ -448,7 +507,7 @@ export class SyntaxGraphEngine {
   }
 
   private setupGL() {
-    let { gl, node_program, line_program,  line_buffer, glyph_buffer, line_vao, text_vao, text_program, node_vao } = this;
+    let { gl, node_program, line_program, line_buffer, glyph_buffer, line_vao, text_vao, text_program, node_vao } = this;
     // Create base line shader for drawing circles
 
     {
@@ -584,6 +643,7 @@ uniform UIData {
   vec2 mouse_pos;
   vec2 screen_offset;
   float scale;
+  float t;
 };
 `
 
@@ -591,15 +651,16 @@ uniform UIData {
 let node_block = `
 
 uniform sampler2D uNodes;
+uniform sampler2D uNodesB;
 
 struct Node {
   vec2 pos;
   vec3 col;
 };
 
-Node get_node_data(float index) {
+Node get_node_data(float index, sampler2D nodes) {
   ivec2 i = ivec2(int(index) % 512, int(index) / 512);
-  vec4 node_data = texelFetch(uNodes, i, 0);
+  vec4 node_data = texelFetch(nodes, i, 0);
   Node node;
   node.pos = node_data.xy;
 
@@ -660,17 +721,18 @@ ${static_square2}
 ${ui_block}
 ${node_block}
 
-
 smooth out vec3 node_col;
-
 
 void main(){
 
-  Node node_a = get_node_data(points.x);
-  Node node_b = get_node_data(points.y);
+  Node node_a_1 = get_node_data(points.x, uNodes);
+  Node node_a_2 = get_node_data(points.x, uNodesB);
+  
+  Node node_b_1 = get_node_data(points.y, uNodes);
+  Node node_b_2 = get_node_data(points.y, uNodesB);
 
-  vec2 point1 = node_a.pos;
-  vec2 point2 = node_b.pos;
+  vec2 point1 = mix(node_a_2.pos, node_a_1.pos, t);
+  vec2 point2 = mix(node_b_2.pos, node_b_1.pos, t);
 
   vec2 static_pos = positions[gl_VertexID] ;
 
@@ -692,9 +754,9 @@ void main(){
   gl_Position = vec4((rot_pos + offset + screen_offset * 2.0) / screen_size * scale, 0.0, 1);
 
   if( color_select[gl_VertexID] ) {
-    node_col = node_a.col;
+    node_col = node_a_1.col;
   } else {
-    node_col = node_b.col;
+    node_col = node_b_1.col;
   }
 }
 `;
@@ -723,18 +785,21 @@ float diameter = 40.0;
 
 void main(){
 
-  Node node_a = get_node_data(float(gl_InstanceID));
-
+  Node node_a_1 = get_node_data(float(gl_InstanceID), uNodes);
+  Node node_a_2 = get_node_data(float(gl_InstanceID), uNodesB);
+  
+  vec2 node_pos = mix(node_a_2.pos, node_a_1.pos, t);
+\
   vec2 static_pos = positions[gl_VertexID];
  
   actual_point = static_pos;
   center_point = vec2(0, 0);
 
-  vec2 adjusted_pos = ((static_pos) * diameter + node_a.pos + screen_offset * 2.0) / screen_size * scale;
+  vec2 adjusted_pos = ((static_pos) * diameter + node_pos + screen_offset * 2.0) / screen_size * scale;
 
   gl_Position = vec4(adjusted_pos, 0.0, 1);
   
-  base_color = node_a.col;
+  base_color = node_a_1.col;
 }
 `
 
@@ -782,10 +847,13 @@ in vec2 uv;
 in vec2 uv_size;
 
 void main(){
-  Node node = get_node_data(pos_index);
+  Node nodeA = get_node_data(pos_index, uNodes);
+  Node nodeB = get_node_data(pos_index, uNodesB);
+
+  vec2 node_pos = mix(nodeB.pos, nodeA.pos, t);
 
   vec2 static_pos = positions[gl_VertexID];
-  gl_Position = vec4(((static_pos + vec2(1)) * 0.5 * vec2(1, -1) * dim + pos ) / screen_size + (screen_offset * 2.0 + node.pos) / screen_size * scale , 0.0, 1.0);
+  gl_Position = vec4(((static_pos + vec2(1)) * 0.5 * vec2(1, -1) * dim + pos ) / screen_size + (screen_offset * 2.0 + node_pos) / screen_size * scale , 0.0, 1.0);
   UV = ((static_pos / 2.0) + vec2(0.5)) * uv_size + uv ;
 }`;
 
