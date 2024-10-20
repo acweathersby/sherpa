@@ -1,0 +1,111 @@
+{ @; @RULES.iter#rule_function() @; }
+
+#rule_function {
+
+  #_{ JSON/Lisp-like construction functions ---------------------------- }
+
+  #type_MultiConvertNode {    
+    [ "merge", "@self.to.val", @self.from.() ]
+  }
+
+  #type_StrNode {
+    ["str", @self.init.()]
+  }
+
+  #type_NumNode {
+    match self.init {
+      & { 
+        ["num", @self.init.()]
+      }
+      { 
+        ["literal_num", @self.literal]  
+      }
+    }
+  }
+
+  #type_TokNode {
+    ["tok", @self.index]
+  }
+
+  #type_TokRuleNode {
+    ["tok"]
+  }
+
+  #type_TrimNode {
+    ["trim",  @self.init.(), @self.start, @self.end]
+  }
+
+  #type_SymNode{
+    ["sym",  @self.index]
+  }
+
+  #type_AddNode {
+    ["add",  @self.left.(), @self.right.()]
+  }
+
+  #type_MulNode {
+    ["mul",  @self.left.(), @self.right.()]
+  }
+
+  #type_SubNode {
+    ["sub",  @self.left.(), @self.right.()]
+  }
+
+  #type_DivNode {
+    ["div",  @self.left.(), @self.right.()]
+  }
+
+  #type_VecNode {
+    #vec_elements_initializers {
+      @self.() match _iter_last_ { False { , } } @; 
+    }
+
+    match self.init.#len {
+      0 {
+        ["vec"]
+      }
+      {
+        ["vec", @self.init.iter#vec_elements_initializers()]
+      }
+    }
+  }
+
+  #type_MapNode {
+    ["map", @self.left.(), @self.right.() ]
+  }
+
+  #type_BoolNode {
+
+    match self.init { 
+      Some { [ "bool", @self.init.() ] }
+      { [ "bool", false ] }
+    }
+  }
+
+  #_{ Initializers ---------------------------- }
+
+  #type_StructInitializer {
+    
+    #print_struct_assign { 
+      "@self.name":\  
+      match self.node {
+        Some { @self.node.()}
+        None { null }
+      }
+      match _iter_last_ { False { , } } @; 
+    }
+    {
+      "name":\ "@self.name",@;
+      "params":\ {
+        @self.props.iter#print_struct_assign()
+      }
+    }
+  }
+
+  #type_Initializer {
+    @self.node.()
+  }
+
+  "@self.id" : @self.init.() match _iter_last_ { False { , } } @;
+}
+

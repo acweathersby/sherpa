@@ -13,7 +13,7 @@ pub fn build_ast_source(
   db: &RadlrGrammarDatabase,
   script: &str,
   ast_path: std::path::PathBuf,
-  build_config: BuildConfig<'_>,
+  ast_struct_name: &str,
   extra_config_properties: &[(&str, &str)],
 ) -> RadlrResult<()> {
   let adb: AscriptDatabase = db.into();
@@ -24,7 +24,7 @@ pub fn build_ast_source(
   } else {
     let parser = OpenOptions::new().append(false).truncate(true).write(true).create(true).open(&ast_path)?;
 
-    adb.format(script, parser, 100, build_config.ast_struct_name, extra_config_properties)?.flush()?;
+    adb.format(script, parser, 100, ast_struct_name, extra_config_properties)?.flush()?;
   })
 }
 

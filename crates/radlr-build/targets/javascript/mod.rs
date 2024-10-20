@@ -23,7 +23,7 @@ pub fn build(db: &RadlrGrammarDatabase, build_config: BuildConfig, parser_config
   build_parser_source(db, PARSER_SCRIPT, bytecode, parser_path.clone(), parser_path)?;
 
   if build_config.build_ast {
-    build_ast_source(db, AST_SCRIPT, ast_path, build_config, &[])?;
+    build_ast_source(db, AST_SCRIPT, ast_path, build_config.ast_struct_name, &[])?;
   }
 
   Ok(())

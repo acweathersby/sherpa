@@ -42,7 +42,7 @@ pub fn build(db: &RadlrGrammarDatabase, build_config: BuildConfig, parser_config
   }
 
   if build_config.build_ast {
-    build_ast_source(db, SCRIPT, ast_path, build_config, &[("RUST_NODE_WRAPPER", "std::sync::Arc")])?;
+    build_ast_source(db, SCRIPT, ast_path, build_config.ast_struct_name, &[("RUST_NODE_WRAPPER", "std::sync::Arc")])?;
   }
 
   if build_config.rust.add_mod {

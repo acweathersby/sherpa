@@ -19,7 +19,7 @@ pub fn build(db: &RadlrGrammarDatabase, build_config: BuildConfig, parser_config
   let ast_path = out_dir.join("ast.ts");
 
   if build_config.build_ast {
-    build_ast_source(db, SCRIPT, ast_path, build_config, &[])?;
+    build_ast_source(db, SCRIPT, ast_path, build_config.ast_struct_name, &[])?;
   }
 
   Ok(())

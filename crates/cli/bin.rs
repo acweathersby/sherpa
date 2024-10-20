@@ -1,8 +1,9 @@
 use clap::{arg, value_parser, ArgMatches, Command};
+use radlr_ascript::AscriptDatabase;
 use radlr_build::BuildConfig;
-use radlr_core::{ParserConfig, RadlrError, RadlrResult};
+use radlr_core::{ParserConfig, RadlrError, RadlrGrammar, RadlrResult};
 use radlr_lab::run_lab_server;
-use std::path::PathBuf;
+use std::{io::BufWriter, path::PathBuf};
 
 #[derive(Clone, Debug)]
 enum ParserType {
@@ -36,6 +37,20 @@ pub fn command() -> ArgMatches {
       .value_parser(value_parser!(u16))
       .required(false)
     ))
+    .subcommand(
+      Command::new("build-ast").about("Output an ast file from a gramamr and an @@ ast script")  
+      .arg(
+        arg!( -a --atat <OUTPUT_PATH> "@@ ast script" )
+        .required(true)
+        .value_parser(value_parser!(PathBuf))
+      )
+      .arg(
+          arg!(<INPUTS>)
+              .help("Path(s) to source grammar files")
+              .required(true)
+              .value_parser(value_parser!(PathBuf))
+      )
+    )
     .subcommand(
       Command::new("build")
         .about("Constructs a parser from a Radlr grammar.")
@@ -114,9 +129,45 @@ fn main() -> RadlrResult<()> {
     RadlrResult::Ok(())
   } else if let Some(matches) = matches.subcommand_matches("lab-mode") {
     run_lab_server(matches.get_one::<u16>("port").cloned())
+  } else if let Some(matches) = matches.subcommand_matches("build-ast") {
+    process_atat_script(matches, pwd)
   } else {
     RadlrResult::Err(RadlrError::from("Command Not Recognized"))
   }
+}
+
+fn process_atat_script(matches: &ArgMatches, pwd: PathBuf) -> Result<(), RadlrError> {
+  let (_, out_dir, _lib_out_dir) = configure_matches(matches, &pwd);
+  let grammar_sources = matches.get_many::<PathBuf>("INPUTS").unwrap_or_default().cloned().collect::<Vec<_>>();
+  let name = matches.get_one::<String>("name").cloned();
+
+  let atat_path = matches.get_one::<PathBuf>("atat").cloned().unwrap_or_default();
+  let atat_path = atat_path.canonicalize().expect("Could not resolve path to {atat_path}");
+
+  let atat_script = std::fs::read_to_string(atat_path).expect("Failed to read {atat_path} as string");
+
+  let resolved_root_path = RadlrGrammar::resolve_to_grammar_file(&grammar_sources[0])?;
+  let db = RadlrGrammar::new().add_source(&resolved_root_path)?.build_db(resolved_root_path, Default::default())?;
+
+  let adb: AscriptDatabase = db.into();
+
+
+  if let Some(errors) = adb.get_errors() {
+    for error in errors {
+      eprintln!("{}", error);
+      return RadlrResult::Err(RadlrError::StaticText("Could not build AST database"));
+    }
+  } else {
+   //// let parser = OpenOptions::new().append(false).truncate(true).write(true).create(true).open(&ast_path)?;
+   
+   let buf = BufWriter::new(Vec::new());
+    let buf = adb.format(atat_script.as_str(), buf, 100, "ast_struct_name", &[])?;
+    println!("-------------------\n\n{}\n\n-------------------", String::from_utf8(buf.into_inner().expect("Could not read buffer bytes"))?);
+  };
+
+  //println!("Hello World {atat_script:?} {db:#?}");
+
+  Ok(())
 }
 
 fn process_build_command(matches: &ArgMatches, pwd: PathBuf) -> Result<(), RadlrError> {
