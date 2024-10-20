@@ -6,14 +6,66 @@ import * as radlr from "js/radlr/radlr_wasm";
 import { sleep } from "./pipeline";
 
 export type LabEngineEvents = {
-  "grammar_built": void
+  "grammar_db": radlr.JSGrammarDB,
   "parser_classification": string,
   "parser_bytecode_db": Uint8Array
   "compile_errors": RadlrError[]
 }
 
 abstract class LabEngine extends Eventable<LabEngineEvents> {
-  abstract compile_grammar(grammar_string: string, config: JSParserConfig): void;
+  grammar_db: radlr.JSGrammarDB | null = null
+
+  /** 
+     Compiles a parser_db from grammar string, emitting `parser_bytecode_db` if the parser compiled, or `compile_errors` 
+     with relevant errors otherwise
+  */
+  abstract build_parser(grammar_string: string, config: JSParserConfig): void;
+
+  /** 
+   Compiles a parser_db from grammar string, emitting `grammar_db` if the parser compiled, or `compile_errors` 
+   with relevant errors otherwise
+  */
+  async build_grammar(grammar: string, config: JSParserConfig) {
+
+    let soup = radlr.create_soup();
+
+    try {
+      soup.add_grammar(grammar, "main");
+
+      if (this.grammar_db)
+        this.grammar_db.free();
+
+      this.grammar_db = radlr.create_grammar_db("main", soup, config);
+
+      if (soup) soup.free();
+
+      this.emit("grammar_db", this.grammar_db);
+
+    } catch (e) {
+
+      if (soup) soup.free();
+
+      if (e instanceof radlr.PositionedErrors) {
+        let l = e.length;
+        let error;
+        let errors: RadlrError[] = [];
+
+        for (let i = 0; i < l; i++) {
+          if (error = new RadlrError(e.get_error_at(i))) {
+            errors.push(error);
+          }
+        }
+
+        e.free();
+
+        this.emit("compile_errors", errors);
+      } else {
+        console.error(e);
+        throw e;
+      }
+    }
+  }
+
 }
 
 export class WasmBytecodeCompiler extends LabEngine {
@@ -63,14 +115,10 @@ export class WasmBytecodeCompiler extends LabEngine {
       throw "Failed to connect to lab host";
     }
   }
-
-  // Compiles a grammar file, producing a grammar_db which is stored in the worker, and a bytecode
-  // parser that is transferred through the `parser_generated`  event, with data that should be imported
-  // into the host radlr instance.
-  async compile_grammar(grammar: string, config: JSParserConfig) {
+  async build_parser(grammar: string, config: JSParserConfig) {
     try {
       let client = await this.getClientConnection();
-      client.compile_grammar(grammar, config);
+      client.build_parser(grammar, config);
       return
     } catch (e) {
       console.error(e);
@@ -78,7 +126,7 @@ export class WasmBytecodeCompiler extends LabEngine {
 
     try {
       if (await this.worker.ready) {
-        this.worker.compile_grammar(grammar, config)
+        this.worker.build_parser(grammar, config)
       } else {
         throw "Could not establish a working connection"
       }
@@ -146,7 +194,7 @@ class LabEngineWorkerClient extends LabEngine {
     return this._ready
   }
 
-  async compile_grammar(grammar: string, config: JSParserConfig) {
+  async build_parser(grammar: string, config: JSParserConfig) {
     this.worker.postMessage({ type: "compile_grammar", eventData: { grammar, config: config.export() }, })
   }
 }
@@ -235,7 +283,7 @@ export class LabEngineWebsocketClient extends LabEngine {
     }
   }
 
-  async compile_grammar(grammar_string: string, config: JSParserConfig) {
+  async build_parser(grammar_string: string, config: JSParserConfig) {
     if (await this.connected) {
       let encoder = new TextEncoder;
       let min_len = (grammar_string.length * 2.5) | 0;

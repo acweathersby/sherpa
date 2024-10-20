@@ -131,16 +131,18 @@ export class ConfigNode extends PipelineNode {
   }
 }
 
-
 export class GrammarDBNode extends PipelineNode<{
   "loading": void
   "loaded": void
   "failed": RadlrError[],
+  "grammar_db": radlr.JSGrammarDB,
   "bytecode_db": radlr.JSBytecodeParserDB,
   "bytecode_ready": string,
-  "grammar-classification": string
+  "parser-classification": string
 }> {
   static worker_path: string = ""
+
+  grammar_string: string = ""
 
   parser_db: radlr.JSBytecodeParserDB | null = null;
   config: radlr.JSParserConfig | null = null;
@@ -155,17 +157,21 @@ export class GrammarDBNode extends PipelineNode<{
   constructor(...args: any[]) {
     super(...args);
 
-    this.compiler.addListener("grammar_built", () => {
-      console.log("Grammar Compiled");
+    this.compiler.addListener("grammar_db", grammar => {
+      this.emit("grammar_db", grammar);
+      // Compile the parser
+      if (this.config)
+        this.compiler.build_parser(this.grammar_string, this.config);
     });
 
     this.compiler.addListener("compile_errors", errors => {
+      console.log(errors);
       this.emit("failed", errors)
       this.disable()
     });
 
     this.compiler.addListener("parser_classification", classification => {
-      this.emit("grammar-classification", classification);
+      this.emit("parser-classification", classification);
     })
 
     this.compiler.addListener("parser_bytecode_db", bytecode_db_export => {
@@ -201,7 +207,12 @@ export class GrammarDBNode extends PipelineNode<{
     }
 
     this.emit("loading", void 0);
-    this.compiler.compile_grammar(data.InputNode, data.ConfigNode);
+
+    this.grammar_string = data.InputNode;
+    this.config = data.ConfigNode;
+
+    if (this.config)
+      this.compiler.build_grammar(this.grammar_string, this.config);
 
     return;
   }
@@ -218,6 +229,15 @@ export class GrammarDBNode extends PipelineNode<{
     this.load(compile_nonce, data)
   }
 }
+
+export class ParserDBNode extends PipelineNode<{
+  "loading": void
+  "loaded": void
+  "failed": RadlrError[],
+  "bytecode_db": radlr.JSBytecodeParserDB,
+  "bytecode_ready": string,
+  "parser-classification": string
+}> { }
 
 
 export type ReduceStruct = { rule_id: number, symbols: number, non_terminal_id: number, db: radlr.JSBytecodeParserDB };

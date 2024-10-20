@@ -55,7 +55,6 @@ function setupSetting() {
       port_input.input.value = getLocalValue(LocalStoreKeys.LocalRADLRPort)
       check_lab_host_connection(port_input.input.value, port_input);
     }
-
   }
 
   data_enable.on("checked", _ => {
@@ -247,6 +246,14 @@ function setupThemes(setting_panel: Element) {
 
     if (active_theme) {
       document.body.classList.add(active_theme);
+    }
+
+    let palette = document.querySelector("#palette")!;
+    for (const child of Array.from(palette.children)) {
+      let style = window.getComputedStyle(child)["backgroundColor"].matchAll(/^rgba?\((?:\s*([\d\.]+)\s*,?)+\)/g);
+
+
+      //console.log([...style], window.getComputedStyle(child)["backgroundColor"])
     }
 
     return {

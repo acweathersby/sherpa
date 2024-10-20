@@ -4,7 +4,7 @@ import radlr_init, * as radlr from "js/radlr/radlr_wasm";
 import { RadlrError } from "./error";
 import { LabEngineEvents } from "./lab_client"
 
-let grammar_db: radlr.JSParserDB | null = null;
+let grammar_db: radlr.JSGrammarDB | null = null;
 let states: radlr.JSIRParser | null = null;
 
 function emit<T extends keyof LabEngineEvents, A = LabEngineEvents[T]>(type: T, val: A, is_transferable: boolean = false) {
@@ -47,15 +47,11 @@ self.addEventListener('message', async function (event) {
 
       cfg = radlr.JSParserConfig.import(config);
 
-
       let optimize = true;
 
       soup = radlr.create_soup();
-
       soup.add_grammar(grammar, "main");
-      grammar_db = radlr.create_parse_db("main", soup, cfg);
-
-      emit("grammar_built", void 0)
+      grammar_db = radlr.create_grammar_db("main", soup, cfg);
 
       states = radlr.create_parser_states(grammar_db, optimize, cfg);
 

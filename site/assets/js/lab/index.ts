@@ -33,10 +33,10 @@ export async function init(compiler_worker_path: string) {
   parser_input_field.set_content_visible(true)
   parser_input_field.set_icon(`<i class="fa-solid fa-quote-left"></i>`);
 
-  let ast_field = nb.add_field(new NBContentField("AST Nodes"), -1);
+  let ast_field = nb.add_field(new NBContentField("AST Nodes"), 1);
   ast_field.set_icon(`<i class="fa-solid fa-share-nodes"></i>`);
 
-  let cst_field = nb.add_field(new NBContentField("CST Nodes"), 1);
+  let cst_field = nb.add_field(new NBContentField("CST Nodes"), -1);
   cst_field.set_icon(`<i class="fa-solid fa-sitemap"></i>`);
 
   let syntax_highlighting_field = nb.add_field(new NBContentField("Syntax Highlighting"), -1);
@@ -103,12 +103,14 @@ export async function init(compiler_worker_path: string) {
     grammar_classification.innerHTML = "error";
     for (const error of errors) {
       if (error.origin == radlr.ErrorOrigin.Grammar) {
-        //alert(error.msg);
         error_reporter.innerText = (`Unhandled Error: \n${radlr.ErrorOrigin[error.origin]}\n${error.msg}\n${error.line}:${error.col}`);
-        grammar_input_field.add_highlight(error.start_offset, error.end_offset, "red");
-        grammar_input_field.add_message(error.start_offset, error.end_offset, error.msg);
-      } else {
-        //alert(error.msg);
+        if (error.start_offset >= grammar_input_field.get_text().length) {
+          grammar_input_field.add_highlight(error.start_offset - 1, error.end_offset, "red");
+          grammar_input_field.add_message(error.start_offset - 1, error.end_offset, "Unexpected end of grammar");
+        } else {
+          grammar_input_field.add_highlight(error.start_offset, error.end_offset, "red");
+          grammar_input_field.add_message(error.start_offset, error.end_offset, error.msg);
+        }
       }
     }
     parser_info_field.set_content_visible(false);
@@ -116,7 +118,7 @@ export async function init(compiler_worker_path: string) {
     controls.setActive(false);
   })
 
-  grammar_pipeline_node.addListener("grammar-classification", classification => {
+  grammar_pipeline_node.addListener("parser-classification", classification => {
     grammar_classification.innerHTML = classification;
     controls.setActive(true);
   })

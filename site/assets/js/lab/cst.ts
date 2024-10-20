@@ -2,11 +2,7 @@ import { JSBytecodeParserDB, get_nonterminal_name_from_id } from "js/radlr/radlr
 import { NBContentField, NBEditorField } from "./notebook";
 import { Parser } from "./parser";
 import { GrammarDBNode } from "./pipeline";
-
-import { SigmaNodeEventPayload } from "sigma/dist/declarations/src/types";
 import { SyntaxGraphEngine } from "js/graph_sys";
-
-type Hooks = { on_node_enter: ((arg: SigmaNodeEventPayload) => void) | null };
 
 export function init(
   cst_field: NBContentField,
@@ -14,12 +10,8 @@ export function init(
   grammar_pipeline: GrammarDBNode,
 ) {
 
-  const hooks: Hooks = { on_node_enter: null }
   let pending = false;
-
-
   let engine = new SyntaxGraphEngine(<HTMLDivElement>cst_field.body);
-
   let input_string: string = "";
   let db: null | JSBytecodeParserDB = null;
 
@@ -28,7 +20,7 @@ export function init(
       pending = true;
       setTimeout(() => {
         pending = false;
-        run_ast_render(parser_input_field, input_string, db, engine, hooks)
+        run_cst_render(input_string, db, engine)
       }, 100)
     }
   }
@@ -58,7 +50,7 @@ export function init(
   });
 }
 
-function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecodeParserDB | null, renderer: SyntaxGraphEngine, hooks: Hooks) {
+function run_cst_render(input: string, db: JSBytecodeParserDB | null, renderer: SyntaxGraphEngine) {
   renderer.clearNodes();
   renderer.flip_nodes();
 
@@ -173,24 +165,14 @@ function run_ast_render(input_field: NBEditorField, input: string, db: JSBytecod
 
   map_positions(symbols, 0, positions, 0, []);
 
-  hooks.on_node_enter = node => {
-
-    let id = parseInt(node.node);
-    let [, , from, to] = positions[id];
-
-    input_field.remove_specific_character_classes("ast-node-target");
-    input_field.add_character_class(from, to, "ast-node-target");
-  }
-
-
   for (let i = 0; i < positions.length; i++) {
     let [x, y] = positions[i];
     let lvl = -y;
     //x -=  offsets[lvl]/ 2
     //x = (x / offsets[lvl] * 5) - (offsets[lvl] ) / 2
-
     renderer.updateNode(i, x * 800, y * 800);
   }
+
   renderer.update();
   renderer.draw();
 }

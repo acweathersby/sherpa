@@ -1,4 +1,5 @@
 use js_sys::{Array, ArrayBuffer, JsString, Number, Uint8Array};
+use radlr_ascript::AscriptDatabase;
 use radlr_bytecode::compile_bytecode;
 use radlr_core::{worker_pool::SingleThreadPool, RadlrGrammar, RadlrGrammarDatabase, *};
 use radlr_rust_runtime::{
@@ -10,7 +11,7 @@ use radlr_rust_runtime::{
     TableHeaderData,
   },
 };
-use std::{collections::HashMap, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, io::BufWriter, path::PathBuf, rc::Rc};
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -25,20 +26,59 @@ pub struct JSGrammarIdentities(pub(crate) Box<GrammarIdentities>);
 
 /// A Parser database derived from grammar defined in a JSSoup
 #[wasm_bindgen]
-pub struct JSParserDB(pub(crate) Box<RadlrGrammarDatabase>);
+pub struct JSGrammarDB(pub(crate) Box<RadlrGrammarDatabase>);
 
-impl AsRef<RadlrGrammarDatabase> for JSParserDB {
-  fn as_ref(&self) -> &RadlrGrammarDatabase {
-    &self.0
+#[wasm_bindgen]
+impl JSGrammarDB {
+  /// Maps a rule_id (integer) to a [begin(int), end(int)] pair marking
+  /// the substring of the rule's definition in the grammar  source
+  pub fn rule_id_to_grammar_offsets(&self, rule_id: u32) -> JsValue {
+    let rule_id: usize = rule_id as usize;
+    let db = self.0.get_internal();
+    if rule_id < db.rules().len() {
+      let rule = db.rule(rule_id.into());
+
+      let start = rule.tok.get_start() as u32;
+      let end = rule.tok.get_end() as u32;
+
+      let array = js_sys::Array::default();
+      array.push(&Number::from(start).into());
+      array.push(&Number::from(end).into());
+      array.into()
+    } else {
+      js_sys::Array::default().into()
+    }
+  }
+
+  /// Maps a nt_id (integer) to the name assigned to nonterminal
+  /// Returns an empty string if the nonterminal cannot be found.
+  pub fn nonterm_id_to_name(&self, nt_id: u32) -> String {
+    let nt_id: usize = nt_id as usize;
+    let db = self.0.get_internal();
+    if nt_id < db.parser_nonterms().len() {
+      db.nonterm_friendly_name(nt_id.into()).to_string(db.string_store())
+    } else {
+      Default::default()
+    }
+  }
+
+  /// Returns the ast generating JSON script for the grammar or any errors
+  /// encountered while generating the script.
+  pub fn get_ast_generating_script(&self) -> Result<String, PositionedErrors> {
+    let atat_json_script = include_str!("../../atat_scripts/ast/json.atat");
+    let ast_db: AscriptDatabase = (self.0.as_ref()).into();
+    if let Some(errors) = ast_db.get_errors() {
+      Err(PositionedErrors::from((&errors.to_vec(), ErrorOrigin::Grammar)))
+    } else {
+      let buf = BufWriter::new(Vec::new());
+      let buf = ast_db.format(atat_json_script, buf, 100, "", &[]).expect("ast script interpreter failed");
+      Ok(String::from_utf8(buf.into_inner().expect("Could not read buffer bytes")).expect("could derive string from buffer"))
+    }
   }
 }
 
-/// A Parser database derived from grammar defined in a JSSoup
-#[wasm_bindgen]
-pub struct JSParserGraph(pub(crate) Box<RadlrParseGraph>);
-
-impl AsRef<RadlrParseGraph> for JSParserGraph {
-  fn as_ref(&self) -> &RadlrParseGraph {
+impl AsRef<RadlrGrammarDatabase> for JSGrammarDB {
+  fn as_ref(&self) -> &RadlrGrammarDatabase {
     &self.0
   }
 }
@@ -170,22 +210,21 @@ pub fn create_soup() -> Result<JSRadlrGrammar, JsError> {
 /// Creates a parser db from a soup and a root grammar, or returns semantic
 /// errors.
 #[wasm_bindgen]
-pub fn create_parse_db(
+pub fn create_grammar_db(
   grammar_id: String,
   soup: &JSRadlrGrammar,
   config: &JSParserConfig,
-) -> Result<JSParserDB, PositionedErrors> {
+) -> Result<JSGrammarDB, PositionedErrors> {
   let grammar = soup.as_ref();
 
-  let parser_db =
-    grammar.build_db(&PathBuf::from(grammar_id), (*config).into()).map_err(|e| to_err(e, ErrorOrigin::ParserBuild))?;
+  let parser_db = grammar.build_db(&PathBuf::from(grammar_id), (*config).into()).map_err(|e| to_err(e, ErrorOrigin::Grammar))?;
 
-  Ok(JSParserDB(Box::new(parser_db)))
+  Ok(JSGrammarDB(Box::new(parser_db)))
 }
 
 /// Temporary simple AST output implementation.
 #[wasm_bindgen]
-pub fn create_rust_ast_output(js_db: &JSParserDB) -> Result<String, PositionedErrors> {
+pub fn create_rust_ast_output(js_db: &JSGrammarDB) -> Result<String, PositionedErrors> {
   let db = &js_db.0;
 
   Ok(String::default())
@@ -244,7 +283,7 @@ fn read_primitive_at_offset<T: Copy + Default>(buffer: &[u8], offset: &mut usize
 ///
 #[wasm_bindgen]
 pub fn create_parser_states(
-  js_db: &JSParserDB,
+  js_db: &JSGrammarDB,
   optimize_states: bool,
   config: &JSParserConfig,
 ) -> Result<JSIRParser, PositionedErrors> {
@@ -303,7 +342,7 @@ pub fn get_debug_symbol_ids(address: u32, pkg: &JSBytecodeParserDB) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn get_debug_state_name(address: u32, pkg: &JSBytecodeParserDB, db: &JSParserDB) -> JsValue {
+pub fn get_debug_state_name(address: u32, pkg: &JSBytecodeParserDB, db: &JSGrammarDB) -> JsValue {
   let bc_db = pkg.0.clone();
 
   if let Some(name) = bc_db.address_to_state_name.get(&(address)) {
@@ -363,14 +402,14 @@ pub fn get_state_source_string(name: String, states: &JSIRParser) -> JsValue {
 
 /// Givin an symbol index, returns the symbol's friendly name.
 #[wasm_bindgen]
-pub fn get_symbol_name_from_id(id: u32, db: &JSParserDB) -> JsValue {
+pub fn get_symbol_name_from_id(id: u32, db: &JSGrammarDB) -> JsValue {
   let db = db.as_ref().get_internal();
   db.token(id.into()).name.to_string(db.string_store()).into()
 }
 
 /// Returns a list of entrypoint names
 #[wasm_bindgen]
-pub fn get_entry_names(db: &JSParserDB) -> JsValue {
+pub fn get_entry_names(db: &JSGrammarDB) -> JsValue {
   let db = db.as_ref().get_internal();
   db.entry_points().iter().map(|ep| JsValue::from(ep.entry_name.to_string(db.string_store()))).collect::<Array>().into()
 }
@@ -403,7 +442,7 @@ pub fn get_rule_location(rule_id: u32, db: &JSBytecodeParserDB) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub fn get_nonterminal_names_from_db(db: &JSParserDB) -> JsValue {
+pub fn get_nonterminal_names_from_db(db: &JSGrammarDB) -> JsValue {
   let db = db.as_ref().get_internal();
 
   let array = Array::new();
@@ -446,7 +485,7 @@ impl From<ReductionType> for JSReductionType {
 }
 
 #[wasm_bindgen]
-pub fn get_rule_reduce_type(id: u32, db: &JSParserDB) -> JSReductionType {
+pub fn get_rule_reduce_type(id: u32, db: &JSGrammarDB) -> JSReductionType {
   let db = db.as_ref().get_internal();
   if (id as usize) < db.rules().len() {
     JSReductionType::from(db.get_reduce_type(DBRuleKey::from(id)))
