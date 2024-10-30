@@ -17,6 +17,7 @@ pub struct AscriptStruct {
   /// The node itself or one of its properties requires a template specifier
   /// for TK
   pub(crate) requires_template: bool,
+  pub(crate) initialized:       bool,
 }
 
 formatted_typed_ordered_map!(AscriptStructProps, StringId, AscriptProp, "AscriptStructProps");

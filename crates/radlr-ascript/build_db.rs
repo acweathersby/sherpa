@@ -10,9 +10,8 @@ use radlr_core::{
   CachedString,
   DBNonTermKey,
   DBRuleKey,
-  GrammarIdentities,
-  Item,
   GrammarDatabase,
+  Item,
   RadlrError,
   RadlrGrammarDatabase,
   RadlrResult,
@@ -35,20 +34,24 @@ pub fn build_database(db: RadlrGrammarDatabase) -> AscriptDatabase {
   let db = adb.db.clone();
   let db = &db;
 
-  extract_structs(db, &mut adb);
+  construct_initializers(db, &mut adb);
 
   let nonterm_types = resolve_nonterm_types(db, &mut adb);
 
   if adb.errors.is_empty() {
-    match resolve_nonterm_values(&mut adb, nonterm_types) {
+    match resolve_nonterm_values(&mut adb, &nonterm_types) {
       Ok(()) => {
-        resolve_multi_types(&mut adb);
+        fill_struct_rules(&mut adb, &nonterm_types);
 
-        fill_out_rules(&mut adb);
+        finalize_structs(&mut adb, &nonterm_types);
 
         resolve_struct_definitions(&mut adb);
 
-        collect_types(&mut adb);
+        resolve_multi_types(&mut adb);
+
+        if let Err(err) = collect_types(&mut adb) {
+          adb.errors.push(RadlrError::Text(err));
+        }
       }
       Err(missing_nonterm_definition) => adb.errors.push(RadlrError::Text(format!(
         "Could not resolve Node type for Non-Term [{}]",
@@ -60,62 +63,16 @@ pub fn build_database(db: RadlrGrammarDatabase) -> AscriptDatabase {
   adb
 }
 
-fn resolve_multi_types(adb: &mut AscriptDatabase) {
-  // Flatten multi types
-  for i in 0..adb.multi_types.len() {
-    let mut accessed_types = adb.multi_types.iter().map(|_| false).collect::<Vec<_>>();
-    let mut outgoing_set = BTreeSet::new();
-    let mut queue = VecDeque::from_iter(adb.multi_types[i].1.iter().cloned());
-
-    while let Some(ty) = queue.pop_front() {
-      if let AscriptScalarType::Multi(index) = ty {
-        if !accessed_types[index] {
-          accessed_types[index] = true;
-          queue.extend(adb.multi_types[index].1.iter().cloned())
-        }
-      } else {
-        outgoing_set.insert(ty);
+fn finalize_structs(adb: &mut AscriptDatabase, nonterm_types: &OrderedMap<DBNonTermKey, AscriptType>) {
+  for initializer_index in 0..adb.rules.0.len() {
+    match &adb.rules.0[initializer_index] {
+      AscriptRule::Struct(..) => {
+        post_process_struct_initializer(adb, initializer_index, nonterm_types);
       }
-    }
-
-    adb.multi_types[i].1 = outgoing_set;
-    adb.multi_types[i].2 =
-      accessed_types.iter().enumerate().filter_map(|(index, used)| (index != i && *used).then_some(index)).collect();
-  }
-
-  for i in 0..adb.multi_type_lu.len() {
-    for j in 0..adb.multi_type_lu.len() {
-      if j == i {
-        continue;
-      };
-
-      if adb.multi_type_lu[j] != j {
-        continue;
-      }
-
-      let target = &adb.multi_types[i];
-      let other = &adb.multi_types[j];
-
-      if other.0 < target.0 && other.1 == target.1 {
-        assert_eq!(other.1.len(), target.1.len());
-
-        let converts = adb.multi_types[i].2.clone();
-        adb.multi_types[j].2.extend(converts);
-
-        // Remap all multis that mapped to i to j
-        for k in adb.multi_type_lu.iter_mut() {
-          *k = if *k == i { j } else { *k }
-        }
-      }
-    }
-
-    for (i, k) in adb.multi_type_lu.iter().enumerate() {
-      adb.multi_types[*k].2.remove(&i);
+      _ => {}
     }
   }
-}
 
-fn fill_out_rules(adb: &mut AscriptDatabase) {
   let AscriptDatabase { rules, structs, db, .. } = adb;
 
   for rule in &mut rules.0 {
@@ -132,9 +89,14 @@ fn fill_out_rules(adb: &mut AscriptDatabase) {
                   ast:               None,
                   g_id:              db.root_grammar_id,
                   rule_local_string: Default::default(),
+                  optional:          prop.is_optional,
                 });
               }
-              std::collections::btree_map::Entry::Occupied(_) => {}
+              std::collections::btree_map::Entry::Occupied(mut init) => {
+                let init = init.get_mut();
+                init.optional = prop.is_optional;
+                init.ty = prop.ty;
+              }
             }
           }
         }
@@ -144,40 +106,29 @@ fn fill_out_rules(adb: &mut AscriptDatabase) {
   }
 }
 
-#[allow(unused)]
-fn add_token_nodes(adb: &mut AscriptDatabase) {
-  let AscriptDatabase { rules, structs, types, db, .. } = adb;
+fn fill_struct_rules(adb: &mut AscriptDatabase, nonterm_types: &OrderedMap<DBNonTermKey, AscriptType>) {
+  let db = adb.db.clone();
 
-  let prop_name = StringId("tok".intern(db.string_store()));
-  let tok_type = AscriptType::Scalar(AscriptScalarType::Token);
-  for (_, s) in &mut structs.0 {
-    if !s.has_token {
-      s.has_token = true;
-      s.properties.insert(prop_name, AscriptProp {
-        is_optional: false,
-        name:        "tok".to_string(),
-        ty:          tok_type,
-        tok:         Default::default(),
-        g_id:        db.root_grammar_id,
-      });
-    }
-  }
+  for initializer_index in 0..adb.rules.0.len() {
+    match &adb.rules.0[initializer_index] {
+      AscriptRule::Struct(_, strct_initializer) => {
+        let rule = &db.rules()[strct_initializer.rule_index];
+        let db_nonterm_key = rule.nonterm;
+        let rule = &rule.rule;
 
-  for rule in &mut rules.0 {
-    match rule {
-      AscriptRule::Struct(_, init) => match init.props.0.entry(prop_name) {
-        std::collections::btree_map::Entry::Vacant(prop) => {
-          prop.insert(Initializer {
-            ty:                tok_type,
-            name:              prop_name,
-            output_graph:      Some(GraphNode::TokRule(AscriptType::Scalar(AscriptScalarType::Token))),
-            ast:               None,
-            g_id:              db.root_grammar_id,
-            rule_local_string: Default::default(),
-          });
-        }
-        std::collections::btree_map::Entry::Occupied(_) => {}
-      },
+        match &rule.ast {
+          Some(ast) => match ast {
+            ASTToken::Defined(ast) => match &ast.ast {
+              ASTNode::AST_Struct(strct) => {
+                process_struct_initializer(adb, strct, initializer_index, nonterm_types, db_nonterm_key);
+              }
+              _ => unreachable!(),
+            },
+            _ => unreachable!(),
+          },
+          _ => unreachable!(),
+        };
+      }
       _ => {}
     }
   }
@@ -254,8 +205,269 @@ fn resolve_struct_definitions(adb: &mut AscriptDatabase) {
   }
 }
 
+pub fn process_struct_initializer(
+  adb: &mut AscriptDatabase,
+  ast_struct: &AST_Struct,
+  initializer_index: usize,
+  nonterm_types: &OrderedMap<DBNonTermKey, AscriptType>,
+  db_nt_key: DBNonTermKey,
+) {
+  let db = adb.db.clone();
+  let db = db.as_ref();
+  let g_id = adb.db.root_grammar_id;
+  let s_store = adb.db.string_store();
+  let AscriptDatabase { rules, structs, multi_type_lu, multi_types, .. } = adb;
+
+  let struct_initializer = match &mut rules[initializer_index] {
+    AscriptRule::Struct(_, init) => init,
+    _ => unreachable!(),
+  };
+
+  let rule_index = struct_initializer.rule_index;
+
+  let item = Item::from((DBRuleKey::from(rule_index), db));
+
+  let name = &ast_struct.ty[2..];
+  let struct_id = StringId(name.intern(s_store));
+
+  let mut seen: BTreeSet<StringId> = OrderedSet::new();
+
+  let ascript_struct = structs.get_mut(&struct_id).expect("Should have been built in `construct_initializers`");
+  let existing_struct = ascript_struct.initialized;
+  ascript_struct.initialized = true;
+
+  for prop in &ast_struct.props {
+    let (name, prop_name, ast, is_token, tok) = match prop {
+      ASTNode::AST_Property(prop) => {
+        let prop_name: StringId = prop.id.as_str().into();
+        (prop.id.as_str().to_string(), prop_name, prop.value.clone(), false, prop.tok.clone())
+      }
+      ast @ ASTNode::AST_Token(..) => {
+        let tok_id = StringId("tok".intern(s_store));
+        ("tok".to_string(), tok_id, Some(ast.clone()), true, Default::default())
+      }
+      _ => unreachable!(),
+    };
+    seen.insert(prop_name);
+
+    let (ty, nt_key) = match &ast {
+      None => {
+        // the property is a named value, so we may be able to resolve this
+        // with a symbol reference name lookup.
+        match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| sym_ref.annotation == prop_name.0) {
+          Some(item) => {
+            (graph_type_from_item(item, &adb.db, nonterm_types, None).0, item.nonterm_index_at_sym_parser(db).unwrap_or_default())
+          }
+          None => match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| match sym_ref.id {
+            radlr_core::SymbolId::DBNonTerminal { key } => db.nonterm_friendly_name(key) == prop_name.0,
+            _ => false,
+          }) {
+            Some(item) => (
+              graph_type_from_item(item, &adb.db, nonterm_types, None).0,
+              item.nonterm_index_at_sym_parser(db).unwrap_or_default(),
+            ),
+            None => (AscriptType::Undefined, db_nt_key),
+          },
+        }
+      }
+      Some(node) => (
+        get_graph_type(
+          GraphResolveData {
+            db,
+            item,
+            node,
+            nonterm_types: &nonterm_types,
+            default_nonterm_type: None,
+          },
+          &mut GraphMutData {
+            selected_indices: &mut HashSet::new(),
+            multi_indices:    multi_type_lu,
+            multi_maps:       multi_types,
+          },
+          Default::default(),
+        )
+        .expect("Could not resolve prop type"),
+        db_nt_key,
+      ),
+    };
+
+    struct_initializer.props.insert(prop_name, Initializer {
+      ty,
+      name: prop_name,
+      output_graph: None,
+      ast,
+      g_id,
+      rule_local_string: Default::default(),
+      optional: false,
+    });
+
+    if is_token {
+      ascript_struct.has_token = true;
+    }
+
+    match ascript_struct.properties.get_mut(&prop_name) {
+      Some(ast_prop) => {
+        if ty.is_unknown() {
+          ast_prop.is_optional = true;
+        } else {
+          ast_prop.ty =
+            get_resolved_type(&ast_prop.ty, &ty, multi_type_lu, multi_types, nt_key).expect("Could not resolve prop type");
+        }
+      }
+      None => {
+        let mut ast_prop = AscriptProp { is_optional: false, name, tok, ty, g_id };
+        if existing_struct {
+          ast_prop.is_optional = true;
+        }
+        ascript_struct.properties.insert(prop_name, ast_prop);
+      }
+    }
+  }
+
+  for (name, ast_prop) in structs.get_mut(&struct_id).unwrap().properties.iter_mut() {
+    if !seen.contains(name) {
+      ast_prop.is_optional |= true;
+    }
+  }
+}
+
+pub fn post_process_struct_initializer(
+  adb: &mut AscriptDatabase,
+  initializer_index: usize,
+  nonterm_types: &OrderedMap<DBNonTermKey, AscriptType>,
+) {
+  let db = adb.db.clone();
+  let db = db.as_ref();
+  let AscriptDatabase { rules, structs, multi_type_lu, multi_types, .. } = adb;
+
+  let struct_initializer = match &mut rules[initializer_index] {
+    AscriptRule::Struct(_, init) => init,
+    _ => unreachable!(),
+  };
+
+  let rule_index = struct_initializer.rule_index;
+
+  let item = Item::from((DBRuleKey::from(rule_index), db));
+  let struct_name: StringId = struct_initializer.name;
+
+  for (prop_name, init) in struct_initializer.props.iter_mut().rev() {
+    let (mut node, rule_tok) = match &init.ast {
+      Some(node) => (
+        create_graph_node(
+          GraphResolveData {
+            db,
+            item,
+            node: init.ast.as_ref().unwrap(),
+            nonterm_types: &nonterm_types,
+            default_nonterm_type: None,
+          },
+          &mut GraphMutData {
+            selected_indices: &mut HashSet::new(),
+            multi_indices:    multi_type_lu,
+            multi_maps:       multi_types,
+          },
+          Default::default(),
+        )
+        .expect("Could not create graph"),
+        node.to_token(),
+      ),
+      None => {
+        // the property is a named value, so we may be able to resolve this
+        // with a symbol reference name lookup.
+
+        let node = match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| sym_ref.annotation == prop_name.0) {
+          Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, &mut HashSet::new(), None).expect("Uknown error"),
+          None => match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| match sym_ref.id {
+            radlr_core::SymbolId::DBNonTerminal { key } => db.nonterm_friendly_name(key) == prop_name.0,
+            _ => false,
+          }) {
+            Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, &mut HashSet::new(), None).expect("Uknown error"),
+            None => GraphNode::Undefined(AscriptType::Undefined),
+          },
+        };
+
+        (node, Default::default())
+      }
+    };
+
+    if !node.get_type().is_unknown() {
+      if let Some(archetype_struct) = structs.get_mut(&struct_name) {
+        if let Some(a_prop) = archetype_struct.properties.get_mut(prop_name) {
+          let rule_prop_type = node.get_type();
+
+          match (&a_prop.ty, rule_prop_type, a_prop.ty == *rule_prop_type) {
+            (_, _, true) => {}
+            (_, AscriptType::Undefined, _) => {
+              a_prop.is_optional = true;
+            }
+            (AscriptType::Undefined, ..) => {
+              a_prop.tok = rule_tok;
+              a_prop.g_id = init.g_id;
+            }
+            (AscriptType::Scalar(AscriptScalarType::Multi(..)), rule_ty, ..) if !rule_ty.is_unknown() => {
+              if a_prop.ty.is_multi() && node.get_type().get_multi_type_index() != a_prop.ty.get_multi_type_index() {
+                node = GraphNode::MultiConvert(Rc::new(node.clone()), a_prop.ty);
+              }
+            }
+            _ => {}
+          }
+
+          init.ty = *node.get_type();
+        }
+      }
+
+      match node {
+        GraphNode::Undefined(_) => {}
+        node => {
+          init.output_graph = Some(node);
+        }
+      }
+    }
+  }
+}
+
+#[allow(unused)]
+fn add_token_nodes(adb: &mut AscriptDatabase) {
+  let AscriptDatabase { rules, structs, types, db, .. } = adb;
+
+  let prop_name = StringId("tok".intern(db.string_store()));
+  let tok_type = AscriptType::Scalar(AscriptScalarType::Token);
+  for (_, s) in &mut structs.0 {
+    if !s.has_token {
+      s.has_token = true;
+      s.properties.insert(prop_name, AscriptProp {
+        is_optional: false,
+        name:        "tok".to_string(),
+        ty:          tok_type,
+        tok:         Default::default(),
+        g_id:        db.root_grammar_id,
+      });
+    }
+  }
+
+  for rule in &mut rules.0 {
+    match rule {
+      AscriptRule::Struct(_, init) => match init.props.0.entry(prop_name) {
+        std::collections::btree_map::Entry::Vacant(prop) => {
+          prop.insert(Initializer {
+            ty:                tok_type,
+            name:              prop_name,
+            output_graph:      Some(GraphNode::TokRule(AscriptType::Scalar(AscriptScalarType::Token))),
+            ast:               None,
+            g_id:              db.root_grammar_id,
+            rule_local_string: Default::default(),
+            optional:          false,
+          });
+        }
+        std::collections::btree_map::Entry::Occupied(_) => {}
+      },
+      _ => {}
+    }
+  }
+}
+
 /// Collect non-struct type information
-fn collect_types(adb: &mut AscriptDatabase) {
+fn collect_types(adb: &mut AscriptDatabase) -> Result<(), String> {
   let AscriptDatabase { rules, structs, types, multi_type_lu, .. } = adb;
 
   for (_, structure) in &structs.0 {
@@ -284,12 +496,66 @@ fn collect_types(adb: &mut AscriptDatabase) {
 
           add_to_type_list(ty, types, multi_type_lu);
         }
-        None => {
-          panic!("GraphNode should be resolved");
-        }
+        None => return Err("Graph node could not be resolved".to_string()),
       },
 
       _ => {}
+    }
+  }
+
+  Ok(())
+}
+fn resolve_multi_types(adb: &mut AscriptDatabase) {
+  // Flatten multi types
+  for i in 0..adb.multi_types.len() {
+    let mut accessed_types = adb.multi_types.iter().map(|_| false).collect::<Vec<_>>();
+    let mut outgoing_set = BTreeSet::new();
+    let mut queue = VecDeque::from_iter(adb.multi_types[i].1.iter().cloned());
+
+    while let Some(ty) = queue.pop_front() {
+      if let AscriptScalarType::Multi(index) = ty {
+        if !accessed_types[index] {
+          accessed_types[index] = true;
+          queue.extend(adb.multi_types[index].1.iter().cloned())
+        }
+      } else {
+        outgoing_set.insert(ty);
+      }
+    }
+
+    adb.multi_types[i].1 = outgoing_set;
+    adb.multi_types[i].2 =
+      accessed_types.iter().enumerate().filter_map(|(index, used)| (index != i && *used).then_some(index)).collect();
+  }
+
+  for i in 0..adb.multi_type_lu.len() {
+    for j in 0..adb.multi_type_lu.len() {
+      if j == i {
+        continue;
+      };
+
+      if adb.multi_type_lu[j] != j {
+        continue;
+      }
+
+      let target = &adb.multi_types[i];
+      let other = &adb.multi_types[j];
+
+      if other.0 < target.0 && other.1 == target.1 {
+        assert_eq!(other.1.len(), target.1.len());
+
+        let converts = adb.multi_types[i].2.clone();
+        adb.multi_types[j].2.extend(converts);
+
+        // Remap all multis that mapped to i to j
+        for k in adb.multi_type_lu.iter_mut() {
+          *k = if *k == i { j } else { *k }
+        }
+      }
+    }
+
+    for (i, k) in adb.multi_type_lu.iter().enumerate() {
+      adb.multi_types[*k].2.remove(&i);
     }
   }
 }
@@ -326,29 +592,37 @@ fn add_to_type_list(ty: AscriptType, types: &mut AscriptTypes, multi_i: &mut Vec
   ty
 }
 
-pub fn extract_structs(db: &GrammarDatabase, adb: &mut AscriptDatabase) {
+pub fn construct_initializers(db: &GrammarDatabase, adb: &mut AscriptDatabase) {
   for (id, db_rule) in db.rules().iter().enumerate().filter(|(_, r)| !r.is_scanner) {
     let rule = &db_rule.rule;
     let g_id = db_rule.rule.g_id;
 
     let ast_rule = match &rule.ast {
       None => AscriptRule::LastSymbol(id, Initializer {
-        ty: AscriptType::Undefined,
-        name: Default::default(),
-        output_graph: None,
-        ast: None,
         g_id,
         rule_local_string: rule.tok.to_string().intern(db.string_store()),
+        ..Default::default()
       }),
       Some(ast) => match ast {
         ASTToken::Defined(ast) => match &ast.ast {
-          ASTNode::AST_Struct(strct) => match process_struct_node(adb, strct, g_id) {
-            Ok(struct_initializer) => AscriptRule::Struct(id, struct_initializer),
-            Err(err) => {
-              adb.errors.push(err);
-              AscriptRule::Invalid(id)
-            }
-          },
+          ASTNode::AST_Struct(strct) => {
+            let name = &strct.ty[2..];
+            let struct_id = StringId(name.intern(db.string_store()));
+            let struct_init =
+              AscriptRule::Struct(id, StructInitializer { name: struct_id, rule_index: id, ..Default::default() });
+
+            adb.structs.entry(struct_id).or_insert_with(|| AscriptStruct {
+              id:                struct_id,
+              name:              name.to_string(),
+              properties:        Default::default(),
+              has_token:         false,
+              requires_template: false,
+              initialized:       false,
+            });
+
+            struct_init
+          }
+
           ASTNode::AST_Statement(stmt) => AscriptRule::Expression(id, Initializer {
             ty: AscriptType::Undefined,
             name: Default::default(),
@@ -356,24 +630,19 @@ pub fn extract_structs(db: &GrammarDatabase, adb: &mut AscriptDatabase) {
             ast: Some(stmt.expression.clone()),
             g_id,
             rule_local_string: rule.tok.to_string().intern(db.string_store()),
+            optional: false,
           }),
           _ => unreachable!(),
         },
         ASTToken::ListEntry(_) => AscriptRule::ListInitial(id, Initializer {
-          ty: AscriptType::Undefined,
-          name: Default::default(),
-          output_graph: None,
-          ast: None,
           g_id,
           rule_local_string: rule.tok.to_string().intern(db.string_store()),
+          ..Default::default()
         }),
         ASTToken::ListIterate(_) => AscriptRule::ListContinue(id, Initializer {
-          ty: AscriptType::Undefined,
-          name: Default::default(),
-          output_graph: None,
-          ast: None,
           g_id,
           rule_local_string: rule.tok.to_string().intern(db.string_store()),
+          ..Default::default()
         }),
       },
     };
@@ -393,135 +662,6 @@ pub fn extract_structs(db: &GrammarDatabase, adb: &mut AscriptDatabase) {
 
     adb.rules.push(ast_rule);
   }
-
-  #[allow(irrefutable_let_patterns)]
-  if let AscriptDatabase { structs, rules, .. } = adb {
-    for rule in rules.iter_mut() {
-      match rule {
-        AscriptRule::Struct(_, rule) => {
-          if let Some(s) = structs.get(&rule.name) {
-            if s.properties.len() != rule.props.len() {
-              rule.complete = false;
-            } else {
-              rule.complete = true;
-            }
-          } else {
-            unreachable!()
-          }
-        }
-        _ => {}
-      }
-    }
-  }
-}
-
-pub fn process_struct_node(
-  adb: &mut AscriptDatabase,
-  strct: &AST_Struct,
-  g_id: GrammarIdentities,
-) -> RadlrResult<StructInitializer> {
-  let s_store = adb.db.string_store();
-  let name = &strct.ty[2..];
-  let struct_id = StringId(name.intern(s_store));
-
-  let mut initializer = StructInitializer {
-    name:              struct_id,
-    props:             Default::default(),
-    complete:          false,
-    has_token:         false,
-    rule_local_string: strct.tok.to_string().intern(s_store),
-  };
-
-  let mut seen: BTreeSet<StringId> = OrderedSet::new();
-  let mut existing_struct = true;
-
-  let ast_struct = adb.structs.entry(struct_id).or_insert_with(|| {
-    existing_struct = false;
-
-    AscriptStruct {
-      id:                struct_id,
-      name:              name.to_string(),
-      properties:        Default::default(),
-      has_token:         false,
-      requires_template: false,
-    }
-  });
-
-  for prop in &strct.props {
-    match prop {
-      ASTNode::AST_Property(prop) => {
-        let prop_name: StringId = prop.id.as_str().into();
-        let mut ast_prop = AscriptProp {
-          is_optional: false,
-          name: prop.id.to_string(),
-          tok: prop.tok.clone(),
-          ty: AscriptType::Undefined,
-          g_id,
-        };
-
-        seen.insert(prop_name);
-
-        match ast_struct.properties.get_mut(&prop_name) {
-          Some(..) => {}
-          None => {
-            if existing_struct {
-              ast_prop.is_optional = true;
-            }
-            ast_struct.properties.insert(prop_name, ast_prop);
-          }
-        }
-
-        initializer.props.insert(StringId(prop.id.to_string().intern(s_store)), Initializer {
-          ty: AscriptType::Undefined,
-          name: prop_name,
-          output_graph: None,
-          ast: prop.value.clone(),
-          g_id,
-          rule_local_string: Default::default(),
-        });
-      }
-      ast @ ASTNode::AST_Token(..) => {
-        let tok_id = StringId("tok".intern(s_store));
-        initializer.props.insert(tok_id, Initializer {
-          ty: AscriptType::Undefined,
-          name: tok_id,
-          output_graph: None,
-          ast: Some(ast.clone()),
-          g_id,
-          rule_local_string: Default::default(),
-        });
-
-        let mut ast_prop = AscriptProp {
-          is_optional: false,
-          name: "tok".to_string(),
-          tok: Default::default(),
-          ty: AscriptType::Undefined,
-          g_id,
-        };
-
-        match ast_struct.properties.get_mut(&tok_id) {
-          Some(..) => {}
-          None => {
-            if existing_struct {
-              ast_prop.is_optional = true;
-            }
-            ast_struct.properties.insert(tok_id, ast_prop);
-          }
-        }
-
-        ast_struct.has_token = true;
-      }
-      _ => {}
-    }
-  }
-
-  for (name, prop) in adb.structs.get_mut(&struct_id).unwrap().properties.iter_mut() {
-    if !seen.contains(name) {
-      prop.is_optional |= true;
-    }
-  }
-
-  Ok(initializer)
 }
 
 /// Derives the AST types of all parser NonTerminals.
@@ -596,8 +736,7 @@ pub fn resolve_nonterm_types(db: &GrammarDatabase, adb: &mut AscriptDatabase) ->
     let ty = match &adb.rules.get(rule_index) {
       Some(AscriptRule::Invalid(..)) => AscriptType::Undefined,
       Some(AscriptRule::Struct(_, id)) => AscriptType::Scalar(AscriptScalarType::Struct(
-        id.name,
-        adb.structs.get(&id.name).map(|a| a.properties.len() == 0).unwrap_or_default(),
+        id.name, false, //adb.structs.get(&id.name).map(|a| a.properties.len() == 0).unwrap_or_default(),
       )),
       Some(AscriptRule::LastSymbol(..)) => match graph_type_from_item(item.to_penultimate(), db, &resolved_nonterms, None) {
         (ty, _) => ty,
@@ -673,7 +812,7 @@ pub fn resolve_nonterm_types(db: &GrammarDatabase, adb: &mut AscriptDatabase) ->
 
 fn resolve_nonterm_values(
   adb: &mut AscriptDatabase,
-  nonterm_types: OrderedMap<DBNonTermKey, AscriptType>,
+  nonterm_types: &OrderedMap<DBNonTermKey, AscriptType>,
 ) -> Result<(), DBNonTermKey> {
   let AscriptDatabase { structs, rules, errors, multi_type_lu, multi_types, .. } = adb;
   let db = adb.db.clone();
@@ -803,157 +942,6 @@ fn resolve_nonterm_values(
         struct_rules.entry(struct_name).or_default().insert((rule_index, nt_key));
       }
       _r => todo!("handle rule {{_r:?}}"),
-    }
-  }
-
-  for (_, struct_rules) in struct_rules {
-    for (index, db_nt_key) in struct_rules.iter().map(|i| *i) {
-      let item = Item::from((DBRuleKey::from(index), db));
-      let ast_rule = &mut rules[index];
-
-      match ast_rule {
-        AscriptRule::Struct(_, rule_struct) => {
-          let struct_name: StringId = rule_struct.name;
-          for (prop_name, init) in rule_struct.props.iter_mut().rev() {
-            let (ty, nt_key) = match &init.ast {
-              None => {
-                // the property is a named value, so we may be able to resolve this
-                // with a symbol refernce name lookup.
-
-                match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| sym_ref.annotation == prop_name.0) {
-                  Some(item) => (
-                    graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
-                    item.nonterm_index_at_sym_parser(db).unwrap_or_default(),
-                  ),
-                  None => match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| match sym_ref.id {
-                    radlr_core::SymbolId::DBNonTerminal { key } => db.nonterm_friendly_name(key) == prop_name.0,
-                    _ => false,
-                  }) {
-                    Some(item) => (
-                      graph_type_from_item(item, &adb.db, &nonterm_types, None).0,
-                      item.nonterm_index_at_sym_parser(db).unwrap_or_default(),
-                    ),
-                    None => (AscriptType::Undefined, db_nt_key),
-                  },
-                }
-              }
-              Some(node) => (
-                get_graph_type(
-                  GraphResolveData {
-                    db,
-                    item,
-                    node,
-                    nonterm_types: &nonterm_types,
-                    default_nonterm_type: None,
-                  },
-                  &mut GraphMutData {
-                    selected_indices: &mut HashSet::new(),
-                    multi_indices:    multi_type_lu,
-                    multi_maps:       multi_types,
-                  },
-                  Default::default(),
-                )
-                .expect("Could not resolve prop type"),
-                db_nt_key,
-              ),
-            };
-
-            if let Some(archetype_struct) = structs.get_mut(&struct_name) {
-              if let Some(archetype_prop) = archetype_struct.properties.get_mut(prop_name) {
-                archetype_prop.ty = get_resolved_type(&archetype_prop.ty, &ty, multi_type_lu, multi_types, nt_key)
-                  .expect("Could not resolve prop type");
-              }
-            }
-          }
-        }
-        _ => {}
-      }
-    }
-
-    for (index, _) in struct_rules.iter().map(|i| *i) {
-      let item = Item::from((DBRuleKey::from(index), db));
-
-      let ast_rule = &mut rules[index];
-
-      match ast_rule {
-        AscriptRule::Struct(_, rule_struct) => {
-          let struct_name: StringId = rule_struct.name;
-          for (prop_name, init) in rule_struct.props.iter_mut().rev() {
-            let (mut node, rule_tok) = match &init.ast {
-              Some(node) => (
-                create_graph_node(
-                  GraphResolveData {
-                    db,
-                    item,
-                    node: init.ast.as_ref().unwrap(),
-                    nonterm_types: &nonterm_types,
-                    default_nonterm_type: None,
-                  },
-                  &mut GraphMutData {
-                    selected_indices: &mut HashSet::new(),
-                    multi_indices:    multi_type_lu,
-                    multi_maps:       multi_types,
-                  },
-                  Default::default(),
-                )?,
-                node.to_token(),
-              ),
-              None => {
-                // the property is a named value, so we may be able to resolve this
-                // with a symbol reference name lookup.
-
-                let node = match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| sym_ref.annotation == prop_name.0) {
-                  Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, &mut HashSet::new(), None)?,
-                  None => match get_item_at_sym_ref(item, &adb.db, |_, sym_ref| match sym_ref.id {
-                    radlr_core::SymbolId::DBNonTerminal { key } => db.nonterm_friendly_name(key) == prop_name.0,
-                    _ => false,
-                  }) {
-                    Some(item) => graph_node_from_item(item, &adb.db, &nonterm_types, &mut HashSet::new(), None)?,
-                    None => GraphNode::Undefined(AscriptType::Undefined),
-                  },
-                };
-
-                (node, Default::default())
-              }
-            };
-
-            if (!node.get_type().is_unknown()) {
-              if let Some(archetype_struct) = structs.get_mut(&struct_name) {
-                if let Some(a_prop) = archetype_struct.properties.get_mut(prop_name) {
-                  let rule_prop_type = node.get_type();
-
-                  match (&a_prop.ty, rule_prop_type, a_prop.ty == *rule_prop_type) {
-                    (_, _, true) => {}
-                    (_, AscriptType::Undefined, _) => {
-                      a_prop.is_optional = true;
-                    }
-                    (AscriptType::Undefined, ..) => {
-                      a_prop.tok = rule_tok;
-                      a_prop.g_id = init.g_id;
-                    }
-                    (AscriptType::Scalar(AscriptScalarType::Multi(..)), rule_ty, ..) if !rule_ty.is_unknown() => {
-                      if a_prop.ty.is_multi() && node.get_type().get_multi_type_index() != a_prop.ty.get_multi_type_index() {
-                        node = GraphNode::MultiConvert(Rc::new(node.clone()), a_prop.ty);
-                      }
-                    }
-                    _ => {}
-                  }
-
-                  init.ty = *node.get_type();
-                }
-              }
-
-              match node {
-                GraphNode::Undefined(_) => {}
-                node => {
-                  init.output_graph = Some(node);
-                }
-              }
-            }
-          }
-        }
-        _ => {}
-      }
     }
   }
 
@@ -1261,7 +1249,12 @@ fn create_graph_node<'a>(
         ty
       };
 
-      let ascript_type = AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: vec_type.as_scalar().unwrap() });
+      let val_type = match vec_type.as_scalar() {
+        Some(scalar) => scalar,
+        None => return Ok(GraphNode::Undefined(AscriptType::Undefined)),
+      };
+
+      let ascript_type = AscriptType::Aggregate(AscriptAggregateType::Vec { val_type });
       let undefined_init = initializers.iter().any(|i| i.get_type().is_unknown());
 
       debug_assert!(!undefined_init);
@@ -1271,7 +1264,7 @@ fn create_graph_node<'a>(
       let mut left = None;
       let mut scalar_inits = GraphNodeVecInits(vec![]);
 
-      for initializer in initializers {
+      for initializer in initializers.clone() {
         let multi_mismatch =
           ascript_type.is_multi() && initializer.get_type().get_multi_type_index() != ascript_type.get_multi_type_index();
 
@@ -1302,7 +1295,7 @@ fn create_graph_node<'a>(
 
       match left {
         Some(graph_node) => Ok(graph_node),
-        None => Ok(GraphNode::Vec(GraphNodeVecInits(vec![]), ascript_type)),
+        None => Ok(GraphNode::Vec(GraphNodeVecInits(initializers), ascript_type)),
       }
     }
 
@@ -1617,8 +1610,6 @@ fn get_resolved_type(
               let nt_b = multi_m[b_index].0;
 
               if nt_a == target_nonterm || nt_b == target_nonterm {
-                //panic!("AA, {a_index} {b_index} {nt_A:?} {nt_B:?} {target_nonterm:?}");
-
                 let (used_index, other) = if nt_a == target_nonterm { (a_index, b_index) } else { (b_index, a_index) };
 
                 let other_index = AscriptScalarType::Multi(other);

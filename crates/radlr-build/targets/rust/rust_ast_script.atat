@@ -434,7 +434,11 @@ use std::collections::HashMap;
 
     #struct_define {
       #prop_define {
-        pub\ #esc_(@self.name):\ #ast_node_rust_type(self.type), @;
+        match (self.type.agg_type, self.optional) {
+          ("Map", _) | ("Vec", _) | (_, false) { pub\ #esc_(@self.name):\ #ast_node_rust_type(self.type), @; }
+          { pub\ #esc_(@self.name):\ Option<#ast_node_rust_type(self.type)>, @;  }
+        }
+        
       }
 
        @rust_struct_type={ #ty_to_rust(self) }
@@ -720,8 +724,18 @@ use std::collections::HashMap;
 
     #print_struct_initializer {
       match self.node {
-        Some { @self.node.(#esc_(@self.name)) @;}
-        None { let\ @self.name\ =\ Default::default(); @;@; }
+        Some { 
+          match (self.type.agg_type, self.optional) {
+            (_, false) | ("Map", _) | ("Vec", _)  { @self.node.(#esc_(@self.name)) @; }
+            { @self.node.(#esc_(@self.name)) @; let\ @self.name\ =\ Some(@self.name); @; }
+          }
+        }
+        None { 
+          match (self.type.agg_type, self.optional) {
+            (_, false) | ("Map", _) | ("Vec", _) { let\ @self.name\ =\ Default::default(); @; } 
+            { let\ @self.name\ =\ None;  }
+          }
+        }
       }
     }
     

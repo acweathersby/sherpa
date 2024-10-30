@@ -4,6 +4,7 @@ use radlr_core::{parser::ASTNode, proxy::OrderedMap, GrammarIdentities, IString}
 use radlr_formatter::*;
 use std::fmt::Debug;
 
+#[derive(Default)]
 /// Intializes a value derived from a rule.
 pub struct Initializer {
   // The type created by this initializer
@@ -16,6 +17,7 @@ pub struct Initializer {
   pub(crate) ast:               Option<ASTNode>,
   pub(crate) g_id:              GrammarIdentities,
   pub(crate) rule_local_string: IString,
+  pub(crate) optional:          bool,
 }
 
 impl Debug for Initializer {
@@ -40,6 +42,8 @@ impl ValueObj for Initializer {
         }
       }
       "comment" => Value::Str(self.rule_local_string),
+      "optional" => Value::Int(self.optional as isize),
+      "type" => Value::Obj(&self.ty),
       _ => Value::None,
     }
   }
@@ -49,15 +53,15 @@ impl ValueObj for Initializer {
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct StructInitializer {
   pub(crate) name:              StringId,
   pub(crate) props:             AscriptStructInitProps,
   /// `true` if the number of `props`  is equal to the number of property
   /// definitions.
-  pub(crate) complete:          bool,
   pub(crate) has_token:         bool,
   pub(crate) rule_local_string: IString,
+  pub(crate) rule_index:        usize,
 }
 
 formatted_typed_ordered_map!(AscriptStructInitProps, StringId, Initializer, "AscriptStructInitProps");
@@ -67,7 +71,6 @@ impl ValueObj for StructInitializer {
     match key {
       "props" => Value::Obj(&self.props),
       "name" => Value::Str(self.name.0),
-      "complete" => Value::Int(self.complete as isize),
       "has_token" => Value::Int(self.has_token as isize),
       "comment" => Value::Str(self.rule_local_string),
       _ => Value::None,
