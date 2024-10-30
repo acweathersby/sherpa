@@ -5,7 +5,6 @@
 use super::super::*;
 use std::{
   collections::hash_map::DefaultHasher,
-  default,
   fmt::Debug,
   hash::{Hash, Hasher},
   rc::Rc,
@@ -84,6 +83,9 @@ pub enum CSTNode {
   Token(TokenNode),
   /// A non-terminal node produce from the reduction of a rule.
   NonTerm(NonTermNode),
+  /// A non-terminal that does not have any internal nodes. Used when overcoming
+  /// errors. Us a fuzzer to replace this value with actual data.
+  PlaceholderNonTerm(u32),
   /// A series of alternative interpretations of a sequence of
   /// characters
   Alts(Alts),
@@ -108,6 +110,7 @@ impl CSTHashes for CSTNode {
       Token(tok) => tok.canonical_hash(state),
       NonTerm(nt) => nt.canonical_hash(state),
       Alts(m) => m.canonical_hash(state),
+      _ => {}
     }
   }
 
@@ -117,6 +120,7 @@ impl CSTHashes for CSTNode {
       Token(tok) => tok.dedup_hash(state),
       NonTerm(nt) => nt.dedup_hash(state),
       Alts(m) => m.dedup_hash(state),
+      _ => {}
     }
   }
 }
@@ -134,6 +138,7 @@ impl NodeTraits for CSTNode {
       Token(tok) => tok.len(),
       NonTerm(nt) => nt.length as usize,
       Alts(m) => m.length as usize,
+      _ => 0,
     }
   }
 
@@ -143,6 +148,7 @@ impl NodeTraits for CSTNode {
       Alts { .. } => NodeType::Alternatives,
       NonTerm { .. } => NodeType::Nonterm,
       Token(tok) => tok.ty(),
+      PlaceholderNonTerm(_) => NodeType::Missing,
     }
   }
 
@@ -151,6 +157,7 @@ impl NodeTraits for CSTNode {
     match self {
       Token(tok) => tok.entropy(),
       NonTerm(nt) => 0,
+      PlaceholderNonTerm(nt) => 1,
       Alts(m) => m.alternatives.first().map(|f| f.entropy).unwrap_or_default(),
     }
   }
@@ -208,6 +215,7 @@ impl Debug for CSTNode {
         }
         _ => unreachable!(),
       },
+      Self::PlaceholderNonTerm(nt) => f.write_str("[NT?]"),
       Self::Alts(multi) => multi.fmt(f),
       Self::NonTerm(nt) => nt.fmt(f),
     }
@@ -353,6 +361,9 @@ pub trait CSTtoASTProducer<I: ParserInput, ASTNode>: ASTProducer<I, ASTNode> {
         NodeType::Missing | NodeType::Token => Some(ASTBaseNode::Token(Rc::new(tk.clone()))),
         _ => None,
       },
+      PlaceholderNonTerm(non_term) => {
+        todo!()
+      }
       NonTerm(non_term) => {
         let reduce_fn = self.get_reduce_functions()[non_term.rule as usize];
 

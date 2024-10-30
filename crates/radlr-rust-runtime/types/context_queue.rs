@@ -128,7 +128,6 @@ impl<T: Sized> ContextQueue<T> {
   }
 
   /// Returns the underlying store as a slice.
-  #[cfg(debug_assertions)]
   pub fn slice(&self) -> &[Sled<T>] {
     unsafe { std::slice::from_raw_parts(self.slice, self.capacity as usize) }
   }

@@ -1,3 +1,5 @@
+use bytecode::MatchInputType;
+
 use super::*;
 use crate::parsers::Parser;
 
@@ -25,6 +27,18 @@ pub trait ParserIterator<T: ParserInput> {
   ///
   /// Returns None if the context has already entered a finished state
   fn next<'ctx>(&mut self, input: &mut T, context: &'ctx mut ParserContext) -> Option<ParseAction>;
+
+  fn get_success_states<'ctx>(&mut self, address: StateInfo) -> Vec<(MatchInputType, u32, StateInfo)> {
+    vec![]
+  }
+
+  fn get_token_id<'ctx>(&mut self, address: StateInfo, input: &mut T, ctx: &mut ParserContext) -> (u32, bool) {
+    (0, false)
+  }
+
+  fn is_token_branch_state<'ctx>(&mut self, address: StateInfo) -> bool {
+    false
+  }
 }
 
 pub type TokenData = u32;
@@ -36,10 +50,19 @@ pub trait RuntimeDatabase {
   /// Return the normal token ids (those that are not skipped) expected at the
   /// given state.
   #[allow(unused)]
-  fn get_expected_tok_ids_at_state(&self, state_id: u32) -> Option<&[TokenData]>;
+  fn get_expected_tok_ids_at_state(&self, state_id: u32) -> Option<&[TokenData]> {
+    None
+  }
+
+  #[allow(unused)]
+  fn get_nonterminal_name_from_id(&self, nt_id: u32) -> Option<String> {
+    None
+  }
 
   /// Returns a human friendly string representation of the given token id.
-  fn token_id_to_str<'str>(&'str self, id: u32) -> Option<&'str str>;
+  fn token_id_to_str<'str>(&'str self, id: u32) -> Option<&'str str> {
+    None
+  }
 
   ///// Returns a human friendly string representation of the given token id.
   //fn state_id_to_ptr<'str>(&'str self, id: u32) -> Option<&'str str>;

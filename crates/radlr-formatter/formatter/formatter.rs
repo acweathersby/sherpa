@@ -123,7 +123,6 @@ impl Formatter {
     map
   }
 
-  #[cfg(debug_assertions)]
   pub fn _debug_print_(&self) {
     eprintln!("{:#?}", self.script)
   }

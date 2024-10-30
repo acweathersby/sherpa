@@ -260,7 +260,7 @@ impl EditNode {
 pub fn split_alternates(node: &Rc<CSTNode>) -> Vec<Vec<Rc<CSTNode>>> {
   match node.as_ref() {
     CSTNode::NonTerm(NonTermNode { id, rule, length, symbols }) => {
-      let alts = fun_name(symbols);
+      let alts = get_alts(symbols);
 
       let mut result = vec![];
 
@@ -274,12 +274,12 @@ pub fn split_alternates(node: &Rc<CSTNode>) -> Vec<Vec<Rc<CSTNode>>> {
     CSTNode::Token(_) => {
       vec![vec![node.clone()]]
     }
-    CSTNode::Alts(alt) => alt.alternatives.iter().flat_map(|alt| fun_name(&alt.symbols)).collect(),
+    CSTNode::Alts(alt) => alt.alternatives.iter().flat_map(|alt| get_alts(&alt.symbols)).collect(),
     _ => vec![],
   }
 }
 
-fn fun_name(symbols: &Vec<Rc<CSTNode>>) -> Vec<Vec<Rc<CSTNode>>> {
+fn get_alts(symbols: &Vec<Rc<CSTNode>>) -> Vec<Vec<Rc<CSTNode>>> {
   let mut alts = vec![vec![]];
 
   for sym in symbols {

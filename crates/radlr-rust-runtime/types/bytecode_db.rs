@@ -23,7 +23,7 @@ pub struct BytecodeParserDB {
   pub rule_offsets:           HashMap<u32, (u32, u32)>,
   pub rule_diagram:           HashMap<u32, String>,
   /// Friendly names of all non-terminals
-  pub nonterm_name:           HashMap<u32, String>,
+  pub nonterm_id_to_name:     HashMap<u32, String>,
 }
 
 impl BytecodeParserDB {
@@ -58,6 +58,10 @@ impl RuntimeDatabase for BytecodeParserDB {
     } else {
       Err(ParserError::InvalidEntryName)
     }
+  }
+
+  fn get_nonterminal_name_from_id(&self, nt_id: u32) -> Option<String> {
+    self.nonterm_id_to_name.get(&nt_id).cloned()
   }
 
   fn get_expected_tok_ids_at_state(&self, state_id: u32) -> Option<&[u32]> {

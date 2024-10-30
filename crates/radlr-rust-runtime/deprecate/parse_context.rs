@@ -279,6 +279,7 @@ impl<T: ByteReader, M> ParseContext<T, M> {
       token_id:                 self.tok_id,
       emitting_state:           Default::default(),
       next_instruction_address: Default::default(),
+      is_recovery:              false,
     }
   }
 

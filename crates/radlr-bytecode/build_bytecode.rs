@@ -46,9 +46,9 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> R
     address_to_state_name:  Default::default(),
     nonterm_id_to_address:  Default::default(),
     state_to_token_ids_map: Default::default(),
-    nonterm_name:           Default::default(),
     rule_offsets:           Default::default(),
     rule_diagram:           Default::default(),
+    nonterm_id_to_name:     Default::default(),
     token_id_to_str:        db
       .tokens()
       .iter()
@@ -66,7 +66,7 @@ pub fn compile_bytecode<T: ParserStore>(store: &T, add_debug_symbols: bool) -> R
   if add_debug_symbols {
     for id in 0..db.nonterms_len() {
       let name = db.nonterm_friendly_name(id.into());
-      pkg.nonterm_name.insert(id as u32, name.to_string(db.string_store()));
+      pkg.nonterm_id_to_name.insert(id as u32, name.to_string(db.string_store()));
     }
 
     for id in 0..db.rules().len() {

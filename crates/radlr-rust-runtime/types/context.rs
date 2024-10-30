@@ -221,12 +221,11 @@ impl ForkableContext for Box<ForkContext> {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecoveryMode {
   Normal,
   CodepointDiscard { start_offset: usize, count: usize },
   SymbolDiscard { start_offset: usize, end_offset: usize, count: usize },
-  SyntheticInput { tok_id: u32, origin_state: usize, count: usize, offset: usize },
   Unrecoverable(usize),
 }
 
@@ -245,6 +244,7 @@ pub fn create_recovery_ctx<I: ParserInput, DB: ParserProducer<I>>(
     symbols:           vec![],
     ctx:               parser.init(entry)?,
     mode:              RecoveryMode::Normal,
+    failed_state:      Default::default(),
     last_failed_state: Default::default(),
   }))
 }
@@ -257,6 +257,7 @@ pub struct RecoverableContext {
   pub symbols:           Vec<(ParserState, Rc<CSTNode>)>,
   pub mode:              RecoveryMode,
   pub last_failed_state: ParserState,
+  pub failed_state:      ParserState,
 }
 
 impl RecoverableContext {
@@ -286,6 +287,7 @@ impl RecoverableContext {
 
 impl ForkableContext for RecCTX {
   fn handle_shift(&mut self) {
+    self.last_failed_state = Default::default();
     self.mode = RecoveryMode::Normal;
   }
 

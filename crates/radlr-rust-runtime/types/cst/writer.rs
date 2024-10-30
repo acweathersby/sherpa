@@ -29,7 +29,11 @@ impl<'node, 'db> Printer<'node, 'db> {
         NodeType::Missing => {
           if self.write_missing {
             let id = token.tok_id() as u32;
-            w.write(self.db.token_id_to_str(id).unwrap_or_default().as_bytes())?;
+            if let Some(token_str) = self.db.token_id_to_str(id) {
+              w.write(token_str.as_bytes())?;
+            } else {
+              w.write(format!("[TK:{id}]").as_bytes())?;
+            }
           }
         }
         NodeType::Errata => {}
@@ -40,6 +44,13 @@ impl<'node, 'db> Printer<'node, 'db> {
       NonTerm(non_term) => {
         for node in &non_term.symbols {
           self.new_node(node).write(w)?;
+        }
+      }
+      PlaceholderNonTerm(non_term) => {
+        if let Some(name) = self.db.get_nonterminal_name_from_id(*non_term) {
+          w.write(format!("<NT:{name}>").as_bytes())?;
+        } else {
+          w.write(format!("<NT:{non_term}>").as_bytes())?;
         }
       }
       Alts(multi) => {
@@ -79,6 +90,9 @@ impl<'node, 'db> Printer<'node, 'db> {
           }
           self.new_node(node).write_all(w, false)?;
         }
+      }
+      PlaceholderNonTerm(non_term) => {
+        todo!("AAAAA");
       }
       Alts(multi) => {
         for alt in &multi.alternatives {

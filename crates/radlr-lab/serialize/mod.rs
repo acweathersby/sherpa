@@ -21,7 +21,7 @@ pub mod bytecode_db {
     db.state_to_token_ids_map = read_hash_of_id_vecu32(&buffer, &mut offset);
     db.nonterm_id_to_address = read_primitive_hash(&buffer, &mut offset);
 
-    db.nonterm_name = read_hash_id_str(&buffer, &mut offset);
+    db.nonterm_id_to_name = read_hash_id_str(&buffer, &mut offset);
     db.rule_offsets = read_primitive_hash(&buffer, &mut offset);
     db.rule_diagram = read_hash_id_str(&buffer, &mut offset);
 
@@ -53,7 +53,7 @@ pub mod bytecode_db {
     size += 4 + db.rule_diagram.iter().fold(0, |size, d| size + 8 + d.1.as_bytes().len());
 
     // nonterm_name:    HashMap<u32, String>
-    size += 4 + db.nonterm_name.iter().fold(0, |size, d| size + 8 + d.1.as_bytes().len());
+    size += 4 + db.nonterm_id_to_name.iter().fold(0, |size, d| size + 8 + d.1.as_bytes().len());
 
     // nonterm_offsets:    HashMap<u32, (u32, u32)>
     size += 4 + db.rule_offsets.iter().fold(0, |size, d| size + 4 + size_of::<(u32, u32)>());
@@ -70,7 +70,7 @@ pub mod bytecode_db {
 
     let mut buffer = Vec::<u8>::with_capacity(size);
 
-    dbg!(&db.nonterm_name);
+    dbg!(&db.nonterm_id_to_name);
 
     write_primitive_to_bytes(&mut buffer, db.bytecode.len() as u32);
     write_bytes(&mut buffer, &db.bytecode);
@@ -81,7 +81,7 @@ pub mod bytecode_db {
     write_hash_of_id_vecu32(&mut buffer, &db.state_to_token_ids_map);
     write_primitive_hash(&mut buffer, &db.nonterm_id_to_address);
 
-    write_hash_of_id_str(&mut buffer, &db.nonterm_name);
+    write_hash_of_id_str(&mut buffer, &db.nonterm_id_to_name);
     write_primitive_hash(&mut buffer, &db.rule_offsets);
     write_hash_of_id_str(&mut buffer, &db.rule_diagram);
 

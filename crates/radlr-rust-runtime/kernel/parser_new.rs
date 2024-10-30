@@ -5,7 +5,10 @@ use crate::{
   },
   utf8::{get_token_class_from_codepoint, get_utf8_byte_length_from_code_point},
 };
-use std::{collections::HashMap, rc::Rc};
+use std::{
+  collections::{hash_set, HashMap, HashSet},
+  rc::Rc,
+};
 
 struct OpResult<'a> {
   action:    ParseAction,
@@ -170,15 +173,17 @@ fn shift_token<'a>(i: Instruction<'a>, ctx: &mut ParserContext, emitting_state: 
     ctx.sym_ptr,
     ctx.start_line_off
   );
+  let is_recovery = ctx.recovery_tok_id > 0;
 
   let action = ParseAction::Shift {
     byte_offset: ctx.sym_ptr as u32,
     byte_length: ctx.tok_byte_len as u32,
     token_line_count: ctx.start_line_num,
     token_line_offset: ctx.start_line_off,
-    token_id: ctx.tok_id,
+    token_id: if is_recovery { ctx.recovery_tok_id } else { ctx.tok_id },
     emitting_state,
     next_instruction_address: i.next().unwrap().address(),
+    is_recovery,
   };
 
   ctx.start_line_num = ctx.chkp_line_num;
@@ -253,6 +258,7 @@ fn __skip_token_core__<'a>(base_instruction: Instruction<'a>, ctx: &mut ParserCo
   let offset = ctx.sym_ptr + ctx.tok_byte_len as usize;
   let tok_len = ctx.tok_byte_len;
   let token_id = ctx.tok_id;
+  let is_recovery = ctx.recovery_tok_id > 0;
   ctx.input_ptr = offset;
   ctx.sym_ptr = offset;
   ctx.tok_id = 0;
@@ -501,14 +507,12 @@ fn hash_branch<'a, 'debug>(
   // Decode data
   let TableHeaderData {
     input_type,
-    table_meta: modulo_base,
+    table_meta,
     scan_block_instruction,
     default_block,
     table_start,
     ..
   } = i.into();
-
-  let hash_mask = (1 << modulo_base) - 1;
 
   let (input_value, is_nl) = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
   #[cfg(any(debug_assertions, feature = "wasm-lab"))]
@@ -519,6 +523,20 @@ fn hash_branch<'a, 'debug>(
     ctx.tok_id = tok_id;
   }
 
+  get_hash_result(input_value, table_meta, i, table_start, is_nl, ctx, default_block)
+}
+
+#[inline]
+fn get_hash_result<'a>(
+  input_value: u32,
+  table_meta: u32,
+  i: Instruction<'a>,
+  table_start: usize,
+  is_nl: bool,
+  ctx: &mut ParserContext,
+  default_block: Instruction<'a>,
+) -> OpResult<'a> {
+  let hash_mask = (1 << table_meta) - 1;
   loop {
     let mut hash_index = (input_value & hash_mask) as usize;
     loop {
@@ -553,6 +571,101 @@ fn hash_branch<'a, 'debug>(
   }
 }
 
+pub fn get_success_branches<'a>(i: Instruction<'a>) -> Vec<(MatchInputType, u32, u32)> {
+  // if yield success branch actions.
+
+  let opcode = i.get_opcode();
+  let mut addresses = Vec::new();
+
+  match opcode {
+    Opcode::HashBranch => {
+      // Decode data
+      let TableHeaderData { table_start, table_length, input_type, .. } = i.into();
+
+      let mut iter: ByteCodeIterator = (i.bytecode(), table_start).into();
+
+      for _ in 0..table_length {
+        let cell = iter.next_u32_le().unwrap();
+        let off = (cell >> 11) & 0x7FF;
+        let value = cell & 0x7FF;
+        let address = off as usize + i.address();
+        addresses.push((input_type, value, address as u32));
+      }
+
+      addresses
+    }
+    Opcode::VectorBranch => {
+      let TableHeaderData { table_start, table_length, .. } = i.into();
+
+      let mut iter: ByteCodeIterator = (i.bytecode(), table_start).into();
+
+      for _ in 0..table_length {
+        let address_offset = iter.next_u32_le().unwrap();
+        let address = address_offset as usize + i.address();
+        //addresses.insert(address as u32);
+      }
+
+      addresses
+    }
+    _ => addresses,
+  }
+}
+
+pub fn get_token_id<'a>(i: Instruction<'a>, ctx: &mut ParserContext, input: &impl ParserInput) -> (u32, bool) {
+  let opcode = i.get_opcode();
+  // if yield success branch actions.
+  match opcode {
+    Opcode::HashBranch | Opcode::VectorBranch => {
+      let TableHeaderData {
+        input_type,
+        table_meta,
+        scan_block_instruction,
+        default_block,
+        table_start,
+        table_length,
+        ..
+      } = i.into();
+
+      if input_type == MatchInputType::Token {
+        let (input_value, is_nl) = get_input_value(input_type, scan_block_instruction, ctx, input, &mut None, false);
+
+        let next = match opcode {
+          Opcode::HashBranch => get_hash_result(input_value, table_meta, i, table_start, is_nl, ctx, default_block),
+          Opcode::VectorBranch => {
+            vector_input_match(input_value, table_meta, table_length, is_nl, ctx, i, table_start, default_block)
+          }
+          _ => unreachable!(),
+        };
+
+        if next.next.unwrap().get_opcode() == Opcode::SkipToken {
+          (input_value, true)
+        } else {
+          (input_value, false)
+        }
+      } else {
+        (0, false)
+      }
+    }
+    _ => (0, false),
+  }
+}
+
+pub fn is_token_state<'a>(i: Instruction<'a>) -> bool {
+  let opcode = i.get_opcode();
+  // if yield success branch actions.
+  match opcode {
+    Opcode::HashBranch | Opcode::VectorBranch => {
+      let TableHeaderData { input_type, scan_block_instruction, .. } = i.into();
+      if input_type == MatchInputType::Token {
+        true
+      } else {
+        false
+      }
+    }
+    _ => false,
+  }
+}
+
 fn vector_branch<'a, 'debug>(
   i: Instruction<'a>,
   ctx: &mut ParserContext,
@@ -564,7 +677,7 @@ fn vector_branch<'a, 'debug>(
 
   let TableHeaderData {
     input_type,
-    table_meta: value_offset,
+    table_meta,
     scan_block_instruction,
     default_block,
     table_start,
@@ -574,8 +687,21 @@ fn vector_branch<'a, 'debug>(
 
   let (input_value, is_nl) = get_input_value(input_type, scan_block_instruction, ctx, input, debug, is_scanner);
 
+  vector_input_match(input_value, table_meta, table_length, is_nl, ctx, i, table_start, default_block)
+}
+
+fn vector_input_match<'a>(
+  input_value: u32,
+  table_meta: u32,
+  table_length: u32,
+  is_nl: bool,
+  ctx: &mut ParserContext,
+  i: Instruction<'a>,
+  table_start: usize,
+  default_block: Instruction<'a>,
+) -> OpResult<'a> {
   loop {
-    let value_index = (input_value as i32 - value_offset as i32) as usize;
+    let value_index = (input_value as i32 - table_meta as i32) as usize;
     if value_index < table_length as usize {
       if is_nl {
         ctx.end_line_num += 1;
@@ -806,6 +932,28 @@ impl ParserInitializer for ByteCodeParserNew {
 }
 
 impl<T: ParserInput> ParserIterator<T> for ByteCodeParserNew {
+  fn get_success_states<'ctx>(&mut self, address: StateInfo) -> Vec<(MatchInputType, u32, StateInfo)> {
+    get_success_branches(Instruction::from((self.bc.as_ref().as_ref(), address.state_id as usize)))
+      .into_iter()
+      .map(|(ty, val, address)| {
+        (ty, val, StateInfo {
+          stack_address:  0,
+          state_type:     StateType::Normal,
+          is_state_entry: false,
+          state_id:       address,
+        })
+      })
+      .collect()
+  }
+
+  fn get_token_id<'ctx>(&mut self, address: StateInfo, input: &mut T, ctx: &mut ParserContext) -> (u32, bool) {
+    get_token_id(Instruction::from((self.bc.as_ref().as_ref(), address.state_id as usize)), ctx, input)
+  }
+
+  fn is_token_branch_state<'ctx>(&mut self, address: StateInfo) -> bool {
+    is_token_state(Instruction::from((self.bc.as_ref().as_ref(), address.state_id as usize)))
+  }
+
   fn next(&mut self, input: &mut T, ctx: &mut ParserContext) -> Option<ParseAction> {
     let Self { bc, debugger, .. } = self;
 

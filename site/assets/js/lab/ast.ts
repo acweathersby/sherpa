@@ -47,7 +47,7 @@ export function init(
     }
   });
 
-  function build_cst() {
+  function build_ast() {
     if (!pending) {
       pending = true;
       setTimeout(() => {
@@ -62,7 +62,7 @@ export function init(
     input_string = field.get_text();
 
     if (!ast_field.is_mini)
-      build_cst();
+      build_ast();
   })
 
   grammar_pipeline.addListener("loading", _ => {
@@ -79,7 +79,7 @@ export function init(
     ast_field.set_loading(false);
 
     if (!ast_field.is_mini)
-      build_cst()
+      build_ast()
   });
 }
 
@@ -132,6 +132,8 @@ function run_cst_render(ast: Rules, input: string, db: JSBytecodeParserDB | null
   if (!input || !db) return;
 
   let parser = new Parser(db, input);
+
+  console.log(parser.generate_error_corrected_output(input))
 
 
   let tokens: Token[] = [];
@@ -220,8 +222,9 @@ function run_cst_render(ast: Rules, input: string, db: JSBytecodeParserDB | null
         let node_a = process_expression(expr[1], offset, len, root_token);
         if (node_a instanceof Token) {
           return input.slice(node_a.off, node_a.off + node_a.len);
+        } else {
+          return node_a?.toString() ?? ""
         }
-        throw "todo"
       } break
       case "sym":
         return nodes[offset + expr[1]]
@@ -371,3 +374,6 @@ function run_cst_render(ast: Rules, input: string, db: JSBytecodeParserDB | null
   renderer.update();
   renderer.draw();
 }
+
+
+

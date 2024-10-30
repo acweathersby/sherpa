@@ -143,6 +143,7 @@ fn shift_token<'a, R: ByteReader + MutByteReader + UTF8Reader + UTF8Reader, M>(
     token_id:                 ctx.tok_id,
     emitting_state:           Default::default(),
     next_instruction_address: Default::default(),
+    is_recovery:              false,
   };
 
   ctx.start_line_num = ctx.chkp_line_num;

@@ -2577,6 +2577,10 @@ impl RuntimeDatabase for ParserDB {
     EntryPoint { nonterm_id: 0 }
   }
 
+  fn get_nonterminal_name_from_id(&self, nt_id: u32) -> Option<String> {
+    NONTERM_NAME_TO_ID.iter().find(|(_, i)| *i == nt_id).map(|(name, _)| name.to_string())
+  }
+
   fn get_entry_data_from_name(&self, entry_name: &str) -> Result<EntryPoint, ParserError> {
     if let Some(id) = self.nonterm_name_to_id.get(entry_name) {
       Ok(EntryPoint { nonterm_id: *id })

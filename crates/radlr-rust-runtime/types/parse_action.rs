@@ -48,6 +48,7 @@ pub enum ParseAction {
     emitting_state:           ParserState,
     /// The instruction that follows this
     next_instruction_address: usize,
+    is_recovery:              bool,
   },
   Skip {
     byte_offset:       u32,

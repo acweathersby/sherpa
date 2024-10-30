@@ -108,15 +108,16 @@ pub fn construct_error_recovering_erlang_toy() -> RadlrResult<()> {
 pub fn temp_lab_test() -> RadlrResult<()> {
   let source = r#"
 
-  IGNORE { c:sp }
+  IGNORE { c:sp c:nl }
 
   <> B > A(+) ";"
 
-  <> A > "Hello" "{" tk:(c:id+)(+) "}" 
+  <> A > "Hello" "{" tk:(c:id+)(*) "}" 
   
    "#;
 
-  let input = "{a  { a } {bbbb }  ;";
+  let input = "Hello{a  Hello  a  Hello } Hello{ hello bbbb } k this is the only way we should have show the make of the master 
+  survival and the core of the being is is not the way we should have made this in the retrium };";
 
   let root_path = PathBuf::from("test.sg");
   let mut grammar = RadlrGrammar::new();
@@ -133,15 +134,98 @@ pub fn temp_lab_test() -> RadlrResult<()> {
 
   _write_disassembly_to_temp_file_(&pkg, parser_data.get_db(), config)?;
 
+  //dbg!(&pkg.nonterm_id_to_name, &pkg.token_id_to_str);
   let result =
     pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
-
+  //dbg!(&result);
   eprintln!("------------------");
   if let Some(best) = result.first() {
     for (_, sym) in &best.symbols {
       for alt in split_alternates(sym) {
-        Printer::new(alt.first().unwrap(), true, &pkg).print();
-        eprintln!("\n");
+        eprintln!("{}\n", Printer::new(alt.first().unwrap(), true, &pkg).to_string());
+      }
+    }
+    eprintln!("\n");
+  }
+
+  // assert_eq!(result.trees().first().to_string(), "<name>()->fn <name>()");
+
+  Ok(())
+}
+
+#[test]
+pub fn temp_lab_tesit2() -> RadlrResult<()> {
+  let source = r#"
+
+IGNORE {c:sp c:nl}
+
+<> json 
+
+  > entry      $           :ast { t_JSON, body: $1, tok }
+
+<> entry > obj | array
+  
+<> obj 
+  
+  > "{" key_val(*",") "}" :ast { t_Object, values: $2, tok }
+
+<> array
+  
+  > "[" val(*",") "]"     :ast { t_Array, values: $2, tok }
+
+
+<> key_val 
+
+  > key ":" val           :ast map($1, $3)
+
+
+<> key 
+
+  > tk:string             :ast str(tok<1,1>)
+
+
+<> val 
+  > tk:string :ast str(tok<1,1>)
+  | tk:( c:num(+) )     :ast f64($1)
+  | obj
+  | array
+  | "true"    :ast bool($1)
+  | "false"   :ast bool
+  | "null"    :ast {t_Null}
+
+
+<> string > "\"" ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) "\""
+
+<> escaped > "\\"{:9999} ( c:id | c:sym | c:num | c:sp | c:nl )
+
+"#;
+
+  let input = "[{\"s\"::2, :\"d\" :[22,3,4,5,6,6],,,,},test";
+
+  let root_path = PathBuf::from("test.sg");
+  let mut grammar = RadlrGrammar::new();
+  grammar.add_source_from_string(source, &root_path, false)?;
+
+  let pool = radlr_core::worker_pool::StandardPool::new_with_max_workers().unwrap();
+
+  let config = ParserConfig::default().cst_editor();
+  let parser_data = grammar.build_db(&root_path, config)?.build_states(config, &pool)?.build_ir_parser(false, false, &pool)?;
+
+  _write_states_to_temp_file_(&parser_data)?;
+
+  let pkg = compile_bytecode(&parser_data, true)?;
+
+  _write_disassembly_to_temp_file_(&pkg, parser_data.get_db(), config)?;
+
+  let result =
+    pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
+
+  dbg!(&result);
+  eprintln!("------------------");
+  if let Some(best) = result.first() {
+    for (_, sym) in &best.symbols {
+      for alt in split_alternates(sym) {
+        eprintln!("{}\n", Printer::new(alt.first().unwrap(), true, &pkg).to_string());
       }
     }
     eprintln!("\n");

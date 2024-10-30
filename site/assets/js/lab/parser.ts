@@ -42,6 +42,11 @@ export class Parser {
       this.parser.free();
   }
 
+  generate_error_corrected_output(input: string): string {
+    const parser = radlr.JSByteCodeParser.new("", this.db);
+    return parser.best_error_recovery("default", input) ?? ""
+  }
+
   private next(key_frame: boolean = false, step_to_next_action: boolean = false): boolean {
 
     let parser = this.parser;

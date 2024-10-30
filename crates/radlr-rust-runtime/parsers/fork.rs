@@ -210,6 +210,19 @@ pub fn create_token<I: ParserInput>(input: &mut I, token_id: u32, token_byte_len
   ))
 }
 
+pub fn create_placeholder_reduction<CTX: ForkableContext>(
+  rec_ctx: &mut CTX,
+  nonterminal_id: u32,
+  store: &CSTStore,
+  mut symbol_count: u32,
+) {
+  while symbol_count > 0 {
+    rec_ctx.symbols().pop();
+    symbol_count -= 1
+  }
+  rec_ctx.symbols().push((Default::default(), store.get_unique(CSTNode::PlaceholderNonTerm(nonterminal_id))));
+}
+
 pub fn reduce_symbols<CTX: ForkableContext>(
   mut symbol_count: u32,
   rec_ctx: &mut CTX,
@@ -219,8 +232,14 @@ pub fn reduce_symbols<CTX: ForkableContext>(
 ) {
   let mut symbols = vec![];
 
+  let count = symbol_count;
+
   while symbol_count > 0 {
-    let (_, sym) = rec_ctx.symbols().pop().expect(&format!("Should have enough symbols to complete this Non-Terminal"));
+    let (_, sym) = rec_ctx.symbols().pop().expect(&format!(
+      "Should have enough symbols to complete this Non-Terminal: expected:{} {:?}",
+      count,
+      rec_ctx.symbols()
+    ));
     match sym.as_ref() {
       CSTNode::Token(tok) if matches!(tok.ty(), NodeType::Skipped | NodeType::Errata) => {}
       _ => {

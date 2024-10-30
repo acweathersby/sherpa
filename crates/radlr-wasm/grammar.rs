@@ -416,7 +416,7 @@ pub fn get_entry_names(db: &JSGrammarDB) -> JsValue {
 
 #[wasm_bindgen]
 pub fn get_nonterminal_name_from_id(id: u32, db: &JSBytecodeParserDB) -> String {
-  db.0.nonterm_name.get(&id).cloned().unwrap_or_default()
+  db.0.nonterm_id_to_name.get(&id).cloned().unwrap_or_default()
 }
 
 /// Returns a diagram of a grammar rule  
