@@ -2,6 +2,7 @@ use bytecode::Instruction;
 
 use crate::{
   kernel::is_token_state,
+  panic_with_string,
   parsers::fork::{fork_meta_kernel, CHAR_USAGE_SCORE},
   types::*,
 };
@@ -132,7 +133,7 @@ fn handle_failed_contexts<I: ParserInput, DB: ParserProducer<I>>(
           // following that state off the stack and then resume
           // parsing from the recovery state.
         }
-        _ => unimplemented!(),
+        _ => {}
       }
     }
 
@@ -211,7 +212,7 @@ fn resolve_errored_contexts<I: ParserInput>(
 
                 rec_ctx.mode = RecoveryMode::Normal;
               }
-              _ => unreachable!(),
+              mode => panic_with_string!(format!("Invalid recovery mode {mode:?}")),
             }
             to_continue.push(rec_ctx);
           }
@@ -239,10 +240,10 @@ fn resolve_errored_contexts<I: ParserInput>(
             RecoveryMode::SymbolDiscard { count, end_offset, .. } => {
               drop_symbols(&rec_ctx, contexts, &mut best_failure, count, end_offset);
             }
-            _ => unreachable!(),
+            mode => panic_with_string!(format!("Invalid recovery mode {mode:?}")),
           },
 
-          _ => unreachable!(),
+          action => panic_with_string!(format!("Invalid parse action: {action:?}")),
         }
       }
     }
@@ -271,29 +272,38 @@ fn inject_synthetics<I: ParserInput>(
 ) {
   // Increment through states until we are able to get to a nonterminal
 
+  dbg!((rec_ctx.last_failed_state.address, rec_ctx.failed_state.address, last_state.address));
   if rec_ctx.last_failed_state.address == last_state.address {
     return;
   }
 
   let mut continue_contexts = VecDeque::new();
 
-  for (ty, val, state) in parser.get_success_states(last_state.info) {
+  for SuccessorState { edge_mode, edge_value, skipped, state_info } in parser.get_success_states(last_state.info) {
+    if skipped {
+      continue;
+    }
+
     let mut ctx = rec_ctx.split();
-    ctx.ctx.push_state(ParserState { info: state, address: state.state_id as usize });
+    ctx.ctx.push_state(ParserState { info: state_info, address: state_info.state_id as usize });
 
     let mut create_synthetic = false;
 
     ctx.ctx.byte_len = 0;
     ctx.ctx.tok_byte_len = 0;
+    ctx.last_failed_state = rec_ctx.failed_state;
 
-    match ty {
+    match edge_mode {
       bytecode::MatchInputType::Token => {
-        ctx.ctx.recovery_tok_id = val;
+        ctx.ctx.recovery_tok_id = edge_value;
       }
       bytecode::MatchInputType::NonTerminal => {
         create_synthetic = true;
       }
-      ty => unreachable!("{ty}"),
+      bytecode::MatchInputType::ByteScanless => {
+        continue;
+      }
+      ty => panic_with_string!(format!("Unrecognized bytecode match type: {ty:?}")),
     }
 
     continue_contexts.push_back((false, create_synthetic, ctx));
@@ -303,8 +313,6 @@ fn inject_synthetics<I: ParserInput>(
     if let Some(action) = parser.next(input, &mut ctx.ctx) {
       match action {
         ParseAction::Reduce { nonterminal_id, rule_id, symbol_count } => {
-          //    panic!("action nonterminal_id: {nonterminal_id}");
-
           ctx.ctx.recovery_tok_id = 0;
           ctx.mode = RecoveryMode::Normal;
 
@@ -445,7 +453,7 @@ fn drop_symbols(
                 NodeType::Token => {
                   rec_ctx.entropy += tok.entropy() as isize * CHAR_USAGE_SCORE;
                 }
-                _ => unreachable!(),
+                _ => {}
               }
 
               rec_ctx.mode = RecoveryMode::SymbolDiscard { count, end_offset, start_offset };
@@ -473,7 +481,7 @@ fn drop_symbols(
 
               break;
             }
-            _ => unreachable!(),
+            node_ty => panic_with_string!(format!("Todo: handle node type {node_ty:?} in drop_symbols")),
           }
         }
         CSTNode::PlaceholderNonTerm(..) | CSTNode::NonTerm(..) | CSTNode::Alts(..) => {
@@ -491,7 +499,7 @@ fn drop_symbols(
                 NodeType::Skipped | NodeType::Token => {
                   entropy_delta += tok.entropy() as isize * CHAR_USAGE_SCORE;
                 }
-                _ => unreachable!(),
+                node_ty => panic_with_string!(format!("Todo: handle node type {node_ty:?} in drop_symbols")),
               },
               CSTNode::PlaceholderNonTerm(node) => entropy_delta += 1,
               CSTNode::NonTerm(node) => queue.extend(node.symbols.iter().cloned()),

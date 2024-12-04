@@ -296,6 +296,33 @@ fn aliased_struct_properties_are_tracked() -> RadlrResult<()> {
 }
 
 #[test]
+fn test_temp() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp }  
+
+  <> goal > fn | strct
+      
+  <> fn > tk:(c:id+) "(" ")" ":"  :ast  { t_FN }
+  
+  <> strct > tk:(c:id+) "{" "}" :ast  { t_FN }
+"##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let mut adb: AscriptDatabase = db.into();
+
+  assert_eq!(adb.structs.len(), 1);
+
+  let (_, strct) = adb.structs.pop_first().expect("should have that one struct here");
+
+  assert_eq!(strct.properties.len(), 2);
+
+  dbg!(strct);
+
+  Ok(())
+}
+
+#[test]
 fn builds_rum_lang() -> RadlrResult<()> {
   let source = r##"
   IGNORE { c:sp c:nl }

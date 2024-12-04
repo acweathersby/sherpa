@@ -1,30 +1,18 @@
-# Radlr 
+# RADLR LAB
 
-Thank you for taking a look
+- Getting Started
+  - Grammars 
+  - Errors
 
-- What are parser compilers
+- Parser Info and Parsing Debugging
+- Abstract Syntax trees
+- Syntax Highlighting
+- Syntax Formatting
 
- Front end component of a compiler toolchain
- Grammars
- AST and CST
-
-- What makes radlr unique
-
-Embedded IR and State machine code
-Embedded AST definition language
-Recursive Ascent/Descent focus
-General Algorithm
-Optimization Passes
-
-- What can be made with radlr
-
-  True generality
-  Language tooling
-  Syntax highlighting
-
-Getting started
-
-- A Grammar
-- AST 
+- Advanced 
+  - Error Recovery
+  - Parse Forests
+  - Incremental Parsing
 
 
+# Colors 

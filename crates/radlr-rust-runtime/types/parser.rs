@@ -21,6 +21,14 @@ pub trait ParserInitializer {
   fn set_debugger(&mut self, debugger: Option<Box<DebugFnNew>>);
 }
 
+#[derive(Clone, Copy)]
+pub struct SuccessorState {
+  pub edge_mode:  MatchInputType,
+  pub edge_value: u32,
+  pub skipped:    bool,
+  pub state_info: StateInfo,
+}
+
 pub trait ParserIterator<T: ParserInput> {
   /// Given a parse context, returns the next ParseAction for that context,
   /// mutating the context as needed.
@@ -28,7 +36,7 @@ pub trait ParserIterator<T: ParserInput> {
   /// Returns None if the context has already entered a finished state
   fn next<'ctx>(&mut self, input: &mut T, context: &'ctx mut ParserContext) -> Option<ParseAction>;
 
-  fn get_success_states<'ctx>(&mut self, address: StateInfo) -> Vec<(MatchInputType, u32, StateInfo)> {
+  fn get_success_states<'ctx>(&mut self, address: StateInfo) -> Vec<SuccessorState> {
     vec![]
   }
 

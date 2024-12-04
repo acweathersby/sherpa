@@ -45,9 +45,9 @@ pub fn build_database(db: RadlrGrammarDatabase) -> AscriptDatabase {
 
         finalize_structs(&mut adb, &nonterm_types);
 
-        resolve_struct_definitions(&mut adb);
-
         resolve_multi_types(&mut adb);
+
+        resolve_struct_definitions(&mut adb);
 
         if let Err(err) = collect_types(&mut adb) {
           adb.errors.push(RadlrError::Text(err));
@@ -145,6 +145,7 @@ fn resolve_struct_definitions(adb: &mut AscriptDatabase) {
 
     for (_, prop) in strct.properties.iter() {
       let mut structs = vec![];
+
       for dependent_stct_id in prop.ty.get_structs(&mut structs, &adb.multi_types) {
         let entry = dependency_lookup.entry(*dependent_stct_id).or_default();
         entry.insert(*strct_id);

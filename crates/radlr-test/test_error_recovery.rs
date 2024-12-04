@@ -157,50 +157,17 @@ pub fn temp_lab_test() -> RadlrResult<()> {
 pub fn temp_lab_tesit2() -> RadlrResult<()> {
   let source = r#"
 
-IGNORE {c:sp c:nl}
+  IGNORE { c:sp }  
 
-<> json 
-
-  > entry      $           :ast { t_JSON, body: $1, tok }
-
-<> entry > obj | array
+  <> goal > fn | strct
+      
+  <> fn > tk:(c:id+) "(" ")" ":" "{" "}" :ast  { t_FN }
   
-<> obj 
-  
-  > "{" key_val(*",") "}" :ast { t_Object, values: $2, tok }
-
-<> array
-  
-  > "[" val(*",") "]"     :ast { t_Array, values: $2, tok }
-
-
-<> key_val 
-
-  > key ":" val           :ast map($1, $3)
-
-
-<> key 
-
-  > tk:string             :ast str(tok<1,1>)
-
-
-<> val 
-  > tk:string :ast str(tok<1,1>)
-  | tk:( c:num(+) )     :ast f64($1)
-  | obj
-  | array
-  | "true"    :ast bool($1)
-  | "false"   :ast bool
-  | "null"    :ast {t_Null}
-
-
-<> string > "\"" ( c:id | c:sym | c:num | c:sp | c:nl | escaped )(*) "\""
-
-<> escaped > "\\"{:9999} ( c:id | c:sym | c:num | c:sp | c:nl )
+  <> strct > tk:(c:id+) "{" "}" :ast  { t_FN }
 
 "#;
 
-  let input = "[{\"s\"::2, :\"d\" :[22,3,4,5,6,6],,,,},test";
+  let input = "test () {";
 
   let root_path = PathBuf::from("test.sg");
   let mut grammar = RadlrGrammar::new();
@@ -220,7 +187,6 @@ IGNORE {c:sp c:nl}
   let result =
     pkg.parse_with_recovery(&mut StringInput::from(input), pkg.get_entry_data_from_name("default")?, &Default::default())?;
 
-  dbg!(&result);
   eprintln!("------------------");
   if let Some(best) = result.first() {
     for (_, sym) in &best.symbols {

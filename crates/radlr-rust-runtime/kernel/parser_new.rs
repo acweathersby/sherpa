@@ -99,7 +99,7 @@ fn dispatch<'a, 'debug>(
       },
     } {
       OpResult { action: None, next: Option::None, .. } => {
-        unreachable!("Expected next instruction!")
+        todo!("Expected next instruction!")
       }
 
       OpResult { action: None, next: Some(next_instruction), is_goto, can_debug } => {
@@ -571,7 +571,7 @@ fn get_hash_result<'a>(
   }
 }
 
-pub fn get_success_branches<'a>(i: Instruction<'a>) -> Vec<(MatchInputType, u32, u32)> {
+pub fn get_success_branches<'a>(i: Instruction<'a>) -> Vec<SuccessorState> {
   // if yield success branch actions.
 
   let opcode = i.get_opcode();
@@ -588,21 +588,45 @@ pub fn get_success_branches<'a>(i: Instruction<'a>) -> Vec<(MatchInputType, u32,
         let cell = iter.next_u32_le().unwrap();
         let off = (cell >> 11) & 0x7FF;
         let value = cell & 0x7FF;
-        let address = off as usize + i.address();
-        addresses.push((input_type, value, address as u32));
+        let address = off as u32 + i.address() as u32;
+        let next: Instruction<'_> = (i.bytecode(), address as usize).into();
+        addresses.push(SuccessorState {
+          edge_mode:  input_type,
+          edge_value: value,
+          skipped:    next.get_opcode() == Opcode::SkipToken,
+          state_info: StateInfo {
+            stack_address:  0,
+            state_type:     StateType::Normal,
+            is_state_entry: false,
+            state_id:       address,
+          },
+        });
       }
 
       addresses
     }
     Opcode::VectorBranch => {
-      let TableHeaderData { table_start, table_length, .. } = i.into();
+      let TableHeaderData { table_start, table_length, input_type, table_meta, .. } = i.into();
 
       let mut iter: ByteCodeIterator = (i.bytecode(), table_start).into();
 
-      for _ in 0..table_length {
+      for val_offset in 0..table_length {
         let address_offset = iter.next_u32_le().unwrap();
-        let address = address_offset as usize + i.address();
-        //addresses.insert(address as u32);
+
+        let address = address_offset as u32 + i.address() as u32;
+        let next: Instruction<'_> = (i.bytecode(), address as usize).into();
+
+        addresses.push(SuccessorState {
+          edge_mode:  input_type,
+          edge_value: table_meta + val_offset as u32,
+          skipped:    next.get_opcode() == Opcode::SkipToken,
+          state_info: StateInfo {
+            stack_address:  0,
+            state_type:     StateType::Normal,
+            is_state_entry: false,
+            state_id:       address,
+          },
+        });
       }
 
       addresses
@@ -629,15 +653,15 @@ pub fn get_token_id<'a>(i: Instruction<'a>, ctx: &mut ParserContext, input: &imp
       if input_type == MatchInputType::Token {
         let (input_value, is_nl) = get_input_value(input_type, scan_block_instruction, ctx, input, &mut None, false);
 
-        let next = match opcode {
+        let branch = match opcode {
           Opcode::HashBranch => get_hash_result(input_value, table_meta, i, table_start, is_nl, ctx, default_block),
           Opcode::VectorBranch => {
             vector_input_match(input_value, table_meta, table_length, is_nl, ctx, i, table_start, default_block)
           }
-          _ => unreachable!(),
+          _ => todo!(),
         };
 
-        if next.next.unwrap().get_opcode() == Opcode::SkipToken {
+        if branch.next.unwrap().get_opcode() == Opcode::SkipToken {
           (input_value, true)
         } else {
           (input_value, false)
@@ -815,7 +839,7 @@ fn get_input_value<'a, 'debug>(
           ctx.byte_len = len as u32;
           cp
         }
-        i_type => unreachable!("{}", i_type),
+        i_type => todo!("{}", i_type),
       }
     }
   };
@@ -932,18 +956,8 @@ impl ParserInitializer for ByteCodeParserNew {
 }
 
 impl<T: ParserInput> ParserIterator<T> for ByteCodeParserNew {
-  fn get_success_states<'ctx>(&mut self, address: StateInfo) -> Vec<(MatchInputType, u32, StateInfo)> {
+  fn get_success_states<'ctx>(&mut self, address: StateInfo) -> Vec<SuccessorState> {
     get_success_branches(Instruction::from((self.bc.as_ref().as_ref(), address.state_id as usize)))
-      .into_iter()
-      .map(|(ty, val, address)| {
-        (ty, val, StateInfo {
-          stack_address:  0,
-          state_type:     StateType::Normal,
-          is_state_entry: false,
-          state_id:       address,
-        })
-      })
-      .collect()
   }
 
   fn get_token_id<'ctx>(&mut self, address: StateInfo, input: &mut T, ctx: &mut ParserContext) -> (u32, bool) {

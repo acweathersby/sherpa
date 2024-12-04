@@ -5,6 +5,7 @@ use radlr_rust_runtime::{
   types::{bytecode::Opcode, *},
 };
 use serde::{Deserialize, Serialize};
+use web_sys::console;
 
 use std::{
   collections::VecDeque,
@@ -42,7 +43,11 @@ impl JSByteCodeParser {
   pub fn best_error_recovery(&mut self, entry_name: String, input: String) -> String {
     let entry = self.db.get_entry_data_from_name(&entry_name).expect("Could not find entry point");
     let parser = &self.db;
+
+
+    console_log_string("A".to_string());
     let result = parser.parse_with_recovery(&mut StringInput::from(input), entry, &Default::default());
+    console_log_string("B".to_string());
 
     let Ok(result) = result else { return "ETF".to_string() };
 
@@ -51,7 +56,9 @@ impl JSByteCodeParser {
       string += "result";
       for (_, sym) in &best.symbols {
         for alt in split_alternates(sym) {
-          return Printer::new(alt.first().unwrap(), true, parser.as_ref()).to_string();
+          if let Some(first) = alt.first() {
+            return Printer::new(first, true, parser.as_ref()).to_string();
+          }
         }
       }
       string
@@ -192,6 +199,10 @@ impl JSByteCodeParser {
       }
     };
   }
+}
+
+fn console_log_string(str: String) {
+  unsafe { console::debug_1(&JsValue::from(&str)) };
 }
 
 #[wasm_bindgen]

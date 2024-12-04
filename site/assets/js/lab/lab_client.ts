@@ -32,8 +32,10 @@ abstract class LabEngine extends Eventable<LabEngineEvents> {
     try {
       soup.add_grammar(grammar, "main");
 
-      if (this.grammar_db)
+      if (this.grammar_db) {
         this.grammar_db.free();
+        this.grammar_db = null;
+      }
 
       this.grammar_db = radlr.create_grammar_db("main", soup, config);
 

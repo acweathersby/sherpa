@@ -220,3 +220,5 @@ fn test_radlr_bytecode_bootstrap() -> RadlrResult<()> {
 
   radlr_build::fs_build(build_config, parser_config, radlr_build::TargetLanguage::Rust)
 }
+
+

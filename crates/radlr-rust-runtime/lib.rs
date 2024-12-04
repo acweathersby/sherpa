@@ -23,8 +23,19 @@
 /// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 /// IN THE SOFTWARE.
 pub mod deprecate;
-pub mod fuzz;
 pub mod kernel;
 pub mod parsers;
 pub mod types;
 pub mod utf8;
+
+#[macro_export]
+macro_rules! panic_with_string {
+  ($data:expr ) => {{
+    let string = format!("{} at {}:{}", $data, file!(), line!());
+    #[cfg(feature = "wasm-lab")]
+    unsafe {
+      web_sys::console::debug_1(&wasm_bindgen::JsValue::from(&string))
+    };
+    panic!("{string}");
+  }};
+}
