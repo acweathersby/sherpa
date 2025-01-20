@@ -773,7 +773,7 @@ pub fn resolve_nonterm_types(db: &GrammarDatabase, adb: &mut AscriptDatabase) ->
             },
             None => AscriptType::Undefined,
           },
-          None => AscriptType::Aggregate(AscriptAggregateType::Vec { val_type: AscriptScalarType::Token }),
+          None => AscriptType::Scalar(AscriptScalarType::Token),
         }
       }
       _ => unreachable!(""),
@@ -891,9 +891,17 @@ fn resolve_nonterm_values(
               *ty = last.get_type().clone();
               *output_graph = Some(last);
             } else {
-              let last = GraphNode::Vec(GraphNodeVecInits(vec![last.clone()]), *expected_type);
-              *ty = last.get_type().clone();
-              *output_graph = Some(last);
+              match last.clone() {
+                GraphNode::TokSym(..) | GraphNode::Tok(..) | GraphNode::TokRule(..) => {
+                  *ty = last.get_type().clone();
+                  *output_graph = Some(last);
+                }
+                last => {
+                  let last = GraphNode::Vec(GraphNodeVecInits(vec![last.clone()]), *expected_type);
+                  *ty = last.get_type().clone();
+                  *output_graph = Some(last);
+                }
+              }
             }
           }
         };
@@ -910,7 +918,9 @@ fn resolve_nonterm_values(
           None => GraphNode::Undefined(AscriptType::Undefined),
         };
 
-        debug_assert!(matches!(first.get_type(), AscriptType::Aggregate(..)));
+        dbg!(&ty, &first, &last, item._debug_string_w_db_(db));
+
+        // debug_assert!(matches!(first.get_type(), AscriptType::Aggregate(..)));
         *ty = *expected_type;
 
         if ty.is_multi() {
@@ -1502,12 +1512,16 @@ fn create_graph_node<'a>(
     ASTNode::AST_TrimmedReference(val) => {
       let gn = create_graph_node(args.to_node(&val.reference), mut_args, nonterm)?;
 
-      Ok(GraphNode::Trim(
-        Rc::new(gn),
-        val.range.start_trim as isize,
-        val.range.end_trim as isize,
-        AscriptType::Scalar(AscriptScalarType::Token),
-      ))
+      if gn.get_type().is_unknown() {
+        Ok(gn)
+      } else {
+        Ok(GraphNode::Trim(
+          Rc::new(gn),
+          val.range.start_trim as isize,
+          val.range.end_trim as isize,
+          AscriptType::Scalar(AscriptScalarType::Token),
+        ))
+      }
     }
 
     node => todo!("handle graph resolve of node {node:#?}"),

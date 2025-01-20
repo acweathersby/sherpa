@@ -104,6 +104,14 @@ impl Add for &Token {
   }
 }
 
+impl Add for Token {
+  type Output = Token;
+
+  fn add(self, rhs: Self) -> Self::Output {
+    Token { inner: self.inner + rhs.inner, input: self.input.clone() }
+  }
+}
+
 impl Add<Token> for u32 {
   type Output = Token;
 

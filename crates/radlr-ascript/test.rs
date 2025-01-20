@@ -323,6 +323,28 @@ fn test_temp() -> RadlrResult<()> {
 }
 
 #[test]
+fn token_vector() -> RadlrResult<()> {
+  let source = r##"
+  IGNORE { c:sp }  
+
+  <> goal > tk:( "test" )+
+"##;
+
+  let db = RadlrGrammar::new().add_source_from_string(source, "", false)?.build_db("", Default::default())?;
+
+  let mut adb: AscriptDatabase = db.into();
+
+  dbg!(&adb);
+
+  let (_, strct) = adb.structs.pop_first().expect("should have that one struct here");
+  assert_eq!(adb.structs.len(), 1);
+
+  //assert_eq!(strct.properties.len(), 2);
+
+  Ok(())
+}
+
+#[test]
 fn builds_rum_lang() -> RadlrResult<()> {
   let source = r##"
   IGNORE { c:sp c:nl }

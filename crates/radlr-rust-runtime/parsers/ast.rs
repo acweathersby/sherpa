@@ -3,7 +3,7 @@
 use crate::types::*;
 use std::fmt::Debug;
 
-pub trait Tk: Clone + Default + std::hash::Hash + Debug {
+pub trait Tk: Clone + Default + std::hash::Hash + Debug + std::ops::Add<Output = Self> {
   fn to_string(&self) -> String;
   fn trim(&self, start: usize, end: usize) -> Self;
   fn from_range(start: usize, end: usize, line_number: u32, line_offset: u32, id: u32, source: SharedSymbolBuffer) -> Self;
@@ -16,28 +16,6 @@ pub trait Node<Token: Tk>: Default {}
 impl<Token: Tk, T: Default> Node<Token> for T {}
 
 pub type Reducer<Token, N> = fn(*mut [N], &[Token], Token) -> N;
-
-impl Tk for String {
-  fn from_range(start: usize, end: usize, _line_number: u32, _line_offset: u32, _id: u32, source: SharedSymbolBuffer) -> Self {
-    unsafe { Self::from_utf8_unchecked((&source[start..end]).to_vec()) }
-  }
-
-  fn from_slice(slice: &[Self]) -> Self {
-    slice.join("")
-  }
-
-  fn len(&self) -> usize {
-    String::len(&self)
-  }
-
-  fn to_string(&self) -> String {
-    self.clone()
-  }
-
-  fn trim(&self, _start: usize, _end: usize) -> Self {
-    self[_start.min(self.len())..self.len() - _end.min(self.len())].to_string()
-  }
-}
 
 impl Tk for Token {
   fn from_range(start: usize, end: usize, line_number: u32, line_offset: u32, _id: u32, source: SharedSymbolBuffer) -> Self {
